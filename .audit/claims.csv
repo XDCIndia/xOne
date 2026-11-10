@@ -1,0 +1,38 @@
+id,claim,status,source,required_validation
+C01,geth-XDC StateAccount keeps Balance as uint256 holding the wrapped value mod 2^256 and BigBalance *big.Int (rlp:-) for the true value,verified source,go-ethereum@6fc8e8c2 core/types/state_account.go:36-46,none
+C02,Account RLP writes BigBalance as a plain RLP big integer when set; no upper bound in encoder or decoder,verified source,go-ethereum@6fc8e8c2 core/types/gen_account_rlp.go:14-30; state_account.go:103-109 138-152,prove legal range from chain history (XA-02)
+C03,BALANCE/SELFBALANCE and GetBalance return the wrapped low 256 bits for a wide account,verified source,go-ethereum@6fc8e8c2 core/state/statedb.go:343-349,adjudicate against legacy XDPoSChain big.Int stack semantics on history (XA-02)
+C04,CanTransfer returns true for any account with BigBalance set; buyGas skips the wrapped pre-check,verified source,go-ethereum@6fc8e8c2 core/evm.go:151-165; core/state_transition.go:554-571,boundary vectors (XA-02)
+C05,SetBalance clears BigBalance; SELFDESTRUCT moves GetBalance (wrapped) value,verified source,go-ethereum@6fc8e8c2 core/state/state_object.go:525-535; core/vm/instructions.go:906-914,boundary vectors incl. wide contract selfdestruct (XA-02)
+C06,Plan B3.1: WideBalance = U256 + carry limb; RLP always 33 bytes,unverified (contradicted as a general bound),issue #1 B3.1,encoding is unbounded big.Int; 33 bytes holds only below 2^264 (XA-02)
+C07,revm 43.0.3 ships opt-in account-ext (AccountInfo::extension; JournalEntry::ExtensionChange),verified source,bluealloy/revm v120 6b2e655b crates/state/src/account_info.rs:68; context/interface/src/journaled_state/entry.rs:126,spike (XA-02)
+C08,revm caller-balance validation is U256-only (validate_against_state_and_deduct_caller),verified source,bluealloy/revm v120 crates/handler/src/handler.rs:448; pre_execution.rs ~127-160,handler override needed for wide accounts (XA-02)
+C09,reth replaced revm with evm2 (PR #25002 merged 2026-10-24); v2.8.1 last revm tag; evm2 unpublished (0.0.0-reserved),verified source,paradigmxyz/reth d763342f Cargo.toml:440; v2.10.1 58ebce14 Cargo.toml:435-437 672,XA-03
+C10,alloy-trie TrieAccount.extension encodes a fifth RLP item (PR #156 in v0.9.6),verified source,alloy-rs/trie 90a71164,stock leaf != geth-XDC leaf for wide accounts (XA-03)
+C11,reth snap-sync is snap/2 (EIP-8189 Last Call) only,verified source,reth crates/snap-sync/README.md:3 83-84; EIP-8189 front-matter,XA-03/XA-09
+C12,ethrex has a Rust snap/1 client and server (Apache-2.0),verified source,lambdaclass/ethrex fd5c57dd crates/networking/p2p/snap/{client,server}.rs,reference only
+C13,Reth Storage V2 routes history indices and tx-hash lookups to RocksDB and changesets to static files,verified source,reth docs/vocs/docs/pages/run/storage.mdx:5-12,XA-06 design input
+C14,Current EEST fixtures are published from ethereum/execution-specs (tests@v21.0.2 2026-10-26),verified source,ethereum/execution-spec-tests README; execution-specs releases,XA-05
+C15,reth-xdc keeps wide balances in a process-global OnceLock lookup over a JSON sidecar with a per-block undo journal,verified source,reth-xdc 49c5719f crates/trie/common/src/xdc_overflow.rs:21 67; commit cabcc1550a,fsync and unwind of sidecar not verified
+C16,reth changeset unwind left a sign-tx sender nonce partly reverted,reported measurement (not found in source),issue #1 B3.5; caller brief,treat as unverified; cover by XA-06 unwind property test
+C17,xOneGo has own EVM/state/trie; go-ethereum enters through pkg/ethcompat module,verified source (partial),xOneGo 8bfacb13 pkg/ethcompat/go.mod:11 119,parent go.mod not read
+C18,xOneGo 85209327 wedge: GetHeaderByHash searched canonical only; fixed e54f592a,verified source,xOneGo e54f592a; pkg/core/chain/consensus_engine.go:156,vector in XA-04
+C19,xOneGo 85214323: side block executed on head state; SetHead on snap datadir broken; fixed 474c3b02 e8c845bd,verified source,xOneGo commit messages 474c3b02 e8c845bd,vector in XA-05
+C20,xOneGo CHAINID/RETURNDATA/CREATE2-nonce EVM bugs,verified source,xOneGo 932d73d2 0f3b98cd 33e0ffe2,EEST coverage in XA-05
+C21,erigon penalty sign-tx scan was newest-first; fixed oldest-first + RangeReturnSigner=150 pre-TIPUpgradePenalty,verified source,erigon-xdc 64f97f9b75,negative vector in XA-04
+C22,erigon E3 bootstrap needs headers/bodies/transactions segments contiguous to the same block,verified source,erigon-xdc 3b851d75 docs/port/APOTHEM_E3_BOOTSTRAP.md:17 29 39,XA-09
+C23,First reward checkpoint after snap (85169004) needs pre-pivot bodies (GetSigningTxCount),verified source + reported,go-ethereum@6fc8e8c2 eth/hooks/engine_v2_hooks.go:621; #1950 comment 6745466170,XA-09
+C24,Post-TIPUpgradePenalty penalty walk reads the last 5 epoch-switch headers (~4500 blocks) - reported then corrected (cause was side-branch lookup),reported measurement,#1950 comments 6771307267 6772969385,derive window in XA-09
+C25,geth persists highestVotedRound before broadcast but with pebble.NoSync in chaindata,verified source,go-ethereum@6fc8e8c2 engine_v2/vote.go:292-297; core/rawdb/accessors_xdc.go:125-131; ethdb/pebble/pebble.go:234,XA-07
+C26,geth sendTimeout persists no timeout-signing record,verified source,go-ethereum@6fc8e8c2 engine_v2/timeout.go:225-296,XA-07 spec decision
+C27,Reference clients differ in vote-record durability (reth fsync+rename; xOneGo plain Put; erigon persists on round change only),verified source (partial),worker check; see handoff,XA-07; erigon item routed privately
+C28,Apothem fork rows (V2 56828700; Berlin..Shanghai 61290000; EIP1559 71550000; Cancun 71551800; reward/penalty/Gas2500x 83600000; Prague 84333000; proportional 84733000),verified source,go-ethereum@6fc8e8c2 params/config.go:1035-1057; consensus/XDPoS/network_constants.go:86-97,XA-01
+C29,Unscheduled forks use placeholder 99999999999 blocks; effective Istanbul via TIPXDCXCancellationFee=23779191; devnet 5551 keeps 68-gas calldata after Prague,verified source,go-ethereum@6fc8e8c2 params/config.go:1040 1054-1057; core/state_transition.go:71-80,XA-01 (conflicts with 'missing value = start-up error' unless sentinels typed)
+C30,Mint fair share windows: 11-12 leader turns per validator in 1078 blocks with 96 masternodes,reported measurement,#1950 comment 6767069167,XA-08
+C31,Campaign memory column is cgroup including page cache; plan A2 mixes it with RSS,verified source (tracker text),#1950 comment 6767069167; issue #1 A2,XA-08
+C32,Plan R3 lint 'unwrap_or_default' is a Clippy style lint that recommends unwrap_or_default; denying it does not ban the call,inference (Clippy docs),issue #1 R3.2; rust-clippy lint list,XA-10 failing fixture
+C33,INFO log on a served XDPOS2 header path flooded syslog; moved to debug,verified source (PR merged),go-ethereum#1953,XA-11
+C34,FIPS 203 (planning note 2025-11-17) and FIPS 204 (2026-07-31) have pending errata; FIPS 205 none,verified source,csrc.nist.gov FIPS 203/204/205 pages,XA-13
+C35,RustCrypto ml-dsa 0.1.2 / ml-kem 0.3.4 / slh-dsa 0.1.0 READMEs say never independently audited; liboqs 0.16.0 not for production,verified source,RustCrypto READMEs; liboqs README:92,XA-13
+C36,ML-DSA-65 pk 1952 B sig 3309 B; 3000 TPS one sig/tx = 9.927 MB/s,verified source + arithmetic,FIPS 204 Table 2 p26,XA-13
+C37,Nethermind fork mirrors geth: UInt256 Balance wrapped + BigBalance for RLP,verified source,xdc-nethermind-private d9ca4e4a Nethermind.Core/Account.cs ~20-27,independent impl shares geth semantics (not an independent check)

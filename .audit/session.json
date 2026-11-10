@@ -1,0 +1,10 @@
+{
+ "phase": "complete (0-4)",
+ "pins": {"xOne": "2e77a4cf516c23a5fd5d7c5421a41d7a58a02dd1", "go-ethereum": "6fc8e8c2088b7f18264f5663036669d04fa7becf", "xOneGo": "8bfacb137ec059cebf8807b2411cb36da70acc5d", "reth-xdc": "49c5719f1f8ed27426333996ba360cc57862bd12", "erigon-xdc": "3b851d75dcf6d72ff8662be90f95ae4912956ba2", "revm": "6b2e655b91f21c3a21770bed78def5b379ed1d17", "reth": "58ebce14ae63dab040beae301e1578cd0dc55e8a"},
+ "issues": {"tracker": 5, "children": [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]},
+ "links": {"sub_issues": 15, "blocked_by": 23},
+ "pending_writes": [],
+ "decisions": "see handoff.md Unresolved decisions",
+ "budget": {"agents_used": 2, "max_agents": 2},
+ "rate_limit": {"retry_after": null, "attempts": 0}
+}
