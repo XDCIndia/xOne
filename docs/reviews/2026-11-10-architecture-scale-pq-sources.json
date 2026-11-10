@@ -1,0 +1,287 @@
+{
+  "research_date": "2026-11-10",
+  "repository_base_commit": "2a3d5840b7b0b98c80799248348396ccdc3e7a45",
+  "scope": "Representative primary-source architecture review; no benchmark reproduction or exhaustive source audit.",
+  "sources": [
+    {
+      "id": 1,
+      "title": "XDC campaign tracker and corrected health/root-cause comments",
+      "url": "https://github.com/XDCIndia/go-ethereum/issues/1950",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 2,
+      "title": "Pinned XDC account representation, BigBalance",
+      "url": "https://github.com/XDCIndia/go-ethereum/blob/5d6ba3664/core/types/state_account.go",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 3,
+      "title": "Pinned XDC state access and subtraction",
+      "url": "https://github.com/XDCIndia/go-ethereum/blob/5d6ba3664/core/state/statedb.go",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 4,
+      "title": "Geth sync modes and state-range proof flow",
+      "url": "https://geth.ethereum.org/docs/fundamentals/sync-modes",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 5,
+      "title": "Reth Storage V2, current page observed v2.10.1",
+      "url": "https://reth.rs/run/storage/",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 6,
+      "title": "revm architecture and customization boundaries",
+      "url": "https://bluealloy.github.io/revm/architecture.html",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 7,
+      "title": "Erigon database and historical segments",
+      "url": "https://docs.erigon.tech/fundamentals/database",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 8,
+      "title": "Ethereum execution fixture format: valid and invalid blocks",
+      "url": "https://steel.ethereum.foundation/docs/execution-specs/running_tests/test_formats/blockchain_test/",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 9,
+      "title": "Hive client integration, P2P and API simulations",
+      "url": "https://github.com/ethereum/hive/blob/master/docs/overview.md",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 10,
+      "title": "MDBX Go bindings and native transaction interface",
+      "url": "https://github.com/erigontech/mdbx-go",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 11,
+      "title": "CometBFT signing discipline; reference pattern only",
+      "url": "https://github.com/cometbft/cometbft/blob/main/spec/consensus/signing.md",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 12,
+      "title": "TigerBeetle safety and deterministic simulation",
+      "url": "https://docs.tigerbeetle.com/concepts/safety/",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 13,
+      "title": "Clippy restriction and disallowed-method/type lint catalog",
+      "url": "https://clippy.rust-lang.org/master/index.html",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 14,
+      "title": "Besu Bonsai and Forest storage formats",
+      "url": "https://docs.besu-eth.org/public-networks/concepts/data-storage-formats",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 15,
+      "title": "Nethermind state pruning",
+      "url": "https://docs.nethermind.io/next/fundamentals/state-pruning/",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 16,
+      "title": "ethrex repository",
+      "url": "https://github.com/lambdaclass/ethrex",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 17,
+      "title": "Silkworm repository",
+      "url": "https://github.com/erigontech/silkworm",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 18,
+      "title": "Firedancer stage topology and scoped local benchmark",
+      "url": "https://docs.firedancer.io/guide/tuning.html",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 19,
+      "title": "Agave repository",
+      "url": "https://github.com/anza-xyz/agave",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 20,
+      "title": "Monad parallel execution",
+      "url": "https://docs.monad.xyz/monad-arch/execution/parallel-execution",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 21,
+      "title": "MonadDb versions, I/O and page commitment design",
+      "url": "https://docs.monad.xyz/monad-arch/execution/monaddb",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 22,
+      "title": "libmdbx native API and durability flags",
+      "url": "https://github.com/Mithril-mine/libmdbx/blob/master/mdbx.h",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 23,
+      "title": "Block-STM original paper, 2022",
+      "url": "https://arxiv.org/abs/2203.06871",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 24,
+      "title": "Sui consensus and settlement lifecycle",
+      "url": "https://docs.sui.io/develop/sui-architecture/consensus",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 25,
+      "title": "Seastar per-core ownership and message passing",
+      "url": "https://seastar.io/",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 26,
+      "title": "RocksDB atomic batches and write durability",
+      "url": "https://github.com/facebook/rocksdb/wiki/Basic-Operations",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 27,
+      "title": "Go garbage collector tuning guide",
+      "url": "https://go.dev/doc/gc-guide",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 28,
+      "title": "wrk2 measurement and coordinated omission",
+      "url": "https://github.com/giltene/wrk2/blob/master/README.md",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 29,
+      "title": "NIST FIPS 203 ML-KEM and update notice",
+      "url": "https://csrc.nist.gov/pubs/fips/203/final",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 30,
+      "title": "NIST FIPS 204; Table 2 encoded sizes, PDF page 26",
+      "url": "https://nvlpubs.nist.gov/nistpubs/fips/nist.fips.204.pdf",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 31,
+      "title": "NIST FIPS 205 SLH-DSA",
+      "url": "https://csrc.nist.gov/pubs/fips/205/final",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 32,
+      "title": "RustCrypto ml-dsa 0.1.2 audit warning",
+      "url": "https://docs.rs/ml-dsa/0.1.2/ml_dsa/",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 33,
+      "title": "liboqs limitations and prototyping scope",
+      "url": "https://github.com/open-quantum-safe/liboqs",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 34,
+      "title": "Ethereum Foundation post-quantum research roadmap",
+      "url": "https://pq.ethereum.org/",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 35,
+      "title": "RLPx ECIES/ECDH transport specification",
+      "url": "https://github.com/ethereum/devp2p/blob/master/rlpx.md",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 36,
+      "title": "Algorand state proofs and bootstrap assumptions",
+      "url": "https://dev.algorand.co/concepts/protocol/state-proofs/",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 37,
+      "title": "NIST SP 800-208 stateful hash-signature guidance",
+      "url": "https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-208.pdf",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 38,
+      "title": "EIP-8189 snap/2, versioned draft status must be checked",
+      "url": "https://eips.ethereum.org/EIPS/eip-8189",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 39,
+      "title": "Ethereum execution tests migrated into execution-specs",
+      "url": "https://github.com/ethereum/execution-spec-tests/blob/main/README.md",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    },
+    {
+      "id": 40,
+      "title": "NIST FIPS 204 landing page and 2026 errata notice",
+      "url": "https://csrc.nist.gov/pubs/fips/204/final",
+      "accessed": "2026-11-10",
+      "pin_policy": "Resolve a full source revision or exact publication version and applicable errata before implementation."
+    }
+  ]
+}
