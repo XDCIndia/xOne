@@ -673,12 +673,21 @@ mod tests {
     #[test]
     fn a_v1_seal_has_its_own_slot_and_never_bounds_a_round() {
         let r = ok(&rec(), Intent::new(Kind::SealV1, 2700, d(1)));
-        assert_eq!(r.signed[3], Slot { round: 2700, digest: d(1) });
+        assert_eq!(
+            r.signed[3],
+            Slot {
+                round: 2700,
+                digest: d(1)
+            }
+        );
         assert_eq!(r.highest_voted_round, 0, "a height is not a voted round");
         // the same height with another digest is refused; the first V2 round is not
         assert_eq!(
             err(&r, Intent::new(Kind::SealV1, 2700, d(2))),
-            Refusal::Conflict { kind: Kind::SealV1, round: 2700 }
+            Refusal::Conflict {
+                kind: Kind::SealV1,
+                round: 2700
+            }
         );
         let r = ok(&r, Intent::new(Kind::Propose, 1, d(3)));
         assert_eq!((r.signed[2].round, r.signed[3].round), (1, 2700));
@@ -693,8 +702,15 @@ mod tests {
         b.observe_tc(8);
         let j = a.join(&b);
         assert!(j.dominates(&a) && j.dominates(&b));
-        assert_eq!((j.signed[2].round, j.signed[0].round, j.highest_tc), (9, 5, 8));
-        assert_eq!(j.join(&a), j, "joining what it already holds changes nothing");
+        assert_eq!(
+            (j.signed[2].round, j.signed[0].round, j.highest_tc),
+            (9, 5, 8)
+        );
+        assert_eq!(
+            j.join(&a),
+            j,
+            "joining what it already holds changes nothing"
+        );
         assert_eq!(j.join(&b).seq, j.seq);
     }
 

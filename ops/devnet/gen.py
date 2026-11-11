@@ -13,7 +13,7 @@ import json, os, shutil, subprocess, sys, tempfile
 
 out, geth = sys.argv[1], sys.argv[2]
 repo = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-EPOCH, GAP, SWITCH, SWITCH_EPOCH = 20, 10, 40, 2   # V1 for 40 blocks, then V2; short so that a run crosses it
+EPOCH, GAP, SWITCH, SWITCH_EPOCH = 30, 10, 30, 1   # V1 for 30 blocks (the M2 double validation starts after the first epoch), then V2
 os.makedirs(out, exist_ok=True)
 
 def run(*a):

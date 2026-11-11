@@ -4,7 +4,8 @@
     clippy::disallowed_methods,
     reason = "test code: a panic is the failure signal"
 )]
-//! The safety unit: the order persist, then sign; a retry writes nothing; a store failure stops it; a
+//! The safety unit (it lives in `xone-consensus`; its tests are here because they need the in-memory fault store
+//! of `xone-db`, which a lower-ranked crate may not depend on, `ci/layering.py`): the order persist, then sign; a retry writes nothing; a store failure stops it; a
 //! restart keeps the record; the machine's observations are joined, never lowered.
 
 use std::{cell::RefCell, rc::Rc};
@@ -12,7 +13,7 @@ use std::{cell::RefCell, rc::Rc};
 use alloy_primitives::{keccak256, Address, Bytes, B256};
 use k256::ecdsa::SigningKey;
 use xone_consensus::{
-    unit::{Authorized, Backend, Sealer, SafetyUnit, UnitError},
+    unit::{Authorized, Backend, SafetyUnit, Sealer, UnitError},
     v2::safety::{BlockRef, Intent, Kind, Refusal, SafetyRecord},
 };
 use xone_db::safety::{Ack, Fault, Loaded, MemStore, SafetyStore, StoreError};
@@ -30,7 +31,11 @@ impl SafetyStore for Shared {
     }
     fn persist_intent(&mut self, i: &[u8], r: &[u8]) -> Result<Ack, StoreError> {
         let out = self.0.borrow_mut().persist_intent(i, r);
-        self.1.borrow_mut().push(if out.is_ok() { "persisted" } else { "write failed" });
+        self.1.borrow_mut().push(if out.is_ok() {
+            "persisted"
+        } else {
+            "write failed"
+        });
         out
     }
 }
@@ -45,15 +50,24 @@ impl Backend for Key {
     }
     fn sign(&self, a: &Authorized<'_>) -> Result<Signature, UnitError> {
         self.1.borrow_mut().push("signed");
-        let (s, id) = self.0.sign_prehash_recoverable(a.digest().as_slice()).unwrap();
+        let (s, id) = self
+            .0
+            .sign_prehash_recoverable(a.digest().as_slice())
+            .unwrap();
         let mut b = s.to_bytes().to_vec();
         b.push(id.to_byte());
-        Ok(Signature { algorithm: AlgorithmId::Secp256k1Keccak, bytes: Bytes::from(b) })
+        Ok(Signature {
+            algorithm: AlgorithmId::Secp256k1Keccak,
+            bytes: Bytes::from(b),
+        })
     }
 }
 
 fn key(log: &Log) -> Key {
-    Key(SigningKey::from_slice(&keccak256(b"throwaway unit key")[..]).unwrap(), log.clone())
+    Key(
+        SigningKey::from_slice(&keccak256(b"throwaway unit key")[..]).unwrap(),
+        log.clone(),
+    )
 }
 
 fn d(n: u8) -> B256 {
@@ -90,10 +104,16 @@ fn a_round_is_never_proposed_twice() {
     let (mut u, _, log) = open();
     u.sign(Intent::new(Kind::Propose, 5, d(1))).unwrap();
     log.borrow_mut().clear();
-    for i in [Intent::new(Kind::Propose, 5, d(2)), Intent::new(Kind::Propose, 4, d(3))] {
+    for i in [
+        Intent::new(Kind::Propose, 5, d(2)),
+        Intent::new(Kind::Propose, 4, d(3)),
+    ] {
         assert!(matches!(u.sign(i), Err(UnitError::Refused(_))));
     }
-    assert!(log.borrow().is_empty(), "a refusal writes and signs nothing");
+    assert!(
+        log.borrow().is_empty(),
+        "a refusal writes and signs nothing"
+    );
 }
 
 #[test]
@@ -111,12 +131,27 @@ fn a_restart_keeps_the_mined_round() {
 
 #[test]
 fn a_failed_write_signs_nothing_and_stops_the_unit() {
-    for fault in [Fault::BeforeWrite, Fault::AfterWrite, Fault::FailSync, Fault::AfterSync] {
+    for fault in [
+        Fault::BeforeWrite,
+        Fault::AfterWrite,
+        Fault::FailSync,
+        Fault::AfterSync,
+    ] {
         let (mut u, store, log) = open();
         store.0.borrow_mut().arm(fault);
-        assert!(matches!(u.sign(Intent::new(Kind::Propose, 5, d(1))), Err(UnitError::Store(_))));
-        assert_eq!(*log.borrow(), ["write failed"], "{fault:?}: nothing was signed");
-        assert!(matches!(u.sign(Intent::new(Kind::Propose, 6, d(1))), Err(UnitError::Stopped)));
+        assert!(matches!(
+            u.sign(Intent::new(Kind::Propose, 5, d(1))),
+            Err(UnitError::Store(_))
+        ));
+        assert_eq!(
+            *log.borrow(),
+            ["write failed"],
+            "{fault:?}: nothing was signed"
+        );
+        assert!(matches!(
+            u.sign(Intent::new(Kind::Propose, 6, d(1))),
+            Err(UnitError::Stopped)
+        ));
         assert!(matches!(u.sign_tx(&d(9)), Err(UnitError::Stopped)));
     }
 }
@@ -127,7 +162,10 @@ fn a_closed_fence_signs_nothing() {
     let store = Shared(Rc::default(), log.clone());
     let mut u = SafetyUnit::open_or_init(store, key(&log), 3).unwrap();
     log.borrow_mut().clear();
-    assert!(matches!(u.sign(Intent::new(Kind::Propose, 5, d(1))), Err(UnitError::FenceClosed)));
+    assert!(matches!(
+        u.sign(Intent::new(Kind::Propose, 5, d(1))),
+        Err(UnitError::FenceClosed)
+    ));
     for _ in 0..3 {
         u.fence_mut().tick();
     }
@@ -139,14 +177,20 @@ fn a_record_of_another_key_is_not_adopted() {
     let log: Log = Rc::default();
     let mut store = Shared(Rc::default(), log.clone());
     SafetyUnit::<Shared, Key>::init(&mut store, Address::repeat_byte(9)).unwrap();
-    assert!(matches!(SafetyUnit::open(store, key(&log), 0), Err(UnitError::Identity { .. })));
+    assert!(matches!(
+        SafetyUnit::open(store, key(&log), 0),
+        Err(UnitError::Identity { .. })
+    ));
 }
 
 #[test]
 fn an_uninitialised_store_is_refused() {
     let log: Log = Rc::default();
     let store = Shared(Rc::default(), log.clone());
-    assert!(matches!(SafetyUnit::open(store, key(&log), 0), Err(UnitError::NotInitialised)));
+    assert!(matches!(
+        SafetyUnit::open(store, key(&log), 0),
+        Err(UnitError::NotInitialised)
+    ));
 }
 
 #[test]
@@ -165,8 +209,16 @@ fn the_machine_record_is_joined_and_the_proposal_survives_its_later_writes() {
     u.sign(Intent::new(Kind::Propose, 9, d(1))).unwrap();
     // the machine never saw the proposal; its record holds a QC and a vote
     let mut m = SafetyRecord::new(u.record().identity);
-    m.observe_qc(BlockRef { hash: d(2), round: 8, number: 80 }, None);
-    u.sign_with(Intent::vote(10, d(3), 8, true), Some(&m)).unwrap();
+    m.observe_qc(
+        BlockRef {
+            hash: d(2),
+            round: 8,
+            number: 80,
+        },
+        None,
+    );
+    u.sign_with(Intent::vote(10, d(3), 8, true), Some(&m))
+        .unwrap();
     let r = u.record();
     assert_eq!(r.signed[2].round, 9, "the proposal is still there");
     assert_eq!((r.highest_qc.round, r.highest_voted_round), (8, 10));

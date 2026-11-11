@@ -23,7 +23,7 @@ pub const MERGE_SIGN_RANGE: u64 = 15;
 
 /// geth `isSignBlock` (`miner/xdpos_worker.go:1184-1186`): every 15th block, and every block before TIP2019.
 pub fn is_sign_block(spec: &ChainSpec, number: u64) -> bool {
-    number % MERGE_SIGN_RANGE == 0 || !spec.effective.tip2019.is_active(number)
+    number.is_multiple_of(MERGE_SIGN_RANGE) || !spec.effective.tip2019.is_active(number)
 }
 
 /// geth `isSigningTxStale` (`miner/xdpos_worker.go:1207-1209`): a block more than 30 behind the head is not
@@ -33,7 +33,7 @@ pub fn is_stale(block: u64, head: u64) -> bool {
     head > block && head - block > SIGN_FRESHNESS
 }
 
-/// geth `signTxNonce` (`contracts/utils.go:94-100`): the pool nonce, floored at the nonce of the head state.
+/// geth `signTxNonce` (`contracts/utils.go:95-100`): the pool nonce, floored at the nonce of the head state.
 pub fn nonce(pool_nonce: u64, state_nonce: Option<u64>) -> u64 {
     state_nonce.map_or(pool_nonce, |s| s.max(pool_nonce))
 }
@@ -70,7 +70,9 @@ pub fn build(number: u64, hash: B256, nonce: u64) -> SignTx {
     }
 }
 
-fn payload(t: &SignTx, tail: &[&dyn Fn(&mut Vec<u8>)]) -> Vec<u8> {
+type Tail<'a> = &'a dyn Fn(&mut Vec<u8>);
+
+fn payload(t: &SignTx, tail: &[Tail<'_>]) -> Vec<u8> {
     let mut p = Vec::new();
     t.nonce.encode(&mut p);
     t.gas_price.encode(&mut p);
@@ -82,7 +84,11 @@ fn payload(t: &SignTx, tail: &[&dyn Fn(&mut Vec<u8>)]) -> Vec<u8> {
         f(&mut p);
     }
     let mut out = Vec::new();
-    RlpHeader { list: true, payload_length: p.len() }.encode(&mut out);
+    RlpHeader {
+        list: true,
+        payload_length: p.len(),
+    }
+    .encode(&mut out);
     out.extend_from_slice(&p);
     out
 }
@@ -91,7 +97,9 @@ fn payload(t: &SignTx, tail: &[&dyn Fn(&mut Vec<u8>)]) -> Vec<u8> {
 pub fn digest(t: &SignTx, chain_id: u64) -> B256 {
     keccak256(payload(
         t,
-        &[&|p| chain_id.encode(p), &|p| 0u8.encode(p), &|p| 0u8.encode(p)],
+        &[&|p| chain_id.encode(p), &|p| 0u8.encode(p), &|p| {
+            0u8.encode(p)
+        }],
     ))
 }
 
@@ -106,7 +114,11 @@ pub fn encode_signed<S: Sealer>(
     let b: &[u8] = &sig.bytes;
     let (rs, parity) = match (b.get(..64), b.get(64)) {
         (Some(rs), Some(v)) => (rs, u64::from(*v & 1)),
-        _ => return Err(UnitError::Sign("a signature of 65 bytes was expected".into())),
+        _ => {
+            return Err(UnitError::Sign(
+                "a signature of 65 bytes was expected".into(),
+            ))
+        }
     };
     let r = U256::from_be_slice(&rs[..32]);
     let s = U256::from_be_slice(&rs[32..]);

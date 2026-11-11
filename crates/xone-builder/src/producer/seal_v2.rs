@@ -1,6 +1,6 @@
 //! V2 `Prepare` and `Seal` (`spec/producer/seal-v2.md`).
 //!
-//! `prepare` is geth `Prepare` of the V2 engine (`consensus/XDPoS/engines/engine_v2/engine.go:651-751`): the
+//! `prepare` is geth `Prepare` of the V2 engine (`consensus/XDPoS/engines/engine_v2/engine.go:651-766`): the
 //! parent must be the block of the highest QC (else `ErrNotReadyToPropose`), `extraData` is the version byte
 //! and `ExtraFields_v2{round, highest QC}`, difficulty 1, the coinbase is the signer, at an epoch switch the
 //! new `Validators` and `Penalties`, time `parent + minePeriod(round)` or now. `seal` is `Seal`
@@ -51,7 +51,10 @@ impl From<UnitError> for Error {
 pub fn prepare(p: &Prepare<'_>) -> Result<Header, Error> {
     let parent = p.parent.hash();
     if parent != p.qc.proposed_block_info.hash {
-        return Err(Error::NotReady { parent, qc: p.qc.proposed_block_info.hash });
+        return Err(Error::NotReady {
+            parent,
+            qc: p.qc.proposed_block_info.hash,
+        });
     }
     let mut h = Header {
         parent_hash: parent,
@@ -62,14 +65,25 @@ pub fn prepare(p: &Prepare<'_>) -> Result<Header, Error> {
         difficulty: U256::from(1),
         timestamp: p.time,
         base_fee: p.base_fee.map(U256::from),
-        extra_data: ExtraFieldsV2 { round: p.round, quorum_cert: p.qc.clone() }
-            .encode_extra()
-            .into(),
+        extra_data: ExtraFieldsV2 {
+            round: p.round,
+            quorum_cert: p.qc.clone(),
+        }
+        .encode_extra()
+        .into(),
         ..Header::default()
     };
     if let Some((masternodes, penalties)) = &p.switch {
-        h.validators = masternodes.iter().flat_map(|a| a.0).collect::<Vec<u8>>().into();
-        h.penalties = penalties.iter().flat_map(|a| a.0).collect::<Vec<u8>>().into();
+        h.validators = masternodes
+            .iter()
+            .flat_map(|a| a.0)
+            .collect::<Vec<u8>>()
+            .into();
+        h.penalties = penalties
+            .iter()
+            .flat_map(|a| a.0)
+            .collect::<Vec<u8>>()
+            .into();
     }
     Ok(h)
 }

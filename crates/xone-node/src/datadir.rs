@@ -34,7 +34,9 @@ pub enum DatadirError {
     },
     #[error("--networkid {given} does not match the genesis chain id {genesis}")]
     NetworkId { given: u64, genesis: u64 },
-    #[error("--chainspec is for private chains; chain id {0} is public and has only its built-in spec")]
+    #[error(
+        "--chainspec is for private chains; chain id {0} is public and has only its built-in spec"
+    )]
     PublicChainspec(u64),
     #[error("genesis json: {0}")]
     GenesisJson(String),

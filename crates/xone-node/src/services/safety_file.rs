@@ -157,21 +157,37 @@ mod tests {
         let d = dir("a");
         let mut s = FileSafety::open(&d).unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(s.load(), Ok(None));
-        s.persist_intent(b"i1", b"r1").unwrap_or_else(|e| panic!("{e}"));
-        s.persist_intent(b"i2", b"r2").unwrap_or_else(|e| panic!("{e}"));
-        assert!(FileSafety::open(&d).is_err(), "one process holds the directory");
+        s.persist_intent(b"i1", b"r1")
+            .unwrap_or_else(|e| panic!("{e}"));
+        s.persist_intent(b"i2", b"r2")
+            .unwrap_or_else(|e| panic!("{e}"));
+        assert!(
+            FileSafety::open(&d).is_err(),
+            "one process holds the directory"
+        );
         drop(s);
         // tear the newest slot (the second write went to slot 1): the other one is the last good state
-        let f = OpenOptions::new().write(true).open(d.join("safety.rec")).unwrap_or_else(|e| panic!("{e}"));
-        f.write_all_at(&[0xff; 40], SLOT as u64 + 8).unwrap_or_else(|e| panic!("{e}"));
+        let f = OpenOptions::new()
+            .write(true)
+            .open(d.join("safety.rec"))
+            .unwrap_or_else(|e| panic!("{e}"));
+        f.write_all_at(&[0xff; 40], SLOT as u64 + 8)
+            .unwrap_or_else(|e| panic!("{e}"));
         drop(f);
         let mut s = FileSafety::open(&d).unwrap_or_else(|e| panic!("{e}"));
-        assert_eq!(s.load().unwrap_or_default().map(|l| l.record), Some(b"r1".to_vec()));
+        assert_eq!(
+            s.load().unwrap_or_default().map(|l| l.record),
+            Some(b"r1".to_vec())
+        );
         // the next write goes to the damaged slot and wins
-        s.persist_intent(b"i3", b"r3").unwrap_or_else(|e| panic!("{e}"));
+        s.persist_intent(b"i3", b"r3")
+            .unwrap_or_else(|e| panic!("{e}"));
         drop(s);
         let mut s = FileSafety::open(&d).unwrap_or_else(|e| panic!("{e}"));
-        assert_eq!(s.load().unwrap_or_default().map(|l| l.record), Some(b"r3".to_vec()));
+        assert_eq!(
+            s.load().unwrap_or_default().map(|l| l.record),
+            Some(b"r3".to_vec())
+        );
         drop(s);
         // no valid slot in an existing file is corrupt, not empty
         std::fs::write(d.join("safety.rec"), vec![7u8; 2 * SLOT]).unwrap_or_else(|e| panic!("{e}"));

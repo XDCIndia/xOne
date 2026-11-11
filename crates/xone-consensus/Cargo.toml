@@ -22,7 +22,6 @@ xone-signer.workspace = true
 xone-state.workspace = true
 
 [dev-dependencies]
-xone-db = { workspace = true, features = ["fault-injection"] }
 serde.workspace = true
 serde_json.workspace = true
 xone-state.workspace = true

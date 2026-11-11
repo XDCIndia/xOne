@@ -8,7 +8,12 @@
 )]
 //! Blocks of the committed replay vectors, and a sealer that answers with the recorded signatures.
 
-use std::{collections::HashMap, fs::File, io::{BufRead, BufReader}, path::PathBuf};
+use std::{
+    collections::HashMap,
+    fs::File,
+    io::{BufRead, BufReader},
+    path::PathBuf,
+};
 
 use alloy_primitives::{Address, Bytes, B256};
 use alloy_rlp::{Decodable, Header as RlpHeader};
@@ -83,12 +88,23 @@ pub struct Recorded {
 
 impl Recorded {
     pub fn new(who: Address, sig: &[u8]) -> Self {
-        Self { who, sig: Bytes::copy_from_slice(sig), asked: vec![] }
+        Self {
+            who,
+            sig: Bytes::copy_from_slice(sig),
+            asked: vec![],
+        }
     }
     fn answer(&self, digest: &B256) -> Result<Signature, UnitError> {
         let got = ecrecover(digest, &self.sig).map_err(|e| UnitError::Sign(e.to_string()))?;
-        assert_eq!(got, self.who, "the digest {digest} is not what {} signed", self.who);
-        Ok(Signature { algorithm: AlgorithmId::Secp256k1Keccak, bytes: self.sig.clone() })
+        assert_eq!(
+            got, self.who,
+            "the digest {digest} is not what {} signed",
+            self.who
+        );
+        Ok(Signature {
+            algorithm: AlgorithmId::Secp256k1Keccak,
+            bytes: self.sig.clone(),
+        })
     }
 }
 
@@ -137,10 +153,21 @@ impl TestKey {
         let (s, id) = self.0.sign_prehash_recoverable(digest.as_slice()).unwrap();
         let mut b = s.to_bytes().to_vec();
         b.push(id.to_byte());
-        Signature { algorithm: AlgorithmId::Secp256k1Keccak, bytes: Bytes::from(b) }
+        Signature {
+            algorithm: AlgorithmId::Secp256k1Keccak,
+            bytes: Bytes::from(b),
+        }
     }
     /// An EIP-155 legacy transaction, decoded as the pool decodes it.
-    pub fn tx(&self, chain_id: u64, nonce: u64, gas_price: u128, gas: u64, to: Address, data: &[u8]) -> std::sync::Arc<PoolTx> {
+    pub fn tx(
+        &self,
+        chain_id: u64,
+        nonce: u64,
+        gas_price: u128,
+        gas: u64,
+        to: Address,
+        data: &[u8],
+    ) -> std::sync::Arc<PoolTx> {
         let fields = |p: &mut Vec<u8>| {
             nonce.encode(p);
             gas_price.encode(p);
@@ -151,7 +178,11 @@ impl TestKey {
         };
         let list = |p: Vec<u8>| {
             let mut o = vec![];
-            alloy_rlp::Header { list: true, payload_length: p.len() }.encode(&mut o);
+            alloy_rlp::Header {
+                list: true,
+                payload_length: p.len(),
+            }
+            .encode(&mut o);
             o.extend(p);
             o
         };

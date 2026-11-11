@@ -17,7 +17,6 @@ use std::{fs, path::PathBuf, process::Command};
 /// (file under `crates/`, text that occurs once, replacement).
 type Edit = (&'static str, &'static str, &'static str);
 
-const B: &str = "xone-builder/src/producer/";
 const U: &str = "xone-consensus/src/unit.rs";
 
 /// (name, edits, package, test target that must fail).
@@ -37,8 +36,8 @@ const MUTANTS: &[(&str, &[Edit], &str, &str)] = &[
     (
         "double-mining a round: the safety record is ignored (unit tests)",
         &[(U, "        let mut next = decide(&self.rec, &intent, self.dur)?;", "        let mut next = self.rec.clone();\n        next.signed[2].round = intent.round;")],
-        "xone-consensus",
-        "unit",
+        "xone-builder",
+        "producer_unit",
     ),
     (
         "signing before persisting",
@@ -46,8 +45,8 @@ const MUTANTS: &[(&str, &[Edit], &str, &str)] = &[
             (U, "        if next != self.rec {\n            // the write and the sync come first", "        let early = self.backend.sign(&Authorized { digest: &intent.digest, domain });\n        if next != self.rec {\n            // the write and the sync come first"),
             (U, "        self.backend.sign(&auth)\n    }\n}\n\nimpl<St: SafetyStore, B: Backend> Sealer for", "        let _ = auth;\n        early\n    }\n}\n\nimpl<St: SafetyStore, B: Backend> Sealer for"),
         ],
-        "xone-consensus",
-        "unit",
+        "xone-builder",
+        "producer_unit",
     ),
     (
         "proposing out of turn (V2): any masternode may lead",
@@ -93,7 +92,7 @@ const MUTANTS: &[(&str, &[Edit], &str, &str)] = &[
     ),
     (
         "sign tx for every block: the 15 block cadence is off",
-        &[("xone-builder/src/producer/signtx.rs", "    number % MERGE_SIGN_RANGE == 0 || !spec.effective.tip2019.is_active(number)", "    true")],
+        &[("xone-builder/src/producer/signtx.rs", "    number.is_multiple_of(MERGE_SIGN_RANGE) || !spec.effective.tip2019.is_active(number)", "    true")],
         "xone-builder",
         "producer_vectors",
     ),
@@ -110,8 +109,8 @@ const MUTANTS: &[(&str, &[Edit], &str, &str)] = &[
         "producer_construction",
     ),
     (
-        "V2 prepare: the QC is not the highest QC",
-        &[("xone-builder/src/producer/seal_v2.rs", "        extra_data: ExtraFieldsV2 { round: p.round, quorum_cert: p.qc.clone() }", "        extra_data: ExtraFieldsV2 { round: p.round + 1, quorum_cert: p.qc.clone() }")],
+        "V2 prepare: a wrong round in the extra data",
+        &[("xone-builder/src/producer/seal_v2.rs", "            round: p.round,\n            quorum_cert: p.qc.clone(),", "            round: p.round + 1,\n            quorum_cert: p.qc.clone(),")],
         "xone-builder",
         "producer_construction",
     ),
@@ -147,7 +146,11 @@ fn the_producer_tests_catch_every_mutant() {
                     original
                 }
             };
-            assert_eq!(current.matches(from).count(), 1, "`{from}` must occur once in {file}");
+            assert_eq!(
+                current.matches(from).count(),
+                1,
+                "`{from}` must occur once in {file}"
+            );
             files.retain(|(p, _)| *p != path);
             files.push((path, current.replace(from, to)));
         }
@@ -156,19 +159,39 @@ fn the_producer_tests_catch_every_mutant() {
             fs::write(p, t).unwrap();
         }
         let out = Command::new(env!("CARGO"))
-            .args(["test", "--offline", "--locked", "-p", package, "--test", test])
+            .args([
+                "test",
+                "--offline",
+                "--locked",
+                "-p",
+                package,
+                "--test",
+                test,
+            ])
             .env("CARGO_TARGET_DIR", &target)
             .current_dir(&crates)
             .output()
             .unwrap();
         drop(guard);
-        let text = String::from_utf8_lossy(&out.stdout).to_string() + &String::from_utf8_lossy(&out.stderr);
+        let text = String::from_utf8_lossy(&out.stdout).to_string()
+            + &String::from_utf8_lossy(&out.stderr);
         let compiled = !text.contains("could not compile");
-        let caught = compiled && !out.status.success() && (text.contains("test result: FAILED") || text.contains("panicked"));
-        let by: Vec<&str> = text.lines().filter(|l| l.starts_with("test ") && l.ends_with("FAILED")).collect();
+        let caught = compiled
+            && !out.status.success()
+            && (text.contains("test result: FAILED") || text.contains("panicked"));
+        let by: Vec<&str> = text
+            .lines()
+            .filter(|l| l.starts_with("test ") && l.ends_with("FAILED"))
+            .collect();
         println!(
             "mutant {name} [{package} {test}]: {} {by:?}",
-            if caught { "CAUGHT" } else if !compiled { "DID NOT COMPILE" } else { "SURVIVED" }
+            if caught {
+                "CAUGHT"
+            } else if !compiled {
+                "DID NOT COMPILE"
+            } else {
+                "SURVIVED"
+            }
         );
         if !caught {
             survivors.push(*name);

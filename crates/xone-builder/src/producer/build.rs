@@ -24,9 +24,8 @@ use crate::txpool::{special::SIGN_CALLDATA_LEN, PoolTx};
 /// geth `params.TxGas`: the least a transaction may declare.
 const TX_GAS: u64 = 21_000;
 /// `Keccak256(RLP([]))`, geth `types.EmptyUncleHash` (`core/types/hashes.go:29`).
-pub const EMPTY_UNCLE_HASH: B256 = alloy_primitives::b256!(
-    "1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-);
+pub const EMPTY_UNCLE_HASH: B256 =
+    alloy_primitives::b256!("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347");
 
 /// What the caller's execution says about one transaction (geth `commitTransaction`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -76,7 +75,10 @@ fn tip(c: &Cand, base_fee: Option<u128>) -> Option<u128> {
 
 impl Heap {
     fn new(pending: BTreeMap<Address, Vec<Cand>>, base_fee: Option<u128>) -> Self {
-        let mut h = Self { rest: BTreeMap::new(), heads: Vec::new() };
+        let mut h = Self {
+            rest: BTreeMap::new(),
+            heads: Vec::new(),
+        };
         for (a, txs) in pending {
             let mut q: VecDeque<Cand> = txs.into();
             if let Some(first) = q.pop_front() {
@@ -94,9 +96,7 @@ impl Heap {
         (0..self.heads.len()).min_by(|&i, &j| {
             let (a, x, tx) = &self.heads[i];
             let (b, y, ty) = &self.heads[j];
-            ty.cmp(tx)
-                .then(x.seen.cmp(&y.seen))
-                .then(a.cmp(b))
+            ty.cmp(tx).then(x.seen.cmp(&y.seen)).then(a.cmp(b))
         })
     }
 

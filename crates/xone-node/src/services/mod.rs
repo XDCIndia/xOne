@@ -63,13 +63,8 @@ pub fn build(
         .map_err(|e| e.to_string())?;
 
     let core = Arc::new(
-        core::Core::open(
-            spec,
-            genesis,
-            &cfg.datadir.join("xone"),
-            CHECKPOINT_EVERY,
-        )
-        .map_err(|e| e.to_string())?,
+        core::Core::open(spec, genesis, &cfg.datadir.join("xone"), CHECKPOINT_EVERY)
+            .map_err(|e| e.to_string())?,
     );
     if core.genesis.to_string() != marker.genesis_hash {
         return Err("the genesis hash of the node differs from the chain marker".into());

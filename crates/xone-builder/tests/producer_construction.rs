@@ -14,7 +14,7 @@
 
 mod producer_common;
 
-use alloy_primitives::{Bloom, U256};
+use alloy_primitives::U256;
 use alloy_trie::root::ordered_trie_root_encoded;
 use producer_common::{addrs, replay, Recorded};
 use xone_builder::producer::{
@@ -27,12 +27,16 @@ use xone_primitives::Header;
 
 fn roots(h: &Header, txs: &[alloy_primitives::Bytes]) -> Roots {
     let tx_root = ordered_trie_root_encoded(txs);
-    assert_eq!(tx_root, h.tx_root, "block {}: the transactions give the recorded root", h.number);
+    assert_eq!(
+        tx_root, h.tx_root,
+        "block {}: the transactions give the recorded root",
+        h.number
+    );
     Roots {
         state_root: h.state_root,
         tx_root,
         receipt_root: h.receipt_root,
-        bloom: Bloom::from(h.bloom),
+        bloom: h.bloom,
         gas_used: h.gas_used,
     }
 }
@@ -52,11 +56,21 @@ fn two_hundred_v1_blocks_are_rebuilt_to_the_canonical_hash() {
         let creator = b.v1_signer().unwrap();
         let checkpoint = (b.number % epoch == 0).then(|| seal_v1::Checkpoint {
             masternodes: masternodes_of(&b.extra_data).unwrap(),
-            penalties: b.penalties.clone().to_vec().chunks_exact(20).map(alloy_primitives::Address::from_slice).collect(),
+            penalties: b
+                .penalties
+                .clone()
+                .to_vec()
+                .chunks_exact(20)
+                .map(alloy_primitives::Address::from_slice)
+                .collect(),
             validators: b.validators.clone(),
         });
         let time = timing::v1_block_time(p.timestamp, spec.xdpos.period, b.timestamp);
-        assert_eq!(time, b.timestamp, "block {} is on or after its slot", b.number);
+        assert_eq!(
+            time, b.timestamp,
+            "block {} is on or after its slot",
+            b.number
+        );
         let h = seal_v1::prepare(&seal_v1::Prepare {
             parent: p,
             gas_limit: b.gas_limit,
@@ -82,7 +96,10 @@ fn two_hundred_v1_blocks_are_rebuilt_to_the_canonical_hash() {
         assert_eq!(h, *b, "block {}", b.number);
         assert_eq!(h.hash(), b.hash(), "block {}", b.number);
     }
-    assert!(m2_by_other > 0, "the sample holds blocks whose M2 is another masternode");
+    assert!(
+        m2_by_other > 0,
+        "the sample holds blocks whose M2 is another masternode"
+    );
 }
 
 #[test]
@@ -100,8 +117,12 @@ fn two_hundred_v2_blocks_are_rebuilt_to_the_canonical_hash() {
         let mine_period = v2.config_at_round(f.round).unwrap().mine_period;
         let time = timing::v2_block_time(p.timestamp, mine_period, b.timestamp);
         assert_eq!(time, b.timestamp, "block {}", b.number);
-        assert_eq!(gaslimit::base_fee(&spec, b.number).map(U256::from), b.base_fee);
-        let switch = (!b.validators.is_empty()).then(|| (addrs(&b.validators), addrs(&b.penalties)));
+        assert_eq!(
+            gaslimit::base_fee(&spec, b.number).map(U256::from),
+            b.base_fee
+        );
+        let switch =
+            (!b.validators.is_empty()).then(|| (addrs(&b.validators), addrs(&b.penalties)));
         switches += usize::from(switch.is_some());
         let h = seal_v2::prepare(&seal_v2::Prepare {
             parent: p,
@@ -132,7 +153,10 @@ fn two_hundred_v2_blocks_are_rebuilt_to_the_canonical_hash() {
 fn a_lone_masternode_is_its_own_m2() {
     use producer_common::{KeySealer, TestKey};
     use xone_builder::producer::seal_v1::Checkpoint;
-    use xone_consensus::{unit::Sealer, v1::double_validation::{assigned_validator, check_double_validation}};
+    use xone_consensus::{
+        unit::Sealer,
+        v1::double_validation::{assigned_validator, check_double_validation},
+    };
     let spec = Network::Apothem.spec();
     let epoch = spec.xdpos.epoch;
     let mut unit = KeySealer(TestKey::new(7));
@@ -149,17 +173,37 @@ fn a_lone_masternode_is_its_own_m2() {
             vanity: &[],
         })
     };
-    let genesis_side = Header { number: epoch - 1, timestamp: 1_000, ..Header::default() };
-    let cp = mk(&genesis_side, Some(Checkpoint { masternodes: vec![me], penalties: vec![], validators: vec![0, 0, 0, b'0'].into() }));
+    let genesis_side = Header {
+        number: epoch - 1,
+        timestamp: 1_000,
+        ..Header::default()
+    };
+    let cp = mk(
+        &genesis_side,
+        Some(Checkpoint {
+            masternodes: vec![me],
+            penalties: vec![],
+            validators: vec![0, 0, 0, b'0'].into(),
+        }),
+    );
     assert_eq!(cp.number, 900);
-    let cp = seal_v1::seal(cp, &mut unit, epoch, None, true).unwrap().header;
+    let cp = seal_v1::seal(cp, &mut unit, epoch, None, true)
+        .unwrap()
+        .header;
     let next = mk(&cp, None);
     let sealed = seal_v1::seal(next, &mut unit, epoch, Some(&cp), true).unwrap();
     assert_eq!(sealed.needs_m2, None);
     let h = sealed.header;
     let n = h.extra_data.len();
-    assert_eq!(h.validator[..], h.extra_data[n - 65..], "the seal and the validator are one signature");
+    assert_eq!(
+        h.validator[..],
+        h.extra_data[n - 65..],
+        "the seal and the validator are one signature"
+    );
     assert_eq!(h.v1_signer().unwrap(), me);
-    let m2 = check_double_validation(&h, me, || assigned_validator(&h, me, Some(&cp), epoch, true)).unwrap();
+    let m2 = check_double_validation(&h, me, || {
+        assigned_validator(&h, me, Some(&cp), epoch, true)
+    })
+    .unwrap();
     assert_eq!(m2, me);
 }

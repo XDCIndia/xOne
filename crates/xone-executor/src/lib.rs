@@ -489,8 +489,7 @@ fn pay_checkpoint_reward<V: StateRead, E: Env>(
     let mut epoch_number = 0;
     if !is_v2_block {
         let at = reward_v1::locate(spec, number)?;
-        let blocks =
-            SignTxCounter::new(env).collect((header.parent_hash, number - 1), at.start)?;
+        let blocks = SignTxCounter::new(env).collect((header.parent_hash, number - 1), at.start)?;
         let masternodes = env
             .masternodes_at(at.checkpoint)
             .ok_or(missing(at.checkpoint))?;
@@ -499,8 +498,7 @@ fn pay_checkpoint_reward<V: StateRead, E: Env>(
         paid = reward_v1::rewards(spec, number, &window, &holders, root)?;
     } else {
         let at = reward_v2::locate(spec, env, number, header.parent_hash)?;
-        let blocks =
-            SignTxCounter::new(env).collect((header.parent_hash, number - 1), at.start)?;
+        let blocks = SignTxCounter::new(env).collect((header.parent_hash, number - 1), at.start)?;
         let masternodes = env
             .masternodes_at(at.switch.1)
             .ok_or(missing(at.switch.1))?;

@@ -43,9 +43,11 @@ Source column: file:line in geth-XDC (`XDCIndia/go-ethereum` at `6fc8e8c2`; `fla
 | `--miner.etherbase <string>` |  | unset | Address that receives block rewards. | flags_legacy.go:119 |
 | `--unlock <a,b,..>` |  | none | Accounts to unlock, comma-separated. | flags_legacy.go:144 |
 | `--password <path>` |  | unset | File with the account password; the password is never a flag. | flags.go:672 |
+| `--keystore <path>` |  | unset | Keystore file of the validator key. Block production (--mine) needs it with --password, and is refused on chain ids 50 and 51 in this build. | flags.go:124 ; xone |
 | `--ethstats <string>` |  | unset | Stats server as name:secret@host:port. | flags.go:786 ; geth,xone |
 | `--verbosity <n>` |  | 3 | Log level: 0 silent, 1 error, 2 warn, 3 info, 4 debug, 5 detail. | internal/debug/flags.go:42 |
 | `--override.genesis <path>` |  | unset | Genesis file; the datadir is initialised from it on first start. | flags.go:294 ; xone |
+| `--chainspec <path>` |  | unset | Fork table of a private chain (one network, the format of generated/forks.json); refused for chain ids 50 and 51. | not in geth-XDC; xone-defined |
 | `--xdcmainnet` |  | false | XDC mainnet profile (chain 50). | flags.go:166 |
 | `--apothem` |  | false | XDC Apothem profile (chain 51). | flags.go:171 |
 | `--xdcdevnet` |  | false | XDC devnet profile (chain 5551). | flags.go:176 |

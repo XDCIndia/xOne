@@ -70,12 +70,7 @@ pub enum Skip {
 /// geth `yourturnAligned` (`engine_v2/mining.go:24-71`). `list` is the list of the round (the new list
 /// at an epoch switch, else the parent's); the mined round comes from the safety unit, so a restart
 /// does not forget it (xOneGo #624).
-pub fn v2_turn<S: Sealer>(
-    unit: &S,
-    round: u64,
-    epoch: u64,
-    list: &[Address],
-) -> Result<(), Skip> {
+pub fn v2_turn<S: Sealer>(unit: &S, round: u64, epoch: u64, list: &[Address]) -> Result<(), Skip> {
     let highest = unit.signed_up_to(Kind::Propose);
     if round <= highest {
         return Err(Skip::AlreadyMined { round, highest });

@@ -35,7 +35,7 @@ The signer is the address of the validator key (`x.signer`, set with the sign fu
 
 ## 3. The safety record
 
-All integers little endian. `SafetyRecord::encode`, 299 bytes:
+All integers little endian. `SafetyRecord::encode`, 339 bytes (format version 2, XB-23; version 1 had three slots and 299 bytes):
 
 ```
 off  len  field
@@ -44,12 +44,12 @@ off  len  field
 6    20   identity (address)
 26   8    seq: count of writes of this record. Not a clock
 34   8    highest_voted_round: highest round of a vote or a timeout
-42   120  signed[vote], signed[timeout], signed[propose]: round u64 | digest 32 (round 0 = none)
-162  1    lock flag (0 or 1)
-163  48   lock QC: hash 32 | round u64 | number u64 (all zero if the flag is 0)
-211  48   highest QC, same layout
-259  8    highest_tc: round of the highest TC
-267  32   keccak256 of bytes 0..267
+42   160  signed[vote], signed[timeout], signed[propose], signed[seal_v1]: round u64 | digest 32 (round 0 = none)
+202  1    lock flag (0 or 1)
+203  48   lock QC: hash 32 | round u64 | number u64 (all zero if the flag is 0)
+251  48   highest QC, same layout
+299  8    highest_tc: round of the highest TC
+307  32   keccak256 of bytes 0..307
 ```
 
 - The checksum is keccak256 (same choice as ADR-005 section 6.2). Decode checks length, magic, version, checksum, and that an unset lock is all zero. Any failure is a refusal to sign, never a reset to zero (this removes G5).
@@ -62,7 +62,7 @@ off  len  field
 Decision [D]: its own directory `datadir/safety/`, not inside `chain.mdbx`, and not a table in an MDBX environment of its own.
 
 - Separate from chaindata: restore, snapshot import, `SetHead` and unwind work on `chain.mdbx`, `static/` and `journal/` (ADR-005 section 1). A tool that replaces those must not be able to replace the record. The safety directory is outside every backup set of those tools; a full-disk image or VM snapshot is the case the fence (section 8) covers.
-- A file, not MDBX: the record is one 299-byte value with one writer. MDBX would add an mmap environment, its sync-mode choice (ADR-005 section 4) and a second copy of its failure modes for one key. A file needs one fsync per write.
+- A file, not MDBX: the record is one 339-byte value with one writer. MDBX would add an mmap environment, its sync-mode choice (ADR-005 section 4) and a second copy of its failure modes for one key. A file needs one fsync per write.
 - Layout: `safety.rec` of two slots of 1024 bytes, created at `init`, fsynced with its directory once. A write goes to the slot that does not hold the newest valid frame, then `fsync`. A frame is `store_seq u64 | intent 41 | record_len u16 | record | keccak256 of the preceding bytes`. A torn write damages only the slot being written; the other slot is the last acknowledged state. Start-up takes the valid frame with the highest `store_seq`. This needs only write ordering around `fsync`, not atomic `rename` (ADR-005 N7 is `[U]`).
 - No valid slot in an existing file: `StoreError::Corrupt`, refuse. Missing file: refuse until the operator runs `xone signer init`, which writes a zero record for the identity. A zero record is treated as unproven (section 8).
 - `load()` syncs the file before it returns a frame, so a frame that was only in the page cache after a crash is durable before anything relies on it.
@@ -181,3 +181,11 @@ Seeds and runtime are in the PR. Seeded mutants: no write before sign (caught), 
 ## 13. Gate B and Gate D
 
 See `tests/signer/PLAN.md`. Gate B: the real file store under the ADR-005 fault matrix and the same kill points; layering fixture. Gate D: two hosts with throwaway keys on a local devnet, restore and failover cases, producer qualification. Any conflicting signature or lowered record blocks Gate D.
+
+## 14. Addendum (XB-23): the unit, the V1 seal slot, the join
+
+- `xone_consensus::unit::SafetyUnit` is the section 10 unit: it owns the key (`Backend`: the local key, or a remote signer with its fencing token), decides, writes, then signs. A signature needs an `Authorized` value that only that module can build (`compile_fail` doctest); `xone-builder` signs only through the `Sealer` trait, and `ci/layering.py` still allows only `xone-consensus` and `xone-node` to depend on `xone-signer`. A sign transaction goes through the unit and does not change the record.
+- A fourth slot, `Kind::SealV1`, holds V1 seals and M2 co-signatures by block number. A V1 height and a V2 round are different counters; in one slot a V1 height (millions on Apothem) would refuse every V2 round after the switch. The slot does not raise `highest_voted_round`. Format version 2.
+- `SafetyRecord::join` (fieldwise maximum): the BFT machine keeps its own copy of the record for its observations (QCs, TC, lock), the unit holds every signature including proposals. `drive` hands the machine's record to `Sealer::sign_joined`, which joins it before the write, so the machine's later writes cannot lower a proposal round.
+- `FileSafety` (`xone-node`) is the two-slot file of section 4, with an exclusive lock. Still not run under the ADR-005 fault matrix (Gate B).
+- The quiet window of section 8 is a parameter of `SafetyUnit::open`; a private devnet passes 0 (no second signer by construction). Public networks are refused by the producer in this slice.

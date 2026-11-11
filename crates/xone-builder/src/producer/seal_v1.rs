@@ -62,7 +62,12 @@ pub fn prepare(p: &Prepare<'_>) -> Header {
         for m in &c.masternodes {
             extra.extend_from_slice(m.as_slice());
         }
-        h.penalties = c.penalties.iter().flat_map(|a| a.0).collect::<Vec<u8>>().into();
+        h.penalties = c
+            .penalties
+            .iter()
+            .flat_map(|a| a.0)
+            .collect::<Vec<u8>>()
+            .into();
         h.validators = c.validators.clone();
     }
     extra.extend_from_slice(&[0; EXTRA_SEAL]);
@@ -105,7 +110,10 @@ pub fn seal<S: Sealer>(
             needs_m2 = Some(m2);
         }
     }
-    Ok(Sealed { header: h, needs_m2 })
+    Ok(Sealed {
+        header: h,
+        needs_m2,
+    })
 }
 
 /// The M2 co-signature of a block another masternode sealed, when this node is its assigned M2 (geth

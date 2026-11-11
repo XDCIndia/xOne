@@ -73,7 +73,11 @@ fn the_gas_limit_and_the_base_fee_equal_geth_at_the_rows() {
             c["parent_gas_limit"].as_u64().unwrap(),
             c["ceil"].as_u64().unwrap(),
         );
-        assert_eq!(gaslimit::gas_limit(&s, p, n, ceil), c["gas_limit"].as_u64().unwrap(), "{c}");
+        assert_eq!(
+            gaslimit::gas_limit(&s, p, n, ceil),
+            c["gas_limit"].as_u64().unwrap(),
+            "{c}"
+        );
         let want = c["base_fee"].as_str().map(|f| f.parse::<u64>().unwrap());
         assert_eq!(gaslimit::base_fee(&s, n), want, "{c}");
     }
@@ -88,7 +92,11 @@ fn the_sign_gates_equal_geth() {
         if matches!(net, "apothem" | "mainnet") {
             let s = spec_of(&o, net);
             let n = c["number"].as_u64().unwrap();
-            assert_eq!(signtx::is_sign_block(&s, n), c["sign_block"].as_bool().unwrap(), "{c}");
+            assert_eq!(
+                signtx::is_sign_block(&s, n),
+                c["sign_block"].as_bool().unwrap(),
+                "{c}"
+            );
         }
     }
     for c in o["stale"].as_array().unwrap() {
@@ -109,24 +117,44 @@ fn the_sign_transaction_has_the_data_gas_and_price_of_geth() {
         assert_eq!(t.gas, c["gas"].as_u64().unwrap());
         assert_eq!(t.gas_price.to_string(), c["gas_price"].as_str().unwrap());
         assert_eq!(t.value.to_string(), c["value"].as_str().unwrap());
-        assert_eq!(format!("{:#x}", t.to).to_lowercase(), c["to"].as_str().unwrap().to_lowercase());
-        assert_eq!(alloy_primitives::hex::encode(&t.data), c["data"].as_str().unwrap());
+        assert_eq!(
+            format!("{:#x}", t.to).to_lowercase(),
+            c["to"].as_str().unwrap().to_lowercase()
+        );
+        assert_eq!(
+            alloy_primitives::hex::encode(&t.data),
+            c["data"].as_str().unwrap()
+        );
     }
 }
 
 #[test]
 fn the_config_rows_of_the_timing_rules_equal_the_pinned_params() {
     let o = oracle();
-    for (net, spec) in [("apothem", Network::Apothem.spec()), ("mainnet", Network::Mainnet.spec())] {
+    for (net, spec) in [
+        ("apothem", Network::Apothem.spec()),
+        ("mainnet", Network::Mainnet.spec()),
+    ] {
         let t = &o["timing"][net];
         assert_eq!(spec.xdpos.period, t["period"].as_u64().unwrap());
         assert_eq!(spec.xdpos.epoch, t["epoch"].as_u64().unwrap());
         let v2 = spec.xdpos.v2.as_ref().unwrap();
-        assert_eq!(v2.switch_block.to_string(), t["switchBlock"].as_str().unwrap());
+        assert_eq!(
+            v2.switch_block.to_string(),
+            t["switchBlock"].as_str().unwrap()
+        );
         for (r, c) in t["rounds"].as_object().unwrap() {
             let cfg = v2.config_at_round(r.parse().unwrap()).unwrap();
-            assert_eq!(cfg.mine_period, c["minePeriod"].as_u64().unwrap(), "{net} round {r}");
-            assert_eq!(cfg.timeout_period, c["timeoutPeriod"].as_u64().unwrap(), "{net} round {r}");
+            assert_eq!(
+                cfg.mine_period,
+                c["minePeriod"].as_u64().unwrap(),
+                "{net} round {r}"
+            );
+            assert_eq!(
+                cfg.timeout_period,
+                c["timeoutPeriod"].as_u64().unwrap(),
+                "{net} round {r}"
+            );
         }
     }
 }
@@ -154,25 +182,41 @@ fn the_sign_transactions_of_the_archive_are_what_the_producer_emits() {
     let mut recovered = 0;
     for (file, from, to, chain_id) in [
         ("apothem-0-1800.jsonl.gz", 0, 1800, 51u64),
-        ("apothem-v2-56827800-56830294.jsonl.gz", 56_827_800, 56_830_294, 51),
+        (
+            "apothem-v2-56827800-56830294.jsonl.gz",
+            56_827_800,
+            56_830_294,
+            51,
+        ),
     ] {
         let blocks = replay(file, from, to);
-        let hashes: std::collections::HashMap<u64, B256> =
-            blocks.iter().map(|b| (b.header.number, b.header.hash())).collect();
+        let hashes: std::collections::HashMap<u64, B256> = blocks
+            .iter()
+            .map(|b| (b.header.number, b.header.hash()))
+            .collect();
         for b in &blocks {
             for raw in &b.txs {
                 if raw.first().is_some_and(|x| *x < 0xc0) {
                     continue; // a typed transaction is not a sign transaction of this era
                 }
                 let mut buf: &[u8] = raw;
-                let Ok(t) = Legacy::decode(&mut buf) else { continue };
-                let alloy_primitives::TxKind::Call(dest) = t.to else { continue };
-                if dest != xone_evm::route::BLOCK_SIGNERS || t.data.len() != 68 || t.data[..4] != SIGN_SELECTOR {
+                let Ok(t) = Legacy::decode(&mut buf) else {
+                    continue;
+                };
+                let alloy_primitives::TxKind::Call(dest) = t.to else {
+                    continue;
+                };
+                if dest != xone_evm::route::BLOCK_SIGNERS
+                    || t.data.len() != 68
+                    || t.data[..4] != SIGN_SELECTOR
+                {
                     continue;
                 }
                 let number = u64::from_be_bytes(t.data[28..36].try_into().unwrap());
                 let hash = B256::from_slice(&t.data[36..68]);
-                let Some(known) = hashes.get(&number) else { continue };
+                let Some(known) = hashes.get(&number) else {
+                    continue;
+                };
                 if *known != hash {
                     continue; // a sign of a block of another branch
                 }
@@ -183,7 +227,12 @@ fn the_sign_transactions_of_the_archive_are_what_the_producer_emits() {
                 assert_eq!(built.value, t.value);
                 seen += 1;
                 // gas and price: reported, then required below for the chain's whole sample
-                assert_eq!((built.gas, built.gas_price), (t.gas, t.gas_price), "block {} ({number})", b.header.number);
+                assert_eq!(
+                    (built.gas, built.gas_price),
+                    (t.gas, t.gas_price),
+                    "block {} ({number})",
+                    b.header.number
+                );
                 // the signature: `v` is 35 + 2 * chain id + parity, or 27 + parity before EIP-155
                 let v: u64 = t.v.to();
                 if v >= 35 {

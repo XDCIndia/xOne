@@ -10,7 +10,10 @@
 //! the leader's safety unit, the three vote through their units, the QC forms, and the proposals commit by the
 //! 3-chain rule. The mined round of a leader is the unit's record: a second proposal of a round is refused.
 
-use std::{collections::{BTreeMap, HashMap, VecDeque}, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashMap, VecDeque},
+    sync::Arc,
+};
 
 use alloy_primitives::{keccak256, Address, Bloom, Bytes, B256};
 use k256::ecdsa::SigningKey;
@@ -44,10 +47,16 @@ impl Backend for Key {
         Address::from_slice(&keccak256(&p.as_bytes()[1..])[12..])
     }
     fn sign(&self, a: &Authorized<'_>) -> Result<Signature, UnitError> {
-        let (s, id) = self.0.sign_prehash_recoverable(a.digest().as_slice()).unwrap();
+        let (s, id) = self
+            .0
+            .sign_prehash_recoverable(a.digest().as_slice())
+            .unwrap();
         let mut b = s.to_bytes().to_vec();
         b.push(id.to_byte());
-        Ok(Signature { algorithm: AlgorithmId::Secp256k1Keccak, bytes: Bytes::from(b) })
+        Ok(Signature {
+            algorithm: AlgorithmId::Secp256k1Keccak,
+            bytes: Bytes::from(b),
+        })
     }
 }
 
@@ -96,7 +105,11 @@ impl Chain for Net {
         self.epoch_of_round(0)
     }
     fn epoch_of_round(&self, _: u64) -> Result<Arc<EpochFacts>, Error> {
-        Ok(Arc::new(EpochFacts { masternodes: self.list.clone(), gap: 0, switch: B256::ZERO }))
+        Ok(Arc::new(EpochFacts {
+            masternodes: self.list.clone(),
+            gap: 0,
+            switch: B256::ZERO,
+        }))
     }
     fn candidates(&self, _: u64) -> Option<Arc<[Address]>> {
         Some(self.list.clone().into())
@@ -122,10 +135,17 @@ fn v2() -> V2 {
         timeout_period: 10,
         cert_threshold: 0.667,
         max_masternodes: 108,
-        exp_timeout: ExpTimeoutConfig { base: 1.0, max_exponent: 0 },
+        exp_timeout: ExpTimeoutConfig {
+            base: 1.0,
+            max_exponent: 0,
+        },
         ..V2Config::default()
     };
-    V2 { switch_block: SWITCH, switch_epoch: 1, configs: BTreeMap::from([(0, row)]) }
+    V2 {
+        switch_block: SWITCH,
+        switch_epoch: 1,
+        configs: BTreeMap::from([(0, row)]),
+    }
 }
 
 /// Delivers events in a queue until it is empty; every signed vote goes to every node.
@@ -151,15 +171,32 @@ fn three_validators_only_the_leader_proposes_and_every_proposal_commits() {
         .map(|n| SafetyUnit::open_or_init(MemStore::default(), key(n), 0).unwrap())
         .collect();
     net.list = units.iter().map(|u| u.address()).collect();
-    let mut sw = Header { number: SWITCH, timestamp: 1_000, ..Header::default() };
+    let mut sw = Header {
+        number: SWITCH,
+        timestamp: 1_000,
+        ..Header::default()
+    };
     sw.extra_data = vec![0u8; 97].into();
     net.head = net.add(sw);
     let mut nodes: Vec<Node> = units
         .into_iter()
         .map(|unit| {
             let me = unit.address();
-            let bft = Bft::new(Config { v2: v2(), gap: 450, me: Some(me) }, Secp, unit.record().clone()).unwrap();
-            Node { bft, unit, committed: vec![] }
+            let bft = Bft::new(
+                Config {
+                    v2: v2(),
+                    gap: 450,
+                    me: Some(me),
+                },
+                Secp,
+                unit.record().clone(),
+            )
+            .unwrap();
+            Node {
+                bft,
+                unit,
+                committed: vec![],
+            }
         })
         .collect();
     for i in 0..3 {
@@ -168,15 +205,22 @@ fn three_validators_only_the_leader_proposes_and_every_proposal_commits() {
     let list = net.list.clone();
     let mut proposers: Vec<(u64, usize)> = vec![];
     for round in 1..=ROUNDS {
-        assert!(nodes.iter().all(|n| n.bft.round() == round), "round {round}");
+        assert!(
+            nodes.iter().all(|n| n.bft.round() == round),
+            "round {round}"
+        );
         // the schedule: exactly one of the three is the leader
-        let turn: Vec<Result<(), Skip>> =
-            nodes.iter().map(|n| schedule::v2_turn(&n.unit, round, EPOCH, &list)).collect();
+        let turn: Vec<Result<(), Skip>> = nodes
+            .iter()
+            .map(|n| schedule::v2_turn(&n.unit, round, EPOCH, &list))
+            .collect();
         let leader = masternodes::leader_index(round, EPOCH, 3).unwrap();
         for (i, t) in turn.iter().enumerate() {
             match (i == leader, t) {
                 (true, Ok(())) => {}
-                (false, Err(Skip::NotLeader { leader: l })) => assert_eq!(l.as_slice(), list[leader].as_slice()),
+                (false, Err(Skip::NotLeader { leader: l })) => {
+                    assert_eq!(l.as_slice(), list[leader].as_slice())
+                }
                 other => panic!("round {round} node {i}: {other:?}"),
             }
         }
@@ -198,21 +242,37 @@ fn three_validators_only_the_leader_proposes_and_every_proposal_commits() {
         .unwrap();
         let h = assemble(
             h,
-            &Roots { state_root: B256::with_last_byte(1), tx_root: B256::with_last_byte(2), receipt_root: B256::with_last_byte(3), bloom: Bloom::ZERO, gas_used: 0 },
+            &Roots {
+                state_root: B256::with_last_byte(1),
+                tx_root: B256::with_last_byte(2),
+                receipt_root: B256::with_last_byte(3),
+                bloom: Bloom::ZERO,
+                gas_used: 0,
+            },
         );
         let sealed = seal_v2::seal(h.clone(), round, &mut n.unit).unwrap();
         assert_eq!(sealed.v2_signer().unwrap(), n.unit.address());
         // the round is mined: the guard says so, and another block of the round is refused by the unit
         assert_eq!(
             schedule::v2_turn(&n.unit, round, EPOCH, &list),
-            Err(Skip::AlreadyMined { round, highest: round })
+            Err(Skip::AlreadyMined {
+                round,
+                highest: round
+            })
         );
         let mut other = h;
         other.gas_used = 1;
-        assert!(seal_v2::seal(other, round, &mut n.unit).is_err(), "a second block of the round is not signed");
+        assert!(
+            seal_v2::seal(other, round, &mut n.unit).is_err(),
+            "a second block of the round is not signed"
+        );
         proposers.push((round, leader));
         let hash = net.add(sealed);
-        settle(&net, &mut nodes, (0..3).map(|i| (i, Event::Proposal(hash))).collect());
+        settle(
+            &net,
+            &mut nodes,
+            (0..3).map(|i| (i, Event::Proposal(hash))).collect(),
+        );
     }
     // one proposal per round, by the scheduled leader
     assert_eq!(proposers.len() as u64, ROUNDS);
@@ -226,9 +286,19 @@ fn three_validators_only_the_leader_proposes_and_every_proposal_commits() {
     }
     // the unit of each leader holds the rounds it proposed; a vote or a timeout never sets it
     for (i, n) in nodes.iter().enumerate() {
-        let mine = proposers.iter().filter(|(_, l)| *l == i).map(|(r, _)| *r).max().unwrap();
+        let mine = proposers
+            .iter()
+            .filter(|(_, l)| *l == i)
+            .map(|(r, _)| *r)
+            .max()
+            .unwrap();
         assert_eq!(n.unit.signed_up_to(Kind::Propose), mine);
-        assert!(n.unit.signed_up_to(Kind::Vote) >= ROUNDS - 1, "every node voted in the rounds");
-        assert!(n.unit.record().dominates(n.bft.record()) || n.bft.record().seq >= n.unit.record().seq);
+        assert!(
+            n.unit.signed_up_to(Kind::Vote) >= ROUNDS - 1,
+            "every node voted in the rounds"
+        );
+        assert!(
+            n.unit.record().dominates(n.bft.record()) || n.bft.record().seq >= n.unit.record().seq
+        );
     }
 }

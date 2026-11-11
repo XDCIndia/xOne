@@ -31,9 +31,7 @@ use xone_signer::{
     LocalSigner,
 };
 
-use crate::v2::safety::{
-    decide, DecodeError, Fence, Intent, Kind, Refusal, SafetyRecord,
-};
+use crate::v2::safety::{decide, DecodeError, Fence, Intent, Kind, Refusal, SafetyRecord};
 
 /// Why a call was not signed.
 #[derive(Debug, thiserror::Error)]
@@ -83,7 +81,8 @@ impl Backend for LocalSigner {
         LocalSigner::address(self)
     }
     fn sign(&self, a: &Authorized<'_>) -> Result<Signature, UnitError> {
-        xone_primitives::Signer::sign(self, a.domain, a.digest).map_err(|e: CryptoError| UnitError::Sign(e.to_string()))
+        xone_primitives::Signer::sign(self, a.domain, a.digest)
+            .map_err(|e: CryptoError| UnitError::Sign(e.to_string()))
     }
 }
 
@@ -120,7 +119,11 @@ pub trait Sealer {
     fn sign(&mut self, intent: Intent) -> Result<Signature, UnitError>;
     /// The same for an intent of the BFT machine, whose record (its observations) is joined into the one written.
     /// A double without a record signs as `sign` does.
-    fn sign_joined(&mut self, intent: Intent, _machine: &SafetyRecord) -> Result<Signature, UnitError> {
+    fn sign_joined(
+        &mut self,
+        intent: Intent,
+        _machine: &SafetyRecord,
+    ) -> Result<Signature, UnitError> {
         self.sign(intent)
     }
     /// The M2 co-signature of a V1 block (the same digest as M1, `Domain::ValidatorV1`).
@@ -165,7 +168,10 @@ impl<St: SafetyStore, B: Backend> SafetyUnit<St, B> {
     /// calls this on its own; a public network refuses to mine in this slice.
     pub fn init(store: &mut St, identity: Address) -> Result<(), UnitError> {
         let zero = SafetyRecord::new(identity);
-        store.persist_intent(&Intent::new(Kind::Vote, 0, B256::ZERO).to_bytes(), &zero.encode())?;
+        store.persist_intent(
+            &Intent::new(Kind::Vote, 0, B256::ZERO).to_bytes(),
+            &zero.encode(),
+        )?;
         Ok(())
     }
 
@@ -255,7 +261,11 @@ impl<St: SafetyStore, B: Backend> Sealer for SafetyUnit<St, B> {
     fn sign(&mut self, intent: Intent) -> Result<Signature, UnitError> {
         self.sign_with(intent, None)
     }
-    fn sign_joined(&mut self, intent: Intent, machine: &SafetyRecord) -> Result<Signature, UnitError> {
+    fn sign_joined(
+        &mut self,
+        intent: Intent,
+        machine: &SafetyRecord,
+    ) -> Result<Signature, UnitError> {
         self.sign_with(intent, Some(machine))
     }
     fn cosign_v1(&mut self, number: u64, digest: B256) -> Result<Signature, UnitError> {

@@ -48,9 +48,7 @@ use xone_consensus::{
     },
     v2::{
         self,
-        bft::{
-            drive::drive, Bft, Chain, Config as BftConfig, EpochFacts, Event, HeaderFacts,
-        },
+        bft::{drive::drive, Bft, Chain, Config as BftConfig, EpochFacts, Event, HeaderFacts},
         cert::Secp,
         epoch_switch, gap_snapshot,
     },
@@ -105,7 +103,11 @@ pub fn plan(cfg: &Config, chain_id: u64) -> Result<Plan, ProducerError> {
     if matches!(chain_id, 50 | 51) {
         return Err(ProducerError::PublicNetwork(chain_id));
     }
-    let keystore = cfg.mining.keystore.clone().ok_or(ProducerError::NoKeystore)?;
+    let keystore = cfg
+        .mining
+        .keystore
+        .clone()
+        .ok_or(ProducerError::NoKeystore)?;
     let password = cfg
         .mining
         .password_file
@@ -243,7 +245,11 @@ impl Worker {
     }
 
     fn switch_block(&self) -> u64 {
-        self.spec.xdpos.v2.as_ref().map_or(u64::MAX, |v| v.switch_block)
+        self.spec
+            .xdpos
+            .v2
+            .as_ref()
+            .map_or(u64::MAX, |v| v.switch_block)
     }
 
     // ---- start ----
@@ -256,8 +262,15 @@ impl Worker {
             if let (Ok(h), Ok(txs)) = (Header::decode(&mut b), Vec::<Bytes>::decode(&mut b)) {
                 let (n, head) = self.core.head();
                 if h.parent_hash == head && h.number == n + 1 {
-                    say(format!("finishing the block {} that was being signed", h.number));
-                    let body = Body { transactions: txs, uncles: vec![], withdrawals: None };
+                    say(format!(
+                        "finishing the block {} that was being signed",
+                        h.number
+                    ));
+                    let body = Body {
+                        transactions: txs,
+                        uncles: vec![],
+                        withdrawals: None,
+                    };
                     if let Err(e) = self.seal_and_send(h, body, false) {
                         say(format!("the pending block is dropped: {e}"));
                     }
@@ -324,10 +337,13 @@ impl Worker {
         if n >= self.switch_block() {
             h.switch_of(n).is_some_and(|w| {
                 h.switch_masternodes(w).contains(&self.me)
-                    || h.pool(w.number).is_ok_and(|p| p.candidates.contains(&self.me))
+                    || h.pool(w.number)
+                        .is_ok_and(|p| p.candidates.contains(&self.me))
             })
         } else {
-            h.snaps.get(&n).is_some_and(|s| s.get_signers().contains(&self.me))
+            h.snaps
+                .get(&n)
+                .is_some_and(|s| s.get_signers().contains(&self.me))
         }
     }
 
@@ -349,11 +365,20 @@ impl Worker {
         let pool_nonce = xone_rpc::api::PoolApi::pending_nonce(&*self.pool, self.me).unwrap_or(0);
         let head = self.core.head().0;
         match signtx::emit(
-            &self.spec, number, hash, head, candidate, pool_nonce, state_nonce, &mut self.unit,
+            &self.spec,
+            number,
+            hash,
+            head,
+            candidate,
+            pool_nonce,
+            state_nonce,
+            &mut self.unit,
         ) {
             Ok(Some(raw)) => match self.pool.add_raws(&[&raw]).remove(0) {
                 Ok(h) => say(format!("sign transaction {h} for block {number}")),
-                Err(e) => say(format!("sign transaction for block {number} not added: {e}")),
+                Err(e) => say(format!(
+                    "sign transaction for block {number} not added: {e}"
+                )),
             },
             Ok(None) => {}
             Err(e) => say(format!("sign transaction for block {number}: {e}")),
@@ -382,12 +407,24 @@ impl Worker {
                 Ok(Context::V2(_)) => return,
                 Err(e) => return say(format!("no V1 context for block {}: {e}", n + 1)),
             };
-            (tip.hash, tip.miner, *c, snap.get_signers(), tip.header.clone())
+            (
+                tip.hash,
+                tip.miner,
+                *c,
+                snap.get_signers(),
+                tip.header.clone(),
+            )
         };
         let epoch = self.spec.xdpos.epoch;
         let me = self.me;
         let now_s = now();
-        let slot = match schedule::v1_slot(&ctx.parent_masternodes, n, (n > 0).then_some(parent_creator), me, epoch) {
+        let slot = match schedule::v1_slot(
+            &ctx.parent_masternodes,
+            n,
+            (n > 0).then_some(parent_creator),
+            me,
+            epoch,
+        ) {
             Ok(s) => s,
             Err(e) => return say(format!("no V1 slot: {e}")),
         };
@@ -397,7 +434,13 @@ impl Worker {
             return;
         }
         self.attempted = Some((n, head));
-        match self.v1_build(&parent, parent_creator, &ctx.parent_masternodes, &snap_signers, slot) {
+        match self.v1_build(
+            &parent,
+            parent_creator,
+            &ctx.parent_masternodes,
+            &snap_signers,
+            slot,
+        ) {
             Ok(()) => {}
             Err(e) => say(format!("block {} not produced: {e}", n + 1)),
         }
@@ -413,9 +456,14 @@ impl Worker {
     ) -> Result<(), String> {
         let number = parent.number + 1;
         let epoch = self.spec.xdpos.epoch;
-        let difficulty = turn::difficulty(list, parent.number, (parent.number > 0).then_some(parent_creator), self.me)
-            .map_err(|e| e.to_string())?;
-        let checkpoint = (number % epoch == 0 && number >= epoch)
+        let difficulty = turn::difficulty(
+            list,
+            parent.number,
+            (parent.number > 0).then_some(parent_creator),
+            self.me,
+        )
+        .map_err(|e| e.to_string())?;
+        let checkpoint = (number.is_multiple_of(epoch) && number >= epoch)
             .then(|| self.v1_checkpoint(number, list, signers))
             .transpose()?;
         let time = timing::v1_block_time(parent.timestamp, self.spec.xdpos.period, now());
@@ -448,11 +496,19 @@ impl Worker {
 
     /// The `Penalties`, `Validators` and masternode list of the V1 checkpoint `number` (geth `Prepare`,
     /// `xdpos.go:1439-1480`).
-    fn v1_checkpoint(&self, number: u64, prev: &[Address], signers: &[Address]) -> Result<seal_v1::Checkpoint, String> {
+    fn v1_checkpoint(
+        &self,
+        number: u64,
+        prev: &[Address],
+        signers: &[Address],
+    ) -> Result<seal_v1::Checkpoint, String> {
         let h = self.core.hist.read();
         let spec = &self.spec;
         let epoch = spec.xdpos.epoch;
-        let era = penalty_era(spec.effective.tip_signing.is_active(number), spec.effective.tip_randomize.is_active(number));
+        let era = penalty_era(
+            spec.effective.tip_signing.is_active(number),
+            spec.effective.tip_randomize.is_active(number),
+        );
         let tip2019 = match spec.effective.tip2019 {
             xone_chainspec::ForkBlock::At(b) => b,
             _ => u64::MAX,
@@ -481,16 +537,24 @@ impl Worker {
                 earlier.insert(key, pens);
             }
         }
-        let removed = xone_consensus::v1::checkpoint::checkpoint_penalties(number, epoch, &current, &earlier)
-            .map_err(|e| e.to_string())?;
-        let masternodes: Vec<Address> = signers.iter().filter(|s| !removed.contains(s)).copied().collect();
+        let removed =
+            xone_consensus::v1::checkpoint::checkpoint_penalties(number, epoch, &current, &earlier)
+                .map_err(|e| e.to_string())?;
+        let masternodes: Vec<Address> = signers
+            .iter()
+            .filter(|s| !removed.contains(s))
+            .copied()
+            .collect();
         if masternodes.is_empty() {
             return Err("every signer is penalised".into());
         }
         // `BuildValidatorFromM2` of `GenM2FromRandomize` with no secrets: one masternode is its own M2.
         // More than one needs Go's `math/rand` source, which is not ported.
         if masternodes.len() != 1 {
-            return Err("the M2 assignment of more than one masternode is not wired into the producer".into());
+            return Err(
+                "the M2 assignment of more than one masternode is not wired into the producer"
+                    .into(),
+            );
         }
         Ok(seal_v1::Checkpoint {
             masternodes,
@@ -530,7 +594,9 @@ impl Worker {
                 Ok(s) => s,
                 Err(_) => return,
             };
-            let Ok(Context::V2(c)) = h.context(&skel, &parent, None) else { return };
+            let Ok(Context::V2(c)) = h.context(&skel, &parent, None) else {
+                return;
+            };
             let v2 = self.spec.xdpos.v2.as_ref();
             let is_switch = v2.is_some_and(|v| {
                 epoch_switch::of_header(v, self.spec.xdpos.epoch, &skel).is_ok_and(|(s, _)| s)
@@ -550,7 +616,12 @@ impl Worker {
             }
         }
         self.attempted = Some((round, qc_hash));
-        if let Err(e) = self.v2_build(&parent, round, switch.then_some((ctx.masternodes, ctx.penalties)), now_s) {
+        if let Err(e) = self.v2_build(
+            &parent,
+            round,
+            switch.then_some((ctx.masternodes, ctx.penalties)),
+            now_s,
+        ) {
             say(format!("block {} (round {round}) not produced: {e}", n + 1));
         }
     }
@@ -582,7 +653,9 @@ impl Worker {
         switch: Option<(Vec<Address>, Vec<Address>)>,
         now_s: u64,
     ) -> Result<(), String> {
-        let h = self.v2_header(parent, round, switch, now_s).map_err(|e| e.to_string())?;
+        let h = self
+            .v2_header(parent, round, switch, now_s)
+            .map_err(|e| e.to_string())?;
         let (body, out) = self.fill(parent, &h, self.me)?;
         let h = assemble(h, &Roots::from(&out));
         self.write_pending(&h, &body)?;
@@ -593,7 +666,12 @@ impl Worker {
 
     /// Selects the transactions and executes them: a transaction the execution refuses is dropped with the
     /// later ones of its sender, and the block is executed again.
-    fn fill(&mut self, parent: &Header, h: &Header, author: Address) -> Result<(Body, BlockOutcome), String> {
+    fn fill(
+        &mut self,
+        parent: &Header,
+        h: &Header,
+        author: Address,
+    ) -> Result<(Body, BlockOutcome), String> {
         let number = h.number;
         let base_fee = h.base_fee.map(|b| u128::try_from(b).unwrap_or(u128::MAX));
         let (pending, raws) = self.pool.pending_raws(base_fee.unwrap_or(0));
@@ -622,7 +700,10 @@ impl Worker {
                 return Err("stopped".into());
             }
             let body = Body {
-                transactions: txs.iter().filter_map(|t| raws.get(&t.hash).cloned()).collect(),
+                transactions: txs
+                    .iter()
+                    .filter_map(|t| raws.get(&t.hash).cloned())
+                    .collect(),
                 uncles: vec![],
                 withdrawals: None,
             };
@@ -633,7 +714,15 @@ impl Worker {
                     .chain
                     .reader()
                     .with_state(parent.hash(), &mut |s| {
-                        out = Some(execute_unsealed(&self.spec, &Dyn(s), h, author, &body, parent, &*hist));
+                        out = Some(execute_unsealed(
+                            &self.spec,
+                            &Dyn(s),
+                            h,
+                            author,
+                            &body,
+                            parent,
+                            &*hist,
+                        ));
                     })
                     .map_err(|e| e.to_string())?;
                 out.ok_or("no parent state")?
@@ -648,7 +737,10 @@ impl Worker {
                 ) if index < txs.len() => {
                     let from = txs[index].from();
                     let nonce = txs[index].tx.nonce;
-                    say(format!("dropping a transaction the execution refused: {}", txs[index].hash));
+                    say(format!(
+                        "dropping a transaction the execution refused: {}",
+                        txs[index].hash
+                    ));
                     txs.retain(|t| !(t.from() == from && t.tx.nonce >= nonce));
                 }
                 Err(e) => return Err(e.to_string()),
@@ -666,7 +758,12 @@ impl Worker {
         write_durable(&self.dir.join("pending.rlp"), &b)
     }
 
-    fn seal_and_send_after(&mut self, h: Header, body: Body, delay: Duration) -> Result<(), String> {
+    fn seal_and_send_after(
+        &mut self,
+        h: Header,
+        body: Body,
+        delay: Duration,
+    ) -> Result<(), String> {
         let sealed = self.seal(h)?;
         self.wait(delay);
         if self.stopped() {
@@ -706,13 +803,20 @@ impl Worker {
             let hist = self.core.hist.read();
             let cp = number - number % epoch;
             (cp != number && cp != 0)
-                .then(|| usize::try_from(cp).ok().and_then(|c| hist.blocks.get(c)).map(|s| s.header.clone()))
+                .then(|| {
+                    usize::try_from(cp)
+                        .ok()
+                        .and_then(|c| hist.blocks.get(c))
+                        .map(|s| s.header.clone())
+                })
                 .flatten()
         };
         let s = seal_v1::seal(h, &mut self.unit, epoch, checkpoint.as_ref(), tip_randomize)
             .map_err(|e| e.to_string())?;
         if let Some(m2) = s.needs_m2 {
-            return Err(format!("the assigned M2 is {m2}: a co-signature of another masternode is not wired"));
+            return Err(format!(
+                "the assigned M2 is {m2}: a co-signature of another masternode is not wired"
+            ));
         }
         Ok(s.header)
     }
@@ -837,11 +941,16 @@ impl ProducerService {
             .map_err(|e| format!("safety store: {e}"))?;
         // ponytail: a private chain has no second signer by construction, so the quiet window is 0; a
         // public chain is refused above and takes the ADR-010 window when it is allowed.
-        let unit = SafetyUnit::open_or_init(store, signer, 0).map_err(|e| format!("safety unit: {e}"))?;
+        let unit =
+            SafetyUnit::open_or_init(store, signer, 0).map_err(|e| format!("safety unit: {e}"))?;
         let spec = core.spec.clone();
         let v2 = spec.xdpos.v2.clone().ok_or("the chain has no V2 section")?;
         let bft = Bft::new(
-            BftConfig { v2, gap: spec.xdpos.gap, me: Some(me) },
+            BftConfig {
+                v2,
+                gap: spec.xdpos.gap,
+                me: Some(me),
+            },
             Secp,
             unit.record().clone(),
         )
@@ -849,7 +958,10 @@ impl ProducerService {
         // the producer's own sign transactions are admitted: this node is a candidate
         pool.set_authority(Authority::candidates([me]));
         let stop = Arc::new(AtomicBool::new(false));
-        say(format!("validator {me}, safety record at round {}", unit.record().signed[2].round));
+        say(format!(
+            "validator {me}, safety record at round {}",
+            unit.record().signed[2].round
+        ));
         Ok(Self {
             worker: Some(Worker {
                 core,
