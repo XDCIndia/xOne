@@ -1,0 +1,99 @@
+// Throwaway: emits the ethstats frames exactly as ethstats/ethstats.go at the pin marshals them
+// (same struct tags, same map envelopes, same websocket WriteJSON = json.Encoder, newline-terminated).
+// The structs below are copied verbatim from ethstats/ethstats.go:487-505, 538-543, 656-694, 838-870.
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"math/big"
+	"os"
+
+	"github.com/ethereum/go-ethereum/common"
+)
+
+type nodeInfo struct {
+	Name        string `json:"name"`
+	Node        string `json:"node"`
+	Port        int    `json:"port"`
+	Network     string `json:"net"`
+	Protocol    string `json:"protocol"`
+	API         string `json:"api"`
+	Os          string `json:"os"`
+	OsVer       string `json:"os_v"`
+	Client      string `json:"client"`
+	History     bool   `json:"canUpdateHistory"`
+	Coinbase    string `json:"coinbase"`
+	Role        string `json:"role"`
+	SyncMode    string `json:"syncMode"`
+	GcMode      string `json:"gcMode"`
+	StateScheme string `json:"stateScheme"`
+}
+type authMsg struct {
+	ID     string   `json:"id"`
+	Info   nodeInfo `json:"info"`
+	Secret string   `json:"secret"`
+}
+type blockStats struct {
+	Number     *big.Int       `json:"number"`
+	Hash       common.Hash    `json:"hash"`
+	ParentHash common.Hash    `json:"parentHash"`
+	Timestamp  *big.Int       `json:"timestamp"`
+	Miner      common.Address `json:"miner"`
+	GasUsed    uint64         `json:"gasUsed"`
+	GasLimit   uint64         `json:"gasLimit"`
+	Diff       string         `json:"difficulty"`
+	TotalDiff  string         `json:"totalDifficulty"`
+	Txs        []txStats      `json:"transactions"`
+	TxHash     common.Hash    `json:"transactionsRoot"`
+	Root       common.Hash    `json:"stateRoot"`
+	Uncles     []int          `json:"uncles"` // uncleStats marshals an empty list as []
+}
+type txStats struct {
+	Hash common.Hash `json:"hash"`
+}
+type pendStats struct {
+	Pending int `json:"pending"`
+}
+type nodeStats struct {
+	Active   bool `json:"active"`
+	Syncing  bool `json:"syncing"`
+	Peers    int  `json:"peers"`
+	GasPrice int  `json:"gasPrice"`
+	Uptime   int  `json:"uptime"`
+}
+
+func line(out *bytes.Buffer, name string, v interface{}) {
+	var b bytes.Buffer
+	json.NewEncoder(&b).Encode(v) // gorilla WriteJSON uses a json.Encoder
+	fmt.Fprintf(out, "%s\t%s", name, b.String())
+}
+
+func blk(n int64, txs int) *blockStats {
+	b := &blockStats{Number: big.NewInt(n), Hash: common.Hash{0xab, 1}, ParentHash: common.Hash{0xcd, 2},
+		Timestamp: big.NewInt(1700000000), Miner: common.HexToAddress("0xAbCdEf0123456789aBcDeF0123456789AbCdEf01"),
+		GasUsed: 21000, GasLimit: 420000000, Diff: "1", TotalDiff: "0", TxHash: common.Hash{0xee}, Root: common.Hash{0xff, 3}, Uncles: []int{}}
+	b.Txs = make([]txStats, txs)
+	for i := range b.Txs {
+		b.Txs[i].Hash = common.Hash{0x77, byte(i)}
+	}
+	return b
+}
+
+func main() {
+	var out bytes.Buffer
+	id := "xone-test"
+	line(&out, "hello", map[string][]interface{}{"emit": {"hello", &authMsg{ID: id, Secret: "s3cret", Info: nodeInfo{
+		Name: id, Node: "xone/v0.1.0-abc1234", Port: 30303, Network: "51", Protocol: "eth/63, xdpos/100",
+		API: "No", Os: "linux", OsVer: "amd64", Client: "xone/v0.1.0-abc1234", History: true,
+		Coinbase: "0xabcdef0123456789abcdef0123456789abcdef01", Role: "validator", SyncMode: "full", GcMode: "full", StateScheme: "hash"}}}})
+	line(&out, "node-ping", map[string][]interface{}{"emit": {"node-ping", map[string]string{"id": id, "clientTime": "2026-11-11 10:00:00.123456789 +0000 UTC"}}})
+	line(&out, "latency", map[string][]interface{}{"emit": {"latency", map[string]string{"id": id, "latency": "12"}}})
+	line(&out, "block", map[string][]interface{}{"emit": {"block", map[string]interface{}{"id": id, "block": blk(12345, 2)}}})
+	line(&out, "block_empty", map[string][]interface{}{"emit": {"block", map[string]interface{}{"id": id, "block": blk(7, 0)}}})
+	line(&out, "pending", map[string][]interface{}{"emit": {"pending", map[string]interface{}{"id": id, "stats": &pendStats{Pending: 5}}}})
+	line(&out, "stats", map[string][]interface{}{"emit": {"stats", map[string]interface{}{"id": id, "stats": &nodeStats{Active: true, Peers: 9, GasPrice: 250000000, Syncing: false, Uptime: 100}}}})
+	line(&out, "history", map[string][]interface{}{"emit": {"history", map[string]interface{}{"id": id, "history": []*blockStats{blk(2, 0), blk(1, 1)}}}})
+	os.Stdout.Write(out.Bytes())
+}
