@@ -13,10 +13,14 @@
 use crate::{
     changeset::{ChangeSet, StateDiff},
     flat::{FlatRead, FlatWrite},
+    mpt::{StateTrie, Undo},
     Account,
 };
 use alloy_primitives::{Address, B256, U256};
-use std::collections::{BTreeMap, HashMap};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::{Mutex, MutexGuard, PoisonError},
+};
 use xone_primitives::WideBalanceError;
 
 /// A state that cannot be opened: unknown hash, or outside the retained window.
@@ -48,8 +52,37 @@ pub trait StateRead {
     fn storage(&self, address: Address, slot: B256) -> U256;
 }
 
+/// The head's incremental trie, and the diff whose root was asked for but that is not committed:
+/// the trie already holds it, with what it overwrote, so the commit of the same diff costs nothing.
+struct Head {
+    trie: StateTrie,
+    pending: Option<(StateDiff, B256, Undo)>,
+}
+
+impl Head {
+    /// The trie of the committed head.
+    fn settle(&mut self) {
+        if let Some((_, _, undo)) = self.pending.take() {
+            self.trie.undo(undo);
+        }
+    }
+
+    fn root_with(&mut self, diff: &StateDiff) -> B256 {
+        if let Some((d, root, _)) = &self.pending {
+            if d == diff {
+                return *root;
+            }
+        }
+        self.settle();
+        let (root, undo) = self.trie.apply(&diff.accounts, &diff.storage);
+        self.pending = Some((diff.clone(), root, undo));
+        root
+    }
+}
+
 pub struct StateProvider<F> {
     flat: F,
+    head: Mutex<Head>,
     retention: u64,
     /// Oldest openable block.
     base: (u64, B256),
@@ -64,8 +97,25 @@ impl<F: FlatWrite> StateProvider<F> {
     /// `flat` is the post-state of block (`number`, `hash`). `retention` is the number of blocks
     /// above the oldest openable one that keep a changeset.
     pub fn new(flat: F, number: u64, hash: B256, retention: u64) -> Self {
+        Self::with_opaque(flat, number, hash, retention, &BTreeMap::new())
+    }
+
+    /// [`Self::new`] over a pruned state: the accounts in `opaque` have no slots in `flat`, only a
+    /// storage root. For tests that commit a window of a large state.
+    pub fn with_opaque(
+        flat: F,
+        number: u64,
+        hash: B256,
+        retention: u64,
+        opaque: &BTreeMap<Address, B256>,
+    ) -> Self {
+        let trie = StateTrie::from_flat_pruned(&flat, opaque);
         Self {
             flat,
+            head: Mutex::new(Head {
+                trie,
+                pending: None,
+            }),
             retention,
             base: (number, hash),
             chain: BTreeMap::new(),
@@ -80,9 +130,25 @@ impl<F: FlatWrite> StateProvider<F> {
             .map_or(self.base, |(n, (h, _))| (*n, *h))
     }
 
-    /// The head state, read-only. For roots (`crate::trie::flat_root`) and tests.
+    /// The head state, read-only. For the reference root (`crate::trie::flat_root`) and tests.
     pub fn flat(&self) -> &F {
         &self.flat
+    }
+
+    fn head_trie(&self) -> MutexGuard<'_, Head> {
+        self.head.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// The state root of the head, from the incremental trie.
+    pub fn root(&self) -> B256 {
+        let mut h = self.head_trie();
+        h.settle();
+        h.trie.root()
+    }
+
+    /// The root after `diff` on top of the head, without committing it.
+    fn root_with(&self, diff: &StateDiff) -> B256 {
+        self.head_trie().root_with(diff)
     }
 
     /// Writes the next canonical block and keeps its changeset (one commit).
@@ -100,6 +166,16 @@ impl<F: FlatWrite> StateProvider<F> {
             return Err(CommitError::Known(hash));
         }
         let cs = diff.apply(&mut self.flat)?;
+        let h = self.head.get_mut().unwrap_or_else(PoisonError::into_inner);
+        match h.pending.take() {
+            Some((d, _, _)) if d == *diff => {}
+            pending => {
+                if let Some((_, _, undo)) = pending {
+                    h.trie.undo(undo);
+                }
+                h.trie.apply(&diff.accounts, &diff.storage);
+            }
+        }
         self.chain.insert(number + 1, (hash, cs));
         self.by_hash.insert(hash, number + 1);
         while u64::try_from(self.chain.len()).unwrap_or(u64::MAX) > self.retention {
@@ -116,12 +192,15 @@ impl<F: FlatWrite> StateProvider<F> {
         if number < self.base.0 || number > self.head().0 {
             return Err(Missing::Number(number));
         }
+        let h = self.head.get_mut().unwrap_or_else(PoisonError::into_inner);
+        h.settle();
         while let Some((n, (hash, cs))) = self.chain.pop_last() {
             if n <= number {
                 self.chain.insert(n, (hash, cs));
                 break;
             }
             cs.revert(&mut self.flat);
+            h.trie.apply(&cs.accounts, &cs.storage);
             self.by_hash.remove(&hash);
         }
         Ok(())
@@ -204,14 +283,15 @@ impl<'a, F> StateView<'a, F> {
 }
 
 impl<F: FlatWrite> StateView<'_, F> {
-    /// The state root after `diff` on top of this view, computed from the flat tables without
-    /// writing ([`crate::trie::root_after`]). Only the head view has its tables at hand: a view with
-    /// side overlays or an older canonical block is [`Missing::Number`].
+    /// The state root after `diff` on top of this view, from the head's incremental trie: only the
+    /// paths `diff` touches are hashed again, and the committed state is not changed. A commit of the
+    /// same diff keeps the work. Only the head view has its trie at hand: a view with side overlays
+    /// or an older canonical block is [`Missing::Number`].
     pub fn root_with(&self, diff: &StateDiff) -> Result<B256, Missing> {
         if !self.overlays.is_empty() || self.number != self.provider.head().0 {
             return Err(Missing::Number(self.number));
         }
-        Ok(crate::trie::root_after(&self.provider.flat, diff))
+        Ok(self.provider.root_with(diff))
     }
 }
 

@@ -9,8 +9,10 @@
 
 use alloy_primitives::{keccak256, Address, B256, U256};
 
+pub mod minted_record_0x9a;
 pub mod randomize_0x90;
 pub mod signer_0x89;
+pub mod trc21_issuer;
 pub mod validator_0x88;
 
 /// Storage key of `mapping[key]` declared at `slot`: `keccak256(pad32(key) ++ pad32(slot))`

@@ -1,11 +1,14 @@
-//! Sequential replay from genesis on the runner's own state. Block N is executed on the persisted
-//! state of block N-1 (`StateProvider::commit_block`), its outcome is compared with the canonical
-//! header, and the run stops at the first difference. The expected values are the archive's
-//! header fields; everything compared against them is computed here.
+//! Sequential replay on the runner's own state, from genesis or from a pivot state. Block N is
+//! executed on the persisted state of block N-1 (`StateProvider::commit_block`), its outcome is
+//! compared with the canonical header, and the run stops at the first difference. The expected
+//! values are the archive's header fields; everything compared against them is computed here.
+//! V1 blocks go through the V1 snapshot and checkpoint rules, V2 blocks through the V2 header
+//! verifier with the epoch-switch lists derived from the runner's own gap snapshots and penalty
+//! engine, the V2 and tiered rewards and the 3-chain commit rule.
 
 use crate::{
     cache::Block,
-    chain::{Chain, Stored},
+    chain::{Chain, Pushed},
 };
 use alloy_primitives::{Address, Bytes, B256, U256};
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
@@ -15,8 +18,9 @@ use xone_chainspec::{ChainSpec, ForkBlock, Network};
 use xone_consensus::{
     chain::SignTx,
     v1::{checkpoint, snapshot::Snapshot},
+    v2::{epoch_switch, gap_snapshot},
 };
-use xone_executor::{execute_block, BlockOutcome, ExecCtx};
+use xone_executor::{execute_block, tx, BlockOutcome, ExecCtx};
 use xone_primitives::WideBalance;
 use xone_state::{
     system_contracts::validator_0x88 as v88, trie::flat_root, Account, FlatRead, FlatWrite,
@@ -32,6 +36,13 @@ pub struct Opts {
     pub state_dir: Option<PathBuf>,
     pub every: u64,
     pub resume: bool,
+    /// Print a line every this many blocks (0: none).
+    pub progress: u64,
+    /// Test mutant: read each gap snapshot from the gap block this many blocks earlier (0: the rule).
+    pub gap_offset: u64,
+    /// Write the state of this block, as the runner holds it after verifying it, to this file (the
+    /// format of the pivot cache, `pivot::start` reads it back).
+    pub dump_state: Option<(u64, PathBuf)>,
 }
 
 #[derive(Debug, Clone)]
@@ -65,6 +76,20 @@ pub struct Report {
     /// Checkpoints with penalties, whose list needs the penalty derivation (not done here).
     pub aux_skipped: u64,
     pub resumed_from: Option<u64>,
+    /// V2 blocks executed, the epoch switches among them (their `Validators` and `Penalties` were
+    /// derived by the runner and found equal, or the block would have been refused), the gap
+    /// snapshots built from state, and the 3-chain commit state at the end of the run.
+    pub v2_blocks: u64,
+    pub v2_switches: u64,
+    pub gap_snapshots: u64,
+    pub committed: Option<(u64, u64)>,
+    pub committed_count: u64,
+    /// Wall time of the first and the last 1,000 blocks of the run, in seconds, to see whether the
+    /// per-block cost grows.
+    pub first_1000_secs: f64,
+    pub last_1000_secs: f64,
+    /// The accounts whose storage a block of the run wrote (what a pruned state must keep).
+    pub storage_written: std::collections::BTreeSet<Address>,
     pub divergence: Option<Divergence>,
 }
 
@@ -130,7 +155,7 @@ fn save(
     chain: &Chain,
     snap: &Snapshot,
 ) -> Result<(), String> {
-    if !snap.votes.is_empty() || !snap.tally.is_empty() {
+    if chain.base != 0 || !snap.votes.is_empty() || !snap.tally.is_empty() {
         return Ok(()); // a snapshot with votes in flight is not saved: the checkpoint would lose them
     }
     let (number, hash) = p.head();
@@ -160,11 +185,10 @@ fn save(
         signs: chain
             .blocks
             .iter()
-            .enumerate()
-            .filter(|(_, b)| !b.signs.is_empty())
-            .map(|(i, b)| {
+            .filter(|b| !b.signs.is_empty())
+            .map(|b| {
                 (
-                    i as u64,
+                    b.header.number,
                     b.signs.iter().map(|s| (s.sender, s.signed, s.ok)).collect(),
                 )
             })
@@ -259,6 +283,33 @@ fn compare(b: &Block, o: &BlockOutcome) -> Vec<Mismatch> {
     m
 }
 
+/// The state a run starts from: the post-state of block `number`, and the code of its contracts.
+pub struct Start {
+    pub number: u64,
+    pub flat: MemFlat,
+    pub codes: BTreeMap<B256, Bytes>,
+    /// Accounts whose slots are not in `flat`, with their storage root (a pruned state, see
+    /// `StateProvider::with_opaque`). Empty for a full state.
+    pub opaque: BTreeMap<Address, B256>,
+}
+
+/// The sign transactions of a block as its transactions show them (senders recovered): what the
+/// reward and penalty engines count. Used for blocks that are stored but not executed.
+fn signs_of(spec: &ChainSpec, b: &Block) -> Result<Vec<SignTx>, String> {
+    let mut out = vec![];
+    for (i, raw) in b.body.transactions.iter().enumerate() {
+        let t = tx::decode(raw, spec.chain_id).map_err(|e| format!("block {} tx {i}: {e}", b.n))?;
+        if let Some(signed) = xone_consensus::chain::signed_hash(t.to, &t.data) {
+            out.push(SignTx {
+                sender: t.from,
+                signed,
+                ok: true,
+            });
+        }
+    }
+    Ok(out)
+}
+
 /// Replay blocks `1..=opts.to` of `blocks` (block 0 is the genesis block) on `net`'s genesis
 /// state. `spec` is the chain spec the rules are read from: the network's, or a mutated copy.
 pub fn run(
@@ -267,27 +318,66 @@ pub fn run(
     blocks: &[Block],
     opts: &Opts,
 ) -> Result<Report, String> {
-    let mut report = Report::default();
     let (flat, codes, g) = genesis(net, spec)?;
     if blocks.first().map(|b| b.header.hash()) != Some(g.hash()) {
         return Err("block 0 of the cache is not the genesis block of the chain spec".into());
     }
-    let (mut chain, mut provider, mut snap, mut start);
+    run_from(
+        spec,
+        Start {
+            number: 0,
+            flat,
+            codes,
+            opaque: BTreeMap::new(),
+        },
+        blocks,
+        opts,
+    )
+}
+
+/// Replay `blocks` above `start.number` up to `opts.to`. `blocks` is contiguous and starts at or
+/// below `start.number`: the blocks up to it are history (headers, sign transactions) that the
+/// rules read, stored without being executed. The state of `start` is trusted by the caller.
+pub fn run_from(
+    spec: &ChainSpec,
+    start: Start,
+    blocks: &[Block],
+    opts: &Opts,
+) -> Result<Report, String> {
+    let mut report = Report::default();
+    let first = blocks.first().ok_or("no blocks")?.n;
+    let at = |n: u64| -> Result<&Block, String> {
+        blocks
+            .get(
+                usize::try_from(
+                    n.checked_sub(first)
+                        .ok_or(format!("block {n} is below the cache"))?,
+                )
+                .map_err(|e| e.to_string())?,
+            )
+            .filter(|b| b.n == n)
+            .ok_or(format!("block {n} is not in the cache"))
+    };
+    let x = &spec.xdpos;
+    let switch = x.v2.as_ref().map_or(u64::MAX, |v| v.switch_block);
     let genesis_snap = |h: &xone_primitives::Header| {
         checkpoint::masternodes_of(&h.extra_data)
-            .map(|m| Snapshot::new(0, h.hash(), m))
+            .map(|m| Snapshot::new(h.number, h.hash(), m))
             .map_err(|e| e.to_string())
     };
-    let resumed = match (&opts.state_dir, opts.resume) {
-        (Some(d), true) => load(d, opts.to),
+    let resumed = match (&opts.state_dir, opts.resume, start.number) {
+        (Some(d), true, 0) => load(d, opts.to),
         _ => None,
     };
+    let (mut chain, mut provider, mut snap, mut tip);
     if let Some(c) = resumed {
         // The headers up to the checkpoint were verified when it was written; their hashes and
         // seals are recomputed, their sign transactions come from the checkpoint.
-        let mut stored = vec![];
-        for b in blocks.iter().take(c.number as usize + 1) {
-            let signs = c.signs.get(&b.n).map_or(vec![], |l| {
+        chain = Chain::new(spec, 0);
+        chain.gap_offset = opts.gap_offset;
+        for n in 0..=c.number {
+            let b = at(n)?;
+            let signs = c.signs.get(&n).map_or(vec![], |l| {
                 l.iter()
                     .map(|(sender, signed, ok)| SignTx {
                         sender: *sender,
@@ -296,19 +386,13 @@ pub fn run(
                     })
                     .collect()
             });
-            let miner = if b.n == 0 {
-                Address::ZERO
-            } else {
-                b.header.v1_signer().map_err(|e| e.to_string())?
-            };
-            stored.push(Stored {
+            chain.push(Pushed {
                 hash: b.header.hash(),
                 header: b.header.clone(),
-                miner,
                 signs,
-            });
+            })?;
         }
-        if stored.last().map(|s| s.hash) != Some(c.hash) {
+        if chain.get(c.number).map(|s| s.hash) != Some(c.hash) {
             return Err("the checkpoint is of another chain than the cache".into());
         }
         let mut f = MemFlat::default();
@@ -326,48 +410,66 @@ pub fn run(
         for (a, k, v) in &c.storage {
             f.set_slot(*a, *k, *v);
         }
-        chain = Chain {
-            epoch: spec.xdpos.epoch,
-            blocks: stored,
-            codes: c.codes,
-            wide: wide_of(&f),
-        };
+        chain.codes = c.codes;
+        chain.wide = wide_of(&f);
         snap = Snapshot::new(c.number, c.hash, c.signers);
         snap.recents = c.recents;
         provider = StateProvider::new(f, c.number, c.hash, RETENTION);
-        start = c.number;
+        tip = c.number;
         report.resumed_from = Some(c.number);
     } else {
-        chain = Chain {
-            epoch: spec.xdpos.epoch,
-            blocks: vec![Stored {
-                hash: g.hash(),
-                header: g.clone(),
-                miner: Address::ZERO,
-                signs: vec![],
-            }],
-            codes,
-            wide: wide_of(&flat),
-        };
-        snap = genesis_snap(&g)?;
-        provider = StateProvider::new(flat, 0, g.hash(), RETENTION);
-        start = 0;
-    }
-    report.last_ok = start;
-
-    while start < opts.to {
-        let n = start + 1;
-        let b = blocks
-            .get(n as usize)
-            .filter(|b| b.n == n)
-            .ok_or(format!("block {n} is not in the cache"))?;
-        if spec.xdpos.v2.as_ref().is_some_and(|v| n > v.switch_block) {
-            return Err(format!(
-                "block {n} is above the V2 switch block: the runner has no V2 context"
-            ));
+        chain = Chain::new(spec, first);
+        chain.gap_offset = opts.gap_offset;
+        for n in first..=start.number {
+            let b = at(n)?;
+            chain.push(Pushed {
+                hash: b.header.hash(),
+                header: b.header.clone(),
+                signs: signs_of(spec, b)?,
+            })?;
         }
-        let parent = &chain.blocks[(n - 1) as usize];
-        let verify = chain.v1_context(&b.header, &snap)?;
+        let head = chain.get(start.number).ok_or("no start block")?;
+        let hash = head.hash;
+        snap = if start.number > switch {
+            Snapshot::new(0, B256::ZERO, vec![]) // not read from the V2 switch block on
+        } else if start.number.is_multiple_of(x.epoch) {
+            genesis_snap(&head.header)?
+        } else {
+            return Err(
+                "a pivot in the V1 era must be a checkpoint (a multiple of the epoch)".into(),
+            );
+        };
+        chain.codes = start.codes;
+        chain.wide = wide_of(&start.flat);
+        provider = StateProvider::with_opaque(
+            start.flat,
+            start.number,
+            hash,
+            RETENTION,
+            &start.opaque,
+        );
+        tip = start.number;
+    }
+    report.last_ok = tip;
+
+    let t0 = std::time::Instant::now();
+    let mut t_1000 = t0;
+    while tip < opts.to {
+        let n = tip + 1;
+        let b = at(n)?;
+        let is_v2 = chain.is_v2(n);
+        let parent = chain
+            .get(n - 1)
+            .ok_or(format!("block {} is not stored", n - 1))?;
+        let verify = if is_v2 {
+            chain.v2_context(&b.header)?
+        } else {
+            chain.v1_context(&b.header, &snap)?
+        };
+        let derive = |q: &epoch_switch::SwitchQuery| {
+            let s = chain.snapshot_for(q.number)?;
+            epoch_switch::expected(spec, &chain, q, &s)
+        };
         let result = {
             let view = provider.at(parent.hash).map_err(|e| e.to_string())?;
             execute_block(
@@ -379,6 +481,7 @@ pub fn run(
                     parent: &parent.header,
                     verify: &verify,
                     env: &chain,
+                    derive: is_v2.then_some(&derive),
                 },
             )
         };
@@ -398,7 +501,7 @@ pub fn run(
         let mut mismatches = compare(b, &o);
         // Consensus auxiliary: the masternode list of a V1 checkpoint is the snapshot's signers
         // (ascending, `Prepare`, `consensus/XDPoS/xdpos.go:1439-1476`) minus the penalised.
-        if n % spec.xdpos.epoch == 0 {
+        if !is_v2 && n % x.epoch == 0 {
             if b.header.penalties.is_empty() {
                 let listed =
                     checkpoint::masternodes_of(&b.header.extra_data).map_err(|e| e.to_string())?;
@@ -429,15 +532,28 @@ pub fn run(
         provider
             .commit_block(o.hash, parent_hash, &o.diff)
             .map_err(|e| e.to_string())?;
-        snap = snap
-            .apply(std::slice::from_ref(&b.header), spec.xdpos.epoch)
-            .map_err(|e| e.to_string())?;
-        reseed(
-            spec,
-            &mut snap,
-            &provider.at(o.hash).map_err(|e| e.to_string())?,
-            n,
-        )?;
+        if !is_v2 {
+            snap = snap
+                .apply(std::slice::from_ref(&b.header), x.epoch)
+                .map_err(|e| e.to_string())?;
+            reseed(
+                spec,
+                &mut snap,
+                &provider.at(o.hash).map_err(|e| e.to_string())?,
+                n,
+            )?;
+        }
+        // geth `Finalize` (`consensus/XDPoS/xdpos.go:1521-1540`): a V2-era gap block stores the pool
+        // read from its own state, for the epoch switch that follows.
+        if chain.is_v2_gap_block(n) {
+            let pool = gap_snapshot::build(&provider.at(o.hash).map_err(|e| e.to_string())?, n)
+                .map_err(|e| format!("gap block {n}: {e}"))?;
+            chain.gaps.insert(n, pool);
+            report.gap_snapshots += 1;
+        }
+        report
+            .storage_written
+            .extend(o.diff.storage.keys().map(|(a, _)| *a));
         chain.codes.extend(o.codes);
         for (a, acc) in &o.diff.accounts {
             match acc {
@@ -445,21 +561,50 @@ pub fn run(
                 _ => chain.wide.remove(a),
             };
         }
-        chain.blocks.push(Stored {
+        chain.push(Pushed {
             hash: o.hash,
             header: b.header.clone(),
-            miner: b.header.v1_signer().map_err(|e| e.to_string())?,
             signs: o.signs,
-        });
-        start = n;
+        })?;
+        if is_v2 {
+            report.v2_blocks += 1;
+            report.v2_switches += u64::from(chain.get(n).is_some_and(|s| s.epoch_switch));
+        }
+        tip = n;
         report.last_ok = n;
         report.blocks += 1;
+        if let Some((at, path)) = &opts.dump_state {
+            if *at == n {
+                crate::pivot::dump(path, n, provider.flat(), &chain.codes)?;
+            }
+        }
+        if report.blocks == 1000 {
+            report.first_1000_secs = t0.elapsed().as_secs_f64();
+            t_1000 = std::time::Instant::now();
+        }
+        if opts.every == 0 && chain.blocks.len() > 30_000 {
+            chain.prune(n - 20_000);
+        }
         if let (Some(d), true) = (
             &opts.state_dir,
             opts.every != 0 && (n % opts.every == 0 || n == opts.to),
         ) {
             save(d, &provider, &chain, &snap)?;
         }
+        if opts.progress != 0 && n % opts.progress == 0 {
+            eprintln!(
+                "block {n}: {} blocks, {} V2 switches, {:.0}s",
+                report.blocks,
+                report.v2_switches,
+                t0.elapsed().as_secs_f64()
+            );
+        }
     }
+    if report.blocks > 1000 {
+        report.last_1000_secs =
+            t_1000.elapsed().as_secs_f64() * 1000.0 / (report.blocks - 1000) as f64;
+    }
+    report.committed = chain.committed.map(|l| (l.number, l.round));
+    report.committed_count = chain.committed_count;
     Ok(report)
 }
