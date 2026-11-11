@@ -172,14 +172,7 @@ pub fn execute_block<V: StateRead, E: Env>(
     let r = rules(spec, number)?;
     let eip158 = spec.eip158.is_active(number);
     let author = block_author(spec, header)?;
-    let txs = body
-        .transactions
-        .iter()
-        .enumerate()
-        .map(|(index, raw)| {
-            tx::decode(raw, spec.chain_id).map_err(|error| ExecError::Tx { index, error })
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    let txs = decode_all(&body.transactions, spec.chain_id)?;
 
     let mut overlay = Overlay::new(parent_view, ctx.env);
     // `ApplyTIPSigningHardFork`, `core/state_processor.go:152`, `:321-327`: before the first transaction.
@@ -289,31 +282,9 @@ pub fn execute_block<V: StateRead, E: Env>(
                 if !fits {
                     return Err(ExecError::GasLimitReached { index });
                 }
-                // EIP-7928 for a plain transfer: the accounts the transaction loads and changes.
-                let bal_touched: Vec<(Address, Option<xone_state::Account>)> = if amsterdam {
-                    let db = evm.ctx.journaled_state.db_and_state_mut().0;
-                    let to =
-                        t.to.filter(|to| {
-                            // not a precompile or system address, no code, no data, no token fee
-                            to.0[..18] != [0u8; 18]
-                                && t.data.is_empty()
-                                && t.access_list.is_empty()
-                                && db.account(*to).is_none_or(|a| {
-                                    a.code_hash == alloy_primitives::KECCAK256_EMPTY
-                                })
-                                && !tokens_fee.contains_key(to)
-                        })
-                        .ok_or(ExecError::Unsupported(
-                            "the block access list of a transaction that is not a plain transfer",
-                        ))?;
-                    let mut v = vec![t.from, to];
-                    v.extend(owner);
-                    v.sort();
-                    v.dedup();
-                    v.into_iter().map(|a| (a, db.account(a))).collect()
-                } else {
-                    vec![]
-                };
+                if amsterdam {
+                    evm.ctx.journaled_state.db_and_state_mut().0.record();
+                }
                 // `ApplyTRC21TokenFee`, `core/state_processor.go:977-993`
                 let token =
                     t.to.and_then(|to| tokens_fee.get(&to).map(|capacity| (to, *capacity)));
@@ -377,29 +348,7 @@ pub fn execute_block<V: StateRead, E: Env>(
                 state_sum += split.block_state_gas_used();
                 if let Some(b) = bal.as_mut() {
                     let db = evm.ctx.journaled_state.db_and_state_mut().0;
-                    let post = |a: Address| db.account(a);
-                    let (nonce_of, balance_of) = (
-                        |x: &Option<xone_state::Account>| x.as_ref().map_or(0, |x| x.nonce),
-                        |x: &Option<xone_state::Account>| {
-                            x.as_ref().map_or(U256::ZERO, |x| x.balance.low())
-                        },
-                    );
-                    for (a, before) in &bal_touched {
-                        let after = post(*a);
-                        b.read(*a);
-                        if balance_of(before) != balance_of(&after) {
-                            b.balance(bal_index, *a, balance_of(&after));
-                        }
-                        if nonce_of(before) != nonce_of(&after) {
-                            b.nonce(bal_index, *a, nonce_of(&after));
-                        }
-                    }
-                    for (a, was) in std::mem::take(&mut pending) {
-                        let now = nonce_of(&post(a));
-                        if now != was && !bal_touched.iter().any(|(t, _)| *t == a) {
-                            b.nonce(bal_index, a, now);
-                        }
-                    }
+                    finalise_bal(b, bal_index, db, std::mem::take(&mut pending))?;
                 }
                 receipts.push(Receipt::new(t.ty, success, used, gas, logs));
             }
@@ -600,6 +549,96 @@ fn prague_pre_execution<S: xone_state::StateRead, E: Env>(
     Ok(())
 }
 
+/// geth `finaliseAmsterdam` (`core/state/statedb.go:887-953`) for one transaction at `index`: every
+/// account and slot it read is listed; a slot whose value changed is a write of its new value
+/// (`state_object.go:255-285`), and a balance, nonce or code that differs from its value before the
+/// transaction is a change (`recordAccessListChanges`, `statedb.go:854-885`). `pending` are the
+/// accounts a sign transaction changed since the last finalise, with their nonce before it: geth's
+/// journal still holds that mutation, so it is recorded here, against the nonce before the sign
+/// transaction.
+fn finalise_bal<S: StateRead, E: Env>(
+    b: &mut Bal,
+    index: u32,
+    db: &mut Overlay<'_, S, E>,
+    pending: BTreeMap<Address, u64>,
+) -> Result<(), ExecError> {
+    let reads = db.take_reads().ok_or(ExecError::Unsupported(
+        "an access list without its read record",
+    ))?;
+    for ((a, k), before) in reads.slots {
+        let now = db.slot(a, k);
+        if now == before {
+            b.storage_read(a, k);
+        } else {
+            b.storage_write(index, a, k, B256::from(now.to_be_bytes::<32>()));
+        }
+    }
+    let balance =
+        |x: &Option<xone_state::Account>| x.as_ref().map_or(U256::ZERO, |x| x.balance.low());
+    let nonce = |x: &Option<xone_state::Account>| x.as_ref().map_or(0, |x| x.nonce);
+    let code_hash = |x: &Option<xone_state::Account>| {
+        x.as_ref()
+            .map_or(alloy_primitives::KECCAK256_EMPTY, |x| x.code_hash)
+    };
+    for (a, before) in &reads.accounts {
+        let now = db.account(*a);
+        b.read(*a);
+        if balance(before) != balance(&now) {
+            b.balance(index, *a, balance(&now));
+        }
+        if pending.get(a).copied().unwrap_or(nonce(before)) != nonce(&now) {
+            b.nonce(index, *a, nonce(&now));
+        }
+        if code_hash(before) != code_hash(&now) {
+            let code = match code_hash(&now) {
+                h if h == alloy_primitives::KECCAK256_EMPTY => Bytes::new(),
+                h => revm::Database::code_by_hash(db, h)?.original_bytes(),
+            };
+            b.code(index, *a, code);
+        }
+    }
+    for (a, was) in pending {
+        let now = nonce(&db.account(a));
+        if now != was && !reads.accounts.contains_key(&a) {
+            b.nonce(index, a, now);
+        }
+    }
+    Ok(())
+}
+
+/// Decodes every transaction and recovers its sender. Recovery dominates a large block (about 0.5 ms
+/// per signature on a busy host), so a long list is split over threads; the result, and the first
+/// error by index, are those of the sequential loop.
+fn decode_all(raws: &[Bytes], chain_id: u64) -> Result<Vec<Tx>, ExecError> {
+    let one = move |index: usize, raw: &Bytes| {
+        tx::decode(raw, chain_id).map_err(|error| ExecError::Tx { index, error })
+    };
+    let threads = std::thread::available_parallelism().map_or(1, |n| n.get().min(8));
+    let chunk = raws.len().div_ceil(threads).max(256);
+    if raws.len() <= chunk {
+        return raws.iter().enumerate().map(|(i, r)| one(i, r)).collect();
+    }
+    std::thread::scope(|s| {
+        let parts: Vec<_> = raws
+            .chunks(chunk)
+            .enumerate()
+            .map(|(c, part)| {
+                s.spawn(move || {
+                    part.iter()
+                        .enumerate()
+                        .map(|(i, r)| one(c * chunk + i, r))
+                        .collect::<Result<Vec<_>, _>>()
+                })
+            })
+            .collect();
+        let mut out = Vec::with_capacity(raws.len());
+        for p in parts {
+            out.extend(p.join().unwrap_or_else(|e| std::panic::resume_unwind(e))?);
+        }
+        Ok(out)
+    })
+}
+
 /// `historyStorageKey` (`core/state_processor.go:672`): block number modulo 8191, as a 32-byte key.
 fn ring_slot(number: u64) -> B256 {
     B256::from(U256::from(number % 8191).to_be_bytes::<32>())
@@ -751,4 +790,30 @@ fn record_minted<S: xone_state::StateRead, E: Env>(
     db.set_slot(a, minted::post_burned(epoch), total_burned);
     db.set_nonce(a, nonce + 1)?;
     Ok(())
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)] // test code: a panic is the failure report
+mod decode_tests {
+    use super::*;
+
+    /// A transfer of net2040 block 918 (transaction 0, as the archive returned it).
+    const TX: &str = "f865808411e1a300825208940223b5b9046a1ebb93669546bd66d6972d1544eb0180821014a096f864b08365bf86f5df595e752295dbb2b03778c0284e5dc60ec969137b29cda02f560843995541ae632a1630ad9d73436dfce0e179dc54926f849d8e265b03ca";
+
+    #[test]
+    fn threaded_decode_is_the_sequential_one() {
+        let good = Bytes::from(alloy_primitives::hex::decode(TX).unwrap());
+        let mut raws = vec![good.clone(); 2_000];
+        let all = decode_all(&raws, 2040).unwrap();
+        assert_eq!(all.len(), 2_000);
+        let want = tx::decode(&good, 2040).ok().map(|t| t.from);
+        assert!(want.is_some() && all.iter().all(|t| Some(t.from) == want));
+        // the first error by index wins, whichever thread finds it
+        raws[1_700] = Bytes::from_static(&[0xc0]);
+        raws[700] = Bytes::from_static(&[0xc0]);
+        assert!(matches!(
+            decode_all(&raws, 2040),
+            Err(ExecError::Tx { index: 700, .. })
+        ));
+    }
 }

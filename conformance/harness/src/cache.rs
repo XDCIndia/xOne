@@ -39,16 +39,34 @@ pub fn read(path: &Path) -> Result<Vec<Line>, String> {
 
 /// The first `limit` lines (a cache of a whole chain is gigabytes: stop reading at the block asked for).
 pub fn read_limit(path: &Path, limit: usize) -> Result<Vec<Line>, String> {
+    lines(path, limit)?.collect()
+}
+
+/// [`read_limit`] decoded line by line: the raw lines of a whole chain are not held next to its blocks.
+/// Blocks below `bodies_from` keep their header only (a resumed run reads no body below its
+/// checkpoint).
+pub fn decode_limit(path: &Path, limit: usize, bodies_from: u64) -> Result<Vec<Block>, String> {
+    lines(path, limit)?
+        .map(|l| {
+            let mut b = decode(&l?)?;
+            if b.n < bodies_from {
+                b.body = Body::default();
+            }
+            Ok(b)
+        })
+        .collect()
+}
+
+fn lines(path: &Path, limit: usize) -> Result<impl Iterator<Item = Result<Line, String>>, String> {
     let f = File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let r: Box<dyn BufRead> = if path.extension().is_some_and(|e| e == "gz") {
         Box::new(BufReader::new(GzDecoder::new(f)))
     } else {
         Box::new(BufReader::new(f))
     };
-    r.lines()
+    Ok(r.lines()
         .take(limit)
-        .map(|l| serde_json::from_str(&l.map_err(|e| e.to_string())?).map_err(|e| e.to_string()))
-        .collect()
+        .map(|l| serde_json::from_str(&l.map_err(|e| e.to_string())?).map_err(|e| e.to_string())))
 }
 
 /// Write `lines` gzipped.
@@ -92,21 +110,28 @@ pub fn decode(l: &Line) -> Result<Block, String> {
     }
     let mut rest = rest;
     let uncles = Vec::<Header>::decode(&mut rest).map_err(e)?;
-    // From Amsterdam the body carries a (empty) withdrawals list: keep each item as its encoding.
+    // `extblock.Withdrawals`, `rlp:"optional"` (`core/types/block.go:278-283`): each item as encoded.
     let withdrawals = if rest.is_empty() {
         None
     } else {
         let list = RlpHeader::decode(&mut rest).map_err(e)?;
-        let mut items = &rest[..list.payload_length];
-        let mut out = vec![];
-        while !items.is_empty() {
-            let start = items;
-            let item = RlpHeader::decode(&mut items).map_err(e)?;
-            let len = start.len() - items.len() + item.payload_length;
-            out.push(Bytes::copy_from_slice(&start[..len]));
-            items = &items[item.payload_length..];
+        let (mut w, tail) = rest
+            .split_at_checked(list.payload_length)
+            .ok_or("short withdrawals")?;
+        if !list.list || !tail.is_empty() {
+            return Err(format!("block {}: bad withdrawals list", l.n));
         }
-        Some(out)
+        let mut items = vec![];
+        while !w.is_empty() {
+            let start = w;
+            let item = RlpHeader::decode(&mut w).map_err(e)?;
+            let len = start.len() - w.len() + item.payload_length;
+            items.push(Bytes::copy_from_slice(
+                start.get(..len).ok_or("short withdrawal")?,
+            ));
+            w = &start[len..];
+        }
+        Some(items)
     };
     Ok(Block {
         n: l.n,

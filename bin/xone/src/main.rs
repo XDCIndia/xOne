@@ -110,7 +110,7 @@ fn run(args: impl IntoIterator<Item = OsString>) -> ExitCode {
 /// Check the datadir marker, open the chain (a restart replays what is stored), then run net, chain,
 /// pool and rpc until SIGTERM or SIGINT.
 fn start(cfg: &Config) -> ExitCode {
-    let (marker, net, genesis) = match datadir::prepare_chain(cfg) {
+    let (marker, spec, genesis) = match datadir::prepare_chain(cfg) {
         Ok(m) => m,
         Err(e) => return fail(e),
     };
@@ -118,7 +118,7 @@ fn start(cfg: &Config) -> ExitCode {
     if let Err(e) = shutdown.install_signals() {
         return fail(e);
     }
-    let mut node = match services::build(cfg, &marker, net, &genesis, stamp()) {
+    let mut node = match services::build(cfg, &marker, spec, &genesis, stamp()) {
         Ok(b) => b.node,
         Err(e) => return fail(e),
     };

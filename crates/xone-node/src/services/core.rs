@@ -37,10 +37,13 @@ use super::{
     store::{self, Ckpt, FileError, FileStore},
 };
 
-/// Blocks above the anchor whose state can be opened (RPC reads at a block, unwind window).
-pub const RETENTION: u64 = 1024;
-/// Blocks per segment chunk of the in-memory store model.
-const BLOCKS_PER_FILE: u64 = 100_000;
+/// Blocks above the anchor whose state can be opened (RPC reads at a block, unwind window), as
+/// geth's `TriesInMemory` (`core/state/statedb.go:47`). The window is held in memory: on a chain of
+/// 10,000-transaction blocks each retained block costs megabytes.
+pub const RETENTION: u64 = 128;
+/// Blocks per segment chunk of the in-memory store model: a chunk is freed once the window has left
+/// it (`MemStore::forget_below`), so it is as long as the window.
+const BLOCKS_PER_FILE: u64 = RETENTION;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CoreError {
@@ -551,11 +554,18 @@ impl Core {
             .iter()
             .map(|(n, g)| (*n, g.candidates.clone()))
             .collect();
+        drop(h);
+        self.sync()?;
         store::save_ckpt(&self.dir, &c)?;
         Ok(Some(n))
     }
 
     pub fn head(&self) -> (u64, B256) {
         self.chain.head()
+    }
+
+    /// Makes every imported block durable: segments fsynced, `head.json` moved to the head.
+    pub fn sync(&self) -> Result<(), CoreError> {
+        Ok(self.chain.with_store(FileStore::sync)?)
     }
 }

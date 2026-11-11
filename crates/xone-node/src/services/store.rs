@@ -2,7 +2,7 @@
 //! in memory) plus the files of `<datadir>/xone/`:
 //!
 //! * `static/{headers,bodies,receipts}.seg`: one frame per block, `len u32 LE | number u64 LE |
-//!   payload | tag`, appended and fsynced before `head.json` moves (ADR-005 sections 5 and 6.1;
+//!   payload | tag`, appended, and fsynced before `head.json` moves (ADR-005 sections 5 and 6.1;
 //!   the tag is the first 4 bytes of keccak256 of the rest, not CRC-32C, to add no crate);
 //! * `head.json`: the head and the committed length of each segment, written by tmp file, fsync,
 //!   rename and directory fsync. Bytes of a segment beyond its length are never read;
@@ -15,8 +15,9 @@
 use std::{
     collections::BTreeMap,
     fs::{self, File, OpenOptions},
-    io::Write,
+    io::{Read, Seek, Write},
     path::{Path, PathBuf},
+    time::{Duration, Instant},
 };
 
 use alloy_primitives::{keccak256, Address, Bytes, B256, U256};
@@ -43,9 +44,11 @@ fn io<T>(what: &Path, r: std::io::Result<T>) -> Result<T, FileError> {
 }
 
 #[derive(RlpEncodable, RlpDecodable)]
+#[rlp(trailing)]
 struct BodyFrame {
     txs: Vec<Bytes>,
     uncles: Vec<Header>,
+    withdrawals: Option<Vec<Bytes>>,
 }
 
 fn tag(len: u32, number: u64, payload: &[u8]) -> [u8; 4] {
@@ -71,6 +74,7 @@ fn payloads(rec: &Record) -> [Vec<u8>; 3] {
         alloy_rlp::encode(BodyFrame {
             txs: rec.block.body.transactions.clone(),
             uncles: rec.block.body.uncles.clone(),
+            withdrawals: rec.block.body.withdrawals.clone(),
         }),
         alloy_rlp::encode(&rec.receipts),
     ]
@@ -130,29 +134,37 @@ pub fn load(dir: &Path) -> Result<Option<Loaded>, FileError> {
     let mut ends: BTreeMap<u64, [u64; 3]> = BTreeMap::new();
     for (i, part) in parts.iter_mut().enumerate() {
         let p = seg_path(dir, i);
-        let bytes = io(&p, fs::read(&p))?;
-        let len = usize::try_from(head.lens[i]).unwrap_or(usize::MAX);
-        let bytes = bytes.get(..len).ok_or_else(|| {
-            FileError(format!(
+        let file = io(&p, File::open(&p))?;
+        if io(&p, file.metadata())?.len() < head.lens[i] {
+            return Err(FileError(format!(
                 "{} is shorter than the committed length {}",
                 p.display(),
                 head.lens[i]
-            ))
-        })?;
-        let (mut at, mut n) = (0usize, 1u64);
-        while at < bytes.len() {
+            )));
+        }
+        // Read frame by frame up to the committed length: a segment can be larger than memory.
+        let mut r = std::io::BufReader::new(file).take(head.lens[i]);
+        let (mut at, mut n) = (0u64, 1u64);
+        while at < head.lens[i] {
             let bad = || FileError(format!("{}: damaged frame for block {n}", p.display()));
-            let h = bytes.get(at..at + 12).ok_or_else(bad)?;
+            let mut h = [0u8; 12];
+            r.read_exact(&mut h).map_err(|_| bad())?;
             let plen = u32::from_le_bytes([h[0], h[1], h[2], h[3]]);
             let number = u64::from_le_bytes([h[4], h[5], h[6], h[7], h[8], h[9], h[10], h[11]]);
-            let end = at + 12 + usize::try_from(plen).unwrap_or(usize::MAX);
-            let payload = bytes.get(at + 12..end).ok_or_else(bad)?;
-            if number != n || bytes.get(end..end + 4) != Some(&tag(plen, number, payload)[..]) {
+            let mut payload = vec![0u8; usize::try_from(plen).map_err(|_| bad())?];
+            let mut t = [0u8; 4];
+            r.read_exact(&mut payload).map_err(|_| bad())?;
+            r.read_exact(&mut t).map_err(|_| bad())?;
+            if number != n || t != tag(plen, number, &payload) {
                 return Err(bad());
             }
-            part.push(payload.to_vec());
-            at = end + 4;
-            ends.entry(n).or_default()[i] = at as u64; // ponytail: usize is u64 here
+            // receipts below the unwind window stay on disk (`FileStore::receipts`)
+            if i == 2 && n + super::core::RETENTION <= head.number {
+                payload = Vec::new();
+            }
+            part.push(payload);
+            at += 16 + u64::from(plen);
+            ends.entry(n).or_default()[i] = at;
             n += 1;
         }
     }
@@ -168,13 +180,17 @@ pub fn load(dir: &Path) -> Result<Option<Loaded>, FileError> {
             |what: &str, e: alloy_rlp::Error| FileError(format!("block {}: {what}: {e}", i + 1));
         let header = Header::decode(&mut &hp[..]).map_err(|e| bad("header", e))?;
         let b = BodyFrame::decode(&mut &bp[..]).map_err(|e| bad("body", e))?;
-        let receipts = Vec::<Bytes>::decode(&mut &rp[..]).map_err(|e| bad("receipts", e))?;
+        let receipts = if rp.is_empty() {
+            vec![] // an encoded list is never empty: this one was left on disk
+        } else {
+            Vec::<Bytes>::decode(&mut &rp[..]).map_err(|e| bad("receipts", e))?
+        };
         blocks.push(Stored3 {
             header,
             body: Body {
                 transactions: b.txs,
                 uncles: b.uncles,
-                withdrawals: None,
+                withdrawals: b.withdrawals,
             },
             receipts,
         });
@@ -294,8 +310,18 @@ pub struct FileStore {
     dir: PathBuf,
     /// Head number on disk. Blocks at or below it are replayed from the files and not written again.
     persisted: u64,
+    persisted_hash: B256,
     ends: BTreeMap<u64, [u64; 3]>,
+    /// The head `head.json` holds (frames above it are written but not yet fsynced), and when.
+    synced: std::sync::Mutex<((u64, B256), Instant)>,
 }
+
+/// ponytail: group commit. Segments and `head.json` are fsynced at most once per this interval, at the
+/// end of each import batch and at a checkpoint (`Core::sync`), and when the store is dropped; not per
+/// block: six fsyncs per block capped the import at about 8 blocks
+/// per second on a busy disk. A crash loses at most the last interval of blocks; their frames lie
+/// beyond the committed lengths, are cut on open and fetched again. Per-batch sync if that is too much.
+const GROUP_COMMIT: Duration = Duration::from_secs(1);
 
 impl FileStore {
     pub fn new(inner: MemStore, dir: &Path, loaded: Option<&Loaded>) -> Result<Self, FileError> {
@@ -319,7 +345,12 @@ impl FileStore {
             inner,
             dir: dir.to_owned(),
             persisted: loaded.map_or(0, |l| l.number),
+            persisted_hash: loaded.map_or(B256::ZERO, |l| l.hash),
             ends: loaded.map(|l| l.ends.clone()).unwrap_or_default(),
+            synced: std::sync::Mutex::new((
+                loaded.map_or((0, B256::ZERO), |l| (l.number, l.hash)),
+                Instant::now(),
+            )),
         })
     }
 
@@ -345,21 +376,74 @@ impl FileStore {
                 OpenOptions::new().create(true).append(true).open(&path),
             )?;
             io(&path, file.write_all(&f))?;
-            io(&path, file.sync_all())?;
             lens[i] += f.len() as u64; // ponytail: usize is u64 here
         }
+        self.ends.insert(n, lens);
+        self.persisted = n;
+        self.persisted_hash = rec.block.hash();
+        if self.lock_synced().1.elapsed() >= GROUP_COMMIT {
+            self.sync()?;
+        }
+        Ok(())
+    }
+
+    /// fsyncs the segments, then moves `head.json` to the last written block.
+    pub fn sync(&self) -> Result<(), FileError> {
+        let mut synced = self.lock_synced();
+        synced.1 = Instant::now();
+        let head = (self.persisted, self.persisted_hash);
+        if synced.0 == head {
+            return Ok(());
+        }
+        for i in 0..3 {
+            let path = seg_path(&self.dir, i);
+            io(&path, File::open(&path).and_then(|f| f.sync_all()))?;
+        }
         sync_dir(&self.dir.join("static"))?;
+        let lens = self.ends.get(&head.0).copied().unwrap_or([0; 3]);
         write_head(
             &self.dir,
             &HeadFile {
-                number: n,
-                hash: rec.block.hash(),
+                number: head.0,
+                hash: head.1,
                 lens,
             },
         )?;
-        self.ends.insert(n, lens);
-        self.persisted = n;
+        synced.0 = head;
         Ok(())
+    }
+
+    /// The receipts of block `n`, read back from the receipts segment.
+    pub fn receipts(&self, n: u64) -> Result<Vec<Bytes>, FileError> {
+        let missing = || FileError(format!("no stored frame for block {n}"));
+        let end = self.ends.get(&n).ok_or_else(missing)?[2];
+        let start = match n {
+            0 => return Err(missing()),
+            1 => 0,
+            _ => self.ends.get(&(n - 1)).ok_or_else(missing)?[2],
+        };
+        let path = seg_path(&self.dir, 2);
+        let mut f = io(&path, File::open(&path))?;
+        io(&path, f.seek(std::io::SeekFrom::Start(start)))?;
+        let mut frame = vec![0u8; usize::try_from(end - start).map_err(|_| missing())?];
+        io(&path, f.read_exact(&mut frame))?;
+        let bad = || FileError(format!("{}: damaged frame for block {n}", path.display()));
+        let (h, rest) = frame.split_at_checked(12).ok_or_else(bad)?;
+        let (payload, t) = rest
+            .split_at_checked(rest.len().saturating_sub(4))
+            .ok_or_else(bad)?;
+        let plen = u32::try_from(payload.len()).map_err(|_| bad())?;
+        if h[4..12] != n.to_le_bytes() || t != tag(plen, n, payload) {
+            return Err(bad());
+        }
+        Vec::<Bytes>::decode(&mut &payload[..])
+            .map_err(|e| FileError(format!("block {n}: receipts: {e}")))
+    }
+
+    fn lock_synced(&self) -> std::sync::MutexGuard<'_, ((u64, B256), Instant)> {
+        self.synced
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     fn cut(&mut self, number: u64) -> Result<(), FileError> {
@@ -381,7 +465,17 @@ impl FileStore {
         write_head(&self.dir, &HeadFile { number, hash, lens })?;
         self.ends.retain(|n, _| *n <= number);
         self.persisted = number;
+        self.persisted_hash = hash;
+        self.lock_synced().0 = (number, hash);
         Ok(())
+    }
+}
+
+impl Drop for FileStore {
+    fn drop(&mut self) {
+        if let Err(e) = self.sync() {
+            eprintln!("store: last blocks not synced on close: {e}");
+        }
     }
 }
 
@@ -422,6 +516,9 @@ impl Store for FileStore {
         if rec.block.number() > self.persisted {
             self.append(rec).map_err(degraded)?;
         }
+        // the files hold every block: memory keeps the unwind window only
+        self.inner
+            .forget_below(rec.block.number().saturating_sub(super::core::RETENTION));
         Ok(())
     }
     fn unwind_to(&mut self, number: u64, blocks: Unwound) -> Result<(), StoreError> {

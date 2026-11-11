@@ -14,6 +14,7 @@ struct Access {
     reads: BTreeSet<B256>,
     balance: BTreeMap<u32, U256>,
     nonce: BTreeMap<u32, u64>,
+    code: BTreeMap<u32, Bytes>,
 }
 
 #[derive(Default)]
@@ -84,6 +85,11 @@ impl Bal {
         self.accounts.entry(a).or_default().nonce.insert(index, n);
     }
 
+    /// `CodeChange`: the code after the transaction.
+    pub fn code(&mut self, index: u32, a: Address, code: Bytes) {
+        self.accounts.entry(a).or_default().code.insert(index, code);
+    }
+
     /// keccak256 of the RLP of the sorted list.
     pub fn hash(&self) -> B256 {
         let list: Vec<AccountAccess> = self
@@ -122,7 +128,14 @@ impl Bal {
                         nonce: *n,
                     })
                     .collect(),
-                code_changes: vec![],
+                code_changes: x
+                    .code
+                    .iter()
+                    .map(|(i, c)| IndexedCode {
+                        index: *i,
+                        code: c.clone(),
+                    })
+                    .collect(),
             })
             .collect();
         keccak256(alloy_rlp::encode(&list))

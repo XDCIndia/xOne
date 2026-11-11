@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use xone_chainspec::{Genesis, Network};
+use xone_chainspec::{ChainSpec, Genesis, Network};
 
 use crate::Config;
 
@@ -36,8 +36,6 @@ pub enum DatadirError {
     NetworkId { given: u64, genesis: u64 },
     #[error("genesis json: {0}")]
     GenesisJson(String),
-    #[error("chain id {0} has no built-in chain spec; custom chain specs are not supported yet")]
-    NoSpec(u64),
     #[error("genesis: {0}")]
     Genesis(#[from] xone_chainspec::Error),
 }
@@ -49,29 +47,30 @@ fn io(path: &Path) -> impl FnOnce(std::io::Error) -> DatadirError + '_ {
     }
 }
 
-/// The built-in network, the parsed genesis and the identity of a genesis file. The hash needs the
-/// fork schedule, which only the built-in networks have. The network is found by `config.chainId`; a
-/// file without a config block (the devnet551 export) must equal a built-in genesis.
-fn identify(genesis_json: &str) -> Result<(Network, Genesis, Marker), DatadirError> {
+/// The chain spec, the parsed genesis and the identity of a genesis file. The hash needs the fork
+/// schedule. A built-in network is found by `config.chainId`; another chain id takes its spec from
+/// the file's own `config` block ([`ChainSpec::from_genesis_json`], a missing or unknown row is a
+/// typed error). A file without a config block (the devnet551 export) must equal a built-in genesis.
+fn identify(genesis_json: &str) -> Result<(ChainSpec, Genesis, Marker), DatadirError> {
     let v: serde_json::Value =
         serde_json::from_str(genesis_json).map_err(|e| DatadirError::GenesisJson(e.to_string()))?;
     let genesis = Genesis::from_json(genesis_json)?;
-    let net = match v["config"]["chainId"].as_u64() {
-        Some(id) => Network::ALL
-            .into_iter()
-            .find(|n| n.spec().chain_id == id)
-            .ok_or(DatadirError::NoSpec(id))?,
+    let spec = match v["config"]["chainId"].as_u64() {
+        Some(id) => match Network::ALL.into_iter().find(|n| n.spec().chain_id == id) {
+            Some(n) => n.spec(),
+            None => ChainSpec::from_genesis_json(genesis_json)?,
+        },
         None => Network::ALL
             .into_iter()
             .find(|n| n.genesis().ok().as_ref() == Some(&genesis))
-            .ok_or_else(|| DatadirError::GenesisJson("config.chainId is missing".into()))?,
+            .ok_or_else(|| DatadirError::GenesisJson("config.chainId is missing".into()))?
+            .spec(),
     };
-    let spec = net.spec();
     let marker = Marker {
         chain_id: spec.chain_id,
         genesis_hash: genesis.hash(&spec)?.to_string(),
     };
-    Ok((net, genesis, marker))
+    Ok((spec, genesis, marker))
 }
 
 /// Chain id and genesis hash of a genesis file.
@@ -118,8 +117,8 @@ pub fn prepare(cfg: &Config) -> Result<Marker, DatadirError> {
     prepare_chain(cfg).map(|(m, _, _)| m)
 }
 
-/// [`prepare`], and the network and genesis the node runs.
-pub fn prepare_chain(cfg: &Config) -> Result<(Marker, Network, Genesis), DatadirError> {
+/// [`prepare`], and the chain spec and genesis the node runs.
+pub fn prepare_chain(cfg: &Config) -> Result<(Marker, ChainSpec, Genesis), DatadirError> {
     let json = match &cfg.override_genesis {
         Some(p) => std::fs::read_to_string(p).map_err(io(p))?,
         None => cfg
@@ -196,11 +195,20 @@ mod tests {
     }
 
     #[test]
-    fn unknown_chain_is_a_typed_error() {
-        let json = Network::Mainnet
+    fn unknown_chain_takes_the_spec_of_its_file() {
+        let json = Network::Net2040
             .genesis_json()
-            .replace("\"chainId\": 50", "\"chainId\": 777");
-        assert!(matches!(identity(&json), Err(DatadirError::NoSpec(777))));
+            .replace("\"chainId\": 2040", "\"chainId\": 777");
+        let m = identity(&json).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(m.chain_id, 777);
+        // a required fork row missing from the file is a typed error, not a default
+        let json = json.replace("\"berlinBlock\"", "\"berlin\"");
+        assert!(matches!(
+            identity(&json),
+            Err(DatadirError::Genesis(xone_chainspec::Error::MissingFork(
+                "berlinBlock"
+            )))
+        ));
         assert!(identity("{}").is_err());
     }
 }

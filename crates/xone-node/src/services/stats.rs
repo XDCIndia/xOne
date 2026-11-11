@@ -7,11 +7,15 @@ use alloy_primitives::keccak256;
 use xone_net::peers::Peers;
 
 use super::{chain::Progress, core::Core, hist::Stored, pool::PoolShared};
-use crate::observe::{BlockInfo, ChainStats, PeerStats};
+use crate::observe::{
+    metrics::{MetricsSource, Snapshot},
+    BlockInfo, ChainStats, PeerStats,
+};
 
 /// geth `eth_gasPrice` is the 1559 base fee plus tip; the board shows it as given. ponytail: the head
 /// base fee, or 0 before the fee market; a tip oracle comes with the pool's gas-price oracle.
 pub struct NodeStats {
+    pub stamp: String,
     pub core: Arc<Core>,
     pub progress: Arc<Progress>,
     pub pool: Arc<PoolShared>,
@@ -67,6 +71,29 @@ impl ChainStats for NodeStats {
     /// A follower never seals.
     fn signer(&self) -> Option<[u8; 20]> {
         None
+    }
+}
+
+/// The parts of the metrics snapshot this node knows; the rest stays zero until its source is wired.
+impl MetricsSource for NodeStats {
+    fn snapshot(&self) -> Snapshot {
+        let (number, hash, timestamp) = {
+            let g = self.core.hist.read();
+            let t = g.tip();
+            (t.header.number, t.hash.0, t.header.timestamp)
+        };
+        Snapshot {
+            version: self.stamp.clone(),
+            head_number: Some(number),
+            head_hash: hash,
+            head_timestamp: timestamp,
+            now: super::core::now(),
+            syncing: self.syncing(),
+            peers: self.peer_count() as u64, // ponytail: usize is u64 here
+            txpool_pending: self.pending_txs() as u64,
+            blocks_imported_total: number.saturating_sub(self.progress.start.load(Relaxed)),
+            ..Snapshot::default()
+        }
     }
 }
 

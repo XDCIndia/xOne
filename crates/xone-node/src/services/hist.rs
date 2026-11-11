@@ -71,7 +71,14 @@ impl BlockReader for HistInner {
             hash,
             parent_hash: s.header.parent_hash,
             miner: s.miner,
-            epoch_switch: self.switches.iter().any(|w| w.hash == hash),
+            // geth `XDPoS.IsEpochSwitch` (`consensus/XDPoS/xdpos_api.go:228-235`), which the V2 reward
+            // walks with: up to the V2 switch block an epoch switch is a multiple of the epoch.
+            epoch_switch: self.switches.iter().any(|w| w.hash == hash)
+                || self.v2_cfg().is_some_and(|v| {
+                    number != 0
+                        && number <= v.switch_block
+                        && number.is_multiple_of(self.spec.xdpos.epoch)
+                }),
         })
     }
     fn sign_txs(&self, hash: B256, number: u64) -> Option<Vec<SignTx>> {
@@ -97,8 +104,7 @@ impl Env for HistInner {
         Some(self.blocks.get(usize::try_from(number).ok()?)?.hash)
     }
     fn masternodes_at(&self, checkpoint: u64) -> Option<Vec<Address>> {
-        let s = self.blocks.get(usize::try_from(checkpoint).ok()?)?;
-        masternodes_of(&s.header.extra_data).ok()
+        self.list_at(checkpoint)
     }
     fn wide_balances(&self) -> Vec<(Address, WideBalance)> {
         self.wide.iter().map(|(a, w)| (*a, w.clone())).collect()
@@ -106,13 +112,27 @@ impl Env for HistInner {
     fn code(&self, hash: B256) -> Option<Bytes> {
         self.codes.get(&hash).cloned()
     }
-    // V1 only: the history holds no V2 gap snapshots or burn records, so the executor refuses a V2
-    // checkpoint block (no standby pool, `ExecError::NoBurn`) instead of paying it wrongly.
-    fn standby_pool(&self, _switch: u64) -> Option<Vec<Address>> {
-        None
+    /// The standby candidates of the epoch that switch block `switch` opens: its gap pool less the
+    /// switch's masternodes and penalties (the replay harness's `Chain::standby_pool`).
+    fn standby_pool(&self, switch: u64) -> Option<Vec<Address>> {
+        let h = &self.blocks.get(usize::try_from(switch).ok()?)?.header;
+        let x = &self.spec.xdpos;
+        let pool = self
+            .gaps
+            .get(&gap_snapshot::gap_number(switch, x.epoch, x.gap).ok()?)?;
+        Some(gap_snapshot::standby(
+            &pool.candidates,
+            &self.list_at(switch)?,
+            &addresses(&h.penalties),
+        ))
     }
-    fn burn(&self, _number: u64) -> Option<alloy_primitives::U256> {
-        None
+    /// The base fee burnt by block `number`: base fee times gas used.
+    fn burn(&self, number: u64) -> Option<alloy_primitives::U256> {
+        let h = &self.blocks.get(usize::try_from(number).ok()?)?.header;
+        Some(
+            h.base_fee
+                .map_or(U256::ZERO, |f| f * U256::from(h.gas_used)),
+        )
     }
 }
 
@@ -166,6 +186,18 @@ impl HistInner {
     pub fn by_hash(&self, hash: B256) -> Option<&Stored> {
         // ponytail: linear in the chain; an index by hash comes with the MDBX store
         self.blocks.iter().rev().find(|b| b.hash == hash)
+    }
+
+    /// The masternode list a checkpoint or epoch-switch header carries (geth
+    /// `GetMasternodesFromEpochSwitchHeader`, `engine_v2/engine.go:1656-1705`): `extraData` up to and
+    /// including the V2 switch block, `validators` above it.
+    fn list_at(&self, number: u64) -> Option<Vec<Address>> {
+        let h = &self.blocks.get(usize::try_from(number).ok()?)?.header;
+        if self.v2_cfg().is_none_or(|v| number <= v.switch_block) {
+            masternodes_of(&h.extra_data).ok()
+        } else {
+            Some(addresses(&h.validators))
+        }
     }
 
     fn v2_cfg(&self) -> Option<&xone_chainspec::V2> {
@@ -348,6 +380,14 @@ impl HistInner {
             self.gaps.insert(g.number, g);
         }
         self.blocks.push(s);
+        // receipts below the unwind window are read back from the files (`FileStore::receipts`)
+        if let Some(old) = usize::try_from(n.saturating_sub(super::core::RETENTION))
+            .ok()
+            .filter(|_| n >= super::core::RETENTION)
+            .and_then(|i| self.blocks.get_mut(i))
+        {
+            old.receipts = Vec::new();
+        }
     }
 
     /// The transaction index and the epoch switches of a block about to be appended.

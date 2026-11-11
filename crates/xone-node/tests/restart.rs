@@ -59,6 +59,14 @@ fn head_and_blocks_come_back() {
         let h = core.hist.read();
         assert_eq!(h.blocks.len(), N + 1);
         assert_eq!(h.tip().receipts, receipts);
+        // the receipts segment gives back what was imported (the RPC reads old blocks from it)
+        for b in &h.blocks[1..] {
+            let n = b.header.number;
+            assert_eq!(
+                core.chain.with_store(|s| s.receipts(n)).unwrap(),
+                b.receipts
+            );
+        }
         assert_eq!(
             h.blocks
                 .iter()
@@ -131,6 +139,46 @@ fn another_chain_is_refused() {
     assert!(
         e.to_string().contains("does not start at this genesis"),
         "{e}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Past the window the store model keeps no record and no segment bytes of a block (memory follows the
+/// window, not the chain); its receipts are read back from the files, and a restart still opens at
+/// the head.
+#[test]
+fn memory_follows_the_window() {
+    use xone_node::services::core::RETENTION;
+    use xone_sync::store::Store;
+    let dir = scratch("window");
+    let n = 3 * RETENTION as usize;
+    let blocks = vectors(n);
+    let core = open(&dir, Network::Apothem, 0).unwrap();
+    for b in &blocks[1..] {
+        let (h, body) = parts(b);
+        core.import(h, body, xone_node::services::core::now())
+            .unwrap();
+    }
+    let (old, new) = (blocks[10].header.hash(), blocks[n].header.hash());
+    assert!(core.chain.with_store(|s| s.record(old)).is_none());
+    assert!(core.chain.with_store(|s| s.record(new)).is_some());
+    {
+        let h = core.hist.read();
+        let with_txs = h.blocks[1..n - RETENTION as usize]
+            .iter()
+            .find(|b| !b.body.transactions.is_empty())
+            .expect("a block with a transaction below the window");
+        assert!(with_txs.receipts.is_empty());
+        let back = core
+            .chain
+            .with_store(|s| s.receipts(with_txs.header.number))
+            .unwrap();
+        assert_eq!(back.len(), with_txs.body.transactions.len());
+    }
+    drop(core);
+    assert_eq!(
+        open(&dir, Network::Apothem, 0).unwrap().head(),
+        (n as u64, new)
     );
     let _ = std::fs::remove_dir_all(&dir);
 }

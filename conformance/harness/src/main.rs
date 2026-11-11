@@ -225,11 +225,16 @@ fn real(cli: Cli) -> Result<ExitCode, String> {
             let source = source.unwrap_or_else(|| root().join(format!("cache/{network}.jsonl")));
             let state_dir = state_dir.unwrap_or_else(|| root().join(format!("state/{network}")));
             let t0 = Instant::now();
-            let blocks =
-                cache::read_limit(&source, usize::try_from(to).map_err(|e| e.to_string())? + 1)?
-                    .iter()
-                    .map(decode)
-                    .collect::<Result<Vec<_>, _>>()?;
+            let from = if resume {
+                xone_harness::replay::resume_point(&state_dir, to).map_or(0, |n| n + 1)
+            } else {
+                0
+            };
+            let blocks = cache::decode_limit(
+                &source,
+                usize::try_from(to).map_err(|e| e.to_string())? + 1,
+                from,
+            )?;
             let spec = net.spec();
             let opts = Opts {
                 to,

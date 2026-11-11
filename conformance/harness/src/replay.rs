@@ -230,6 +230,11 @@ fn save(
     fs::rename(&tmp, ckpt_path(dir, number)).map_err(|e| e.to_string())
 }
 
+/// The number of the checkpoint a resumed run to `to` starts from.
+pub fn resume_point(dir: &std::path::Path, to: u64) -> Option<u64> {
+    load(dir, to).map(|c| c.number)
+}
+
 /// The newest checkpoint of `dir` at or below `to`.
 fn load(dir: &std::path::Path, to: u64) -> Option<Ckpt> {
     let mut files: Vec<_> = fs::read_dir(dir)

@@ -75,6 +75,11 @@ impl ChainApi for RpcChain {
             header: s.header.clone(),
             transactions: s.body.transactions.iter().map(to_wire).collect(),
             uncles: s.body.uncles.clone(),
+            withdrawals: s
+                .body
+                .withdrawals
+                .as_ref()
+                .map(|w| w.iter().cloned().map(xone_net::eth::Raw).collect()),
         });
         Some(BlockView {
             hash,
@@ -88,7 +93,19 @@ impl ChainApi for RpcChain {
         Some(self.core.hist.read().by_hash(hash)?.header.clone())
     }
     fn receipts(&self, hash: B256) -> Option<Vec<Bytes>> {
-        Some(self.core.hist.read().by_hash(hash)?.receipts.clone())
+        let (n, r, txs) = {
+            let h = self.core.hist.read();
+            let s = h.by_hash(hash)?;
+            (
+                s.header.number,
+                s.receipts.clone(),
+                s.body.transactions.len(),
+            )
+        };
+        if r.len() == txs {
+            return Some(r);
+        }
+        self.core.chain.with_store(|s| s.receipts(n)).ok()
     }
     fn tx_location(&self, tx: B256) -> Option<(B256, u64)> {
         let h = self.core.hist.read();

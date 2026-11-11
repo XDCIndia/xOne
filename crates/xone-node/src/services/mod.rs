@@ -47,7 +47,7 @@ pub struct Built {
 pub fn build(
     cfg: &crate::Config,
     marker: &crate::datadir::Marker,
-    net: xone_chainspec::Network,
+    spec: xone_chainspec::ChainSpec,
     genesis: &xone_chainspec::Genesis,
     stamp: &str,
 ) -> Result<Built, String> {
@@ -60,13 +60,8 @@ pub fn build(
     }
 
     let core = Arc::new(
-        core::Core::open(
-            net.spec(),
-            genesis,
-            &cfg.datadir.join("xone"),
-            CHECKPOINT_EVERY,
-        )
-        .map_err(|e| e.to_string())?,
+        core::Core::open(spec, genesis, &cfg.datadir.join("xone"), CHECKPOINT_EVERY)
+            .map_err(|e| e.to_string())?,
     );
     if core.genesis.to_string() != marker.genesis_hash {
         return Err("the genesis hash of the node differs from the chain marker".into());
@@ -100,6 +95,7 @@ pub fn build(
     let progress = chain_svc.progress.clone();
     let pool_svc = pool::PoolService::new(pool.clone(), rth.clone());
     let stats = Arc::new(stats::NodeStats {
+        stamp: stamp.to_owned(),
         core: core.clone(),
         progress: progress.clone(),
         pool: pool.clone(),
@@ -115,6 +111,16 @@ pub fn build(
     node.add(Box::new(chain_svc));
     node.add(Box::new(pool_svc));
     node.add(Box::new(rpc_svc));
+    if cfg.metrics.enabled {
+        node.add(Box::new(crate::observe::metrics::MetricsServer::new(
+            crate::observe::metrics::MetricsCfg {
+                addr: cfg.metrics.addr.clone(),
+                port: cfg.metrics.port,
+                max_head_age_secs: 60,
+            },
+            stats.clone(),
+        )));
+    }
     if let Some(url) = &cfg.ethstats {
         node.add(Box::new(crate::observe::ethstats::Ethstats::new(
             crate::observe::ethstats::EthstatsCfg {
