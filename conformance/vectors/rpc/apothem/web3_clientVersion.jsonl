@@ -1,0 +1,1 @@
+{"block":null,"class":"live","network":"apothem","request":{"id":1,"jsonrpc":"2.0","method":"web3_clientVersion","params":[]},"response":{"id":1,"jsonrpc":"2.0","result":"XDC/v1.17.10-xdc.20-08d25caf-20261028/linux-amd64/go1.25.0"}}

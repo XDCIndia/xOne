@@ -1,0 +1,1 @@
+{"block":null,"class":"live","network":"apothem","request":{"id":1,"jsonrpc":"2.0","method":"XDPoS_networkInformation","params":[]},"response":{"id":1,"jsonrpc":"2.0","result":{"epoch":900,"networkId":51,"v2SwitchBlock":56828700,"xdcValidators":108}}}

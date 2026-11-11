@@ -1,0 +1,1 @@
+{"block":null,"class":"live","network":"apothem","request":{"id":1,"jsonrpc":"2.0","method":"txpool_inspect","params":[]},"response":{"error":{"code":-32601,"message":"the method txpool_inspect does not exist/is not available"},"id":1,"jsonrpc":"2.0"}}

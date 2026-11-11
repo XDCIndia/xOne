@@ -1,0 +1,2 @@
+{"block":null,"class":"live","network":"apothem","request":{"id":1,"jsonrpc":"2.0","method":"net_version","params":[]},"response":{"id":1,"jsonrpc":"2.0","result":"51"}}
+{"block":null,"class":"live","network":"apothem","request":{"id":1,"jsonrpc":"2.0","method":"net_version","params":[]},"response":{"id":1,"jsonrpc":"2.0","result":"51"}}
