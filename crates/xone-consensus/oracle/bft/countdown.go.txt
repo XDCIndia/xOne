@@ -1,0 +1,6 @@
+// Overlaid into package countdown of the pinned geth-XDC by run.sh (go build -overlay); the checkout is
+// never written. Fire is the timer expiring: onTimeout without a callback, then the restart with the
+// next round (countdown.go:126-148).
+package countdown
+
+func (e *ExpCountDown) Fire() { e.onTimeout() }

@@ -1,0 +1,82 @@
+// Overlaid into package engine_v2 of the pinned geth-XDC by run.sh (go build -overlay); the checkout is
+// never written. It exposes the unexported engine functions that the oracle calls. Nothing here
+// re-implements a rule.
+package engine_v2
+
+import (
+	"math/big"
+	"time"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/lru"
+	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/params"
+)
+
+// OracleChain serves headers from memory.
+type OracleChain struct {
+	Cfg    *params.ChainConfig
+	Head   *types.Header
+	ByHash map[common.Hash]*types.Header
+}
+
+func NewOracleChain(cfg *params.ChainConfig) *OracleChain {
+	return &OracleChain{Cfg: cfg, ByHash: map[common.Hash]*types.Header{}}
+}
+func (c *OracleChain) Add(h *types.Header)                         { c.ByHash[h.Hash()] = h }
+func (c *OracleChain) Config() *params.ChainConfig                 { return c.Cfg }
+func (c *OracleChain) CurrentHeader() *types.Header                { return c.Head }
+func (c *OracleChain) GetHeaderByNumber(uint64) *types.Header      { return nil }
+func (c *OracleChain) GetHeaderByHash(h common.Hash) *types.Header { return c.ByHash[h] }
+func (c *OracleChain) GetHeader(h common.Hash, n uint64) *types.Header {
+	if x := c.ByHash[h]; x != nil && x.Number.Uint64() == n {
+		return x
+	}
+	return nil
+}
+func (c *OracleChain) GetBlock(common.Hash, uint64) *types.Block { return nil }
+
+var _ consensus.ChainReader = (*OracleChain)(nil)
+
+// OracleEngine is createEngine over an in-memory database, without the forensics goroutine. The epoch
+// cache holds every epoch the oracle seeds (the engine's holds 10).
+func OracleEngine(cfg *params.ChainConfig) *XDPoS_v2 {
+	x := createEngine(cfg, rawdb.NewMemoryDatabase(), nil, nil)
+	x.ForensicsProcessor = nil
+	x.epochSwitches = lru.NewCache[common.Hash, *types.EpochSwitchInfo](1 << 16)
+	return x
+}
+
+// OracleInitial is the end of initial(): the timer is reset for round 0 and QC round 0 (engine.go:466).
+func (x *XDPoS_v2) OracleInitial() time.Duration {
+	x.timeoutWorker.Reset(nil, 0, 0)
+	return x.timeoutWorker.GetTimeout()
+}
+
+// OracleNewRound is setNewRound with the highest QC at qcRound (engine.go:3220); it returns the timeout of the new timer.
+func (x *XDPoS_v2) OracleNewRound(round, qcRound uint64) time.Duration {
+	x.highestQuorumCert = &types.QuorumCert{ProposedBlockInfo: &types.BlockInfo{Round: types.Round(qcRound), Number: big.NewInt(0)}}
+	x.setNewRound(nil, types.Round(round))
+	return x.timeoutWorker.GetTimeout()
+}
+
+// OracleFire is the timer expiring once; it returns the timeout of the timer it restarts.
+func (x *XDPoS_v2) OracleFire() time.Duration {
+	x.timeoutWorker.Fire()
+	return x.timeoutWorker.GetTimeout()
+}
+
+// OracleVotingRule is verifyVotingRule with the engine fields set (vote.go:404).
+func (x *XDPoS_v2) OracleVotingRule(chain consensus.ChainReader, current, highestVoted uint64, lock *types.QuorumCert, block *types.BlockInfo, qc *types.QuorumCert) (bool, error) {
+	x.currentRound = types.Round(current)
+	x.highestVotedRound = types.Round(highestVoted)
+	x.lockQuorumCert = lock
+	return x.verifyVotingRule(chain, block, qc)
+}
+
+// OracleSeedEpoch stores the epoch info getEpochSwitchInfo reads for a block hash.
+func (x *XDPoS_v2) OracleSeedEpoch(hash common.Hash, mn []common.Address, sw *types.BlockInfo) {
+	x.epochSwitches.Add(hash, &types.EpochSwitchInfo{Masternodes: mn, MasternodesLen: len(mn), EpochSwitchBlockInfo: sw})
+}
