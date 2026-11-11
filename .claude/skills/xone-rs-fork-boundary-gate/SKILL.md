@@ -1,11 +1,11 @@
 ---
 name: xone-rs-fork-boundary-gate
-description: The fork-boundary and epoch-switch gate of the xOne Rust rebuild. Lists the Apothem and mainnet fork blocks and the epoch switches that must pass at 0 mismatches before a milestone closes, and says how to refresh the list from geth-XDC params/config.go. Use when a milestone is about to close, when a fork value is added or changed, when geth-XDC is re-pinned, or when the task says fork boundary, fork gate, chainspec check, epoch-switch gate, "can we close M2/M3/M4".
+description: The fork-boundary and epoch-switch gate of the xOne Rust rebuild. Lists the Apothem and mainnet fork blocks and the epoch switches that must pass at 0 mismatches before a gate (B, C or E) closes, and says how to refresh the list from geth-XDC params/config.go. Use when a gate is about to close, when a fork value is added or changed, when geth-XDC is re-pinned, or when the task says fork boundary, fork gate, chainspec check, epoch-switch gate, "can we close gate B".
 ---
 
 # xone-rs-fork-boundary-gate
 
-XDC forks are block-gated. A client that reaches a boundary with a missing or time-gated value computes a wrong root there or soon after. This gate runs before a milestone is closed, and again after every re-pin of geth-XDC.
+XDC forks are block-gated. A client that reaches a boundary with a missing or time-gated value computes a wrong root there or soon after. This gate runs before a gate-DAG gate (B, C or E) that covers a range is closed, and again after every re-pin of geth-XDC. Gates are A feasibility, B foundational correctness, C sync and resource, D isolated producer, E public rollout; see the plan revision on issue #1.
 
 ## Operating rules
 
@@ -51,13 +51,15 @@ XDC forks are block-gated. A client that reaches a boundary with a missing or ti
 4. **Start-up check.** Remove one fork value from a copy of the chainspec; the client must refuse to start.
 5. **Record.** Post the table of boundaries with result, commit and pin on the milestone issue.
 
-## Which milestone needs which rows
+## Which gate needs which rows
 
-- M1: genesis hashes; the start-up check.
-- M2: every row up to the V2 switch minus one, and the V1 blocks.
-- M3: the V2 switch and the V2 bootstrap switches.
-- M4: every later row on Apothem, and the regression blocks.
-- M8: every mainnet row.
+Replays run in sequential mode (`xone-rs-diff-exec`) so each boundary is crossed on accumulated state, not on a fresh prestate.
+
+- Gate A: genesis hashes (Apothem, mainnet, net2040) and the start-up check, as feasibility evidence.
+- Gate B: every row up to the V2 switch and the V1 blocks; the V2 switch and bootstrap switches; every later row on Apothem and the regression blocks. Also malformed-input rejection at each boundary (negative vectors).
+- Gate C: pivots at every discontinuity: each fork boundary, each epoch switch in range, each gap block, and the V2 switch. Fifty random pivots is a sampling choice, not a proof. Unsupported history returns an explicit error.
+- Gate D: the net2040 fork walk and window on the local adversarial devnet.
+- Gate E: every mainnet row, on a follower, then the testnet producer soak windows.
 
 ## Done
 
