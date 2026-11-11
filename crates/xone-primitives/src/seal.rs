@@ -30,6 +30,12 @@ pub fn ecrecover(hash: &B256, sig: &[u8]) -> Result<Address, SealError> {
     let recover = || {
         let signature = Signature::from_slice(&sig[..64]).ok()?;
         let id = RecoveryId::from_byte(sig[64])?;
+        // libsecp256k1, which geth calls, recovers from a high-S signature too; k256 refuses
+        // it. (r, N - s) with the other y parity recovers the same key.
+        let (signature, id) = match signature.normalize_s() {
+            Some(low) => (low, RecoveryId::from_byte(sig[64] ^ 1)?),
+            None => (signature, id),
+        };
         VerifyingKey::recover_from_prehash(hash.as_slice(), &signature, id).ok()
     };
     let key = recover().ok_or(SealError::Invalid)?;
@@ -93,5 +99,34 @@ impl Header {
             return Err(SealError::Missing);
         }
         ecrecover(&self.v2_sig_hash(), &self.validator)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use k256::ecdsa::SigningKey;
+
+    /// geth recovers the same address from `(r, s, v)` and from `(r, N - s, v ^ 1)`; only a
+    /// caller that checks low-S (a QC) refuses the second.
+    #[test]
+    fn high_s_signature_recovers_the_same_address() {
+        let key = SigningKey::from_slice(&[7u8; 32]).unwrap();
+        let hash = keccak256(b"high s");
+        let (sig, id) = key.sign_prehash_recoverable(hash.as_slice()).unwrap();
+        let mut low = sig.to_bytes().to_vec();
+        low.push(id.to_byte());
+        let want = ecrecover(&hash, &low).unwrap();
+
+        let n = alloy_primitives::U256::from_be_slice(&hex_n());
+        let s = alloy_primitives::U256::from_be_slice(&low[32..64]);
+        let mut high = low.clone();
+        high[32..64].copy_from_slice(&(n - s).to_be_bytes::<32>());
+        high[64] ^= 1;
+        assert_eq!(ecrecover(&hash, &high), Ok(want));
+    }
+
+    fn hex_n() -> [u8; 32] {
+        alloy_primitives::hex!("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141")
     }
 }

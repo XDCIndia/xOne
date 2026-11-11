@@ -7,6 +7,7 @@
 //	go run .          write ../../crates/xone-chainspec/generated/forks.json
 //	go run . -check   regenerate in memory; exit 1 with a diff if the file differs
 //	go run . headers  write header vectors from an archive RPC (see headers.go)
+//	go run . blocks   write consensus vectors with bodies and receipts (see blocks.go)
 package main
 
 import (
@@ -225,14 +226,23 @@ func build(pin string) ([]byte, error) {
 	var out object
 	for _, n := range nets {
 		b := n.gen.ToBlock()
-		out = append(out, kv{n.name, network{
-			ChainID:   n.cfg.ChainID.String(),
-			Blocks:    blocks(n.cfg),
-			Effective: effective(n.cfg),
-			XDPoS:     xdposOf(n.cfg.XDPoS),
-			Genesis:   genesis{b.Hash().Hex(), b.Root().Hex()},
-		}})
+		out = append(out, kv{n.name, networkOf(n.cfg, b.Hash().Hex(), b.Root().Hex())})
 	}
+	return marshalTable(pin, out)
+}
+
+// networkOf is one row of the fork table.
+func networkOf(cfg *params.ChainConfig, genesisHash, genesisRoot string) network {
+	return network{
+		ChainID:   cfg.ChainID.String(),
+		Blocks:    blocks(cfg),
+		Effective: effective(cfg),
+		XDPoS:     xdposOf(cfg.XDPoS),
+		Genesis:   genesis{genesisHash, genesisRoot},
+	}
+}
+
+func marshalTable(pin string, out object) ([]byte, error) {
 	raw, err := json.Marshal(file{Pin: pin, Networks: out})
 	if err != nil {
 		return nil, err
@@ -248,6 +258,10 @@ func build(pin string) ([]byte, error) {
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "headers" {
 		headers(os.Args[2:])
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "blocks" {
+		blocksCmd(os.Args[2:])
 		return
 	}
 	out := flag.String("out", "../../crates/xone-chainspec/generated/forks.json", "generated file")

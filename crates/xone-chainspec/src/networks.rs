@@ -165,11 +165,17 @@ struct RawExpTimeout {
 /// table lacks, a value that is not a decimal block number, or a fork this
 /// crate does not model is an error; nothing defaults.
 pub fn load(net: Network, json: &str) -> Result<ChainSpec, Error> {
+    load_named(net.name(), json)
+}
+
+/// [`load`] for a table row whose network is not built in (a devnet exported
+/// with `conformance/exporter blocks -forks-out`).
+pub fn load_named(name: &'static str, json: &str) -> Result<ChainSpec, Error> {
     let mut file: RawFile = serde_json::from_str(json)?;
     let raw = file
         .networks
-        .remove(net.name())
-        .ok_or(Error::MissingNetwork(net.name()))?;
+        .remove(name)
+        .ok_or(Error::MissingNetwork(name))?;
     let x = raw.xdpos;
     let switch_block =
         x.v2.switch_block

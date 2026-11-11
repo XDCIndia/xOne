@@ -36,3 +36,6 @@ A rule with no source line is not a rule. A value that a page states must come f
 | [non-parameter-switches](chainspec/non-parameter-switches.md) | every rule found at the pin that is not a plain `params` row |
 | [account-leaf](state/account-leaf.md) | the XDC account RLP, its slim form and the secure-trie keys |
 | [changesets](state/changesets.md) | whole-record changesets, the state of a retained block and side-branch execution |
+| [header-verification-v1](consensus/header-verification-v1.md) | the order and content of the V1 header checks, seal and double validation |
+| [header-verification-v2](consensus/header-verification-v2.md) | the order and content of the V2 header checks and the quorum certificate |
+| [body-roots](consensus/body-roots.md) | body checks and the roots recomputed from body and receipts |

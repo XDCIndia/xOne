@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 use alloy_primitives::{Address, B256};
 
 pub use genesis::Genesis;
-pub use networks::{apothem, devnet, devnet551, load, mainnet, Network};
+pub use networks::{apothem, devnet, devnet551, load, load_named, mainnet, Network};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -162,6 +162,7 @@ chain_spec!(
     eip1559 = "eip1559Block",
     cancun = "cancunBlock",
     prague = "pragueBlock",
+    osaka = "osakaBlock",
     amsterdam = "amsterdamBlock",
     tip_fixed_reward = "tipFixedRewardBlock",
     tip_upgrade_penalty = "tipUpgradePenaltyBlock",
@@ -510,9 +511,9 @@ mod tests {
         // geth sets a fork this crate has no field for.
         assert!(matches!(
             load_edited(Network::Mainnet, |v| {
-                v["networks"]["mainnet"]["blocks"]["osakaBlock"] = "5".into();
+                v["networks"]["mainnet"]["blocks"]["daoForkBlock"] = "5".into();
             }),
-            Err(Error::UnmodelledFork(k)) if k == "osakaBlock"
+            Err(Error::UnmodelledFork(k)) if k == "daoForkBlock"
         ));
         assert!(matches!(
             load_edited(Network::Mainnet, |v| {
