@@ -564,7 +564,7 @@ impl OsDir {
         lock.try_lock().map_err(|e| match e {
             fs::TryLockError::WouldBlock => io::Error::new(
                 io::ErrorKind::WouldBlock,
-                "datadir is locked by another process",
+                "the datadir is in use by another process (locked)",
             ),
             fs::TryLockError::Error(e) => e,
         })?;
