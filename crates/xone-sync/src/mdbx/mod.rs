@@ -1434,7 +1434,7 @@ impl<D: SegDir> Store for MdbxStore<D> {
         let mut starts: [BTreeMap<u64, u64>; 3] = Default::default();
         let mut put = |i: usize, n: u64, payload: &[u8]| {
             let buf = chunks[i].entry(chunk_of(n, per)).or_default();
-            starts[i].insert(n, HEADER_LEN + buf.len() as u64);
+            starts[i].insert(n, HEADER_LEN + u64::try_from(buf.len()).unwrap_or(u64::MAX));
             buf.extend_from_slice(&frame(n, payload));
         };
         for h in &s.headers {
@@ -1463,7 +1463,7 @@ impl<D: SegDir> Store for MdbxStore<D> {
                 segment: sg,
                 first_block: if i == 0 { h_first } else { r_first },
                 last_block: number,
-                len: HEADER_LEN + last.len() as u64,
+                len: HEADER_LEN + u64::try_from(last.len()).unwrap_or(u64::MAX),
                 tail_digest: keccak256(&last[usize::try_from(at - HEADER_LEN).unwrap_or(0)..]),
             };
         }
