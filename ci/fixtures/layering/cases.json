@@ -10,5 +10,8 @@
   "signer-depends-on-consensus": {"ok": false, "crates": {"crates/xone-signer": ["xone-consensus"], "crates/xone-consensus": []}},
   "signer-called-by-db": {"ok": false, "crates": {"crates/xone-signer": [], "crates/xone-db": ["xone-signer"]}},
   "signer-called-by-bin": {"ok": false, "crates": {"crates/xone-signer": [], "bin/xone": ["xone-signer"]}},
+  "good-builder-depends-on-executor-and-state": {"ok": true, "crates": {"crates/xone-primitives": [], "crates/xone-chainspec": ["xone-primitives"], "crates/xone-state": ["xone-primitives"], "crates/xone-evm": ["xone-chainspec"], "crates/xone-consensus": ["xone-state"], "crates/xone-executor": ["xone-evm", "xone-consensus"], "crates/xone-builder": ["xone-executor", "xone-state", "xone-evm"]}},
+  "wrong-direction-builder-to-node": {"ok": false, "crates": {"crates/xone-builder": ["xone-node"], "crates/xone-node": []}},
+  "wrong-direction-executor-to-builder": {"ok": false, "crates": {"crates/xone-executor": ["xone-builder"], "crates/xone-builder": []}},
   "unknown-crate": {"ok": false, "crates": {"crates/xone-mystery": []}}
 }

@@ -4217,6 +4217,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "xone-builder"
+version = "0.1.0"
+dependencies = [
+ "alloy-primitives",
+ "alloy-rlp",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "xone-chainspec",
+ "xone-consensus",
+ "xone-evm",
+ "xone-executor",
+ "xone-primitives",
+ "xone-state",
+]
+
+[[package]]
 name = "xone-chainspec"
 version = "0.1.0"
 dependencies = [

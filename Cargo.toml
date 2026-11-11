@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/xone-primitives", "crates/xone-chainspec", "crates/xone-db", "crates/xone-state", "crates/xone-consensus", "crates/xone-signer", "crates/xone-node", "sim", "bin/xone", "spikes/wide-balance", "spikes/net", "labs/pq", "crates/xone-evm", "conformance/sweep", "conformance/harness", "conformance/negative-gen", "crates/xone-net", "crates/xone-executor"]
+members = ["crates/xone-primitives", "crates/xone-chainspec", "crates/xone-db", "crates/xone-state", "crates/xone-consensus", "crates/xone-signer", "crates/xone-node", "sim", "bin/xone", "spikes/wide-balance", "spikes/net", "labs/pq", "crates/xone-evm", "conformance/sweep", "conformance/harness", "conformance/negative-gen", "crates/xone-net", "crates/xone-executor", "crates/xone-builder"]
 
 [workspace.package]
 version = "0.1.0"
@@ -38,6 +38,7 @@ xone-state = { path = "crates/xone-state" }
 xone-consensus = { path = "crates/xone-consensus" }
 xone-evm = { path = "crates/xone-evm" }
 xone-executor = { path = "crates/xone-executor" }
+xone-builder = { path = "crates/xone-builder" }
 xone-signer = { path = "crates/xone-signer" }
 
 # R3 rule 1 and 2 (plan #1). Crates opt in with `[lints] workspace = true`; the lint
@@ -72,6 +73,8 @@ opt-level = 2
 opt-level = 2
 [profile.dev.package.revm-context]
 opt-level = 2
+[profile.dev.package.revm-context-interface]
+opt-level = 2
 [profile.dev.package.revm-database]
 opt-level = 2
 [profile.dev.package.revm-state]
@@ -89,4 +92,7 @@ opt-level = 2
 [profile.dev.package.xone-state]
 opt-level = 2
 [profile.dev.package.xone-executor]
+opt-level = 2
+# The pool flood test pushes 100,000 transactions through the heaps and lists and prices each with a gas table.
+[profile.dev.package.xone-builder]
 opt-level = 2
