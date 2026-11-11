@@ -90,6 +90,7 @@ fn serve(
                         .map(|b| BlockBody {
                             transactions: b.transactions.clone(),
                             uncles: b.uncles.clone(),
+                            withdrawals: b.withdrawals.clone(),
                         })
                         .collect(),
                 },
@@ -179,7 +180,7 @@ fn a_minimal_node_follows_two_checkpoints_and_a_reward_from_a_fake_peer_only() {
     let (spec, genesis) = (net.spec(), net.genesis().unwrap());
     assert!(Core::open(spec.clone(), &genesis, &min.join("xone"), 0).is_err());
     let empty = scratch("peer-empty");
-    assert!(Core::open_with(spec, &genesis, &empty.join("xone"), 0, true).is_err());
+    assert!(Core::open_with(spec, &genesis, &empty.join("xone"), 0, true, false).is_err());
 
     let mut cfg = Config::default();
     cfg.set("apothem", "true").unwrap();
@@ -233,7 +234,7 @@ fn a_minimal_node_prunes_to_its_floor_restarts_and_answers_for_the_rest_with_the
     let net = Network::Apothem;
     let (spec, genesis) = (net.spec(), net.genesis().unwrap());
     let dir = min.join("xone");
-    let mut core = Core::open_with(spec.clone(), &genesis, &dir, 100, true).unwrap();
+    let mut core = Core::open_with(spec.clone(), &genesis, &dir, 100, true, false).unwrap();
     core.prune_slack = 0;
     let held0 = core.held().unwrap();
     assert_eq!((held0.headers_from, held0.records_from), (0, 0));
@@ -278,7 +279,7 @@ fn a_minimal_node_prunes_to_its_floor_restarts_and_answers_for_the_rest_with_the
     drop(core);
 
     // restart: the files are the pruned generation, the checkpoint is block 1800
-    let core = Core::open_with(spec, &genesis, &dir, 100, true).unwrap();
+    let core = Core::open_with(spec, &genesis, &dir, 100, true, false).unwrap();
     assert_eq!(core.head(), want);
     assert_eq!(core.held().unwrap(), held);
     let root: B256 = core.chain.with_store(|s| flat_root(s.head_flat()));

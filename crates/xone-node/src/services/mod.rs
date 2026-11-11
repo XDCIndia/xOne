@@ -7,6 +7,7 @@ pub mod pool;
 pub mod producer;
 pub mod rpc;
 pub mod safety_file;
+pub mod stats;
 pub mod store;
 
 use alloy_primitives::Bytes;
@@ -69,6 +70,8 @@ pub fn build(
             &cfg.datadir.join("xone"),
             CHECKPOINT_EVERY,
             cfg.sync.minimal,
+            // a node that signs commits every block to the device before it goes on
+            producer_plan.is_none(),
         )
         .map_err(|e| e.to_string())?,
     );
@@ -108,6 +111,13 @@ pub fn build(
             producer::ProducerService::new(&p, cfg, core.clone(), pool.clone(), nh.peers.clone())
         })
         .transpose()?;
+    let stats = Arc::new(stats::NodeStats {
+        stamp: stamp.to_owned(),
+        core: core.clone(),
+        progress: progress.clone(),
+        pool: pool.clone(),
+        peers: nh.peers.clone(),
+    });
     let rpc_svc = rpc::RpcService::new(cfg, rth, core.clone(), progress, pool, nh.clone())?;
     let l = &cfg.limits;
     let mut node = crate::Node::new(
@@ -121,9 +131,50 @@ pub fn build(
         node.add(Box::new(p));
     }
     node.add(Box::new(rpc_svc));
+    if cfg.metrics.enabled {
+        node.add(Box::new(crate::observe::metrics::MetricsServer::new(
+            crate::observe::metrics::MetricsCfg {
+                addr: cfg.metrics.addr.clone(),
+                port: cfg.metrics.port,
+                max_head_age_secs: 60,
+            },
+            stats.clone(),
+        )));
+    }
+    if let Some(url) = &cfg.ethstats {
+        node.add(Box::new(crate::observe::ethstats::Ethstats::new(
+            crate::observe::ethstats::EthstatsCfg {
+                url: url.clone(),
+                allow_plaintext: false,
+                identity: identity(cfg, marker, stamp),
+            },
+            stats.clone(),
+            stats,
+        )));
+    }
     Ok(Built {
         node,
         net: nh,
         core,
     })
+}
+
+/// The hello frame's static facts. `node` and `client` are the build's one stamp.
+fn identity(
+    cfg: &crate::Config,
+    marker: &crate::datadir::Marker,
+    stamp: &str,
+) -> crate::observe::ethstats::Identity {
+    crate::observe::ethstats::Identity {
+        node: stamp.to_owned(),
+        client: stamp.to_owned(),
+        port: cfg.p2p.port,
+        net: cfg.network_id.unwrap_or(marker.chain_id).to_string(),
+        protocol: "eth/63, xdpos/100".into(),
+        os: std::env::consts::OS.into(),
+        os_v: std::env::consts::ARCH.into(),
+        sync_mode: "full".into(),
+        gc_mode: cfg.sync.gcmode.clone(),
+        state_scheme: "hash".into(),
+    }
 }

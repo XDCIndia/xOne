@@ -95,7 +95,7 @@ fn to_body(b: BlockBody) -> (Body, usize) {
         Body {
             transactions: b.transactions.iter().map(from_wire).collect(),
             uncles: b.uncles,
-            withdrawals: None,
+            withdrawals: b.withdrawals.map(|w| w.into_iter().map(|r| r.0).collect()),
         },
         n,
     )
@@ -246,6 +246,26 @@ impl Follower {
             self.ban(peer, "no bodies");
             return;
         }
+        let mut headers = headers;
+        let rest = headers.split_off(bodies.len().min(headers.len()));
+        // A peer answers with what fits its response limit (2 MB in geth), often one dense block:
+        // the bodies still missing are asked for before the ones at hand are imported, so the next
+        // answer travels while this one executes.
+        if !rest.is_empty() {
+            let (id, wire) = self.rid(&peer);
+            let msg = Message::GetBlockBodies {
+                id: wire,
+                hashes: rest.iter().map(Header::hash).collect(),
+            };
+            if self.peers.send(&peer, msg).is_ok() {
+                self.inflight = Some(Inflight {
+                    peer,
+                    id,
+                    stage: Stage::Bodies(rest),
+                    deadline: Instant::now() + REQUEST_TIMEOUT,
+                });
+            }
+        }
         let blocks: Vec<_> = headers
             .into_iter()
             .zip(bodies)
@@ -254,6 +274,10 @@ impl Follower {
         if let Err(e) = self.import(blocks).await {
             self.ban(peer, &e);
             return;
+        }
+        // the deadline of a request sent before a long import counts from its end
+        if let Some(i) = self.inflight.as_mut() {
+            i.deadline = i.deadline.max(Instant::now() + REQUEST_TIMEOUT);
         }
         self.kick();
     }
@@ -274,7 +298,10 @@ impl Follower {
             let body = Body {
                 transactions: nb.block.transactions.iter().map(from_wire).collect(),
                 uncles: nb.block.uncles,
-                withdrawals: None,
+                withdrawals: nb
+                    .block
+                    .withdrawals
+                    .map(|w| w.into_iter().map(|r| r.0).collect()),
             };
             if let Err(e) = self.import(vec![(h, body)]).await {
                 self.ban(peer, &e);
@@ -315,18 +342,28 @@ impl Follower {
                     headers: out,
                 }
             }
-            Message::GetBlockBodies { id, hashes } => Message::BlockBodies {
-                id: *id,
-                bodies: hashes
+            Message::GetBlockBodies { id, hashes } => {
+                let found: Vec<_> = hashes
                     .iter()
                     .take(128)
-                    .filter_map(|x| h.by_hash(*x))
-                    .map(|s| BlockBody {
-                        transactions: s.body.transactions.iter().map(to_wire).collect(),
-                        uncles: s.body.uncles.clone(),
-                    })
-                    .collect(),
-            },
+                    .filter_map(|x| Some((h.by_hash(*x)?.header.number, *x)))
+                    .collect();
+                drop(h);
+                Message::BlockBodies {
+                    id: *id,
+                    bodies: found
+                        .into_iter()
+                        .filter_map(|(n, x)| self.core.records(n, x))
+                        .map(|(b, _)| BlockBody {
+                            transactions: b.transactions.iter().map(to_wire).collect(),
+                            uncles: b.uncles,
+                            withdrawals: b
+                                .withdrawals
+                                .map(|w| w.into_iter().map(xone_net::eth::Raw).collect()),
+                        })
+                        .collect(),
+                }
+            }
             _ => return,
         };
         // a full queue of the peer drops the answer; it asks again

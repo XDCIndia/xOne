@@ -141,26 +141,6 @@ fn check(file: &str) -> (usize, usize, usize) {
         v.network
     );
     let auth = Authority::candidates(snap.candidates.iter().copied());
-    if spec.amsterdam.is_active(v.head) {
-        // xone-evm has no Amsterdam gas rules, so the pool cannot be opened at this head (a typed error, not
-        // a guess). What can be checked without the pool: the sender of every real transaction is recovered
-        // and every candidate is authorised.
-        assert!(matches!(
-            Pool::new(spec.clone(), &Config::default(), auth.clone(), v.head, 1).err(),
-            Some(Error::Spec(_))
-        ));
-        for t in &v.sign_txs {
-            let raw = PoolTx::decode(&t.raw, spec.chain_id).unwrap();
-            assert_eq!((raw.hash, raw.from()), (t.hash, t.from));
-            assert!(auth.is_signer(&t.from), "{}", t.hash);
-        }
-        assert!(
-            v.lists.penalised.iter().all(|a| auth.is_signer(a)),
-            "penalised candidates are authorised"
-        );
-        assert!(!auth.is_signer(&Address::repeat_byte(0xee)));
-        return (v.sign_txs.len(), 0, v.lists.penalised.len());
-    }
     let free = |a: Address| MapState([(a, account(0, U256::from(1u64), &[]))].into());
     let cfg = Config::default();
     let (mut real, mut penalised_real) = (0, 0);

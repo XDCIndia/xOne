@@ -840,6 +840,9 @@ impl Worker {
                 header: h,
                 transactions: body.transactions.iter().map(to_wire).collect(),
                 uncles: vec![],
+                withdrawals: body
+                    .withdrawals
+                    .map(|w| w.into_iter().map(xone_net::eth::Raw).collect()),
             },
             td,
         }));

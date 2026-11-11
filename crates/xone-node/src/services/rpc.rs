@@ -63,18 +63,22 @@ impl ChainApi for RpcChain {
         Some(h.at(number)?.hash)
     }
     fn block(&self, hash: B256) -> Option<BlockView> {
-        let h = self.core.hist.read();
-        let s = h.by_hash(hash)?;
+        let header = self.core.hist.read().by_hash(hash)?.header.clone();
+        let (body, _) = self.core.records(header.number, hash)?;
         let raw = alloy_rlp::encode(xone_net::eth::Block {
-            header: s.header.clone(),
-            transactions: s.body.transactions.iter().map(to_wire).collect(),
-            uncles: s.body.uncles.clone(),
+            header: header.clone(),
+            transactions: body.transactions.iter().map(to_wire).collect(),
+            uncles: body.uncles.clone(),
+            withdrawals: body
+                .withdrawals
+                .as_ref()
+                .map(|w| w.iter().cloned().map(xone_net::eth::Raw).collect()),
         });
         Some(BlockView {
             hash,
-            header: s.header.clone(),
-            txs: s.body.transactions.clone(),
-            uncles: s.body.uncles.clone(),
+            header,
+            txs: body.transactions,
+            uncles: body.uncles,
             raw: Bytes::from(raw),
         })
     }
@@ -82,7 +86,8 @@ impl ChainApi for RpcChain {
         Some(self.core.hist.read().by_hash(hash)?.header.clone())
     }
     fn receipts(&self, hash: B256) -> Option<Vec<Bytes>> {
-        Some(self.core.hist.read().by_hash(hash)?.receipts.clone())
+        let n = self.core.hist.read().by_hash(hash)?.header.number;
+        Some(self.core.records(n, hash)?.1)
     }
     fn tx_location(&self, tx: B256) -> Option<(B256, u64)> {
         let h = self.core.hist.read();

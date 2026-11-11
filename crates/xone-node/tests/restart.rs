@@ -59,6 +59,16 @@ fn head_and_blocks_come_back() {
         let h = core.hist.read();
         assert_eq!(h.blocks.len(), N + 1);
         assert_eq!(h.tip().receipts, receipts);
+        // the receipts segment gives back what was imported (the RPC reads old blocks from it)
+        for b in &h.blocks[1..] {
+            let n = b.header.number;
+            let (_, _, stored) = core
+                .chain
+                .with_store(|s| s.canonical_block(n))
+                .unwrap()
+                .unwrap();
+            assert_eq!(stored, b.receipts);
+        }
         assert_eq!(
             h.blocks
                 .iter()
@@ -145,4 +155,41 @@ fn a_second_opener_of_a_live_datadir_is_refused() {
     assert!(e.to_string().contains("in use"), "{e}");
     drop(first);
     open(&dir, Network::Apothem, 0).unwrap();
+}
+
+/// Past the memory window the history keeps no body and no receipts of a block (memory follows the
+/// window, not the chain); they are read back from the store, and a restart from a checkpoint still
+/// opens at the head with the same split.
+#[test]
+fn memory_follows_the_window() {
+    use xone_node::services::hist::MEMORY_WINDOW;
+    let dir = scratch("window");
+    let n = 3 * MEMORY_WINDOW as usize;
+    let blocks = vectors(n);
+    let old = (1..n - MEMORY_WINDOW as usize)
+        .find(|i| !blocks[*i].transactions.is_empty())
+        .expect("a block with a transaction below the window");
+    let check = |core: &Core| {
+        assert_eq!(core.head(), (n as u64, blocks[n].header.hash()));
+        {
+            let h = core.hist.read();
+            let s = h.at(old as u64).unwrap();
+            assert!(s.body.transactions.is_empty() && s.receipts.is_empty());
+            let tip = h.at(n as u64).unwrap();
+            assert_eq!(tip.body.transactions.len(), blocks[n].transactions.len());
+        }
+        let (body, receipts) = core.records(old as u64, blocks[old].header.hash()).unwrap();
+        assert_eq!(body.transactions, parts(&blocks[old]).1.transactions);
+        assert_eq!(receipts.len(), body.transactions.len());
+    };
+    let core = open(&dir, Network::Apothem, 100).unwrap();
+    for b in &blocks[1..] {
+        let (h, body) = parts(b);
+        core.import(h, body, xone_node::services::core::now())
+            .unwrap();
+    }
+    check(&core);
+    drop(core);
+    check(&open(&dir, Network::Apothem, 100).unwrap());
+    let _ = std::fs::remove_dir_all(&dir);
 }

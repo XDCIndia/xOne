@@ -161,6 +161,9 @@ struct Ckpt {
     signers: Vec<Address>,
     recents: BTreeMap<u64, Address>,
     signs: BTreeMap<u64, Vec<(Address, B256, bool)>>,
+    /// V2 gap snapshots (the epoch switch after a resume reads the one of its own gap block).
+    #[serde(default)]
+    gaps: BTreeMap<u64, Vec<Address>>,
 }
 
 fn ckpt_path(dir: &std::path::Path, n: u64) -> PathBuf {
@@ -211,6 +214,11 @@ fn save(
                 )
             })
             .collect(),
+        gaps: chain
+            .gaps
+            .iter()
+            .map(|(n, g)| (*n, g.candidates.clone()))
+            .collect(),
     };
     fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     let tmp = dir.join("ckpt.tmp");
@@ -220,6 +228,11 @@ fn save(
     );
     serde_json::to_writer(z, &c).map_err(|e| e.to_string())?;
     fs::rename(&tmp, ckpt_path(dir, number)).map_err(|e| e.to_string())
+}
+
+/// The number of the checkpoint a resumed run to `to` starts from.
+pub fn resume_point(dir: &std::path::Path, to: u64) -> Option<u64> {
+    load(dir, to).map(|c| c.number)
 }
 
 /// The newest checkpoint of `dir` at or below `to`.
@@ -295,6 +308,13 @@ fn compare(b: &Block, o: &BlockOutcome) -> Vec<Mismatch> {
     check("logsBloom", hex(h.bloom), hex(o.bloom));
     check("transactionsRoot", hex(h.tx_root), hex(o.tx_root));
     check("stateRoot", hex(h.state_root), hex(o.state_root));
+    if let Some(want) = h.block_access_list_hash {
+        check(
+            "blockAccessListHash",
+            hex(want),
+            o.bal_hash.map_or("none".into(), hex),
+        );
+    }
     if let Some(a) = b.archive_hash {
         check("hash", hex(a), hex(o.hash));
     }
@@ -433,6 +453,11 @@ pub fn run_from(
             f.set_slot(*a, *k, *v);
         }
         chain.codes = c.codes;
+        chain.gaps = c
+            .gaps
+            .into_iter()
+            .map(|(number, candidates)| (number, gap_snapshot::SnapshotV2 { number, candidates }))
+            .collect();
         chain.wide = wide_of(&f);
         snap = Snapshot::new(c.number, c.hash, c.signers);
         snap.recents = c.recents;

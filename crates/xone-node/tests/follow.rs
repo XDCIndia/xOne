@@ -77,6 +77,7 @@ fn serve(
                         .map(|b| BlockBody {
                             transactions: b.transactions.clone(),
                             uncles: b.uncles.clone(),
+                            withdrawals: None,
                         })
                         .collect(),
                 },

@@ -4,7 +4,8 @@
 //!
 //! Open mode: `SyncMode::Durable`, WRITEMAP off. A commit that returned is on the device, so the
 //! commit is the publication point of a generation. Tables are created once, at open; a table
-//! name is part of the on-disk contract.
+//! name is part of the on-disk contract. A follower that does not sign may open it in group-commit
+//! mode instead ([`Env::open_with`]): its commits become steady at [`Env::sync`].
 use std::{borrow::Cow, fs, path::Path};
 
 use libmdbx::{
@@ -130,11 +131,11 @@ impl MdbxError {
 
 type R<V> = Result<V, MdbxError>;
 
-fn options() -> DatabaseOptions {
+fn options(sync_mode: SyncMode) -> DatabaseOptions {
     DatabaseOptions {
         max_tables: Some(64),
         mode: Mode::ReadWrite(ReadWriteOptions {
-            sync_mode: SyncMode::Durable,
+            sync_mode,
             max_size: Some(1 << 40),
             growth_step: Some(64 << 20),
             ..Default::default()
@@ -157,8 +158,20 @@ pub type Wr<'e> = Tx<'e, RW>;
 
 impl Env {
     pub fn open(path: &Path, tables: &[&str]) -> R<Env> {
+        Self::open_with(path, tables, true)
+    }
+
+    /// [`Env::open`]; with `durable` false the environment is `SyncMode::SafeNoSync`: a commit is not
+    /// flushed, a crash of the system rolls the database back to the last steady commit (never to a
+    /// torn one), and [`Env::sync`] makes the last commit steady. For group commit only.
+    pub fn open_with(path: &Path, tables: &[&str], durable: bool) -> R<Env> {
         fs::create_dir_all(path).map_err(|_| libmdbx::Error::Access)?;
-        let db = Database::<NoWriteMap>::open_with_options(path, options())?;
+        let mode = if durable {
+            SyncMode::Durable
+        } else {
+            SyncMode::SafeNoSync
+        };
+        let db = Database::<NoWriteMap>::open_with_options(path, options(mode))?;
         let env = Env { db };
         let tx = env.db.begin_rw_txn()?;
         for t in tables {
@@ -166,6 +179,12 @@ impl Env {
         }
         tx.commit()?;
         Ok(env)
+    }
+
+    /// Flushes the environment: the last commit is on the device and steady.
+    pub fn sync(&self) -> R<()> {
+        self.db.sync(true)?;
+        Ok(())
     }
 
     pub fn read(&self) -> R<Rd<'_>> {

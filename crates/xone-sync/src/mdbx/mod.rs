@@ -59,6 +59,16 @@ pub struct Config {
     pub retention: u64,
     /// Blocks per segment chunk file.
     pub per_file: u64,
+    /// `None`: ADR-005 as written, every block commit is on the device when it returns. `Some(t)`:
+    /// group commit, for a node that does not sign. A block commit skips the journal, segment and
+    /// directory syncs and MDBX runs `SafeNoSync`. [`MdbxStore::steady`] syncs the segment chunks the
+    /// deferred blocks wrote to, then makes MDBX steady; it runs on the first block commit `t` after
+    /// the last steady point, before every other write transaction, and when the owner calls it (the
+    /// node does on close). A crash of the process loses nothing (the bytes are in the page cache); a
+    /// crash of the system rolls MDBX back to its last steady commit, whose segment bytes were synced
+    /// before it, and the restart cuts the frames above it (ADR-005 section 7) and fetches those
+    /// blocks again. [`Store::durability`] is not `Durable` while blocks are deferred.
+    pub group_commit: Option<std::time::Duration>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -243,6 +253,9 @@ pub struct MdbxStore<D: SegDir> {
     dead: Option<Dead>,
     /// A fired `Probe::IoCommitted`: the commit in flight is applied before the error is returned.
     committed_on_error: bool,
+    /// Group commit: the first block whose commit is not steady yet, and when MDBX was last made steady.
+    deferred: Option<u64>,
+    steady_at: std::time::Instant,
 }
 
 impl<D: SegDir> MdbxStore<D> {
@@ -258,7 +271,7 @@ impl<D: SegDir> MdbxStore<D> {
             }
         }
         let names: Vec<&str> = T::ALL.iter().map(|t| t.name()).collect();
-        let env = Env::open(path, &names)?;
+        let env = Env::open_with(path, &names, cfg.group_commit.is_none())?;
         let mut s = Self {
             env: Arc::new(env),
             segs: Segs::new(dir, cfg.per_file),
@@ -277,6 +290,8 @@ impl<D: SegDir> MdbxStore<D> {
             reconciling: true,
             dead: None,
             committed_on_error: false,
+            deferred: None,
+            steady_at: std::time::Instant::now(),
         };
         let rd = s.env.read()?;
         s.generation = rd
@@ -414,6 +429,7 @@ impl<D: SegDir> MdbxStore<D> {
         hash: B256,
         payload: &[u8],
         points: (KillPoint, Option<KillPoint>, KillPoint),
+        sync: bool,
     ) -> Result<(), StoreError> {
         let bytes = journal_bytes(kind, self.generation + 1, number, hash, payload);
         let mut f = self
@@ -423,7 +439,9 @@ impl<D: SegDir> MdbxStore<D> {
             .map_err(|e| self.io_failed(&e))?;
         f.write_at(0, &bytes).map_err(|e| self.io_failed(&e))?;
         self.step(points.0)?;
-        f.sync_all().map_err(|_| self.sync_failed())?;
+        if sync {
+            f.sync_all().map_err(|_| self.sync_failed())?;
+        }
         if let Some(k) = points.1 {
             self.step(k)?;
         }
@@ -432,6 +450,9 @@ impl<D: SegDir> MdbxStore<D> {
             .rename(JOURNAL_TMP, JOURNAL)
             .map_err(|e| self.io_failed(&e))?;
         self.step(points.2)?;
+        if !sync {
+            return Ok(());
+        }
         self.segs
             .dir
             .sync("journal")
@@ -440,17 +461,69 @@ impl<D: SegDir> MdbxStore<D> {
 
     /// S7 / U5. The head is already published: a failure here is fail-stop and the next start
     /// deletes the stale journal.
-    fn remove_journal(&mut self, points: (KillPoint, KillPoint)) -> Result<(), StoreError> {
+    fn remove_journal(
+        &mut self,
+        points: (KillPoint, KillPoint),
+        sync: bool,
+    ) -> Result<(), StoreError> {
         self.segs
             .dir
             .remove(JOURNAL)
             .map_err(|_| self.fail_stop(Cause::Io))?;
         self.step(points.0)?;
-        self.segs
-            .dir
-            .sync("journal")
-            .map_err(|_| self.sync_failed())?;
+        if sync {
+            self.segs
+                .dir
+                .sync("journal")
+                .map_err(|_| self.sync_failed())?;
+        }
         self.step(points.1)
+    }
+
+    // ---- group commit
+
+    /// The commit of a write transaction other than a deferred block commit: the deferred blocks'
+    /// segment bytes reach the device first, then the commit, which group commit makes steady.
+    fn commit_steady(&mut self, tx: Wr<'_>) -> Result<(), StoreError> {
+        self.sync_deferred()?;
+        tx.commit().map_err(|_| self.sync_failed())?;
+        self.sync_env()
+    }
+
+    /// Group commit: syncs the segment chunks and directories the deferred blocks wrote to.
+    fn sync_deferred(&mut self) -> Result<(), StoreError> {
+        let Some(from) = self.deferred else {
+            return Ok(());
+        };
+        let per = self.cfg.per_file;
+        let last = chunk_of(self.head.0.max(from), per);
+        for s in Segment::ALL {
+            let mut c = chunk_of(from, per);
+            while c <= last {
+                self.segs.sync_chunk(s, c).map_err(|_| self.sync_failed())?;
+                c += per;
+            }
+        }
+        self.segs.sync_dirs().map_err(|_| self.sync_failed())
+    }
+
+    fn sync_env(&mut self) -> Result<(), StoreError> {
+        if self.cfg.group_commit.is_some() {
+            self.env.sync().map_err(|_| self.sync_failed())?;
+        }
+        self.deferred = None;
+        self.steady_at = std::time::Instant::now();
+        Ok(())
+    }
+
+    /// Group commit: every committed block is on the device after this returns. A no-op otherwise.
+    pub fn steady(&mut self) -> Result<(), StoreError> {
+        if self.deferred.is_none() {
+            return Ok(());
+        }
+        self.alive()?;
+        self.sync_deferred()?;
+        self.sync_env()
     }
 
     // ---- reads
@@ -603,7 +676,7 @@ impl<D: SegDir> MdbxStore<D> {
         let tx = env.write().map_err(|e| self.db_failed(&e))?;
         f(&tx).map_err(|e| self.db_failed(&e))?;
         self.step(KillPoint::K14)?;
-        tx.commit().map_err(|_| self.sync_failed())?;
+        self.commit_steady(tx)?;
         after(self);
         self.step(KillPoint::K16)
     }
@@ -721,6 +794,8 @@ impl<D: SegDir> MdbxStore<D> {
         use KillPoint::*;
         let b = &rec.block;
         let n = b.number();
+        // group commit defers the syncs of a block; the first commit of a datadir is always steady
+        let defer = self.cfg.group_commit.is_some() && anchor.is_none();
         // S1 journal
         self.step(K01)?;
         self.write_journal(
@@ -729,6 +804,7 @@ impl<D: SegDir> MdbxStore<D> {
             b.hash(),
             &block_rlp(b),
             (K02, Some(K03), K04),
+            !defer,
         )?;
         // S2 execute: nothing durable
         self.step(K05)?;
@@ -760,10 +836,14 @@ impl<D: SegDir> MdbxStore<D> {
         }
         // S4 sync
         for (i, s) in Segment::ALL.into_iter().enumerate() {
-            self.segs.sync_file(s, n).map_err(|_| self.sync_failed())?;
+            if !defer {
+                self.segs.sync_file(s, n).map_err(|_| self.sync_failed())?;
+            }
             self.step([K10, K11, K12][i])?;
         }
-        self.segs.sync_dirs().map_err(|_| self.sync_failed())?;
+        if !defer {
+            self.segs.sync_dirs().map_err(|_| self.sync_failed())?;
+        }
         self.step(K13)?;
         // S5 transaction
         let first = self
@@ -806,14 +886,23 @@ impl<D: SegDir> MdbxStore<D> {
             }
             return Err(e);
         }
-        tx.commit().map_err(|_| self.sync_failed())?;
+        if defer {
+            tx.commit().map_err(|_| self.sync_failed())?;
+            self.deferred.get_or_insert(n);
+        } else {
+            self.commit_steady(tx)?;
+        }
         self.degraded = None;
         self.publish_commit(rec, &manifest, committed, anchor.as_ref(), new_base)?;
         self.step(K16)?;
         // S7 publish: the visible lengths swap, then the journal goes
         self.segs.publish(&manifest);
         self.step(K17)?;
-        self.remove_journal((K18, K19))
+        self.remove_journal((K18, K19), !defer)?;
+        match self.cfg.group_commit {
+            Some(t) if defer && self.steady_at.elapsed() >= t => self.steady(),
+            _ => Ok(()),
+        }
     }
 
     /// The commit returned: the generation, the head and the read model move together.
@@ -1000,7 +1089,7 @@ impl<D: SegDir> MdbxStore<D> {
             Self::meta_rows(&tx, &m)
         })();
         r.map_err(|e| self.db_failed(&e))?;
-        tx.commit().map_err(|_| self.sync_failed())?;
+        self.commit_steady(tx)?;
         self.generation = m.generation;
         self.manifest = Some(m.clone());
         self.step(PR2)?;
@@ -1058,7 +1147,7 @@ impl<D: SegDir> MdbxStore<D> {
             return Err(StoreError::Unwind(number));
         }
         // U1 journal
-        self.write_journal(JOURNAL_UNWIND, number, target, &[], (U1a, None, U1b))?;
+        self.write_journal(JOURNAL_UNWIND, number, target, &[], (U1a, None, U1b), true)?;
         // U2 read-only: the new lengths and tail digests, and the blocks that stay as side blocks
         let (ends, dropped) = {
             let rd = self.rd()?;
@@ -1122,7 +1211,7 @@ impl<D: SegDir> MdbxStore<D> {
         })();
         r.map_err(|e| self.db_failed(&e))?;
         self.step(U3a)?;
-        tx.commit().map_err(|_| self.sync_failed())?;
+        self.commit_steady(tx)?;
         self.degraded = None;
         self.generation = manifest.generation;
         self.head = (number, target);
@@ -1160,7 +1249,7 @@ impl<D: SegDir> MdbxStore<D> {
         self.segs.sync_dirs().map_err(|_| self.sync_failed())?;
         self.step(U4b)?;
         // U5 journal
-        self.remove_journal((U5a, U5b))
+        self.remove_journal((U5a, U5b), true)
     }
 
     fn stage_row(&self, t: T, number: u64) -> Option<Vec<u8>> {
@@ -1238,6 +1327,9 @@ impl<D: SegDir> Store for MdbxStore<D> {
             (Some(Dead::Crashed(_)), _, _) => Durability::Degraded(Cause::Io),
             (None, Some(c), _) => Durability::Degraded(c),
             (None, None, true) => Durability::Degraded(Cause::Reconciling),
+            (None, None, false) if self.deferred.is_some() => {
+                Durability::Degraded(Cause::GroupCommit)
+            }
             (None, None, false) => Durability::Durable,
         }
     }
@@ -1504,7 +1596,7 @@ impl<D: SegDir> Store for MdbxStore<D> {
             Self::meta_rows(&tx, &manifest)
         })();
         r.map_err(|e| self.db_failed(&e))?;
-        tx.commit().map_err(|_| self.sync_failed())?;
+        self.commit_steady(tx)?;
         self.generation = 1;
         self.manifest = Some(manifest.clone());
         self.head = (number, hash);
@@ -1570,7 +1662,7 @@ impl<D: SegDir> Store for MdbxStore<D> {
             Self::meta_rows(&tx, &m)
         })();
         r.map_err(|e| self.db_failed(&e))?;
-        tx.commit().map_err(|_| self.sync_failed())?;
+        self.commit_steady(tx)?;
         self.generation = m.generation;
         self.manifest = Some(m.clone());
         self.step(PR2)?;

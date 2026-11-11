@@ -70,7 +70,7 @@ pub fn network_of(datadir: &Path) -> Result<Network, String> {
 
 fn open_core(spec: &ChainSpec, genesis: &Genesis, dir: &Path) -> Result<Core, String> {
     match Core::open(spec.clone(), genesis, dir, 0) {
-        Err(CoreError::Anchored) => Core::open_with(spec.clone(), genesis, dir, 0, true),
+        Err(CoreError::Anchored) => Core::open_with(spec.clone(), genesis, dir, 0, true, false),
         r => r,
     }
     .map_err(|e| e.to_string())
@@ -197,7 +197,7 @@ pub fn import_datadir(
     fs::create_dir_all(&dir)
         .map_err(|e| ImportDatadirError::Io(format!("{}: {e}", dir.display())))?;
     let mut store =
-        store::open(&dir, RETENTION).map_err(|e| ImportDatadirError::Io(e.to_string()))?;
+        store::open(&dir, RETENTION, None).map_err(|e| ImportDatadirError::Io(e.to_string()))?;
     if load(&store)
         .map_err(|e| ImportDatadirError::Io(e.to_string()))?
         .is_some()

@@ -54,6 +54,7 @@ pub fn cfg(retention: u64, per_file: u64) -> Config {
     Config {
         retention,
         per_file,
+        group_commit: None,
     }
 }
 

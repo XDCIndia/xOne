@@ -54,7 +54,10 @@ fn body(b: &BlockBody) -> Body {
     Body {
         transactions: b.transactions.iter().map(tx_bytes).collect(),
         uncles: b.uncles.clone(),
-        withdrawals: None,
+        withdrawals: b
+            .withdrawals
+            .as_ref()
+            .map(|w| w.iter().map(|r| r.0.clone()).collect()),
     }
 }
 
@@ -150,6 +153,7 @@ impl NetSource {
                         body(&BlockBody {
                             transactions: nb.block.transactions.clone(),
                             uncles: nb.block.uncles.clone(),
+                            withdrawals: nb.block.withdrawals.clone(),
                         }),
                     );
                     self.heads.insert(peer, block.hash());

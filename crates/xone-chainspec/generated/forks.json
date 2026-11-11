@@ -676,6 +676,110 @@
         "hash": "0x4a9d748bd78a8d0385b67788c2435dcdb914f98a96250b68863a1f8b7642d6b1",
         "stateRoot": "0x49be235b0098b048f9805aed38a279d8c189b469ff9ba307b39c7ad3a3bc55ae"
       }
+    },
+    "net2040": {
+      "chainId": "2040",
+      "blocks": {
+        "amsterdamBlock": "21600",
+        "arrowGlacierBlock": null,
+        "berlinBlock": "9000",
+        "byzantiumBlock": "4",
+        "cancunBlock": "14400",
+        "constantinopleBlock": "4",
+        "daoForkBlock": null,
+        "denylistBlock": "7200",
+        "dynamicGasLimitBlock": "16200",
+        "eip150Block": "2",
+        "eip1559Block": "12600",
+        "eip155Block": "3",
+        "eip158Block": "3",
+        "gas2500xBlock": "12600",
+        "gas50xBlock": "10800",
+        "grayGlacierBlock": null,
+        "homesteadBlock": "1",
+        "istanbulBlock": "4",
+        "londonBlock": "9000",
+        "mergeBlock": "9000",
+        "mergeNetsplitBlock": null,
+        "muirGlacierBlock": null,
+        "osakaBlock": "19800",
+        "paroleDedupBlock": null,
+        "petersburgBlock": "4",
+        "pragueBlock": "18000",
+        "shanghaiBlock": "9000",
+        "signingTxBoundBlock": null,
+        "tip2019Block": "1",
+        "tipEpochHalvingBlock": "999999999",
+        "tipFixedRewardBlock": "16200",
+        "tipIncreaseMasternodesBlock": "5400",
+        "tipNoHalvingMNRewardBlock": "7200",
+        "tipProportionalRewardBlock": null,
+        "tipRandomizeBlock": "3600",
+        "tipSigningBlock": "1800",
+        "tipTRC21FeeBlock": "7200",
+        "tipUpgradePenaltyBlock": "16200",
+        "tipXDCXBlock": "7200",
+        "tipXDCXCancellationFeeBlock": "7200",
+        "tipXDCXLendingBlock": "7200",
+        "tipXDCXMinerDisableBlock": "10800",
+        "tipXDCXReceiverDisableBlock": "11700",
+        "validatorOrderBlock": null
+      },
+      "effective": {
+        "constantinople": "4",
+        "eip1559": "12600",
+        "gas50x": "10800",
+        "istanbul": "4",
+        "petersburg": "4",
+        "tip2019": "1",
+        "tipNoHalvingMNReward": "7200",
+        "tipRandomize": "3600",
+        "tipSigning": "1800",
+        "tipTRC21Fee": "7200",
+        "tipXDCX": "7200",
+        "tipXDCXCancellationFee": "7200",
+        "tipXDCXMinerDisable": "10800",
+        "tipXDCXReceiverDisable": "11700"
+      },
+      "xdpos": {
+        "period": 2,
+        "epoch": 900,
+        "reward": 5000,
+        "rewardCheckpoint": 900,
+        "gap": 450,
+        "foudationWalletAddr": "0x1c1d49ed32312a524bf996f4adb08b4ccf573112",
+        "maxMasternodesV2": 108,
+        "v2": {
+          "switchBlock": "10800",
+          "switchEpoch": 12,
+          "allConfigs": {
+            "0": {
+              "switchRound": 0,
+              "minePeriod": 2,
+              "timeoutSyncThreshold": 3,
+              "timeoutPeriod": 60,
+              "certificateThreshold": 0.667,
+              "maxMasternodes": 108,
+              "maxProtectorNodes": 432,
+              "maxObserverNodes": 99999,
+              "masternodeReward": 63.4196,
+              "protectorReward": 50.7357,
+              "observerReward": 25.3678,
+              "minimumMinerBlockPerEpoch": 5,
+              "limitPenaltyEpoch": 5,
+              "minimumSigningTx": 30,
+              "expTimeoutConfig": {
+                "base": 1,
+                "maxExponent": 0
+              }
+            }
+          }
+        }
+      },
+      "genesis": {
+        "hash": "0x8d8ff2e9d8369b7b4af5a84eb010e2b1a358eefa9f971985435d538dda235714",
+        "stateRoot": "0x72c63f4b099a047faa06efb21dd02437a597b0d059b43a9a07d74d5f477d940b"
+      }
     }
   }
 }

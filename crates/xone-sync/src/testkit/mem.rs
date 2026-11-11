@@ -108,6 +108,8 @@ pub struct MemStore {
     cut: Cut,
     committed_on_error: bool,
     log: Vec<KillPoint>,
+    /// `forget_below` has dropped the records below this block.
+    forgotten: u64,
 }
 
 fn journal_bytes(kind: u8, generation: u64, number: u64, hash: B256) -> Vec<u8> {
@@ -271,6 +273,7 @@ impl MemStore {
             cut: Cut::Kill9,
             committed_on_error: false,
             log: Vec::new(),
+            forgotten: 0,
         }
     }
 
@@ -340,6 +343,26 @@ impl MemStore {
     }
 
     /// The flat tables of the head, for a node that writes its own state checkpoints.
+    /// For an owner that keeps the chain on its own files (the node's `FileStore`): drops the records
+    /// of canonical blocks below `number` and the bytes of segment files that end below it, so that
+    /// memory follows the retained window instead of the chain. Those blocks can no longer be read
+    /// here, unwound or replayed from this store.
+    pub fn forget_below(&mut self, number: u64) {
+        let m = &mut self.d.mdbx;
+        for (_, h) in m.canonical.range(self.forgotten..number) {
+            m.records.remove(h);
+        }
+        self.forgotten = self.forgotten.max(number);
+        for files in &mut self.d.segs {
+            let starts: Vec<u64> = files.iter().map(|f| f.first_block).collect();
+            for (f, next) in files.iter_mut().zip(starts.iter().skip(1)) {
+                if *next <= number && !f.bytes.is_empty() {
+                    f.bytes = Vec::new();
+                }
+            }
+        }
+    }
+
     pub fn head_flat(&self) -> &MemFlat {
         self.d.mdbx.state.flat()
     }

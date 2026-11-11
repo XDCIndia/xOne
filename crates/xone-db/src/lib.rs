@@ -34,6 +34,8 @@ pub enum Cause {
     Io,
     /// A sync call failed. The store stays failed until restart and verification (ADR-005 section 9).
     FsyncFailed,
+    /// Group commit: the newest commits are not on the device yet (a follower that does not sign).
+    GroupCommit,
 }
 
 /// Status read by the signer interface (XA-07): no signing while degraded.

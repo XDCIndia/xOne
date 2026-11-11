@@ -78,6 +78,11 @@ impl PoolShared {
     }
 
     /// Consensus encodings in, one result per transaction (geth's error text on a refusal).
+    /// Executable transactions in the pool (the stats board's pending count).
+    pub fn pending_count(&self) -> usize {
+        self.lock().pool.stats().0
+    }
+
     pub fn add_raws(&self, raws: &[&[u8]]) -> Vec<Result<B256, String>> {
         let mut g = self.lock();
         let res = match self.on_head(|st| g.pool.add_raw(st, now(), raws)) {

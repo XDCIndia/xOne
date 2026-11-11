@@ -1,6 +1,6 @@
 //! ```text
-//! xone-replay fetch --to N [--cache PATH]                       archive blocks 0..=N into the cache (needs ssh xdc02)
-//! xone-replay run --network apothem --to N [--source PATH] ...   sequential replay on own state; exit 1 on the first mismatch
+//! xone-replay fetch [--network apothem|net2040] [--to N] [--cache PATH]   archive blocks 0..=N into the cache (needs ssh xdc02)
+//! xone-replay run --network apothem|net2040 --to N [--source PATH] ...   sequential replay on own state; exit 1 on the first mismatch
 //! xone-replay pivot --network apothem --block N --to M ...      DIAGNOSTIC-PIVOT: archive state of block N, own-state replay N+1..=M
 //! xone-replay diagnostic-prestate [ARGS]                         oracle-prestate replay via xone-sweep (DIAGNOSTIC, never a gate)
 //! ```
@@ -31,13 +31,18 @@ fn root() -> PathBuf {
 enum Cmd {
     /// Fetch blocks 0..=to from the archive into the cache (gitignored).
     Fetch {
+        /// `apothem` or `net2040`: the archive to read.
+        #[arg(long, default_value = "apothem")]
+        network: String,
         /// First block of a new cache file; an existing cache continues after its last line.
         #[arg(long, default_value_t = 0)]
         from: u64,
+        /// Last block; with `--network net2040` the default is the archive's current head.
         #[arg(long)]
-        to: u64,
-        #[arg(long, default_value_os_t = root().join("cache/apothem.jsonl"))]
-        cache: PathBuf,
+        to: Option<u64>,
+        /// Default: `cache/<network>.jsonl`.
+        #[arg(long)]
+        cache: Option<PathBuf>,
     },
     /// DIAGNOSTIC: per-transaction replay on archive prestate (`xone-sweep run`). It proves nothing
     /// about accumulated state and never marks a gate; use it to isolate a divergence of `run`.
@@ -102,14 +107,17 @@ enum Cmd {
     Run {
         #[arg(long, default_value = "apothem")]
         network: String,
+        /// Must be 0: a run starts at the genesis state, or at a checkpoint with `--resume`.
+        #[arg(long, default_value_t = 0)]
+        from: u64,
         #[arg(long)]
         to: u64,
         /// Block cache, plain or `.gz` (default: the cache written by `fetch`).
-        #[arg(long, default_value_os_t = root().join("cache/apothem.jsonl"))]
-        source: PathBuf,
-        /// Where checkpoints of the persisted state go.
-        #[arg(long, default_value_os_t = root().join("state/apothem"))]
-        state_dir: PathBuf,
+        #[arg(long)]
+        source: Option<PathBuf>,
+        /// Where checkpoints of the persisted state go (default `state/<network>`).
+        #[arg(long)]
+        state_dir: Option<PathBuf>,
         #[arg(long, default_value_t = 1000)]
         checkpoint_every: u64,
         /// Continue from the newest checkpoint at or below `--to`.
@@ -139,8 +147,23 @@ fn main() -> ExitCode {
 
 fn real(cli: Cli) -> Result<ExitCode, String> {
     match cli.cmd {
-        Cmd::Fetch { from, to, cache } => {
-            let n = cache::fetch(&cache, from, to)?;
+        Cmd::Fetch {
+            network,
+            from,
+            to,
+            cache,
+        } => {
+            let net: Network = network.parse().map_err(|e| format!("{e}"))?;
+            let cache = cache.unwrap_or_else(|| root().join(format!("cache/{network}.jsonl")));
+            let to = match to {
+                Some(t) => t,
+                None => {
+                    let head = Rpc::for_network(net)?
+                        .batch(vec![("eth_blockNumber", serde_json::json!([]))])?;
+                    xone_sweep::fetch::hex_u64(&head[0]["result"])
+                }
+            };
+            let n = cache::fetch(net, &cache, from, to)?;
             println!("fetched {n} blocks, cache holds {from}..={to}");
             Ok(ExitCode::SUCCESS)
         }
@@ -185,6 +208,7 @@ fn real(cli: Cli) -> Result<ExitCode, String> {
         }
         Cmd::Run {
             network,
+            from,
             to,
             source,
             state_dir,
@@ -195,15 +219,22 @@ fn real(cli: Cli) -> Result<ExitCode, String> {
             progress,
         } => {
             let net: Network = network.parse().map_err(|e| format!("{e}"))?;
-            if net != Network::Apothem {
-                return Err("only apothem has a V1 context here".into());
+            if from != 0 {
+                return Err("--from must be 0: use --resume to continue from a checkpoint".into());
             }
+            let source = source.unwrap_or_else(|| root().join(format!("cache/{network}.jsonl")));
+            let state_dir = state_dir.unwrap_or_else(|| root().join(format!("state/{network}")));
             let t0 = Instant::now();
-            let blocks = cache::read(&source)?
-                .iter()
-                .take(usize::try_from(to).map_err(|e| e.to_string())? + 1)
-                .map(decode)
-                .collect::<Result<Vec<_>, _>>()?;
+            let from = if resume {
+                xone_harness::replay::resume_point(&state_dir, to).map_or(0, |n| n + 1)
+            } else {
+                0
+            };
+            let blocks = cache::decode_limit(
+                &source,
+                usize::try_from(to).map_err(|e| e.to_string())? + 1,
+                from,
+            )?;
             let spec = net.spec();
             let opts = Opts {
                 to,
@@ -406,7 +437,11 @@ fn record(
         if d.mismatches.iter().any(|m| m.field == "stateRoot") {
             rec += &format!(
                 "\n## state diagnosis (archive eth_getProof, prestateTracer)\n\n{}",
-                diagnose(&mut Rpc::default(), d.block, diff)?
+                diagnose(
+                    &mut Rpc::for_network(network.parse().map_err(|e| format!("{e}"))?)?,
+                    d.block,
+                    diff
+                )?
             );
         }
     }

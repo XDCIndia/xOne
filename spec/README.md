@@ -29,6 +29,7 @@ A rule with no source line is not a rule. A value that a page states must come f
 | --- | --- |
 | [fork-table](chainspec/fork-table.md) | what the generated table holds and how it is produced and checked |
 | [unscheduled-sentinel](chainspec/unscheduled-sentinel.md) | `99_999_999_999` means declared but not scheduled |
+| [custom-genesis](chainspec/custom-genesis.md) | the `config` block of a genesis file as a chain spec; the net2040 profile |
 | [effective-istanbul-via-tipxdcx-cancellation-fee](chainspec/effective-istanbul-via-tipxdcx-cancellation-fee.md) | Istanbul and Petersburg fire at `TIPXDCXCancellationFee` |
 | [eip1559-decoupled-from-london](chainspec/eip1559-decoupled-from-london.md) | the fee market, EIP-2929 and EIP-3860 follow `Eip1559Block` |
 | [v2-config-by-round](chainspec/v2-config-by-round.md) | XDPoS v2 parameters are selected by round |

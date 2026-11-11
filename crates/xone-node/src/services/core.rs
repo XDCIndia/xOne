@@ -41,7 +41,7 @@ use xone_sync::{
 };
 
 use super::{
-    hist::{reseed, HistInner, Stored},
+    hist::{reseed, HistInner, Stored, MEMORY_WINDOW},
     store::{self, Ckpt, FileError, NodeStore},
 };
 
@@ -51,6 +51,12 @@ pub const PRUNE_SLACK: u64 = 256;
 
 /// Blocks above the anchor whose state can be opened (RPC reads at a block, unwind window).
 pub const RETENTION: u64 = 1024;
+
+/// ponytail: group commit of a node that does not sign. The block commits of this interval become
+/// steady together: one sync of each touched segment chunk, the segment directories and MDBX, instead
+/// of a dozen syncs per block (about 30 ms each on a busy disk, 3 blocks per second). A crash of the
+/// system loses at most this interval, which is fetched again. Shorter if that is too much.
+pub const GROUP_COMMIT: std::time::Duration = std::time::Duration::from_secs(1);
 
 #[derive(Debug, thiserror::Error)]
 pub enum CoreError {
@@ -192,7 +198,7 @@ impl BlockExecutor for NodeExec {
             receipts: out.receipt_encodings,
             state_root: out.state_root,
             gas_used: out.gas_used,
-            access_list_hash: None,
+            access_list_hash: out.bal_hash,
             aux: Bytes::new(),
         })
     }
@@ -297,6 +303,14 @@ fn miner_of(spec: &ChainSpec, h: &Header) -> Result<Address, CoreError> {
         .map_err(|e| CoreError::Inconsistent(format!("block {}: {e}", h.number)))
 }
 
+impl Drop for Core {
+    fn drop(&mut self) {
+        if let Err(e) = self.chain.with_store_mut(NodeStore::steady) {
+            eprintln!("store: the last blocks are not steady on close: {e}");
+        }
+    }
+}
+
 impl Core {
     /// Opens `<dir>`: genesis on a new datadir, else the checkpoint and the stored blocks above it,
     /// replayed and verified. Refuses a datadir whose files do not fit `genesis`.
@@ -306,23 +320,26 @@ impl Core {
         dir: &Path,
         ckpt_every: u64,
     ) -> Result<Self, CoreError> {
-        Self::open_with(spec, genesis, dir, ckpt_every, false)
+        Self::open_with(spec, genesis, dir, ckpt_every, false, false)
     }
 
     /// [`Core::open`], and with `minimal` the start of a node from the anchor of an imported snapshot
     /// (`spec/bootstrap/minimal-mode.md`): the datadir must be anchored, holds nothing below its
     /// first retained block, and prunes to the derived retention floor as the head moves. An
     /// anchored datadir is never opened as a full node, and a full datadir never as a minimal one.
+    /// `group_commit` (a node that does not sign) makes the block commits steady once per
+    /// [`GROUP_COMMIT`] instead of each on the device before it returns (`xone_sync::mdbx::Config`).
     pub fn open_with(
         spec: ChainSpec,
         genesis: &Genesis,
         dir: &Path,
         ckpt_every: u64,
         minimal: bool,
+        group_commit: bool,
     ) -> Result<Self, CoreError> {
         let (flat0, codes0, g) = genesis_state(genesis, &spec)?;
         std::fs::create_dir_all(dir).map_err(|e| FileError(format!("{}: {e}", dir.display())))?;
-        let mut node_store = store::open(dir, RETENTION)?;
+        let mut node_store = store::open(dir, RETENTION, group_commit.then_some(GROUP_COMMIT))?;
         let resumed = resume(&mut node_store)?;
         let loaded = store::load(&node_store)?;
         let anchored = loaded.as_ref().is_some_and(|l| l.anchor.is_some());
@@ -347,8 +364,8 @@ impl Core {
                 c.number
                     .checked_sub(l.first)
                     .and_then(|n| usize::try_from(n).ok())
-                    .and_then(|n| l.blocks.get(n))
-                    .map(|b| b.header.hash())
+                    .and_then(|n| l.headers.get(n))
+                    .map(Header::hash)
                     == Some(c.hash)
             })
         });
@@ -404,17 +421,20 @@ impl Core {
                     inner.td = genesis_block.header.difficulty;
                     inner.blocks.push(genesis_block);
                 }
-                for (i, b) in l
-                    .blocks
+                for (i, header) in l
+                    .headers
                     .iter()
                     .take((c.number + 1 - l.first) as usize)
                     .enumerate()
                 {
                     let n = l.first + i as u64;
-                    let s = Stored {
-                        hash: b.header.hash(),
-                        header: b.header.clone(),
-                        miner: miner_of(&spec, &b.header)?,
+                    // every body is read once for the transaction index; the history keeps the
+                    // window's only (`MEMORY_WINDOW`)
+                    let (body, receipts) = store::records(&node_store, l, n)?;
+                    let mut s = Stored {
+                        hash: header.hash(),
+                        header: header.clone(),
+                        miner: miner_of(&spec, header)?,
                         signs: c.signs.get(&n).map_or(vec![], |v| {
                             v.iter()
                                 .map(|(sender, signed, ok)| SignTx {
@@ -424,10 +444,13 @@ impl Core {
                                 })
                                 .collect()
                         }),
-                        body: b.body.clone(),
-                        receipts: b.receipts.clone(),
+                        body,
+                        receipts,
                     };
                     inner.index(&s, n);
+                    if n + MEMORY_WINDOW <= c.number {
+                        (s.body, s.receipts) = (Body::default(), vec![]);
+                    }
                     inner.td += s.header.difficulty;
                     inner.blocks.push(s);
                 }
@@ -471,7 +494,19 @@ impl Core {
             inner: RwLock::new(inner),
             pending: Mutex::new(None),
         });
-        // The store goes back to the checkpoint: the blocks above it are replayed below.
+        // The blocks above the checkpoint are read before the store goes back to it, and replayed
+        // below.
+        let replay = match &loaded {
+            Some(l) => (start + 1..=l.number)
+                .map(|n| {
+                    let h = l.header(n).cloned().ok_or_else(|| {
+                        CoreError::Inconsistent(format!("block {n} is not loaded"))
+                    })?;
+                    Ok((h, store::records(&node_store, l, n)?.0))
+                })
+                .collect::<Result<Vec<_>, CoreError>>()?,
+            None => vec![],
+        };
         if loaded.as_ref().is_some_and(|l| start < l.number) {
             node_store.unwind_to(start, Unwound::Drop).map_err(|e| {
                 CoreError::Inconsistent(format!(
@@ -510,21 +545,21 @@ impl Core {
         if minimal {
             core.check_start()?;
         }
-        if let Some(l) = loaded {
-            for b in l.blocks.into_iter().skip((start + 1 - l.first) as usize) {
-                let number = b.header.number;
-                match core.import(b.header, b.body, now())? {
-                    Outcome::Extended => {}
-                    o => {
-                        return Err(CoreError::Inconsistent(format!(
-                            "stored block {number} replayed as {o:?}"
-                        )))
-                    }
+        for (header, body) in replay {
+            let number = header.number;
+            match core.import(header, body, now())? {
+                Outcome::Extended => {}
+                o => {
+                    return Err(CoreError::Inconsistent(format!(
+                        "stored block {number} replayed as {o:?}"
+                    )))
                 }
             }
+        }
+        if let Some(l) = loaded {
             if core.chain.head() != (l.number, l.hash) {
                 return Err(CoreError::Inconsistent(format!(
-                    "the replay ends at {:?}, head.json says {} {}",
+                    "the replay ends at {:?}, the store's head was {} {}",
                     core.chain.head(),
                     l.number,
                     l.hash
@@ -646,6 +681,7 @@ impl Core {
             .iter()
             .map(|(n, g)| (*n, g.candidates.clone()))
             .collect();
+        drop(h);
         store::save_ckpt(&self.dir, &c)?;
         if self.minimal {
             store::drop_ckpts_below(&self.dir, n);
@@ -655,6 +691,20 @@ impl Core {
 
     pub fn head(&self) -> (u64, B256) {
         self.chain.head()
+    }
+
+    /// Body and receipts of canonical block `n` (`hash`): from the history inside its memory window,
+    /// else from the store (`MEMORY_WINDOW`). `None` for a block the node does not hold.
+    pub fn records(&self, n: u64, hash: B256) -> Option<(Body, Vec<Bytes>)> {
+        {
+            let h = self.hist.read();
+            let s = h.at(n).filter(|s| s.hash == hash)?;
+            if h.in_memory(n) {
+                return Some((s.body.clone(), s.receipts.clone()));
+            }
+        }
+        let (header, body, receipts) = self.chain.with_store(|s| s.canonical_block(n)).ok()??;
+        (header.hash() == hash).then_some((body, receipts))
     }
 
     fn check_start(&self) -> Result<(), CoreError> {

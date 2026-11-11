@@ -240,8 +240,23 @@ func build(pin string) ([]byte, error) {
 		b := n.gen.ToBlock()
 		out = append(out, kv{n.name, networkOf(n.cfg, b.Hash().Hex(), b.Root().Hex())})
 	}
+	// net2040 is not in geth's params: its row is read from the committed genesis file, the way a
+	// node started with --datadir/genesis.json reads it.
+	raw, err := os.ReadFile(net2040Genesis)
+	if err != nil {
+		return nil, err
+	}
+	var g core.Genesis
+	if err := json.Unmarshal(raw, &g); err != nil {
+		return nil, fmt.Errorf("%s: %w", net2040Genesis, err)
+	}
+	b := g.ToBlock()
+	out = append(out, kv{"net2040", networkOf(g.Config, b.Hash().Hex(), b.Root().Hex())})
 	return marshalTable(pin, out)
 }
+
+// net2040Genesis is the genesis file of chain 2040, relative to this directory.
+const net2040Genesis = "../../crates/xone-chainspec/genesis/net2040.json"
 
 // networkOf is one row of the fork table.
 func networkOf(cfg *params.ChainConfig, genesisHash, genesisRoot string) network {

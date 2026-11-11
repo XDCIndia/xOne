@@ -407,6 +407,22 @@ pub const FLAGS: &[Flag] = &[
         "flags.go:176",
     ),
     f(
+        "net2040",
+        B,
+        "false",
+        "true",
+        "XDC net2040 end-to-end devnet profile (chain 2040).",
+        "chainspec genesis/net2040.json ; xone",
+    ),
+    f(
+        "network",
+        S,
+        "unset",
+        "net2040",
+        "Built-in network by name: mainnet, apothem, devnet or net2040; same as the profile flags.",
+        "xone",
+    ),
+    f(
         "config",
         P,
         "unset",

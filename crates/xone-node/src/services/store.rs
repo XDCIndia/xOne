@@ -4,11 +4,13 @@
 //! replay harness that carry what the node's in-memory history needs beyond the store (V1 snapshots,
 //! deployed code, sign transactions, V2 gap pools).
 //!
-//! A restart reads the committed blocks back from the store, loads the newest checkpoint, unwinds the
-//! store to it and replays the blocks above it through `Chain::insert`, so that nothing stored is
-//! trusted without being verified and executed again.
+//! A restart reads the committed headers back from the store, loads the newest checkpoint, reads the
+//! bodies of the blocks above it, unwinds the store to it and replays them through `Chain::insert`, so
+//! that nothing stored is trusted without being verified and executed again. Bodies and receipts below
+//! the history's memory window are read from the store when asked for ([`records`]).
 //!
-//! ponytail: the history (`hist.rs`) is still memory only and rebuilt this way. Persisting its rows in
+//! ponytail: the history (`hist.rs`) keeps every header, sign transaction and transaction hash in
+//! memory and is rebuilt this way (every body is read once at start for the transaction index). Persisting its rows in
 //! the consensus tables of the store (`ConsensusEpoch`, `ConsensusSnapshot`, `Aux`) replaces the
 //! checkpoint files and the replay; nothing above this module changes.
 
@@ -41,9 +43,14 @@ fn io<T>(what: &Path, r: std::io::Result<T>) -> Result<T, FileError> {
     r.map_err(|e| FileError(format!("{}: {e}", what.display())))
 }
 
-/// Opens (or creates) the store of `<dir>`: takes the datadir lock and opens MDBX. Reconciliation is
-/// `Chain::open`'s or `resume`'s.
-pub fn open(dir: &Path, retention: u64) -> Result<NodeStore, FileError> {
+/// Opens (or creates) the store of `<dir>`: takes the datadir lock and opens MDBX, with group commit
+/// for `Some` (`xone_sync::mdbx::Config::group_commit`). Reconciliation is `Chain::open`'s or
+/// `resume`'s.
+pub fn open(
+    dir: &Path,
+    retention: u64,
+    group_commit: Option<std::time::Duration>,
+) -> Result<NodeStore, FileError> {
     if dir.join("head.json").exists() {
         return Err(FileError(format!(
             "{} holds the file store of an older build; it cannot be opened (remove the datadir and sync again)",
@@ -57,33 +64,37 @@ pub fn open(dir: &Path, retention: u64) -> Result<NodeStore, FileError> {
         Config {
             retention,
             per_file: BLOCKS_PER_FILE,
+            group_commit,
         },
     )
     .map_err(|e| FileError(format!("{}: {e}", dir.display())))
 }
 
-/// A block as the store holds it.
-pub struct Stored3 {
-    pub header: Header,
-    pub body: Body,
-    pub receipts: Vec<Bytes>,
-}
-
-/// What a start-up reads from the store: blocks `first..=number`, every frame CRC-checked.
+/// What a start-up reads from the store: the headers of blocks `first..=number`, every frame
+/// CRC-checked. Bodies and receipts stay in the store ([`records`]): the history keeps them in memory
+/// for its window only.
 pub struct Loaded {
     pub number: u64,
     pub hash: B256,
     /// The first block held: 1 for a node that followed from genesis, the first retained header of an
     /// imported snapshot otherwise.
     pub first: u64,
-    /// Bodies and receipts below this block are not held (the blocks carry empty ones).
+    /// Bodies and receipts below this block are not held ([`records`] gives empty ones).
     pub records_from: u64,
     /// The manifest of the snapshot the datadir was made from.
     pub anchor: Option<Bytes>,
-    pub blocks: Vec<Stored3>,
+    pub headers: Vec<Header>,
 }
 
-/// Reads the committed blocks back. `None` for a store that holds nothing.
+impl Loaded {
+    /// The stored header of block `n`.
+    pub fn header(&self, n: u64) -> Option<&Header> {
+        self.headers
+            .get(usize::try_from(n.checked_sub(self.first)?).ok()?)
+    }
+}
+
+/// Reads the committed headers back. `None` for a store that holds nothing.
 pub fn load(store: &NodeStore) -> Result<Option<Loaded>, FileError> {
     let Some(m) = store.manifest() else {
         return Ok(None);
@@ -92,28 +103,14 @@ pub fn load(store: &NodeStore) -> Result<Option<Loaded>, FileError> {
     let (h_from, records_from) = (m.entries[0].first_block, m.entries[1].first_block);
     let first = if anchor.is_some() { h_from } else { 1 };
     let (number, hash) = store.head();
-    let mut blocks = Vec::new();
+    let mut headers = Vec::new();
     for n in first..=number {
         let missing = || FileError(format!("block {n} is missing from the store"));
         let e = |e: xone_sync::store::StoreError| FileError(e.to_string());
-        if n < records_from {
-            let header = store.canonical_header(n).map_err(e)?.ok_or_else(missing)?;
-            blocks.push(Stored3 {
-                header,
-                body: Body::default(),
-                receipts: vec![],
-            });
-            continue;
-        }
-        let (header, body, receipts) = store.canonical_block(n).map_err(e)?.ok_or_else(missing)?;
-        blocks.push(Stored3 {
-            header,
-            body,
-            receipts,
-        });
+        headers.push(store.canonical_header(n).map_err(e)?.ok_or_else(missing)?);
     }
-    if blocks.last().map_or(0, |b| b.header.number) != number
-        || blocks.last().map(|b| b.header.hash()).unwrap_or(hash) != hash
+    if headers.last().map_or(0, |h| h.number) != number
+        || headers.last().map(Header::hash).unwrap_or(hash) != hash
     {
         return Err(FileError(
             "the last stored header is not the head of the manifest".into(),
@@ -125,8 +122,20 @@ pub fn load(store: &NodeStore) -> Result<Option<Loaded>, FileError> {
         first,
         records_from,
         anchor,
-        blocks,
+        headers,
     }))
+}
+
+/// Body and receipts of stored block `n`; empty ones below `records_from`.
+pub fn records(store: &NodeStore, l: &Loaded, n: u64) -> Result<(Body, Vec<Bytes>), FileError> {
+    if n < l.records_from {
+        return Ok((Body::default(), vec![]));
+    }
+    let (_, body, receipts) = store
+        .canonical_block(n)
+        .map_err(|e| FileError(e.to_string()))?
+        .ok_or_else(|| FileError(format!("block {n} is missing from the store")))?;
+    Ok((body, receipts))
 }
 
 /// The state checkpoint of the replay harness (`conformance/harness/src/replay.rs`), plus the V2 gap
