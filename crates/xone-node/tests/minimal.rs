@@ -169,6 +169,7 @@ fn import(blocks: &[WireBlock], tag: &str) -> std::path::PathBuf {
 }
 
 #[test]
+#[ignore = "follows 1,700 blocks through the services: ~3 min release, >10 min debug; run with --ignored"]
 fn a_minimal_node_follows_two_checkpoints_and_a_reward_from_a_fake_peer_only() {
     let blocks = Arc::new(vectors(1800));
     let min = import(&blocks, "peer");
