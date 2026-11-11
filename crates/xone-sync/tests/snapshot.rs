@@ -146,7 +146,11 @@ fn fixture(signer: Signer<'_>) -> Fix {
     let n0 = headers.len();
     for (i, round) in rounds.iter().enumerate() {
         let n = S + u64::try_from(i).unwrap();
-        let state_root = if n == PIVOT { root } else { keccak256(n.to_le_bytes()) };
+        let state_root = if n == PIVOT {
+            root
+        } else {
+            keccak256(n.to_le_bytes())
+        };
         let mut h = plain(n, headers.last().unwrap().hash(), state_root);
         let mut qc = QuorumCert {
             proposed_block_info: BlockInfo {
@@ -271,7 +275,8 @@ fn rewrite(file: &[u8], f: impl FnOnce(&mut Vec<(Kind, Vec<u8>)>, &mut (u64, u64
         w.chunk(*k, raw).unwrap();
     }
     let manifest = chunks.iter().find(|c| c.0 == Kind::Manifest).unwrap();
-    w.finish(keccak256(&manifest.1), firsts.0, firsts.1).unwrap();
+    w.finish(keccak256(&manifest.1), firsts.0, firsts.1)
+        .unwrap();
     out
 }
 
@@ -287,7 +292,13 @@ fn run(f: &Fix, file: &[u8]) -> Result<(), ImportError> {
     let pins = pins(f);
     let mut store = MemStore::empty(100_000);
     let mut stage: Vec<u8> = vec![];
-    import(&cfg(f, &pins), &mut Cursor::new(file), &mut stage, &mut store).map(|_| ())?;
+    import(
+        &cfg(f, &pins),
+        &mut Cursor::new(file),
+        &mut stage,
+        &mut store,
+    )
+    .map(|_| ())?;
     Ok(())
 }
 
@@ -306,7 +317,13 @@ fn export_then_import_reaches_the_same_state_root() {
     let mut store = MemStore::empty(100_000);
     let mut stage: Vec<u8> = vec![];
     let t0 = Instant::now();
-    let done = import(&cfg(&f, &pins), &mut Cursor::new(&file), &mut stage, &mut store).unwrap();
+    let done = import(
+        &cfg(&f, &pins),
+        &mut Cursor::new(&file),
+        &mut stage,
+        &mut store,
+    )
+    .unwrap();
     let t_import = t0.elapsed();
     eprintln!(
         "snapshot: {} bytes ({} chunks), {} accounts, {} slots, {} codes, {} headers, {} bodies; export {:?}, import {:?}",
@@ -320,14 +337,21 @@ fn export_then_import_reaches_the_same_state_root() {
         t_export,
         t_import,
     );
-    assert!(stage.is_empty(), "the staging area is cleared after the write");
+    assert!(
+        stage.is_empty(),
+        "the staging area is cleared after the write"
+    );
 
     let (head, hash) = store.head();
     assert_eq!(head, PIVOT);
     assert_eq!(store.canonical_hash(PIVOT), Some(hash));
     assert_eq!(flat_root(store.head_flat()), f.root);
     assert_eq!(store.flat_root(), f.root);
-    assert_eq!(store.head_flat(), &f.flat, "accounts, slots and the wide balance, row for row");
+    assert_eq!(
+        store.head_flat(),
+        &f.flat,
+        "accounts, slots and the wide balance, row for row"
+    );
     assert_eq!(store.header(hash).unwrap().state_root, f.root);
     assert_eq!(done.side.codes, f.side.codes);
     assert_eq!(store.anchor().unwrap().as_ref(), done.anchor.encode());
@@ -343,13 +367,21 @@ fn export_then_import_reaches_the_same_state_root() {
     assert_eq!(b_first, PIVOT + 1 - 1799);
     assert!(store.canonical_hash(h_first).is_some());
     assert!(store.canonical_hash(h_first - 1).is_none());
-    let rec = store.record(store.canonical_hash(b_first).unwrap()).unwrap();
+    let rec = store
+        .record(store.canonical_hash(b_first).unwrap())
+        .unwrap();
     assert!(rec.block.body.transactions.is_empty());
-    assert!(store.record(store.canonical_hash(b_first - 1).unwrap()).is_none());
-    assert!(store.header(store.canonical_hash(b_first - 1).unwrap()).is_some());
+    assert!(store
+        .record(store.canonical_hash(b_first - 1).unwrap())
+        .is_none());
+    assert!(store
+        .header(store.canonical_hash(b_first - 1).unwrap())
+        .is_some());
     assert_eq!(
         done.side.gaps.keys().copied().collect::<Vec<_>>(),
-        plan.of(Class::GapSnapshot).map(|n| n.first).collect::<Vec<_>>()
+        plan.of(Class::GapSnapshot)
+            .map(|n| n.first)
+            .collect::<Vec<_>>()
     );
     // the datadir can be started as a minimal node
     check_start(&f.spec, &store).unwrap();
@@ -370,18 +402,32 @@ fn a_pins_file_is_required_and_is_the_trust_root() {
     let mut stage: Vec<u8> = vec![];
     let none: [(u64, B256); 0] = [];
     assert!(matches!(
-        import(&cfg(&f, &none), &mut Cursor::new(&file), &mut stage, &mut store),
+        import(
+            &cfg(&f, &none),
+            &mut Cursor::new(&file),
+            &mut stage,
+            &mut store
+        ),
         Err(ImportError::NoPins)
     ));
     // a pin for another block of the chain: the manifest binds the right bytes of an unpinned chain
     let other = [(PIVOT, B256::repeat_byte(9))];
     assert!(matches!(
-        import(&cfg(&f, &other), &mut Cursor::new(&file), &mut stage, &mut store),
+        import(
+            &cfg(&f, &other),
+            &mut Cursor::new(&file),
+            &mut stage,
+            &mut store
+        ),
         Err(ImportError::Anchor(AnchorError::NotPinned))
     ));
     assert!(untouched(&store) && stage.is_empty());
     // the file of pins
-    let text = format!("# apothem epoch switch\n{S} {}\n{PIVOT} {}  # the checkpoint\n", pins(&f)[0].1, pins(&f)[0].1);
+    let text = format!(
+        "# apothem epoch switch\n{S} {}\n{PIVOT} {}  # the checkpoint\n",
+        pins(&f)[0].1,
+        pins(&f)[0].1
+    );
     assert_eq!(parse_pins(&text).unwrap().len(), 2);
     assert!(parse_pins("85000100\n").is_err());
     assert!(parse_pins("x 0x00\n").is_err());
@@ -393,31 +439,39 @@ fn a_pins_file_is_required_and_is_the_trust_root() {
 fn every_malicious_manifest_is_refused_before_any_write() {
     let f = good();
     let file = exported(&f);
-    let check = |name: &str, bytes: &[u8], f: &Fix, want: fn(&ImportError) -> bool, now: Option<u64>| {
-        let pins = pins(f);
-        let mut cfg = cfg(f, &pins);
-        if let Some(n) = now {
-            cfg.ctx.now = n;
-        }
-        let mut store = MemStore::empty(100_000);
-        let mut stage: Vec<u8> = vec![];
-        let e = import(&cfg, &mut Cursor::new(bytes), &mut stage, &mut store)
-            .err()
-            .unwrap_or_else(|| panic!("{name}: accepted"));
-        assert!(want(&e), "{name}: {e:?}");
-        assert!(untouched(&store), "{name}: the store was written");
-        assert!(stage.is_empty(), "{name}: the staging area was written");
-    };
+    let check =
+        |name: &str, bytes: &[u8], f: &Fix, want: fn(&ImportError) -> bool, now: Option<u64>| {
+            let pins = pins(f);
+            let mut cfg = cfg(f, &pins);
+            if let Some(n) = now {
+                cfg.ctx.now = n;
+            }
+            let mut store = MemStore::empty(100_000);
+            let mut stage: Vec<u8> = vec![];
+            let e = import(&cfg, &mut Cursor::new(bytes), &mut stage, &mut store)
+                .err()
+                .unwrap_or_else(|| panic!("{name}: accepted"));
+            assert!(want(&e), "{name}: {e:?}");
+            assert!(untouched(&store), "{name}: the store was written");
+            assert!(stage.is_empty(), "{name}: the staging area was written");
+        };
     check(
         "wrong chain",
         &mutate_anchor(&file, |a| a.chain_id = 50),
         &f,
-        |e| matches!(e, ImportError::Anchor(AnchorError::WrongChain { want: 51, got: 50 })),
+        |e| {
+            matches!(
+                e,
+                ImportError::Anchor(AnchorError::WrongChain { want: 51, got: 50 })
+            )
+        },
         None,
     );
     check(
         "wrong genesis",
-        &mutate_anchor(&file, |a| a.genesis_hash = Network::Mainnet.spec().genesis_hash),
+        &mutate_anchor(&file, |a| {
+            a.genesis_hash = Network::Mainnet.spec().genesis_hash
+        }),
         &f,
         |e| matches!(e, ImportError::Anchor(AnchorError::WrongGenesis { .. })),
         None,
@@ -447,7 +501,12 @@ fn every_malicious_manifest_is_refused_before_any_write() {
         "future manifest version",
         &mutate_anchor(&file, |a| a.version = 2),
         &f,
-        |e| matches!(e, ImportError::Anchor(AnchorError::UnsupportedFormat { found: 2, .. })),
+        |e| {
+            matches!(
+                e,
+                ImportError::Anchor(AnchorError::UnsupportedFormat { found: 2, .. })
+            )
+        },
         None,
     );
     let mut future_file = file.clone();
@@ -456,7 +515,14 @@ fn every_malicious_manifest_is_refused_before_any_write() {
         "future file version",
         &future_file,
         &f,
-        |e| matches!(e, ImportError::Format(xone_sync::bootstrap::format::FormatError::UnsupportedFormat { found: 2, .. })),
+        |e| {
+            matches!(
+                e,
+                ImportError::Format(
+                    xone_sync::bootstrap::format::FormatError::UnsupportedFormat { found: 2, .. }
+                )
+            )
+        },
         None,
     );
     // certificates: made by the exporter from a chain whose QCs are forged or short
@@ -479,7 +545,16 @@ fn every_malicious_manifest_is_refused_before_any_write() {
         "under threshold",
         &exported(&short),
         &short,
-        |e| matches!(e, ImportError::Anchor(AnchorError::UnderThreshold { unique: 6, required: 7, .. })),
+        |e| {
+            matches!(
+                e,
+                ImportError::Anchor(AnchorError::UnderThreshold {
+                    unique: 6,
+                    required: 7,
+                    ..
+                })
+            )
+        },
         None,
     );
 }
@@ -533,7 +608,10 @@ fn the_window_must_hold_and_link_to_the_pivot() {
     });
     assert!(matches!(
         run(&f, &bad),
-        Err(ImportError::ShortWindow { class: Class::Header, .. })
+        Err(ImportError::ShortWindow {
+            class: Class::Header,
+            ..
+        })
     ));
     // a header that does not link
     let bad = rewrite(&file, |c, _| {
@@ -555,7 +633,8 @@ fn the_window_must_hold_and_link_to_the_pivot() {
     // a gap pool the plan does not name
     let bad = rewrite(&file, |c, _| {
         let at = c.iter().position(|x| x.0 == Kind::Side).unwrap();
-        let mut row: xone_sync::bootstrap::manifest::SideRow = alloy_rlp::decode_exact(&c[at].1).unwrap();
+        let mut row: xone_sync::bootstrap::manifest::SideRow =
+            alloy_rlp::decode_exact(&c[at].1).unwrap();
         row.gaps.pop();
         c[at].1 = alloy_rlp::encode(&row);
     });
@@ -570,7 +649,10 @@ fn a_damaged_container_is_refused() {
     for at in [HEAD_LEN + 20, file.len() as u64 / 2, file.len() as u64 - 9] {
         let mut bad = file.clone();
         bad[usize::try_from(at).unwrap()] ^= 1;
-        assert!(matches!(run(&f, &bad), Err(ImportError::Format(_))), "flip at {at}");
+        assert!(
+            matches!(run(&f, &bad), Err(ImportError::Format(_))),
+            "flip at {at}"
+        );
     }
     // a trailer that names other chunks than the ones before it
     let (chunks, t) = parse(&file);
@@ -584,7 +666,10 @@ fn a_damaged_container_is_refused() {
     // bytes after the trailer
     let mut bad = file.clone();
     bad.push(0);
-    assert!(matches!(run(&f, &bad), Err(ImportError::Format(_) | ImportError::Trailing)));
+    assert!(matches!(
+        run(&f, &bad),
+        Err(ImportError::Format(_) | ImportError::Trailing)
+    ));
     // not a snapshot
     assert!(matches!(
         run(&f, b"hello, this is not a snapshot"),
@@ -640,19 +725,33 @@ fn an_interrupted_import_resumes_from_the_last_whole_chunk() {
         let at = if torn { boundary + 7 } else { boundary };
         let mut store = MemStore::empty(100_000);
         let mut stage: Vec<u8> = vec![];
-        let e = verify(&cfg(&f, &pins), &mut Cursor::new(&file[..usize::try_from(at).unwrap()]), &mut stage)
-            .err()
-            .expect("a cut file is not complete");
+        let e = verify(
+            &cfg(&f, &pins),
+            &mut Cursor::new(&file[..usize::try_from(at).unwrap()]),
+            &mut stage,
+        )
+        .err()
+        .expect("a cut file is not complete");
         match (&e, torn) {
             (ImportError::Incomplete { chunks, offset }, false) => {
                 assert_eq!((*chunks, *offset), (u32::try_from(k).unwrap(), boundary));
             }
-            (ImportError::Format(xone_sync::bootstrap::format::FormatError::Truncated { offset, .. }), true) => {
+            (
+                ImportError::Format(xone_sync::bootstrap::format::FormatError::Truncated {
+                    offset,
+                    ..
+                }),
+                true,
+            ) => {
                 assert_eq!(*offset, boundary);
             }
             _ => panic!("cut after chunk {k} (torn {torn}): {e:?}"),
         }
-        assert_eq!(u64::try_from(stage.len()).unwrap(), boundary, "staging is the whole chunks");
+        assert_eq!(
+            u64::try_from(stage.len()).unwrap(),
+            boundary,
+            "staging is the whole chunks"
+        );
         assert!(untouched(&store));
 
         let mut input = Counting {
@@ -683,7 +782,13 @@ fn an_interrupted_import_resumes_from_the_last_whole_chunk() {
     .unwrap();
     assert!(!stage.is_empty());
     let mut store = MemStore::empty(100_000);
-    let done = import(&cfg(&f, &pins), &mut Cursor::new(&file), &mut stage, &mut store).unwrap();
+    let done = import(
+        &cfg(&f, &pins),
+        &mut Cursor::new(&file),
+        &mut stage,
+        &mut store,
+    )
+    .unwrap();
     assert_eq!(done.stats.resumed_from, None);
     assert_eq!(store.flat_root(), f.root);
 }
@@ -694,7 +799,13 @@ fn export_refuses_what_it_cannot_prove_or_does_not_hold() {
     let mut sink = Vec::new();
     // above the head, and the 3-chain is not there yet
     for at in [S + 4, S + 9] {
-        let e = export(&f.spec, &f.store, &f.side, &Params { at, ..params() }, &mut sink);
+        let e = export(
+            &f.spec,
+            &f.store,
+            &f.side,
+            &Params { at, ..params() },
+            &mut sink,
+        );
         assert!(matches!(e, Err(ExportError::Proof(_))), "{at}: {e:?}");
     }
     // a pool the plan needs and the side data lacks
@@ -713,12 +824,21 @@ fn export_refuses_what_it_cannot_prove_or_does_not_hold() {
         export(&f.spec, &f.store, &side, &params(), &mut sink),
         Err(ExportError::MissingCode(h)) if h == c
     ));
-    assert!(sink.is_empty(), "nothing is written for a snapshot that cannot be made");
+    assert!(
+        sink.is_empty(),
+        "nothing is written for a snapshot that cannot be made"
+    );
     // a node that is itself pruned cannot give the window
     let mut pruned = good();
     pruned.store.prune(PIVOT - 100, PIVOT - 100).unwrap();
     assert!(matches!(
-        export(&pruned.spec, &pruned.store, &pruned.side, &params(), &mut sink),
+        export(
+            &pruned.spec,
+            &pruned.store,
+            &pruned.side,
+            &params(),
+            &mut sink
+        ),
         Err(ExportError::NotRetained { .. })
     ));
 }
@@ -759,7 +879,10 @@ fn start_refuses_a_datadir_that_holds_less_than_the_rules_need() {
         store
     };
     let need = keep_from(spec, PIVOT, None).unwrap();
-    assert_eq!((need.headers_from, need.records_from), (PIVOT + 1 - 4500, PIVOT + 1 - 1799));
+    assert_eq!(
+        (need.headers_from, need.records_from),
+        (PIVOT + 1 - 4500, PIVOT + 1 - 1799)
+    );
     check_start(spec, &inst(need.headers_from, need.records_from)).unwrap();
     check_start(spec, &inst(need.headers_from, need.records_from - 10)).unwrap(); // more is fine
     assert_eq!(
@@ -772,7 +895,10 @@ fn start_refuses_a_datadir_that_holds_less_than_the_rules_need() {
     );
     assert!(matches!(
         check_start(spec, &inst(need.headers_from, need.records_from + 1)),
-        Err(MinimalError::Shrunk { class: Class::Body, .. })
+        Err(MinimalError::Shrunk {
+            class: Class::Body,
+            ..
+        })
     ));
     // a datadir that was not made from a snapshot has no anchor
     assert_eq!(check_start(spec, &f.store), Err(MinimalError::NoAnchor));
@@ -798,7 +924,10 @@ fn pruning_deletes_only_what_the_floor_has_passed_and_the_rest_is_a_typed_error(
     let kept = prune(spec, &mut store, None, 0).unwrap().unwrap();
     assert_eq!(kept, k);
     let held = Held::of_store(spec, &store, 64).unwrap();
-    assert_eq!((held.headers_from, held.records_from), (k.headers_from, k.records_from));
+    assert_eq!(
+        (held.headers_from, held.records_from),
+        (k.headers_from, k.records_from)
+    );
     assert!(store.canonical_hash(k.headers_from - 1).is_none());
     assert!(store.canonical_hash(k.headers_from).is_some());
     assert!(held.is_within(Class::Header, k.headers_from).is_ok());
@@ -813,7 +942,10 @@ fn pruning_deletes_only_what_the_floor_has_passed_and_the_rest_is_a_typed_error(
     );
     assert!(matches!(
         held.is_within(Class::Body, k.records_from - 1),
-        Err(Missing::UnsupportedHistory { class: Class::Body, .. })
+        Err(Missing::UnsupportedHistory {
+            class: Class::Body,
+            ..
+        })
     ));
     assert!(held.is_within(Class::State, S + 4).is_ok());
     // a second call with the same head does nothing

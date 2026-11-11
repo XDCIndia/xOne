@@ -166,7 +166,8 @@ impl HistInner {
 
     /// The stored block `number`, `None` below the first retained one or above the tip.
     pub fn at(&self, number: u64) -> Option<&Stored> {
-        self.blocks.get(usize::try_from(number.checked_sub(self.base)?).ok()?)
+        self.blocks
+            .get(usize::try_from(number.checked_sub(self.base)?).ok()?)
     }
 
     /// Minimal mode: drops what the store dropped. Headers below `headers_from` go, bodies and
@@ -179,12 +180,17 @@ impl HistInner {
         self.blocks.drain(..drop);
         self.base += drop as u64;
         let base = self.base;
-        for b in self.blocks.iter_mut().take_while(|b| b.header.number < records_from) {
+        for b in self
+            .blocks
+            .iter_mut()
+            .take_while(|b| b.header.number < records_from)
+        {
             b.body = Body::default();
             b.receipts.clear();
             b.signs.clear();
         }
-        self.tx_index.retain(|_, (n, _)| *n >= records_from.max(base));
+        self.tx_index
+            .retain(|_, (n, _)| *n >= records_from.max(base));
         self.snaps = self.snaps.split_off(&base);
         self.gaps = self.gaps.split_off(&gaps_from);
         let keep = self
@@ -276,9 +282,9 @@ impl HistInner {
         let sw = self.v2_cfg().ok_or(v2::Error::NoV2)?.switch_block;
         if gap_snapshot::uses_v1_list(number, epoch, sw)? {
             let s = self.at(sw).ok_or(v2::Error::Missing {
-                    what: "V1 switch block",
-                    number: sw,
-                })?;
+                what: "V1 switch block",
+                number: sw,
+            })?;
             return gap_snapshot::bootstrap(&s.header.extra_data, sw);
         }
         let g = gap_snapshot::gap_number(number, epoch, gap)?;

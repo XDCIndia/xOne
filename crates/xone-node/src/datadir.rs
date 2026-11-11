@@ -93,7 +93,10 @@ fn read_marker(datadir: &Path) -> Result<Option<Marker>, DatadirError> {
 /// The chain marker of a datadir, which must have one.
 pub fn marker(datadir: &Path) -> Result<Marker, DatadirError> {
     read_marker(datadir)?.ok_or_else(|| {
-        DatadirError::BadMarker(datadir.join(MARKER), "no chain marker: pass --network".into())
+        DatadirError::BadMarker(
+            datadir.join(MARKER),
+            "no chain marker: pass --network".into(),
+        )
     })
 }
 

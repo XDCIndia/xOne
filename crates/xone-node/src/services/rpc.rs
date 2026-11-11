@@ -98,7 +98,9 @@ impl ChainApi for RpcChain {
     fn history(&self, class: Class, block: u64) -> Result<(), Missing> {
         // A node that followed from genesis holds every block. A minimal node holds what its
         // store holds, and answers for the rest with the typed error, never an empty list.
-        self.core.held().map_or(Ok(()), |h| h.is_within(class, block))
+        self.core
+            .held()
+            .map_or(Ok(()), |h| h.is_within(class, block))
     }
     fn syncing(&self) -> Option<(u64, u64, u64)> {
         let (head, _) = self.core.head();

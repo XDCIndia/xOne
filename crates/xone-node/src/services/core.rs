@@ -231,6 +231,8 @@ pub struct Core {
     pub head: watch::Sender<(u64, B256)>,
     /// Started from an imported snapshot: prunes below the retention floor, serves nothing below it.
     pub minimal: bool,
+    /// Blocks the retention floor moves before the store is rewritten ([`PRUNE_SLACK`]; a test sets 0).
+    pub prune_slack: u64,
 }
 
 /// The blocks of the files up to the checkpoint `start`, with the checkpoint's state, as the store's
@@ -433,7 +435,12 @@ impl Core {
                     inner.td = genesis_block.header.difficulty;
                     inner.blocks.push(genesis_block);
                 }
-                for (i, b) in l.blocks.iter().take((c.number + 1 - l.first) as usize).enumerate() {
+                for (i, b) in l
+                    .blocks
+                    .iter()
+                    .take((c.number + 1 - l.first) as usize)
+                    .enumerate()
+                {
                     let n = l.first + i as u64;
                     let s = Stored {
                         hash: b.header.hash(),
@@ -531,6 +538,7 @@ impl Core {
             ckpt_every,
             head,
             minimal,
+            prune_slack: PRUNE_SLACK,
         };
         if minimal {
             core.check_start()?;
@@ -695,14 +703,16 @@ impl Core {
         let committed = self.chain.committed().map(|l| l.number);
         let kept = self
             .chain
-            .with_store_mut(|s| minimal::prune(&self.spec, s, committed, PRUNE_SLACK))
+            .with_store_mut(|s| minimal::prune(&self.spec, s, committed, self.prune_slack))
             .map_err(|e| CoreError::Minimal(e.to_string()))?;
         if let Some(k) = kept {
             let (head, _) = self.chain.head();
             let gaps_from = Retention::derive(&self.spec, head)
                 .map_err(|e| CoreError::Minimal(e.to_string()))?
                 .floor(Class::GapSnapshot);
-            self.hist.write().prune(k.headers_from, k.records_from, gaps_from);
+            self.hist
+                .write()
+                .prune(k.headers_from, k.records_from, gaps_from);
         }
         Ok(())
     }

@@ -36,6 +36,15 @@ pub enum Profile {
 }
 
 impl Profile {
+    pub fn of(n: Network) -> Option<Self> {
+        match n {
+            Network::Mainnet => Some(Self::Mainnet),
+            Network::Apothem => Some(Self::Apothem),
+            Network::Devnet => Some(Self::Devnet),
+            _ => None,
+        }
+    }
+
     pub fn network(self) -> Network {
         match self {
             Self::Mainnet => Network::Mainnet,

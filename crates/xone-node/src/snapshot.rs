@@ -20,7 +20,7 @@ use xone_sync::{
     bootstrap::{
         export::{export, Exported, Params},
         import::{verify, Config, ImportError, Imported, Staging},
-        manifest::{default_at, parse_pins, SignRow, Side},
+        manifest::{default_at, parse_pins, Side, SignRow},
         Context,
     },
     store::Store,
@@ -87,7 +87,13 @@ fn side_of(core: &Core, at: u64) -> Result<Side, String> {
     if let Some(s) = h.snaps.get(&at) {
         side.signers = s.get_signers();
         side.recents = s.recents.clone();
-    } else if !core.spec.xdpos.v2.as_ref().is_some_and(|v| at > v.switch_block) {
+    } else if core
+        .spec
+        .xdpos
+        .v2
+        .as_ref()
+        .is_none_or(|v| at <= v.switch_block)
+    {
         return Err(format!("no V1 signer snapshot of block {at} in memory"));
     }
     side.gaps = h
@@ -95,7 +101,11 @@ fn side_of(core: &Core, at: u64) -> Result<Side, String> {
         .iter()
         .map(|(n, g)| (*n, g.candidates.clone()))
         .collect();
-    for b in h.blocks.iter().filter(|b| b.header.number <= at && !b.signs.is_empty()) {
+    for b in h
+        .blocks
+        .iter()
+        .filter(|b| b.header.number <= at && !b.signs.is_empty())
+    {
         side.signs.insert(
             b.header.number,
             b.signs
@@ -179,13 +189,18 @@ pub fn import_datadir(
     let dir = datadir.join("xone");
     let pins = match pins_file {
         Some(p) => parse_pins(
-            &fs::read_to_string(p).map_err(|e| ImportDatadirError::Io(format!("{}: {e}", p.display())))?,
+            &fs::read_to_string(p)
+                .map_err(|e| ImportDatadirError::Io(format!("{}: {e}", p.display())))?,
         )
         .map_err(|e| ImportDatadirError::Io(format!("{}: {e}", p.display())))?,
         None => vec![],
     };
-    fs::create_dir_all(&dir).map_err(|e| ImportDatadirError::Io(format!("{}: {e}", dir.display())))?;
-    if load(&dir).map_err(|e| ImportDatadirError::Io(e.to_string()))?.is_some() {
+    fs::create_dir_all(&dir)
+        .map_err(|e| ImportDatadirError::Io(format!("{}: {e}", dir.display())))?;
+    if load(&dir)
+        .map_err(|e| ImportDatadirError::Io(e.to_string()))?
+        .is_some()
+    {
         return Err(ImportDatadirError::NotEmpty);
     }
     let cfg = Config {
@@ -197,7 +212,8 @@ pub fn import_datadir(
         },
         retention: RETENTION,
     };
-    let mut file = File::open(input).map_err(|e| ImportDatadirError::Io(format!("{}: {e}", input.display())))?;
+    let mut file = File::open(input)
+        .map_err(|e| ImportDatadirError::Io(format!("{}: {e}", input.display())))?;
     let mut stage = FileStaging(dir.join("snapshot.part"));
     let v = verify(&cfg, &mut file, &mut stage)?;
     // the state checkpoint first, then the files with `head.json` last
@@ -208,7 +224,14 @@ pub fn import_datadir(
         accounts: flat
             .accounts
             .iter()
-            .map(|(a, x)| (*a, x.nonce, Bytes::from(x.balance.to_be_bytes()), x.code_hash))
+            .map(|(a, x)| {
+                (
+                    *a,
+                    x.nonce,
+                    Bytes::from(x.balance.to_be_bytes()),
+                    x.code_hash,
+                )
+            })
             .collect(),
         storage: flat.storage.clone(),
         codes: v.side.codes.clone(),

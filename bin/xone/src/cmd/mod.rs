@@ -7,6 +7,7 @@
 
 mod export;
 mod import;
+mod snapshot;
 
 use std::{
     fs::File,
@@ -27,6 +28,7 @@ use xone_sync::{
 
 pub use export::export;
 pub use import::import;
+pub use snapshot::snapshot;
 
 type Accept = fn(
     &dyn ChainRead,

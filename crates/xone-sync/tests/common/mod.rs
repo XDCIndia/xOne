@@ -446,10 +446,7 @@ impl xone_sync::store::Store for Mutant {
     fn unwind_stages(&mut self, n: u64) -> Result<(), xone_sync::store::StoreError> {
         self.inner.unwind_stages(n)
     }
-    fn state_rows(
-        &self,
-        h: B256,
-    ) -> Result<xone_sync::store::StateRows, xone_state::Missing> {
+    fn state_rows(&self, h: B256) -> Result<xone_sync::store::StateRows, xone_state::Missing> {
         self.inner.state_rows(h)
     }
     fn install_snapshot(

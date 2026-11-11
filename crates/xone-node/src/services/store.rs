@@ -146,12 +146,12 @@ fn seg_path(dir: &Path, i: usize, gen: u64) -> PathBuf {
 /// Deletes the segment files that are not generation `gen`: what a crash before `head.json`
 /// (the new files) or after it (the old ones) left.
 fn sweep(dir: &Path, gen: u64) {
-    for i in 0..3 {
+    for (i, seg) in SEGS.iter().enumerate() {
         let keep = seg_path(dir, i, gen);
         if let Ok(rd) = fs::read_dir(dir.join("static")) {
             for e in rd.filter_map(Result::ok) {
                 let n = e.file_name().to_string_lossy().into_owned();
-                let own = n.starts_with(SEGS[i]) && n.ends_with(".seg");
+                let own = n.starts_with(seg) && n.ends_with(".seg");
                 if own && e.path() != keep {
                     let _ = fs::remove_file(e.path());
                 }
@@ -161,7 +161,11 @@ fn sweep(dir: &Path, gen: u64) {
 }
 
 /// The frames of one segment file's committed bytes, from block `first`: number and payload.
-fn frames(bytes: &[u8], first: u64, path: &Path) -> Result<Vec<(u64, std::ops::Range<usize>)>, FileError> {
+fn frames(
+    bytes: &[u8],
+    first: u64,
+    path: &Path,
+) -> Result<Vec<(u64, std::ops::Range<usize>)>, FileError> {
     let mut out = Vec::new();
     let (mut at, mut n) = (0usize, first);
     while at < bytes.len() {
@@ -381,6 +385,9 @@ pub fn load_ckpt(dir: &Path, upto: u64, ok: impl Fn(&Ckpt) -> bool) -> Option<Ck
     })
 }
 
+/// A block's number and the payloads of its header, body and receipts frames.
+type Payloads = (u64, Vec<u8>, Vec<u8>, Vec<u8>);
+
 /// `MemStore` with its commits written through to the segment files.
 pub struct FileStore {
     inner: MemStore,
@@ -497,7 +504,7 @@ impl FileStore {
         gen: u64,
         first: u64,
         records_from: u64,
-        blocks: &[(u64, Vec<u8>, Vec<u8>, Vec<u8>)],
+        blocks: &[Payloads],
         head: (u64, B256),
     ) -> Result<(), FileError> {
         let mut files: [Vec<u8>; 3] = Default::default();
@@ -556,7 +563,12 @@ impl FileStore {
                 (n, keep(0), keep(1), keep(2))
             })
             .collect();
-        let head = (self.persisted, self.inner.canonical_hash(self.persisted).unwrap_or_default());
+        let head = (
+            self.persisted,
+            self.inner
+                .canonical_hash(self.persisted)
+                .unwrap_or_default(),
+        );
         self.publish(self.gen + 1, first, records_from, &blocks, head)
     }
 
@@ -588,7 +600,10 @@ impl FileStore {
         io(&tmp, f.sync_all())?;
         let to = self.dir.join("anchor.rlp");
         io(&to, fs::rename(&tmp, &to))?;
-        let head = s.headers.last().map_or((0, B256::ZERO), |h| (h.number, h.hash()));
+        let head = s
+            .headers
+            .last()
+            .map_or((0, B256::ZERO), |h| (h.number, h.hash()));
         self.publish(0, first, records_from, &blocks, head)
     }
 }
@@ -686,7 +701,10 @@ impl Store for FileStore {
     }
     fn prune(&mut self, headers_from: u64, records_from: u64) -> Result<(), StoreError> {
         self.inner.prune(headers_from, records_from)?;
-        let (h, r) = (headers_from.max(self.first), records_from.max(self.records_from));
+        let (h, r) = (
+            headers_from.max(self.first),
+            records_from.max(self.records_from),
+        );
         if (h, r) != (self.first, self.records_from) {
             self.rewrite(h, r).map_err(degraded)?;
         }

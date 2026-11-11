@@ -246,7 +246,11 @@ impl<F: FlatWrite> StateProvider<F> {
         let mut addrs: std::collections::BTreeSet<Address> =
             self.flat.accounts().map(|(a, _)| a).collect();
         let mut slots: std::collections::BTreeSet<(Address, B256)> = Default::default();
-        for (_, cs) in self.chain.range(view.number + 1..).map(|(n, (_, c))| (n, c)) {
+        for (_, cs) in self
+            .chain
+            .range(view.number + 1..)
+            .map(|(n, (_, c))| (n, c))
+        {
             addrs.extend(cs.accounts.keys());
             slots.extend(cs.storage.keys());
         }
