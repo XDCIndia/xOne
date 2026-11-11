@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/xone-primitives", "crates/xone-chainspec", "crates/xone-db", "crates/xone-state", "crates/xone-consensus", "crates/xone-signer", "crates/xone-node", "sim", "bin/xone", "spikes/wide-balance", "spikes/net", "labs/pq", "crates/xone-evm", "conformance/sweep", "conformance/negative-gen", "crates/xone-net"]
+members = ["crates/xone-primitives", "crates/xone-chainspec", "crates/xone-db", "crates/xone-state", "crates/xone-consensus", "crates/xone-signer", "crates/xone-node", "sim", "bin/xone", "spikes/wide-balance", "spikes/net", "labs/pq", "crates/xone-evm", "conformance/sweep", "conformance/negative-gen", "crates/xone-net", "crates/xone-sync"]
 
 [workspace.package]
 version = "0.1.0"
@@ -38,6 +38,7 @@ xone-state = { path = "crates/xone-state" }
 xone-consensus = { path = "crates/xone-consensus" }
 xone-evm = { path = "crates/xone-evm" }
 xone-signer = { path = "crates/xone-signer" }
+xone-sync = { path = "crates/xone-sync" }
 
 # R3 rule 1 and 2 (plan #1). Crates opt in with `[lints] workspace = true`; the lint
 # set is per crate, see docs/assurance/README.md. disallowed-* lists live in each

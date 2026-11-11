@@ -189,13 +189,22 @@ impl<'a> BodyVerifier<'a> {
         list_len(payload)
     }
 
-    /// geth `ValidateBody` followed by the receipt checks of `ValidateState`.
+    /// geth `ValidateBody` followed by the receipt checks of `ValidateState`: [`Self::verify_body`]
+    /// then [`Self::verify_receipts`].
     pub fn verify(
         &self,
         header: &Header,
         body: &Body,
         receipts: &[Bytes],
     ) -> Result<(), BodyError> {
+        self.verify_body(header, body)?;
+        self.verify_receipts(header, body.transactions.len(), receipts)
+    }
+
+    /// geth `ValidateBody` (`core/block_validator.go:52-190`): what the body must satisfy before the
+    /// block is executed. Needs no receipts, so an importer runs it first and never executes a body
+    /// that does not match its header.
+    pub fn verify_body(&self, header: &Header, body: &Body) -> Result<(), BodyError> {
         let (n, spec) = (header.number, self.spec);
         let size = Self::block_size(header, body);
         if spec.osaka.is_active(n) && size > MAX_BLOCK_SIZE {
@@ -266,11 +275,23 @@ impl<'a> BodyVerifier<'a> {
             _ => {}
         }
 
+        Ok(())
+    }
+
+    /// The receipt checks of geth `ValidateState` (`core/block_validator.go:217`, `:227`): count,
+    /// bloom and receipt root, from receipts that execution produced. `txs` is the number of
+    /// transactions of the body.
+    pub fn verify_receipts(
+        &self,
+        header: &Header,
+        txs: usize,
+        receipts: &[Bytes],
+    ) -> Result<(), BodyError> {
         // Receipts: derived fields only; the bloom comes from the logs.
-        if receipts.len() != body.transactions.len() {
+        if receipts.len() != txs {
             return Err(BodyError::ReceiptCount {
                 receipts: receipts.len(),
-                txs: body.transactions.len(),
+                txs,
             });
         }
         let decoded = receipts
