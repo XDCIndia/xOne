@@ -1,8 +1,9 @@
-//! The chain as the node runs it: `xone_sync::chain::Chain` over the [`FileStore`], the executor
-//! adapter (`xone_executor::execute_block`) and the header check adapter (`HeaderVerifier`), both
-//! reading the node's own [`History`]. A restart re-opens the files and replays every block above
-//! the newest state checkpoint through the same `Chain::insert`, so nothing that was stored is
-//! trusted without being verified and executed again.
+//! The chain as the node runs it: `xone_sync::chain::Chain` over the [`NodeStore`] (MDBX and the
+//! segment files, ADR-005), the executor adapter (`xone_executor::execute_block`) and the header
+//! check adapter (`HeaderVerifier`), both reading the node's own [`History`]. A restart reconciles
+//! the store, unwinds it to the newest state checkpoint and replays every block above it through the
+//! same `Chain::insert`, so nothing that was stored is trusted without being verified and executed
+//! again.
 
 use std::{
     collections::BTreeMap,
@@ -30,15 +31,18 @@ use xone_sync::{
         minimal::{self, Held},
         Class, Retention,
     },
-    chain::{insert::Outcome, resume::ResumeError, Chain, ChainRead, HeaderCheck, InsertError},
+    chain::{
+        insert::Outcome,
+        resume::{resume, ResumeError, Resumed},
+        Chain, ChainRead, HeaderCheck, InsertError,
+    },
     executor::{BlockExecutor, ExecError, Execution},
-    store::{Block, Install, Record, StateRows, Store},
-    testkit::MemStore,
+    store::{Block, Store, Unwound},
 };
 
 use super::{
     hist::{reseed, HistInner, Stored},
-    store::{self, Ckpt, FileError, FileStore, Loaded},
+    store::{self, Ckpt, FileError, NodeStore},
 };
 
 /// Minimal mode deletes when the floor has moved this many blocks past the first held block: a
@@ -47,8 +51,6 @@ pub const PRUNE_SLACK: u64 = 256;
 
 /// Blocks above the anchor whose state can be opened (RPC reads at a block, unwind window).
 pub const RETENTION: u64 = 1024;
-/// Blocks per segment chunk of the in-memory store model.
-const BLOCKS_PER_FILE: u64 = 100_000;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CoreError {
@@ -219,7 +221,7 @@ impl HeaderCheck for NodeCheck {
     }
 }
 
-pub type NodeChain = Chain<FileStore, NodeExec, NodeCheck>;
+pub type NodeChain = Chain<NodeStore, NodeExec, NodeCheck>;
 
 pub struct Core {
     pub spec: ChainSpec,
@@ -233,45 +235,6 @@ pub struct Core {
     pub minimal: bool,
     /// Blocks the retention floor moves before the store is rewritten ([`PRUNE_SLACK`]; a test sets 0).
     pub prune_slack: u64,
-}
-
-/// The blocks of the files up to the checkpoint `start`, with the checkpoint's state, as the store's
-/// base: an anchored datadir's snapshot, or a full node's whole chain with its genesis block
-/// (`genesis`). The store then holds the window that an export reads.
-fn install_of(l: &Loaded, start: u64, flat: &MemFlat, genesis: Option<&Header>) -> Install {
-    let take = usize::try_from(start + 1 - l.first).unwrap_or(0);
-    let window = || l.blocks.iter().take(take);
-    let rec = |h: &Header, body: Body, receipts: Vec<Bytes>| Record {
-        block: Block::new(h.clone(), body),
-        receipts,
-        diff: Default::default(),
-        aux: Default::default(),
-    };
-    Install {
-        anchor: l.anchor.clone().unwrap_or_default(),
-        headers: genesis
-            .into_iter()
-            .cloned()
-            .chain(window().map(|b| b.header.clone()))
-            .collect(),
-        records: genesis
-            .map(|g| rec(g, Body::default(), vec![]))
-            .into_iter()
-            .chain(
-                window()
-                    .filter(|b| b.header.number >= l.records_from)
-                    .map(|b| rec(&b.header, b.body.clone(), b.receipts.clone())),
-            )
-            .collect(),
-        state: StateRows {
-            accounts: flat.accounts().collect(),
-            storage: flat
-                .accounts()
-                .flat_map(|(a, _)| flat.slots(a).map(move |(k, v)| (a, k, v)))
-                .collect(),
-        },
-        retention: RETENTION,
-    }
 }
 
 pub fn now() -> u64 {
@@ -359,19 +322,25 @@ impl Core {
     ) -> Result<Self, CoreError> {
         let (flat0, codes0, g) = genesis_state(genesis, &spec)?;
         std::fs::create_dir_all(dir).map_err(|e| FileError(format!("{}: {e}", dir.display())))?;
-        let loaded = store::load(dir)?;
+        let mut node_store = store::open(dir, RETENTION)?;
+        let resumed = resume(&mut node_store)?;
+        let loaded = store::load(&node_store)?;
         let anchored = loaded.as_ref().is_some_and(|l| l.anchor.is_some());
         match (anchored, minimal) {
             (true, false) => return Err(CoreError::Anchored),
             (false, true) => return Err(CoreError::NotAnchored),
             _ => {}
         }
-        if let Some(l) = loaded.as_ref().filter(|_| !anchored) {
-            if l.blocks.first().map(|b| b.header.parent_hash) != Some(g.hash()) {
+        match resumed {
+            Resumed::Fresh => node_store
+                .init_anchor(g.clone(), flat0.clone())
+                .map_err(|e| CoreError::Inconsistent(e.to_string()))?,
+            Resumed::Head { .. } if !anchored && node_store.canonical_hash(0) != Some(g.hash()) => {
                 return Err(CoreError::Inconsistent(
                     "the stored chain does not start at this genesis".into(),
                 ));
             }
+            Resumed::Head { .. } => {}
         }
         let ck = loaded.as_ref().and_then(|l| {
             store::load_ckpt(dir, l.number, |c| {
@@ -498,27 +467,25 @@ impl Core {
                 "an anchored datadir without a state checkpoint at or below its head".into(),
             ));
         }
-        // With a checkpoint the in-memory store is the blocks of the files up to it, installed like a
-        // snapshot: its manifest says what the files hold (`first_block`), and an export, the
-        // retention check and the pruning see the same window the history does.
-        let install = match (&loaded, &ck) {
-            (Some(l), Some(_)) => Some(install_of(l, start, &flat, (!anchored).then_some(&g))),
-            _ => None,
-        };
         let hist = std::sync::Arc::new(History {
             inner: RwLock::new(inner),
             pending: Mutex::new(None),
         });
-        let mem = match install {
-            Some(i) => {
-                let mut m = MemStore::empty(BLOCKS_PER_FILE);
-                m.install_snapshot(i)
-                    .map_err(|e| CoreError::Inconsistent(e.to_string()))?;
-                m
-            }
-            None => MemStore::with_anchor(anchor, flat, RETENTION, BLOCKS_PER_FILE),
-        };
-        let files = FileStore::new(mem, dir, loaded.as_ref())?;
+        // The store goes back to the checkpoint: the blocks above it are replayed below.
+        if loaded.as_ref().is_some_and(|l| start < l.number) {
+            node_store.unwind_to(start, Unwound::Drop).map_err(|e| {
+                CoreError::Inconsistent(format!(
+                    "no state checkpoint within the last {RETENTION} blocks to replay from: {e}"
+                ))
+            })?;
+        }
+        if node_store.head() != (start, anchor.hash())
+            || node_store.flat_root() != anchor.state_root
+        {
+            return Err(CoreError::Inconsistent(format!(
+                "the store at block {start} is not the checkpoint's state"
+            )));
+        }
         let exec = NodeExec {
             spec: spec.clone(),
             hist: hist.clone(),
@@ -527,7 +494,7 @@ impl Core {
             spec: spec.clone(),
             hist: hist.clone(),
         };
-        let (chain, _) = Chain::open(spec.clone(), files, exec, check)?;
+        let chain = Chain::new(spec.clone(), node_store, exec, check);
         let (head, _) = watch::channel((start, hist.read().tip().hash));
         let core = Self {
             spec,

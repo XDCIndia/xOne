@@ -1,7 +1,7 @@
 # ADR-005: Storage and cross-store publication
 
 Status: proposed (Gate A design review). Gate B must prove it. Issue: XDCIndia/xOne#11 (XA-06). Plan: issue #1 ADR-005 line and Revision 1 section 4.
-Code: `crates/xone-db/` (traits, manifest bytes, pure `reconcile`). Fault plan: `tests/fault/PLAN.md`.
+Code: `crates/xone-db/` (traits, manifest bytes, pure `reconcile`, `mdbx`, `segments`, `fault`), `crates/xone-sync/src/mdbx/` (`MdbxStore`). Fault plan: `tests/fault/PLAN.md`. Gate B implementation notes: section 15.
 
 ## 0. How to read the sources
 
@@ -301,3 +301,19 @@ The reth hazard (MDBX rolling back below pruned data) cannot occur: the commit o
 5. A sync-failure test: after injected `fsync` failure the process exits and the next start in the same boot refuses; after a simulated reboot it recovers or refuses with a typed error.
 6. The release-tree check shows no fault-injection code in shipped artifacts.
 7. Open questions 1 and 2 answered by the owner.
+
+## 15. Gate B implementation notes (XA-06)
+
+What the code does where this ADR left a choice. None changes the commit order, the manifest or the decision table.
+
+- **Crate**: `libmdbx` 0.6.6 with `mdbx-sys` 13.11.0 (libmdbx C 0.13.11), pinned `=0.6.6`. `reth-libmdbx` is not on crates.io. `SyncMode::Durable`, WRITEMAP off (`Database<NoWriteMap>`). The crate and its build dependency `bindgen` (needs libclang) are the only `unsafe`/FFI additions; `docs/assurance/unsafe-ffi-audit-2026-11-11.md` lists them. Our crates keep `forbid(unsafe_code)`.
+- **Where the code lives**: the `Store` trait is in `xone-sync` (rank 6), above `xone-db` (rank 5), so `MdbxStore` is `xone_sync::mdbx`; the environment, the tables, the segment writer and scanner and the fault disk are `xone_db::{mdbx, segments, fault}`.
+- **Tables** (`xone_db::mdbx::T`): `Meta`, `CanonicalHeaders`, `HeaderNumbers`, `SegIdx`, `PlainAccountState`, `PlainStorageState`, `Bytecodes`, `HashedAccounts`, `HashedStorages`, `Preimages`, `AccountChangeSets`, `StorageChangeSets`, `BlockDiffs`, `Aux`, `SideBlocks`, `Stateless`, `ConsensusEpoch`, `ConsensusSnapshot`, `Stages`, `StagedHeaders`, `StagedBodies`. Added to section 1: `BlockDiffs` (the new values of each block inside the retained window, kept so that an unwind with `Unwound::Keep` and a reorg can re-adopt a block), `Aux` (`Record::aux`, kept for every canonical block: executors restore their context from it), the hashed tables and `Preimages` (snap serves and heals by hashed key). The committed V2 block is `Meta[committed]`. The safety record is `MdbxSafety` in its own environment (`safety.mdbx`, ADR-010).
+- **Chunk files** are named by the chunk-aligned first block (`block / BLOCKS_PER_FILE * BLOCKS_PER_FILE`); the segment header repeats it. The first file of a datadir that starts at an anchor holds its first frame at offset 20. Unwind computes the new `len` as `SegIdx[n].start + frame length` (equal to `SegIdx[n+1].start` inside a chunk, and correct across a chunk boundary).
+- **State reads** come from an in-memory `StateProvider` rebuilt from the tables at start-up (after `repair`) and checked against the head's state root. The tables are written in the commit transaction from the diff, not from the model. ponytail: the flat state and the trie are memory-resident until the trie has tables.
+- **Journal**: written and deleted as in sections 5 and 8; start-up deletes it whatever its generation and never replays it (the block is re-imported from the network or the caller).
+- **First commit of a datadir** (`init_anchor`) goes through the same steps. A kill before it returns that left segment files is row D2 (refuse, `OrphanSegments`): the datadir holds nothing and an operator removes it.
+- **Failure policy**: ENOSPC on a write or truncate with a clean cleanup is `Degraded(NoSpace)` and the next write retries; every failed sync or MDBX commit, EIO, a failed cleanup and any failure after the commit returned is fail-stop with `FSYNC_FAILED` holding the boot id. `Reconciling` holds from open until `repair` (or the anchor commit) finishes.
+- **Format version**: a segment header of another version is reported to `reconcile` as `ManifestState::Invalid(Version(v))`, so it refuses as `FormatVersion(v)` with no file change.
+- **Pruning** (`prune_to`) requires the floor to be chunk aligned and not above the oldest openable block, so a pruned block never has a state or a changeset that is still served.
+- **Measured** (Apothem blocks 0 to 1,800 through the node on this host): see the report of the XA-06 Gate B run attached to issue #11; fsync calls per block are counted with `strace -f -c`.

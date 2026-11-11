@@ -24,6 +24,7 @@ pub mod executor;
 pub mod export;
 pub mod follow;
 pub mod import;
+pub mod mdbx;
 pub mod stages;
 pub mod store;
 pub mod testkit;

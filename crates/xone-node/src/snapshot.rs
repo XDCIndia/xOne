@@ -24,12 +24,11 @@ use xone_sync::{
         Context,
     },
     store::Store,
-    testkit::MemStore,
 };
 
 use crate::services::{
     core::{Core, CoreError, RETENTION},
-    store::{load, save_ckpt, Ckpt, FileStore},
+    store::{self, load, save_ckpt, Ckpt},
 };
 
 /// The files of an interrupted import: a prefix of the snapshot file made of whole chunks.
@@ -197,7 +196,9 @@ pub fn import_datadir(
     };
     fs::create_dir_all(&dir)
         .map_err(|e| ImportDatadirError::Io(format!("{}: {e}", dir.display())))?;
-    if load(&dir)
+    let mut store =
+        store::open(&dir, RETENTION).map_err(|e| ImportDatadirError::Io(e.to_string()))?;
+    if load(&store)
         .map_err(|e| ImportDatadirError::Io(e.to_string()))?
         .is_some()
     {
@@ -216,7 +217,7 @@ pub fn import_datadir(
         .map_err(|e| ImportDatadirError::Io(format!("{}: {e}", input.display())))?;
     let mut stage = FileStaging(dir.join("snapshot.part"));
     let v = verify(&cfg, &mut file, &mut stage)?;
-    // the state checkpoint first, then the files with `head.json` last
+    // the state checkpoint first, then the store in one commit
     let flat = v.install.state.clone();
     let mut ck = Ckpt {
         number: v.anchor.number,
@@ -247,8 +248,6 @@ pub fn import_datadir(
     };
     ck.gaps.sort();
     save_ckpt(&dir, &ck).map_err(|e| ImportDatadirError::Io(e.to_string()))?;
-    let mut store = FileStore::new(MemStore::empty(100_000), &dir, None)
-        .map_err(|e| ImportDatadirError::Io(e.to_string()))?;
     store
         .install_snapshot(v.install)
         .map_err(|e| ImportDatadirError::Import(ImportError::Store(e)))?;

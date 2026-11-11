@@ -1,6 +1,6 @@
 # Fault-injection plan for ADR-005 (XA-06)
 
-Status: plan for Gate A review. Nothing here is implemented. Protocol, kill point IDs and decision rows come from `docs/adr/ADR-005-storage-and-publication.md` (called "the ADR" below). Fault IDs F1-F8 are the ADR section 3 model.
+Status: implemented for gates G1 to G4 (Gate B, XA-06): `tests/fault/tests/{kill,rows,store,import,process_kill}.rs`; G5 to G8 (loop device, device-mapper, two file systems) remain. Protocol, kill point IDs and decision rows come from `docs/adr/ADR-005-storage-and-publication.md` (called "the ADR" below). Fault IDs F1-F8 are the ADR section 3 model.
 
 Rules: run only on test datadirs, never on a producer host, keys or live validators. Fault code is a test-build feature (`fault-injection`) and must be absent from release artifacts; the release-tree check from `xone-rs-release` proves it. No expected result is edited by hand to make a run pass.
 
