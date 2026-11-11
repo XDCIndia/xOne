@@ -1,0 +1,1 @@
+# net2040: no public bootnode list is committed. Set BOOTNODES in /etc/xone/net2040.env.

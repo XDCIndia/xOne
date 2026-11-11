@@ -5,13 +5,21 @@
 `AUTH_PORT`, `EXTRA_ARGS`, and the per-network file `/etc/xone/<net>.env`. The launch line
 uses xone flags (`docs/cli/flags.md`) instead of xone-geth flags.
 
+Release layout (the tarball from `ci/release.sh` unpacks to this): `/opt/xone/{xone,run-xone.sh,xone@.service,bootnodes/}`.
+Install and timing: `ops/install.md`. Upgrade and rollback: `ops/upgrade-rollback.md`. Release, signing and
+reproducibility: `docs/ops/release.md`.
+
 ```bash
-install -m755 ops/run-xone.sh /opt/xone/run-xone.sh
-install -m644 ops/xone@.service /etc/systemd/system/xone@.service
+install -m644 /opt/xone/xone@.service /etc/systemd/system/xone@.service
 install -d -m750 /etc/xone
 install -m600 /dev/null /etc/xone/apothem.env     # then edit it, see below
 systemctl enable --now xone@apothem
 ```
+
+`NETWORK` (the instance name) is `apothem`, `xdcmainnet`, `xdcdevnet` or `net2040`; `mainnet`, `xdc-mainnet`,
+`devnet` and `xdc-devnet` are still accepted. Bootnodes default to `bootnodes/<net>.txt` (from geth-XDC
+`params/bootnodes.go` at the pin); `BOOTNODES` replaces them. `net2040` needs `GENESIS` and `BOOTNODES`.
+`NODENAME` defaults to `xone-<net>-<host>`, `ETHSTATS_HOST` to `stats.xdcindia.com:443`.
 
 `/etc/xone/apothem.env`:
 

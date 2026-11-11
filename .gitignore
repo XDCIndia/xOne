@@ -30,3 +30,6 @@ __pycache__/
 # xone-replay: archive block cache, persisted-state checkpoints (XA-05)
 /conformance/harness/cache/
 /conformance/harness/state/
+
+# ci/release.sh output
+/dist/
