@@ -17,6 +17,21 @@ use xone_primitives::Header;
 use xone_state::StateRead;
 use xone_sync::bootstrap::retention::{Class, Missing};
 
+impl dyn StateApi {
+    /// [`StateApi::state`] returning the value `f` computes.
+    pub fn query<R>(&self, block: B256, f: impl FnOnce(&dyn StateRead) -> R) -> Result<R, Missing> {
+        let (mut f, mut out) = (Some(f), None);
+        self.state(block, &mut |s| out = f.take().map(|f| f(s)))?;
+        // an implementation that never ran `f` answers nothing rather than a default
+        out.ok_or(Missing::UnsupportedHistory {
+            class: Class::State,
+            block: 0,
+            floor: 0,
+            pivot: 0,
+        })
+    }
+}
+
 /// A canonical or side block with its consensus encoding.
 #[derive(Debug, Clone)]
 pub struct BlockView {
@@ -115,8 +130,9 @@ pub enum TraceOut {
 
 /// State at a block, and what needs the executor.
 pub trait StateApi: Send + Sync {
-    /// Post-state of `block`; `Missing` below the retained window.
-    fn state(&self, block: B256) -> Result<Box<dyn StateRead + '_>, Missing>;
+    /// Runs `f` on the post-state of `block`, pinned for the whole call; `Missing` below the
+    /// retained window. A caller reads through `f` so a retention move cannot turn into a default.
+    fn state(&self, block: B256, f: &mut dyn FnMut(&dyn StateRead)) -> Result<(), Missing>;
     fn code(&self, code_hash: B256) -> Option<Bytes>;
     /// Runs `req` on the post-state of `block` with the header of `block` as environment.
     fn call(

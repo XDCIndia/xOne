@@ -20,6 +20,7 @@ use std::{
     time::Duration,
 };
 
+use alloy_primitives::B256;
 use tokio::{
     runtime::Handle,
     sync::{mpsc::Receiver, watch},
@@ -28,7 +29,7 @@ use tokio::{
 };
 use xone_consensus::verify::Body;
 use xone_net::{
-    eth::{BlockAnnounce, BlockBody, GetHeaders, Message, Origin},
+    eth::{BlockBody, GetHeaders, Message, Origin},
     peers::{Event, Peers},
     rlpx::PeerId,
 };
@@ -61,6 +62,8 @@ pub struct Progress {
 struct Peer {
     version: u64,
     rank: u64,
+    /// The head the peer last advertised: its Status head, then its announcements.
+    head: B256,
 }
 
 enum Stage {
@@ -196,6 +199,12 @@ impl Follower {
         }
         let rest = &headers[1..];
         if rest.is_empty() {
+            // an empty continuation proves "caught up" only from a peer that advertises our head;
+            // a peer that claims more and serves nothing is set aside
+            if self.known.get(&peer).is_none_or(|p| p.head != head) {
+                self.ban(peer, "advertises a head it does not serve");
+                return;
+            }
             self.progress.confirmed.store(true, Ordering::Relaxed);
             self.progress.highest.fetch_max(number, Ordering::Relaxed);
             return;
@@ -251,10 +260,11 @@ impl Follower {
 
     async fn on_new_block(&mut self, peer: PeerId, nb: Box<xone_net::eth::NewBlock>) {
         let rank = u64::try_from(nb.td).unwrap_or(u64::MAX);
+        let h = nb.block.header;
         if let Some(p) = self.known.get_mut(&peer) {
             p.rank = p.rank.max(rank);
+            p.head = h.hash();
         }
-        let h = nb.block.header;
         self.progress.highest.fetch_max(h.number, Ordering::Relaxed);
         let (number, head) = self.core.head();
         if h.number <= number {
@@ -329,17 +339,27 @@ impl Follower {
                 peer,
                 version,
                 rank,
+                head,
                 ..
             } => {
                 eprintln!(
                     "chain: peer {} connected, eth/{version}, rank {rank}",
                     short(&peer)
                 );
-                self.known.insert(peer, Peer { version, rank });
+                self.known.insert(
+                    peer,
+                    Peer {
+                        version,
+                        rank,
+                        head,
+                    },
+                );
                 self.kick();
             }
             Event::Disconnected { peer } => {
                 self.known.remove(&peer);
+                // the proof was bound to a peer session
+                self.progress.confirmed.store(false, Ordering::Relaxed);
                 if self.inflight.as_ref().is_some_and(|i| i.peer == peer) {
                     self.inflight = None;
                 }
@@ -359,11 +379,11 @@ impl Follower {
                 }
                 Message::NewBlock(nb) => self.on_new_block(peer, nb).await,
                 Message::NewBlockHashes(list) => {
-                    if let Some(m) = list
-                        .iter()
-                        .map(|BlockAnnounce { number, .. }| *number)
-                        .max()
-                    {
+                    if let Some(a) = list.iter().max_by_key(|a| a.number) {
+                        let m = a.number;
+                        if let Some(p) = self.known.get_mut(&peer) {
+                            p.head = a.hash;
+                        }
                         self.progress.highest.fetch_max(m, Ordering::Relaxed);
                         if m > self.core.head().0 {
                             self.progress.confirmed.store(false, Ordering::Relaxed);

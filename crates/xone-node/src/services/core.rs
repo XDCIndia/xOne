@@ -549,32 +549,42 @@ impl Core {
         if out != Outcome::Extended {
             return Ok(out);
         }
-        let p = self
-            .hist
-            .pending()
-            .take()
-            .filter(|p| p.hash == hash)
-            .ok_or_else(|| CoreError::Inconsistent(format!("no execution record for {hash}")))?;
-        let (mut snap, mut gap, mut err) = (p.snap, None, None);
-        let want_gap = self.hist.read().is_gap_block(number);
-        self.chain
-            .reader()
-            .with_state(hash, &mut |s| {
-                if let Some(sn) = snap.as_mut() {
-                    err = reseed(&self.spec, sn, &Dyn(s), number).err();
-                }
-                if want_gap && err.is_none() {
-                    match gap_snapshot::build(&Dyn(s), number) {
-                        Ok(g) => gap = Some(g),
-                        Err(e) => err = Some(e.to_string()),
+        // The block is committed. If its history context cannot be built, rewind the chain to the
+        // parent so the store head and the history tip stay the same block.
+        let derived = (|| -> Result<_, CoreError> {
+            let mut p = self
+                .hist
+                .pending()
+                .take()
+                .filter(|p| p.hash == hash)
+                .ok_or_else(|| {
+                    CoreError::Inconsistent(format!("no execution record for {hash}"))
+                })?;
+            let (mut snap, mut gap, mut err) = (p.snap.take(), None, None);
+            let want_gap = self.hist.read().is_gap_block(number);
+            self.chain
+                .reader()
+                .with_state(hash, &mut |s| {
+                    if let Some(sn) = snap.as_mut() {
+                        err = reseed(&self.spec, sn, &Dyn(s), number).err();
                     }
-                }
-            })
-            .map_err(|e| CoreError::Inconsistent(e.to_string()))?;
-        if let Some(e) = err {
-            return Err(CoreError::Inconsistent(format!("block {number}: {e}")));
-        }
-        let miner = miner_of(&self.spec, &header)?;
+                    if want_gap && err.is_none() {
+                        match gap_snapshot::build(&Dyn(s), number) {
+                            Ok(g) => gap = Some(g),
+                            Err(e) => err = Some(e.to_string()),
+                        }
+                    }
+                })
+                .map_err(|e| CoreError::Inconsistent(e.to_string()))?;
+            if let Some(e) = err {
+                return Err(CoreError::Inconsistent(format!("block {number}: {e}")));
+            }
+            let miner = miner_of(&self.spec, &header)?;
+            Ok((p, snap, gap, miner))
+        })();
+        let (p, snap, gap, miner) = derived.inspect_err(|_| {
+            let _ = self.chain.set_head(number - 1);
+        })?;
         self.hist.write().push(
             Stored {
                 hash,
