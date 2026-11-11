@@ -42,7 +42,7 @@ const MUTANTS: &[(&str, &[Edit], &str, &str)] = &[
     ),
     (
         "highest QC: the QC is not handed to the driver to store",
-        &[("v2/bft/mod.rs", "            fx.push(Effect::Store(syncinfo::originate(self)));\n", "")],
+        &[("v2/bft/mod.rs", "            self.rec.observe_qc(block_ref(info), None);\n            fx.push(Effect::Store(syncinfo::originate(self)));\n", "            self.rec.observe_qc(block_ref(info), None);\n")],
         "xone-consensus",
         "bft_machine",
     ),
@@ -56,8 +56,6 @@ const MUTANTS: &[(&str, &[Edit], &str, &str)] = &[
     ("sim: the lock check is dropped (rule and safety unit)", &[("v2/bft/rule.rs", "        Ok(Verdict::No(Why::NotExtended))", "        Ok(Verdict::Vote { extends_lock: true })"), ("v2/safety.rs", "                if !(i.ctx.qc_round > l.round || i.ctx.extends_lock) {", "                if false {")], "xone-sim", "bft_seeds"),
     ("sim: duplicate votes are counted", &[("v2/pool.rs", "        if entries.iter().any(|(a, _)| *a == signer) {", "        if false {")], "xone-sim", "bft_seeds"),
     ("sim: send before persist", &[("v2/bft/mod.rs", "                if next != self.rec {\n                    fx.push(Effect::PersistIntent {\n                        intent,\n                        record: next.clone(),\n                    });\n                    self.rec = next;\n                }\n                fx.push(Effect::Sign(intent));\n                fx.push(Effect::Send(out));", "                fx.push(Effect::Sign(intent));\n                fx.push(Effect::Send(out));\n                if next != self.rec {\n                    fx.push(Effect::PersistIntent {\n                        intent,\n                        record: next.clone(),\n                    });\n                    self.rec = next;\n                }")], "xone-sim", "bft_seeds"),
-    ("sim: the QC is not handed to the driver to store", &[("v2/bft/mod.rs", "            fx.push(Effect::Store(syncinfo::originate(self)));\n", "")], "xone-sim", "bft_seeds"),
-    ("sim: the TC is not handed to the driver to store", &[("v2/bft/mod.rs", "            self.rec.observe_tc(tc.round);\n            fx.push(Effect::Store(syncinfo::originate(self)));\n", "            self.rec.observe_tc(tc.round);\n")], "xone-sim", "bft_seeds"),
     ("sim: a forged SyncInfo is accepted", &[("v2/syncinfo.rs", "    if let Err(e) = verify(m, c, qc, tc) {", "    let checked = verify(m, c, qc, tc);\n    let checked: Result<(), Error> = if checked.is_err() { Ok(()) } else { checked };\n    if let Err(e) = checked {")], "xone-sim", "bft_seeds"),
 ];
 
@@ -76,7 +74,9 @@ fn the_bft_tests_and_the_simulator_catch_every_mutant() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let target = root.join("../../target/bft-mutants");
     let mut survivors = vec![];
-    for (name, edits, package, test) in MUTANTS {
+    // ponytail: `MUTANT_FILTER=<text>` runs the mutants whose name has the text (test code only)
+    let filter = std::env::var("MUTANT_FILTER").unwrap_or_default();
+    for (name, edits, package, test) in MUTANTS.iter().filter(|m| m.0.contains(&filter)) {
         let mut saved = vec![];
         let mut files: Vec<(PathBuf, String)> = vec![];
         for (file, from, to) in *edits {

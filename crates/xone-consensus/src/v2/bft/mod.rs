@@ -17,7 +17,8 @@
 //!   the safety record). A QC or TC that a node formed from votes or timeouts is in no block until a
 //!   leader includes it; if the node restarts and loses it while its record says it moved past that round,
 //!   it cannot sign a timeout for the round the others are in (ADR-010 section 7), and when the others need
-//!   that timeout the network stops. At start the driver feeds the stored SyncInfo back as
+//!   that timeout the network stops. The driver keeps, for each of the two, the certificate of the higher
+//!   round (a restart itself emits a lower one first). At start the driver feeds the stored SyncInfo back as
 //!   `Event::SyncInfo` with no peer; it is verified like any other (found by the simulator, seeds 806 and
 //!   1983).
 //!

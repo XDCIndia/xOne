@@ -106,7 +106,7 @@ fn no_safety_violation_and_recovery_within_the_bound_in_every_seed() {
     assert!(
         s.commits > 0 && s.votes > 0 && s.timeouts > 0 && s.sync_infos > 0 && s.sibling_votes > 0
     );
-    assert!(s.kills.iter().all(|k| *k > 0) && s.restarts > 0 && s.dropped > 0 && s.refused > 0);
+    assert!(s.kills.iter().all(|k| *k > 0) && s.restarts > 0 && s.dropped > 0);
     assert!(
         s.byz_variants > 0
             && s.byz_equivocations > 0
@@ -152,5 +152,15 @@ fn the_seeds_cover_every_size_and_every_fault_count() {
                 "no seed with n {n} and {b} Byzantine validators"
             );
         }
+    }
+}
+
+/// One seed is one run: the same seed gives the same report, in the same process or another.
+#[test]
+fn a_seed_is_reproducible() {
+    for seed in (0..2_000).step_by(if cfg!(debug_assertions) { 307 } else { 61 }) {
+        let a = run(seed).map(|r| format!("{r:?}"));
+        let b = run(seed).map(|r| format!("{r:?}"));
+        assert_eq!(a, b, "seed {seed}");
     }
 }

@@ -814,7 +814,32 @@ impl Sim {
                     }
                 }
                 Effect::Commit(link) => self.on_commit(id, link)?,
-                Effect::Store(si) => self.nodes[id].stored = Some(si),
+                Effect::Store(si) => {
+                    // per field, the certificate of the higher round: a restart seeds a lower one first
+                    let n = &mut self.nodes[id];
+                    n.stored = Some(match n.stored.take() {
+                        None => si,
+                        Some(old) => SyncInfo {
+                            highest_quorum_cert: if old
+                                .highest_quorum_cert
+                                .proposed_block_info
+                                .round
+                                >= si.highest_quorum_cert.proposed_block_info.round
+                            {
+                                old.highest_quorum_cert
+                            } else {
+                                si.highest_quorum_cert
+                            },
+                            highest_timeout_cert: if old.highest_timeout_cert.round
+                                >= si.highest_timeout_cert.round
+                            {
+                                old.highest_timeout_cert
+                            } else {
+                                si.highest_timeout_cert
+                            },
+                        },
+                    });
+                }
                 Effect::ScorePeer { peer, offence } => {
                     let peer = usize::try_from(peer).map_err(|e| e.to_string())?;
                     if !self.nodes[peer].byz {
@@ -1070,7 +1095,7 @@ impl Sim {
                 .difference(&self.nodes[id].have)
                 .filter_map(|h| self.w.blocks.get(h).cloned())
                 .collect();
-            missing.sort_by_key(|h| h.number);
+            missing.sort_by_key(|h| (h.number, h.hash));
             for h in missing {
                 let p = self.w.proposer[&h.hash];
                 self.send(peer, id, Arc::new(Msg::Block(h, p)));

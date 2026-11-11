@@ -69,7 +69,7 @@ A run goes on for 100 ticks after the recovery so that the safety checks see the
 
 ## Mutants
 
-`xone-consensus/tests/bft_mutants.rs` edits the source, runs the tests, restores the files. The simulator catches: the lock check dropped from the voting rule and from the safety unit (the vote oracle of item 3 and a conflicting commit), duplicate votes counted (a Byzantine validator's signature variants make a QC with no quorum: item 5), a signature sent before it is persisted (item 4), a SyncInfo that is accepted when it does not verify (item 5). The vectors and `tests/bft_machine.rs` catch the rule-level mutants (the lock check in the voting rule alone is also caught by the vectors; the simulator does not notice it, because the safety unit repeats the check).
+`xone-consensus/tests/bft_mutants.rs` edits the source, runs the tests, restores the files (`MUTANT_FILTER=<text>` selects some). The simulator, in a debug build with its 300 seeds, catches: the lock check dropped from the voting rule and from the safety unit (the vote oracle of item 3), duplicate votes counted (a Byzantine validator's signature variants make a QC with no quorum: item 5), a signature sent before it is persisted (item 4), and a SyncInfo that is accepted when it does not verify (item 5). The vectors and `tests/bft_machine.rs` catch the rule-level mutants (the lock check in the voting rule alone is caught by the vectors; the simulator does not notice it, because the safety unit repeats the check) and the mutants that stop the machine from handing its QC or TC to the driver. The simulator catches those last two only in the 10,000-seed release run (seeds 806 and 1983), not in the 300 debug seeds.
 
 ## Limits
 

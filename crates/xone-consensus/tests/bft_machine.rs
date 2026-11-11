@@ -408,6 +408,11 @@ fn enough_timeouts_make_a_tc_move_the_round_and_send_syncinfo() {
     assert_eq!(rounds(&fx), [(2, 2)]);
     assert!(matches!(sends(&fx)[..], [Outbound::SyncInfo(_)]));
     assert_eq!(m.highest_tc().round, 1);
+    assert!(
+        fx.iter()
+            .any(|e| matches!(e, Effect::Store(si) if si.highest_timeout_cert.round == 1)),
+        "the TC is handed to the driver to store: {fx:?}"
+    );
     assert_eq!(
         m.pooled().1,
         0,
