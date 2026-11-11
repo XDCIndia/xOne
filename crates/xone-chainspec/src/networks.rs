@@ -179,6 +179,21 @@ pub fn load_named(name: &'static str, json: &str) -> Result<ChainSpec, Error> {
         .networks
         .remove(name)
         .ok_or(Error::MissingNetwork(name))?;
+    spec_of(raw)
+}
+
+/// The one network of a fork table of a private chain (`--chainspec`): the same table format as the built-in
+/// networks, with exactly one entry. The caller decides which chain ids it accepts.
+pub fn load_custom(json: &str) -> Result<ChainSpec, Error> {
+    let file: RawFile = serde_json::from_str(json)?;
+    let mut rows = file.networks.into_values();
+    match (rows.next(), rows.next()) {
+        (Some(raw), None) => spec_of(raw),
+        _ => Err(Error::MissingNetwork("exactly one network")),
+    }
+}
+
+fn spec_of(raw: RawNetwork) -> Result<ChainSpec, Error> {
     let x = raw.xdpos;
     let switch_block =
         x.v2.switch_block

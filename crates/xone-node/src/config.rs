@@ -63,6 +63,8 @@ pub struct Config {
     pub datadir: PathBuf,
     pub identity: Option<String>,
     pub override_genesis: Option<PathBuf>,
+    /// Fork table of a private chain (`--chainspec`); the table format of `generated/forks.json` with one network.
+    pub chainspec: Option<PathBuf>,
     /// `name:secret@host:port`, as geth.
     pub ethstats: Option<String>,
     pub sync: SyncCfg,
@@ -150,6 +152,8 @@ pub struct Mining {
     pub etherbase: Option<String>,
     /// File with the account password. The password itself is never a flag or a key.
     pub password_file: Option<PathBuf>,
+    /// Keystore file of the validator key (`--keystore`). Block production needs it and the password file.
+    pub keystore: Option<PathBuf>,
     pub unlock: Vec<String>,
 }
 
@@ -206,6 +210,7 @@ defaults!(Config {
     datadir: PathBuf::from("xone-data"),
     identity: None,
     override_genesis: None,
+    chainspec: None,
     ethstats: None,
     sync: SyncCfg::default(),
     p2p: P2p::default(),
@@ -269,6 +274,7 @@ defaults!(Mining {
     mine: false,
     etherbase: None,
     password_file: None,
+    keystore: None,
     unlock: vec![]
 });
 defaults!(Logging { verbosity: 3 });
@@ -348,6 +354,7 @@ impl Config {
             "networkid" => self.network_id = Some(num(key, v)?),
             "identity" => self.identity = Some(v.to_owned()),
             "override.genesis" => self.override_genesis = Some(v.into()),
+            "chainspec" => self.chainspec = Some(v.into()),
             "ethstats" => self.ethstats = Some(v.to_owned()),
             "xdcmainnet" | "apothem" | "xdcdevnet" => {
                 if flag(key, v)? {
@@ -390,6 +397,7 @@ impl Config {
             "mine" => self.mining.mine = flag(key, v)?,
             "miner.etherbase" => self.mining.etherbase = Some(v.to_owned()),
             "password" => self.mining.password_file = Some(v.into()),
+            "keystore" => self.mining.keystore = Some(v.into()),
             "unlock" => self.mining.unlock = list(v),
             "verbosity" => {
                 let n: u8 = num(key, v)?;

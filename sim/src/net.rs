@@ -457,6 +457,7 @@ fn kind_idx(k: Kind) -> u8 {
         Kind::Vote => 0,
         Kind::Timeout => 1,
         Kind::Propose => 2,
+        Kind::SealV1 => 3,
     }
 }
 

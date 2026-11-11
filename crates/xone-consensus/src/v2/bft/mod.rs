@@ -42,6 +42,7 @@ use super::{
     Error,
 };
 
+pub mod drive;
 pub mod rule;
 pub mod timeout;
 pub mod vote;

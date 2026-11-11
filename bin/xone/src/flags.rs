@@ -343,6 +343,14 @@ pub const FLAGS: &[Flag] = &[
         "flags.go:672",
     ),
     f(
+        "keystore",
+        P,
+        "unset",
+        "/d/ks.json",
+        "Keystore file of the validator key. Block production (--mine) needs it with --password, and is refused on chain ids 50 and 51 in this build.",
+        "flags.go:124 ; xone",
+    ),
+    f(
         "ethstats",
         S,
         "unset",
@@ -365,6 +373,14 @@ pub const FLAGS: &[Flag] = &[
         "/g.json",
         "Genesis file; the datadir is initialised from it on first start.",
         "flags.go:294 ; xone",
+    ),
+    f(
+        "chainspec",
+        P,
+        "unset",
+        "/forks.json",
+        "Fork table of a private chain (one network, the format of generated/forks.json); refused for chain ids 50 and 51.",
+        "not in geth-XDC; xone-defined",
     ),
     f(
         "xdcmainnet",
