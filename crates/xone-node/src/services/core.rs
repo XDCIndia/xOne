@@ -176,7 +176,7 @@ impl BlockExecutor for NodeExec {
             receipts: out.receipt_encodings,
             state_root: out.state_root,
             gas_used: out.gas_used,
-            access_list_hash: None,
+            access_list_hash: out.bal_hash,
             aux: Bytes::new(),
         })
     }

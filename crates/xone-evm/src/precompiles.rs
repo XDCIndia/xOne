@@ -11,7 +11,7 @@ use revm::{
     handler::PrecompileProvider,
     interpreter::{CallInputs, Gas, InstructionResult, InterpreterResult},
     precompile::{
-        blake2, bls12_381, bn254, modexp, u64_to_address, Precompile, PrecompileError,
+        blake2, bls12_381, bn254, modexp, secp256r1, u64_to_address, Precompile, PrecompileError,
         PrecompileHalt, PrecompileId, PrecompileOutput, PrecompileResult, PrecompileStatus,
         Precompiles,
     },
@@ -66,6 +66,8 @@ pub struct PrecompileRow {
     pub byzantium: bool,
     pub istanbul: bool,
     pub prague: bool,
+    /// MODEXP priced by EIP-7883 and P256VERIFY at 0x100 (geth `PrecompiledContractsXDCOsaka`).
+    pub osaka: bool,
     pub modexp_eip2565: bool,
     pub xdcx: bool,
 }
@@ -76,6 +78,7 @@ pub fn row(spec: &ChainSpec, rules: &XdcRules, n: u64) -> PrecompileRow {
         byzantium: spec.byzantium.is_active(n),
         istanbul: spec.is_istanbul(n) || spec.berlin.is_active(n) || spec.cancun.is_active(n),
         prague: spec.prague.is_active(n),
+        osaka: spec.osaka.is_active(n),
         modexp_eip2565: rules.modexp_eip2565,
         xdcx: rules.xdcx_precompiles,
     }
@@ -111,6 +114,9 @@ impl PrecompileRow {
                 KZG_POINT_EVALUATION,
                 kzg_unsupported,
             )]);
+        }
+        if self.osaka {
+            p.extend([modexp::OSAKA, secp256r1::P256VERIFY_OSAKA]);
         }
         if self.xdcx {
             p.extend([

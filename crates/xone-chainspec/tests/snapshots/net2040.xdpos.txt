@@ -1,0 +1,36 @@
+XdposConfig {
+    period: 2,
+    epoch: 900,
+    reward: 5000,
+    reward_checkpoint: 900,
+    gap: 450,
+    foundation_wallet: 0x1c1d49ed32312a524bf996f4adb08b4ccf573112,
+    max_masternodes_v2: 108,
+    v2: Some(
+        V2 {
+            switch_block: 10800,
+            switch_epoch: 12,
+            configs: {
+                0: V2Config {
+                    mine_period: 2,
+                    timeout_sync_threshold: 3,
+                    timeout_period: 60,
+                    cert_threshold: 0.667,
+                    max_masternodes: 108,
+                    max_protector_nodes: 432,
+                    max_observer_nodes: 99999,
+                    masternode_reward: 63.4196,
+                    protector_reward: 50.7357,
+                    observer_reward: 25.3678,
+                    minimum_miner_block_per_epoch: 5,
+                    limit_penalty_epoch: 5,
+                    minimum_signing_tx: 30,
+                    exp_timeout: ExpTimeoutConfig {
+                        base: 1.0,
+                        max_exponent: 0,
+                    },
+                },
+            },
+        },
+    ),
+}

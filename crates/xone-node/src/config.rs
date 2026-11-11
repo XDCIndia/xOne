@@ -26,13 +26,14 @@ pub enum ConfigError {
     Toml(String),
 }
 
-/// Built-in network selected by `--xdcmainnet`, `--apothem` or `--xdcdevnet`.
+/// Built-in network selected by `--xdcmainnet`, `--apothem`, `--xdcdevnet`, `--net2040` or `--network`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Profile {
     Mainnet,
     Apothem,
     Devnet,
+    Net2040,
 }
 
 impl Profile {
@@ -41,6 +42,7 @@ impl Profile {
             Self::Mainnet => Network::Mainnet,
             Self::Apothem => Network::Apothem,
             Self::Devnet => Network::Devnet,
+            Self::Net2040 => Network::Net2040,
         }
     }
 }
@@ -337,14 +339,30 @@ impl Config {
             "identity" => self.identity = Some(v.to_owned()),
             "override.genesis" => self.override_genesis = Some(v.into()),
             "ethstats" => self.ethstats = Some(v.to_owned()),
-            "xdcmainnet" | "apothem" | "xdcdevnet" => {
+            "xdcmainnet" | "apothem" | "xdcdevnet" | "net2040" => {
                 if flag(key, v)? {
                     self.profile = Some(match key {
                         "xdcmainnet" => Profile::Mainnet,
                         "apothem" => Profile::Apothem,
+                        "net2040" => Profile::Net2040,
                         _ => Profile::Devnet,
                     });
                 }
+            }
+            "network" => {
+                self.profile = Some(match v {
+                    "mainnet" => Profile::Mainnet,
+                    "apothem" => Profile::Apothem,
+                    "devnet" => Profile::Devnet,
+                    "net2040" => Profile::Net2040,
+                    _ => {
+                        return Err(ConfigError::Invalid {
+                            key: key.to_owned(),
+                            value: v.to_owned(),
+                            why: "one of mainnet, apothem, devnet, net2040",
+                        })
+                    }
+                });
             }
             "syncmode" => self.sync.mode = one_of(key, v, &["snap", "fast", "full"])?,
             "gcmode" => self.sync.gcmode = one_of(key, v, &["full", "archive"])?,

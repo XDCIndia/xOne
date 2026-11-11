@@ -115,6 +115,14 @@ impl<'a, S: StateRead, E: Env> Overlay<'a, S, E> {
         self.set(a, acc, eip158).map(|_| ())
     }
 
+    /// geth `SetCode`: the account is created if it does not exist; balance, nonce and storage stay.
+    pub fn set_code(&mut self, a: Address, code: Bytes) -> Result<(), OverlayError> {
+        let mut acc = self.account(a).unwrap_or_else(blank);
+        acc.code_hash = alloy_primitives::keccak256(&code);
+        self.codes.insert(acc.code_hash, code);
+        self.set(a, acc, true).map(|_| ())
+    }
+
     pub fn set_nonce(&mut self, a: Address, nonce: u64) -> Result<(), OverlayError> {
         let mut acc = self.account(a).unwrap_or_else(blank);
         acc.nonce = nonce;

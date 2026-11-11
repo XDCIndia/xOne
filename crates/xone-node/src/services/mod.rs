@@ -5,6 +5,7 @@ pub mod hist;
 pub mod net;
 pub mod pool;
 pub mod rpc;
+pub mod stats;
 pub mod store;
 
 use alloy_primitives::Bytes;
@@ -98,6 +99,12 @@ pub fn build(
         chain::ChainService::new(core.clone(), rth.clone(), nh.clone(), pool.clone(), events);
     let progress = chain_svc.progress.clone();
     let pool_svc = pool::PoolService::new(pool.clone(), rth.clone());
+    let stats = Arc::new(stats::NodeStats {
+        core: core.clone(),
+        progress: progress.clone(),
+        pool: pool.clone(),
+        peers: nh.peers.clone(),
+    });
     let rpc_svc = rpc::RpcService::new(cfg, rth, core.clone(), progress, pool, nh.clone())?;
     let l = &cfg.limits;
     let mut node = crate::Node::new(
@@ -108,9 +115,40 @@ pub fn build(
     node.add(Box::new(chain_svc));
     node.add(Box::new(pool_svc));
     node.add(Box::new(rpc_svc));
+    if let Some(url) = &cfg.ethstats {
+        node.add(Box::new(crate::observe::ethstats::Ethstats::new(
+            crate::observe::ethstats::EthstatsCfg {
+                url: url.clone(),
+                allow_plaintext: false,
+                identity: identity(cfg, marker, stamp),
+            },
+            stats.clone(),
+            stats,
+        )));
+    }
     Ok(Built {
         node,
         net: nh,
         core,
     })
+}
+
+/// The hello frame's static facts. `node` and `client` are the build's one stamp.
+fn identity(
+    cfg: &crate::Config,
+    marker: &crate::datadir::Marker,
+    stamp: &str,
+) -> crate::observe::ethstats::Identity {
+    crate::observe::ethstats::Identity {
+        node: stamp.to_owned(),
+        client: stamp.to_owned(),
+        port: cfg.p2p.port,
+        net: cfg.network_id.unwrap_or(marker.chain_id).to_string(),
+        protocol: "eth/63, xdpos/100".into(),
+        os: std::env::consts::OS.into(),
+        os_v: std::env::consts::ARCH.into(),
+        sync_mode: "full".into(),
+        gc_mode: cfg.sync.gcmode.clone(),
+        state_scheme: "hash".into(),
+    }
 }

@@ -54,9 +54,11 @@ fn run(args: impl IntoIterator<Item = OsString>) -> ExitCode {
         Some(("export", s)) => return cmd::export(s),
         _ => {}
     }
-    let profiles = ["xdcmainnet", "apothem", "xdcdevnet"];
-    if profiles.iter().filter(|k| on(k)).count() > 1 {
-        eprintln!("xone: --xdcmainnet, --apothem and --xdcdevnet are mutually exclusive");
+    let profiles = ["xdcmainnet", "apothem", "xdcdevnet", "net2040"];
+    if profiles.iter().filter(|k| on(k)).count() + usize::from(m.contains_id("network")) > 1 {
+        eprintln!(
+            "xone: --xdcmainnet, --apothem, --xdcdevnet, --net2040 and --network are mutually exclusive"
+        );
         return ExitCode::from(2);
     }
     let mut cfg = match m.get_one::<String>("config") {

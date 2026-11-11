@@ -190,8 +190,14 @@ impl<DB: Database> Handler for XdcHandler<DB> {
     /// A special transaction (to 0x89 or 0x90) is exempt from the fee-cap floor: it is minted with
     /// a zero fee cap and geth skips `ErrFeeCapTooLow` for it (`core/state_transition.go:684`). revm's
     /// check compares against the block's base fee, so it runs against zero for such a transaction.
+    ///
+    /// Between London and `Eip1559Block` the header has no base fee and geth checks the fee cap
+    /// against none (`core/state_transition.go:681-684`, `st.evm.Context.BaseFee != nil`); the BASEFEE
+    /// opcode reports 12.5 gwei there ([`XdcRules::block_env`]), which must not reject a cheaper
+    /// transaction.
     fn validate_env(&self, evm: &mut Self::Evm) -> Result<(), Self::Error> {
-        if !is_special_tx(evm.ctx_ref().tx().kind().to().copied()) {
+        let priced = evm.ctx_ref().chain().rules.header_has_basefee;
+        if priced && !is_special_tx(evm.ctx_ref().tx().kind().to().copied()) {
             return revm::handler::validation::validate_env(evm.ctx());
         }
         let basefee = std::mem::take(&mut evm.ctx().block.basefee);

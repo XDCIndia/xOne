@@ -49,6 +49,8 @@ Source column: file:line in geth-XDC (`XDCIndia/go-ethereum` at `6fc8e8c2`; `fla
 | `--xdcmainnet` |  | false | XDC mainnet profile (chain 50). | flags.go:166 |
 | `--apothem` |  | false | XDC Apothem profile (chain 51). | flags.go:171 |
 | `--xdcdevnet` |  | false | XDC devnet profile (chain 5551). | flags.go:176 |
+| `--net2040` |  | false | XDC net2040 end-to-end devnet profile (chain 2040). | chainspec genesis/net2040.json ; xone |
+| `--network <string>` |  | unset | Built-in network by name: mainnet, apothem, devnet or net2040; same as the profile flags. | xone |
 | `--config <path>` |  | unset | TOML config file; flags override it. Not a config key. | cmd/geth/config.go:65 |
 | `--metrics` |  | false | Enable the metrics endpoint. | flags.go:1074 |
 | `--metrics.addr <string>` |  | 127.0.0.1 | Metrics listen address. | flags.go:1083 |

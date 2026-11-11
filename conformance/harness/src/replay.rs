@@ -295,6 +295,13 @@ fn compare(b: &Block, o: &BlockOutcome) -> Vec<Mismatch> {
     check("logsBloom", hex(h.bloom), hex(o.bloom));
     check("transactionsRoot", hex(h.tx_root), hex(o.tx_root));
     check("stateRoot", hex(h.state_root), hex(o.state_root));
+    if let Some(want) = h.block_access_list_hash {
+        check(
+            "blockAccessListHash",
+            hex(want),
+            o.bal_hash.map_or("none".into(), hex),
+        );
+    }
     if let Some(a) = b.archive_hash {
         check("hash", hex(a), hex(o.hash));
     }
