@@ -383,6 +383,7 @@ mod tests {
     /// One line per fork so any value change shows up as a diff of
     /// `tests/snapshots/<net>.txt`. Regenerate with `XONE_BLESS=1 cargo test`.
     #[test]
+    #[allow(clippy::disallowed_methods)] // test-only snapshot bless switch, never in a shipped path
     fn fork_rows_snapshot() {
         for net in Network::ALL {
             let spec = net.spec();
@@ -412,6 +413,7 @@ mod tests {
     /// change in `generated/forks.json` shows up as a diff of
     /// `tests/snapshots/<net>.xdpos.txt`. Regenerate with `XONE_BLESS=1 cargo test`.
     #[test]
+    #[allow(clippy::disallowed_methods)] // test-only snapshot bless switch, never in a shipped path
     fn xdpos_snapshot() {
         for net in Network::ALL {
             let got = format!("{:#?}\n", net.spec().xdpos);

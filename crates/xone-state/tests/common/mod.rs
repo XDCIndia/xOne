@@ -1,3 +1,9 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::as_conversions,
+    clippy::disallowed_methods
+)] // integration test: a panic is the failure report
 #![allow(dead_code)]
 use alloy_primitives::{hex, Address, B256, U256};
 use std::str::FromStr;

@@ -25,6 +25,40 @@ jobs:
       - run: cargo clippy --locked --all-targets -- -D warnings
       - run: cargo test --locked
 
+  # XA-10 / XB-02: the R3 rule checks, each proven by a failing fixture; the release tree check.
+  # Every command here is also run locally (docs/assurance/README.md); keep them in step.
+  assurance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/bin/cargo-deny
+            ~/.cargo/bin/cargo-audit
+            target
+          key: assurance-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+      - run: ci/check-fixtures.sh
+      - run: ci/check-layering.sh
+      - run: ci/check-layering.sh --fixtures
+      - run: command -v cargo-deny || cargo install cargo-deny --locked --version 0.20.2
+      - run: command -v cargo-audit || cargo install cargo-audit --locked --version 0.23.0
+      - run: cargo deny --locked check
+      - run: cargo audit --deny warnings
+      - run: RELEASE_TREE_REQUIRE_CLEAN=1 ci/check-release-tree.sh
+
+  # Plan #1 R3 rule 5, primitives part. Nightly is pinned to the date verified locally;
+  # raise it deliberately. Unit tests only (--lib): the integration tests read vector files, which
+  # miri isolation refuses, and they are untested under miri (about 14 min for --lib locally).
+  miri:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install nightly-2026-03-24 --profile minimal --component miri,rust-src
+      - run: cargo +nightly-2026-03-24 miri test -p xone-primitives --lib
+
   # The oracle fork is private. Without the deploy-key secret (forks, local
   # runs of the workflow) this job reports that it did nothing and passes; the
   # cheap parse-and-snapshot check of the committed table is in `cargo test`.

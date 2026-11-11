@@ -23,7 +23,9 @@ impl Network {
     pub const NAMES: [&'static str; 4] = ["mainnet", "apothem", "devnet", "devnet551"];
 
     pub fn name(self) -> &'static str {
-        Self::NAMES[self as usize]
+        #[allow(clippy::as_conversions)] // fieldless enum, discriminant indexes NAMES (same order)
+        let i = self as usize;
+        Self::NAMES[i]
     }
 
     /// The built-in spec, or the typed error of a damaged generated table.
@@ -33,6 +35,7 @@ impl Network {
 
     /// The built-in spec. `generated/forks.json` is part of the build and a
     /// test loads every network from it, so this cannot fail in a shipped binary.
+    #[allow(clippy::expect_used)] // forks.json is embedded and every network is loaded by a test
     pub fn spec(self) -> ChainSpec {
         self.try_spec()
             .expect("generated/forks.json is checked by the test suite")

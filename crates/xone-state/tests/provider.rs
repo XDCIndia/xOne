@@ -1,3 +1,9 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::as_conversions,
+    clippy::disallowed_methods
+)] // integration test: a panic is the failure report
 use alloy_primitives::{keccak256, Address, B256, U256};
 use xone_state::{
     Account, CommitError, MemFlat, Missing, StateDiff, StateProvider, StateRead, StateView,

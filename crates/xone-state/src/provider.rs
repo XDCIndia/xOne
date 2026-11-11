@@ -102,7 +102,7 @@ impl<F: FlatWrite> StateProvider<F> {
         let cs = diff.apply(&mut self.flat)?;
         self.chain.insert(number + 1, (hash, cs));
         self.by_hash.insert(hash, number + 1);
-        while self.chain.len() as u64 > self.retention {
+        while u64::try_from(self.chain.len()).unwrap_or(u64::MAX) > self.retention {
             if let Some((n, (h, _))) = self.chain.pop_first() {
                 self.by_hash.remove(&self.base.1);
                 self.base = (n, h);

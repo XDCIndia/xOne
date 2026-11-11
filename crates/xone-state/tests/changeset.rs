@@ -1,3 +1,9 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::as_conversions,
+    clippy::disallowed_methods
+)] // integration test: a panic is the failure report
 //! Changeset properties: apply N then revert N restores the state and the root; every retained
 //! block opens to exactly the state it had; a side block's view equals the diff applied to a copy.
 

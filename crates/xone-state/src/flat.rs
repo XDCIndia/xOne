@@ -31,10 +31,14 @@ impl FlatRead for MemFlat {
         self.accounts.get(&address).cloned()
     }
     fn storage(&self, address: Address, slot: B256) -> U256 {
-        self.storage
+        // an unset slot reads as zero (EVM semantics)
+        #[allow(clippy::disallowed_methods)]
+        let v = self
+            .storage
             .get(&(address, slot))
             .copied()
-            .unwrap_or_default()
+            .unwrap_or_default();
+        v
     }
     fn accounts(&self) -> Box<dyn Iterator<Item = (Address, Account)> + '_> {
         Box::new(self.accounts.iter().map(|(a, x)| (*a, x.clone())))

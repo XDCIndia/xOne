@@ -115,6 +115,8 @@ impl Genesis {
                     .balance
                     .as_deref()
                     .map_or(Ok(U256::ZERO), |b| quantity("balance", b))?,
+                // absent `code` in genesis JSON means empty code, as geth
+                #[allow(clippy::disallowed_methods)]
                 code: a.code.unwrap_or_default(),
                 storage: a.storage,
             };

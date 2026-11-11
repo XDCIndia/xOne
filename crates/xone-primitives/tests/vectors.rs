@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used)] // integration test: a panic is the failure report
 //! Header vectors exported from the archives by `conformance/exporter headers`.
 //! Every expected value here comes from the vector file: the archive's block
 //! hash and the values pinned geth-XDC computed for the header.

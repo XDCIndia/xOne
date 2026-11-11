@@ -1,0 +1,41 @@
+# cargo-deny policy (XB-02 / XA-10). Run: cargo deny --locked check
+[graph]
+all-features = false
+
+[advisories]
+version = 2
+yanked = "deny"
+# Each ignore names the advisory, the path and the reason; review it at the next dependency bump.
+ignore = [
+    { id = "RUSTSEC-2026-0387", reason = "k256 0.13 -> crypto-bigint 0.5.5 (xone-primitives, alloy-eip7702 via revm); the fix is crypto-bigint 0.7.6, which k256 0.13 cannot take. Owner review pending (#70)." },
+    { id = "RUSTSEC-2024-0436", reason = "paste 1.0.15 is an unmaintained proc-macro pulled in by alloy-primitives; build-time only, no runtime code. Re-check at the next alloy bump." },
+]
+
+[licenses]
+version = 2
+# Our crates are GPL-3.0-or-later; every dependency license below is compatible with it.
+allow = [
+    "GPL-3.0-or-later",
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "Unicode-3.0",
+    "Zlib",
+    "CC0-1.0",
+    "Unlicense",
+]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true # path dependencies inside the workspace
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# spikes/net pins reth by revision (tag v2.3.0); nothing shipped depends on it.
+allow-git = ["https://github.com/paradigmxyz/reth"]

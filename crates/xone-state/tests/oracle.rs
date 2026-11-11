@@ -1,3 +1,9 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::as_conversions,
+    clippy::disallowed_methods
+)] // integration test: a panic is the failure report
 //! Values printed by the geth-XDC oracle (`oracle/run.sh`, pin in `oracle/PIN`); nothing here is
 //! typed by hand. Also: the four genesis allocs against the chainspec's genesis state roots.
 

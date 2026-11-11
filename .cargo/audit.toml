@@ -1,0 +1,7 @@
+# cargo-audit policy: `cargo audit --deny warnings`. Same ignores and reasons as deny.toml.
+[advisories]
+ignore = [
+    "RUSTSEC-2026-0387", # k256 0.13 -> crypto-bigint 0.5.5; fix is 0.7.6, k256 0.13 cannot take it (#70)
+    "RUSTSEC-2024-0436", # paste 1.0.15 unmaintained proc-macro, via alloy-primitives, build-time only
+    "RUSTSEC-2024-0388", # derivative 2.2.0 unmaintained; in Cargo.lock via ark-ff but not compiled for any target (cargo tree -i is empty)
+]
