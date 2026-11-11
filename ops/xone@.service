@@ -1,0 +1,28 @@
+[Unit]
+Description=xone XDC node (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+# %i = network instance: mainnet | apothem | devnet (or a custom name with GENESIS and CHAINID in the env file)
+Environment=NETWORK=%i
+# Secrets (ETHSTATS_SECRET) live only in this file: chmod 600, owner root.
+EnvironmentFile=-/etc/xone/%i.env
+ExecStart=/opt/xone/run-xone.sh
+# SIGTERM is the bounded stop: the node exits in 5 s or less (limits.stop_timeout_ms).
+# TimeoutStopSec leaves margin, then systemd sends SIGKILL.
+KillSignal=SIGTERM
+TimeoutStopSec=15
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+# Cap from the xOneGo operator record (a 30 GB blow-up on a shared host). Tune per host.
+MemoryMax=15G
+User=xone
+Group=xone
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
