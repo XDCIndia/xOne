@@ -5,6 +5,7 @@
 pub mod chain;
 pub mod penalty;
 pub mod reward;
+pub mod unit;
 pub mod v1;
 pub mod v2;
 pub mod verify;

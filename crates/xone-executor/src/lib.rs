@@ -154,7 +154,6 @@ pub fn execute_block<V: StateRead, E: Env>(
     body: &Body,
     ctx: &ExecCtx<'_, E>,
 ) -> Result<BlockOutcome, ExecError> {
-    let number = header.number;
     // geth `engine.VerifyHeader` and `eip1559.VerifyEIP1559Header`: before any state is touched.
     match (ctx.verify, ctx.derive) {
         (VerifyContext::V2(c), Some(derive)) => {
@@ -162,10 +161,40 @@ pub fn execute_block<V: StateRead, E: Env>(
         }
         _ => HeaderVerifier::new(spec).verify(header, ctx.parent, u64::MAX, ctx.verify)?,
     }
-    basefee::verify(spec, number, header.base_fee)?;
+    basefee::verify(spec, header.number, header.base_fee)?;
+    let author = block_author(spec, header)?;
+    run_block(spec, parent_view, header, author, body, ctx.parent, ctx.env)
+}
+
+/// The producer's execution of a block it is building (XB-23): everything `execute_block` does after the
+/// header checks, for a header whose roots and seal do not exist yet. `author` is the creator that the
+/// seal will name. The sealed block is imported through `execute_block` in full, so no check is skipped
+/// for a block that leaves the node: this only computes the roots to put in the header.
+pub fn execute_unsealed<V: StateRead, E: Env>(
+    spec: &ChainSpec,
+    parent_view: &V,
+    header: &Header,
+    author: Address,
+    body: &Body,
+    parent: &Header,
+    env: &E,
+) -> Result<BlockOutcome, ExecError> {
+    basefee::verify(spec, header.number, header.base_fee)?;
+    run_block(spec, parent_view, header, author, body, parent, env)
+}
+
+fn run_block<V: StateRead, E: Env>(
+    spec: &ChainSpec,
+    parent_view: &V,
+    header: &Header,
+    author: Address,
+    body: &Body,
+    parent: &Header,
+    env: &E,
+) -> Result<BlockOutcome, ExecError> {
+    let number = header.number;
     let r = rules(spec, number)?;
     let eip158 = spec.eip158.is_active(number);
-    let author = block_author(spec, header)?;
     let txs = body
         .transactions
         .iter()
@@ -175,7 +204,7 @@ pub fn execute_block<V: StateRead, E: Env>(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    let mut overlay = Overlay::new(parent_view, ctx.env);
+    let mut overlay = Overlay::new(parent_view, env);
     // `ApplyTIPSigningHardFork`, `core/state_processor.go:152`, `:321-327`: before the first transaction.
     if let Some(wiped) = tip_signing_wipe(spec, number) {
         overlay.delete(wiped);
@@ -204,7 +233,7 @@ pub fn execute_block<V: StateRead, E: Env>(
     let mut evm = build_evm_with_rules(overlay, spec, r.clone(), &block, owner);
     // geth-XDC `BigBalance` (`core/state/state_object.go`): the journal carries the true balance of
     // every wide account in a side map that lives for the whole block (`xone_evm::journal`).
-    for (a, w) in ctx.env.wide_balances() {
+    for (a, w) in env.wide_balances() {
         evm.ctx.journaled_state.side.insert(a, w);
     }
 
@@ -311,7 +340,7 @@ pub fn execute_block<V: StateRead, E: Env>(
         }
         db.debit(issuer, total_fee_used, eip158)?;
     }
-    pay_checkpoint_reward(spec, ctx, parent_view, header, db, eip158)?;
+    pay_checkpoint_reward(spec, parent, env, parent_view, header, db, eip158)?;
 
     let signs = txs
         .iter()
@@ -431,7 +460,8 @@ fn prague_pre_execution<S: xone_state::StateRead, E: Env>(
 /// and burnt totals in the MintedRecord contract (`:173-212`).
 fn pay_checkpoint_reward<V: StateRead, E: Env>(
     spec: &ChainSpec,
-    ctx: &ExecCtx<'_, E>,
+    parent: &Header,
+    env: &E,
     parent_view: &V,
     header: &Header,
     db: &mut Overlay<'_, V, E>,
@@ -448,7 +478,7 @@ fn pay_checkpoint_reward<V: StateRead, E: Env>(
     if !due || number <= period || v2.is_some_and(|v| number == v.switch_block.saturating_add(1)) {
         return Ok(());
     }
-    let root = ctx.parent.state_root;
+    let root = parent.state_root;
     let missing = |n| chain::Error::Missing {
         what: "epoch-switch header",
         number: n,
@@ -460,20 +490,18 @@ fn pay_checkpoint_reward<V: StateRead, E: Env>(
     if !is_v2_block {
         let at = reward_v1::locate(spec, number)?;
         let blocks =
-            SignTxCounter::new(ctx.env).collect((header.parent_hash, number - 1), at.start)?;
-        let masternodes = ctx
-            .env
+            SignTxCounter::new(env).collect((header.parent_hash, number - 1), at.start)?;
+        let masternodes = env
             .masternodes_at(at.checkpoint)
             .ok_or(missing(at.checkpoint))?;
         let window = RewardWindow::new(at.start, at.end, blocks, masternodes, vec![], vec![])?;
         let holders = Holders::read(root, parent_view, window.masternodes().iter().copied());
         paid = reward_v1::rewards(spec, number, &window, &holders, root)?;
     } else {
-        let at = reward_v2::locate(spec, ctx.env, number, header.parent_hash)?;
+        let at = reward_v2::locate(spec, env, number, header.parent_hash)?;
         let blocks =
-            SignTxCounter::new(ctx.env).collect((header.parent_hash, number - 1), at.start)?;
-        let masternodes = ctx
-            .env
+            SignTxCounter::new(env).collect((header.parent_hash, number - 1), at.start)?;
+        let masternodes = env
             .masternodes_at(at.switch.1)
             .ok_or(missing(at.switch.1))?;
         match reward::rule(spec, number) {
@@ -491,8 +519,7 @@ fn pay_checkpoint_reward<V: StateRead, E: Env>(
                     .map_err(|_| ExecError::NoV2Fields(number))?
                     .round;
                 let cfg = tiered::config(spec, round)?;
-                let pool = ctx
-                    .env
+                let pool = env
                     .standby_pool(at.switch.1)
                     .ok_or(ExecError::NoStandby(at.switch.1))?;
                 let (protectors, observers) = tiered::tiers(cfg, &pool);
@@ -513,7 +540,7 @@ fn pay_checkpoint_reward<V: StateRead, E: Env>(
                 let holders = Holders::read(root, parent_view, nodes);
                 paid = tiered::rewards(spec, number, cfg, &window, &holders, root)?;
                 for n in at.end + 1..number {
-                    burned += ctx.env.burn(n).ok_or(ExecError::NoBurn(n))?;
+                    burned += env.burn(n).ok_or(ExecError::NoBurn(n))?;
                 }
                 let v = v2.ok_or(chain::Error::NoV2)?;
                 epoch_number = v.switch_epoch + round / spec.xdpos.epoch;

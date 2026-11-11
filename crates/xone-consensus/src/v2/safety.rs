@@ -10,6 +10,9 @@ pub enum Kind {
     Vote = 1,
     Timeout = 2,
     Propose = 3,
+    /// A V1 block seal (M1) or co-signature (M2), keyed by block number: its own slot, because V2
+    /// rounds and V1 heights are different counters and a height never bounds a round.
+    SealV1 = 4,
 }
 
 impl Kind {
@@ -93,16 +96,16 @@ pub struct SafetyRecord {
     pub seq: u64,
     /// Highest round of a vote or a timeout. A vote needs a round above it.
     pub highest_voted_round: u64,
-    /// Highest signed round and digest, indexed by `Kind` (vote, timeout, propose).
-    pub signed: [Slot; 3],
+    /// Highest signed round and digest, indexed by `Kind` (vote, timeout, propose, V1 seal).
+    pub signed: [Slot; 4],
     pub lock_qc: Option<BlockRef>,
     pub highest_qc: BlockRef,
     pub highest_tc: u64,
 }
 
-pub const RECORD_LEN: usize = 299;
+pub const RECORD_LEN: usize = 339;
 const MAGIC: &[u8; 4] = b"XSR1";
-const VERSION: u16 = 1;
+const VERSION: u16 = 2;
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum DecodeError {
@@ -124,17 +127,17 @@ impl SafetyRecord {
             identity,
             seq: 0,
             highest_voted_round: 0,
-            signed: [Slot::default(); 3],
+            signed: [Slot::default(); 4],
             lock_qc: None,
             highest_qc: BlockRef::default(),
             highest_tc: 0,
         }
     }
 
-    /// All integers little endian. Layout (299 bytes):
+    /// All integers little endian. Layout (339 bytes):
     /// magic 4 | version 2 | identity 20 | seq 8 | highest_voted_round 8 |
-    /// 3 x (round 8 | digest 32) | lock flag 1 | lock QC 48 | highest QC 48 |
-    /// highest_tc 8 | keccak256 of the preceding 267 bytes.
+    /// 4 x (round 8 | digest 32) | lock flag 1 | lock QC 48 | highest QC 48 |
+    /// highest_tc 8 | keccak256 of the preceding 307 bytes.
     /// A QC is `hash 32 | round 8 | number 8`.
     pub fn encode(&self) -> Vec<u8> {
         let mut b = Vec::with_capacity(RECORD_LEN);
@@ -178,7 +181,7 @@ impl SafetyRecord {
         let identity = Address::from_slice(r.take(20));
         let seq = r.u64();
         let highest_voted_round = r.u64();
-        let mut signed = [Slot::default(); 3];
+        let mut signed = [Slot::default(); 4];
         for s in &mut signed {
             *s = Slot {
                 round: r.u64(),
@@ -243,7 +246,7 @@ impl SafetyRecord {
         }
         if round > slot.round {
             self.signed[kind.idx()] = Slot { round, digest };
-            if kind != Kind::Propose {
+            if matches!(kind, Kind::Vote | Kind::Timeout) {
                 self.highest_voted_round = self.highest_voted_round.max(round);
             }
             self.seq += 1;
@@ -264,6 +267,37 @@ impl SafetyRecord {
             && self.lock_qc.map(|l| l.round) >= old.lock_qc.map(|l| l.round)
             && self.highest_qc.round >= old.highest_qc.round
             && self.highest_tc >= old.highest_tc
+    }
+}
+
+impl SafetyRecord {
+    /// The fieldwise maximum of two records of one identity: the record that holds everything either
+    /// holds. The machine's record (its observations) and the unit's (every signature, proposals
+    /// included) are joined before a write, so neither lowers the other. `seq` counts the writes.
+    pub fn join(&self, o: &Self) -> Self {
+        let by_round = |a: Option<BlockRef>, b: Option<BlockRef>| match (a, b) {
+            (Some(x), Some(y)) => Some(if y.round > x.round { y } else { x }),
+            (x, None) => x,
+            (None, y) => y,
+        };
+        let mut j = self.clone();
+        j.highest_voted_round = j.highest_voted_round.max(o.highest_voted_round);
+        for (a, b) in j.signed.iter_mut().zip(&o.signed) {
+            if b.round > a.round {
+                *a = *b;
+            }
+        }
+        j.lock_qc = by_round(j.lock_qc, o.lock_qc);
+        if o.highest_qc.round > j.highest_qc.round {
+            j.highest_qc = o.highest_qc;
+        }
+        j.highest_tc = j.highest_tc.max(o.highest_tc);
+        j.seq = if j == *self {
+            self.seq
+        } else {
+            self.seq.max(o.seq) + 1
+        };
+        j
     }
 }
 
@@ -397,7 +431,7 @@ pub fn decide(
         round: i.round,
         digest: i.digest,
     };
-    if i.kind != Kind::Propose {
+    if matches!(i.kind, Kind::Vote | Kind::Timeout) {
         next.highest_voted_round = i.round;
     }
     Ok(next)
@@ -475,7 +509,7 @@ mod tests {
         assert_eq!(SafetyRecord::decode(&b), Ok(r.clone()));
         let empty = rec();
         assert_eq!(SafetyRecord::decode(&empty.encode()), Ok(empty));
-        assert_eq!(SafetyRecord::decode(&b[1..]), Err(DecodeError::Length(298)));
+        assert_eq!(SafetyRecord::decode(&b[1..]), Err(DecodeError::Length(338)));
         for i in 0..b.len() {
             let mut c = b.clone();
             c[i] ^= 1;
@@ -486,7 +520,7 @@ mod tests {
         known.seq = 1;
         known.highest_voted_round = 2;
         let e = known.encode();
-        assert_eq!(&e[..6], b"XSR1\x01\x00");
+        assert_eq!(&e[..6], b"XSR1\x02\x00");
         assert_eq!(&e[6..26], &[7; 20]);
         assert_eq!(&e[26..34], &1u64.to_le_bytes());
         assert_eq!(&e[34..42], &2u64.to_le_bytes());
@@ -627,13 +661,41 @@ mod tests {
             Cause::Io,
             Cause::FsyncFailed,
         ] {
-            for k in [Kind::Vote, Kind::Timeout, Kind::Propose] {
+            for k in [Kind::Vote, Kind::Timeout, Kind::Propose, Kind::SealV1] {
                 assert_eq!(
                     decide(&r, &Intent::new(k, 5, d(1)), Durability::Degraded(c)),
                     Err(Refusal::Degraded(c))
                 );
             }
         }
+    }
+
+    #[test]
+    fn a_v1_seal_has_its_own_slot_and_never_bounds_a_round() {
+        let r = ok(&rec(), Intent::new(Kind::SealV1, 2700, d(1)));
+        assert_eq!(r.signed[3], Slot { round: 2700, digest: d(1) });
+        assert_eq!(r.highest_voted_round, 0, "a height is not a voted round");
+        // the same height with another digest is refused; the first V2 round is not
+        assert_eq!(
+            err(&r, Intent::new(Kind::SealV1, 2700, d(2))),
+            Refusal::Conflict { kind: Kind::SealV1, round: 2700 }
+        );
+        let r = ok(&r, Intent::new(Kind::Propose, 1, d(3)));
+        assert_eq!((r.signed[2].round, r.signed[3].round), (1, 2700));
+        let r = ok(&r, Intent::vote(1, d(4), 0, true));
+        assert_eq!(r.highest_voted_round, 1);
+    }
+
+    #[test]
+    fn join_holds_what_either_record_holds() {
+        let a = ok(&rec(), Intent::new(Kind::Propose, 9, d(1)));
+        let mut b = ok(&rec(), Intent::vote(5, d(2), 4, false));
+        b.observe_tc(8);
+        let j = a.join(&b);
+        assert!(j.dominates(&a) && j.dominates(&b));
+        assert_eq!((j.signed[2].round, j.signed[0].round, j.highest_tc), (9, 5, 8));
+        assert_eq!(j.join(&a), j, "joining what it already holds changes nothing");
+        assert_eq!(j.join(&b).seq, j.seq);
     }
 
     #[test]

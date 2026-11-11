@@ -101,8 +101,8 @@ fn twenty_vector_blocks_through_net_and_chain_services() {
     cfg.http.port = port;
     cfg.http.api = vec!["eth".into(), "web3".into(), "XDPoS".into()];
     cfg.ipc.disabled = true;
-    let (marker, net, genesis) = datadir::prepare_chain(&cfg).unwrap();
-    let mut built = services::build(&cfg, &marker, net, &genesis, STAMP).unwrap();
+    let (marker, spec, genesis) = datadir::prepare_chain(&cfg).unwrap();
+    let mut built = services::build(&cfg, &marker, spec, &genesis, STAMP).unwrap();
     built.node.start().unwrap();
 
     // the fake peer: its own identity, a TD above ours, the pipe to our net service
@@ -186,8 +186,8 @@ fn discovery_pings_the_boot_node() {
     )];
     cfg.ipc.disabled = true;
     // loopback listener for the test only: nothing but this socket is addressed
-    let (marker, net, genesis) = datadir::prepare_chain(&cfg).unwrap();
-    let mut built = services::build(&cfg, &marker, net, &genesis, STAMP).unwrap();
+    let (marker, spec, genesis) = datadir::prepare_chain(&cfg).unwrap();
+    let mut built = services::build(&cfg, &marker, spec, &genesis, STAMP).unwrap();
     built.node.start().unwrap();
     let mut buf = [0u8; 2048];
     let (n, _) = boot.recv_from(&mut buf).unwrap();

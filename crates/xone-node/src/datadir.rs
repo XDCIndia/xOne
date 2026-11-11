@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use xone_chainspec::{Genesis, Network};
+use xone_chainspec::{ChainSpec, Genesis, Network};
 
 use crate::Config;
 
@@ -34,6 +34,8 @@ pub enum DatadirError {
     },
     #[error("--networkid {given} does not match the genesis chain id {genesis}")]
     NetworkId { given: u64, genesis: u64 },
+    #[error("--chainspec is for private chains; chain id {0} is public and has only its built-in spec")]
+    PublicChainspec(u64),
     #[error("genesis json: {0}")]
     GenesisJson(String),
     #[error("chain id {0} has no built-in chain spec; custom chain specs are not supported yet")]
@@ -92,7 +94,10 @@ fn read_marker(datadir: &Path) -> Result<Option<Marker>, DatadirError> {
 
 /// Write the marker for `genesis_json`, or check an existing one against it.
 pub fn init(datadir: &Path, genesis_json: &str) -> Result<Marker, DatadirError> {
-    let want = identity(genesis_json)?;
+    init_marker(datadir, identity(genesis_json)?)
+}
+
+fn init_marker(datadir: &Path, want: Marker) -> Result<Marker, DatadirError> {
     match read_marker(datadir)? {
         Some(have) if have == want => Ok(want),
         Some(have) => Err(DatadirError::ChainMismatch {
@@ -118,8 +123,9 @@ pub fn prepare(cfg: &Config) -> Result<Marker, DatadirError> {
     prepare_chain(cfg).map(|(m, _, _)| m)
 }
 
-/// [`prepare`], and the network and genesis the node runs.
-pub fn prepare_chain(cfg: &Config) -> Result<(Marker, Network, Genesis), DatadirError> {
+/// [`prepare`], and the chain spec and genesis the node runs. With `--chainspec` the spec is the fork table
+/// of a private chain; chain ids 50 and 51 are public and have only their built-in spec.
+pub fn prepare_chain(cfg: &Config) -> Result<(Marker, ChainSpec, Genesis), DatadirError> {
     let json = match &cfg.override_genesis {
         Some(p) => std::fs::read_to_string(p).map_err(io(p))?,
         None => cfg
@@ -128,14 +134,32 @@ pub fn prepare_chain(cfg: &Config) -> Result<(Marker, Network, Genesis), Datadir
             .genesis_json()
             .to_owned(),
     };
-    let (net, genesis, marker) = identify(&json)?;
+    let (spec, genesis, marker) = match &cfg.chainspec {
+        Some(p) => {
+            let table = std::fs::read_to_string(p).map_err(io(p))?;
+            let spec = xone_chainspec::load_custom(&table)?;
+            if matches!(spec.chain_id, 50 | 51) {
+                return Err(DatadirError::PublicChainspec(spec.chain_id));
+            }
+            let genesis = Genesis::from_json(&json)?;
+            let marker = Marker {
+                chain_id: spec.chain_id,
+                genesis_hash: genesis.hash(&spec)?.to_string(),
+            };
+            (spec, genesis, marker)
+        }
+        None => {
+            let (net, genesis, marker) = identify(&json)?;
+            (net.spec(), genesis, marker)
+        }
+    };
     if let Some(given) = cfg.network_id.filter(|n| *n != marker.chain_id) {
         return Err(DatadirError::NetworkId {
             given,
             genesis: marker.chain_id,
         });
     }
-    Ok((init(&cfg.datadir, &json)?, net, genesis))
+    Ok((init_marker(&cfg.datadir, marker)?, spec, genesis))
 }
 
 #[cfg(test)]

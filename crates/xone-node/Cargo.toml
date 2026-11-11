@@ -41,6 +41,7 @@ xone-executor.workspace = true
 xone-net = { path = "../xone-net" }
 xone-primitives.workspace = true
 xone-rpc.workspace = true
+xone-signer.workspace = true
 xone-state.workspace = true
 xone-sync.workspace = true
 

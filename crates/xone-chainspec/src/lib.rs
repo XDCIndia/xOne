@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 use alloy_primitives::{Address, B256};
 
 pub use genesis::Genesis;
-pub use networks::{apothem, devnet, devnet551, load, load_named, mainnet, Network};
+pub use networks::{apothem, devnet, devnet551, load, load_custom, load_named, mainnet, Network};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

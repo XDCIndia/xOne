@@ -18,9 +18,11 @@ thiserror.workspace = true
 xone-chainspec.workspace = true
 xone-db.workspace = true
 xone-primitives.workspace = true
+xone-signer.workspace = true
 xone-state.workspace = true
 
 [dev-dependencies]
+xone-db = { workspace = true, features = ["fault-injection"] }
 serde.workspace = true
 serde_json.workspace = true
 xone-state.workspace = true

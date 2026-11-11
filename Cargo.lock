@@ -4494,11 +4494,15 @@ version = "0.1.0"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
+ "alloy-trie",
+ "flate2",
+ "k256",
  "serde",
  "serde_json",
  "thiserror",
  "xone-chainspec",
  "xone-consensus",
+ "xone-db",
  "xone-evm",
  "xone-executor",
  "xone-primitives",
@@ -4532,6 +4536,7 @@ dependencies = [
  "xone-chainspec",
  "xone-db",
  "xone-primitives",
+ "xone-signer",
  "xone-state",
 ]
 
@@ -4656,6 +4661,7 @@ dependencies = [
  "xone-net",
  "xone-primitives",
  "xone-rpc",
+ "xone-signer",
  "xone-state",
  "xone-sync",
 ]
