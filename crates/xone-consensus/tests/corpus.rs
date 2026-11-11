@@ -178,7 +178,7 @@ fn the_corpus_has_the_required_shape() {
 /// execution sources may turn a check off.
 #[test]
 fn no_switch_can_disable_a_check() {
-    const FORBIDDEN: [&str; 14] = [
+    const FORBIDDEN: [&str; 17] = [
         "cfg(feature",
         "cfg!(feature",
         "cfg_attr(feature",
