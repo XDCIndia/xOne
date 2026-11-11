@@ -2467,6 +2467,9 @@ version = "0.1.0"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
+ "k256",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]

@@ -9,3 +9,8 @@ publish.workspace = true
 [dependencies]
 alloy-primitives.workspace = true
 alloy-rlp.workspace = true
+k256.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

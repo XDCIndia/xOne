@@ -6,6 +6,7 @@
 //
 //	go run .          write ../../crates/xone-chainspec/generated/forks.json
 //	go run . -check   regenerate in memory; exit 1 with a diff if the file differs
+//	go run . headers  write header vectors from an archive RPC (see headers.go)
 package main
 
 import (
@@ -245,6 +246,10 @@ func build(pin string) ([]byte, error) {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "headers" {
+		headers(os.Args[2:])
+		return
+	}
 	out := flag.String("out", "../../crates/xone-chainspec/generated/forks.json", "generated file")
 	pinFile := flag.String("pin", "../PIN", "file holding the geth-XDC commit SHA")
 	check := flag.Bool("check", false, "compare with the committed file instead of writing it")
