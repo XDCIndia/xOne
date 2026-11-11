@@ -26,6 +26,9 @@ fn replay(spec: &ChainSpec, to: u64) -> Report {
         every: 0,
         resume: false,
         keep: false,
+        progress: 0,
+        gap_offset: 0,
+        dump_state: None,
     };
     run(Network::Apothem, spec, &blocks(to), &opts).unwrap()
 }

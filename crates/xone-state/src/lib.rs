@@ -10,6 +10,7 @@
 pub mod account;
 pub mod changeset;
 pub mod flat;
+pub mod mpt;
 pub mod provider;
 pub mod system_contracts;
 pub mod trie;

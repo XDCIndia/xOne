@@ -4,9 +4,8 @@
 //! `HashBuilder::add_leaf` as bytes, so a wide balance is never narrowed. `alloy_trie::TrieAccount`
 //! and `alloy_trie::root::state_root*` must not be used after genesis (spikes/wide-balance/REPORT.md).
 //!
-//! ponytail: every root is computed from the whole table. [`root_of_hashed`] is the one place that
-//! touches `HashBuilder`; an incremental trie (retained nodes plus a prefix set of changed hashed
-//! keys) replaces its body and keeps the hashed-leaf shape of the callers.
+//! These functions compute a root from the whole table: they are the reference. The head's root
+//! comes from the incremental trie ([`crate::mpt`]), which must equal them after every diff.
 
 use crate::{flat::FlatRead, Account};
 use alloy_primitives::{keccak256, Address, B256, U256};

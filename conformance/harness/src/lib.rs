@@ -6,4 +6,5 @@
 pub mod cache;
 pub mod chain;
 pub mod diag;
+pub mod pivot;
 pub mod replay;

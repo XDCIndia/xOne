@@ -139,6 +139,14 @@ impl Env for Ctx {
     fn code(&self, hash: B256) -> Option<Bytes> {
         self.codes.get(&hash).cloned()
     }
+    // V1 only: this context holds no V2 gap snapshots or burn records, so a V2 checkpoint block
+    // is refused by the executor (`ExecError::NoBurn`, no standby pool) and never mis-paid.
+    fn standby_pool(&self, _switch: u64) -> Option<Vec<Address>> {
+        None
+    }
+    fn burn(&self, _number: u64) -> Option<alloy_primitives::U256> {
+        None
+    }
 }
 
 impl Ctx {
@@ -473,6 +481,7 @@ impl BlockExecutor for XdcExecutor {
                 parent: &parent_stored.header,
                 verify: &verify,
                 env: ctx,
+                derive: None,
             },
         )
         .map_err(fail)?;
