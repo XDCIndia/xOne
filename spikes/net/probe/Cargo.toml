@@ -1,0 +1,13 @@
+# Standalone, not a workspace member: reth v2.8.1 needs rustc 1.95, the workspace pins 1.94.0.
+# Run with: cargo +nightly test --manifest-path spikes/net/probe/Cargo.toml -- --nocapture
+[package]
+name = "net-spike-probe"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+reth-eth-wire = { git = "https://github.com/paradigmxyz/reth", rev = "d763342fa185e4e90ee79dc65f6a5706168b0bcb" }
+reth-eth-wire-types = { git = "https://github.com/paradigmxyz/reth", rev = "d763342fa185e4e90ee79dc65f6a5706168b0bcb" }
