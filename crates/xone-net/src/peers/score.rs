@@ -1,10 +1,10 @@
-//! Score accounting per peer identity, on top of `xone_node::PeerBudget` (ADR-007 section 5).
+//! Score accounting per peer identity, on top of `xone_primitives::limits::PeerBudget` (ADR-007 section 5).
 //! A peer that crosses the threshold is disconnected; unless it is trusted it is also banned.
 //! A ban lasts until a time and survives a reconnect, because it is keyed by node id.
 
 use std::collections::HashMap;
 
-use xone_node::{Offence, PeerBudget, PeerLimits};
+use xone_primitives::limits::{Offence, PeerBudget, PeerLimits};
 
 use crate::rlpx::PeerId;
 

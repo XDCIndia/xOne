@@ -195,7 +195,14 @@ fn kill(pid: u32) {
 fn sigterm_stops_the_node_and_ten_in_a_row_are_one_stop() {
     let d = scratch("signal");
     let mut child = Command::new(env!("CARGO_BIN_EXE_xone"))
-        .args(["--datadir", d.to_str().unwrap_or_default(), "--apothem"])
+        .args([
+            "--datadir",
+            d.to_str().unwrap_or_default(),
+            "--apothem",
+            "--port",
+            "0",
+            "--nodiscover",
+        ])
         .stdout(Stdio::piped())
         .spawn()
         .unwrap_or_else(|e| panic!("{e}"));

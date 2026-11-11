@@ -22,7 +22,6 @@ secp256k1 = { version = "0.30", default-features = false, features = ["global-co
 snap = "1"
 thiserror.workspace = true
 tokio = { version = "1", features = ["net", "rt", "macros", "time", "sync", "io-util"] }
-xone-node = { path = "../xone-node" }
 xone-primitives.workspace = true
 
 [dev-dependencies]

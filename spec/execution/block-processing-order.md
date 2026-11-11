@@ -11,7 +11,7 @@ A block is executed on the state of its parent, in this order. The result holds 
 | 2 | `TIPSigning` wipe of 0x89 at the fork block, before the first transaction | `core/state_processor.go:152`, `:321-327` | `xone_evm::special::tip_signing_wipe` |
 | 3 | EIP-4788 (not on XDC), Multicall3 and EIP-2935 at Prague | `core/state_processor.go:336-350` | not reached: `rules()` refuses Prague and later (`xone_evm::spec`) |
 | 4 | Fee owner of the author, read once from the validator contract 0x88 in the state before the loop; author is the seal signer | `core/state_processor.go:103`, `:182`; `core/evm.go:43-52` | `fees::block_author`, `validator_0x88::candidate_owner` |
-| 5 | TRC21 token fee capacity | `core/state_processor.go:189`, `:254`, `:268` | not supported: a block at or above `TIPTRC21Fee` is `ExecError::Unsupported` |
+| 5 | TRC21 token fee capacity | `core/state_processor.go:189`, `:254`, `:268` | not supported when it applies: a block at or above `TIPTRC21Fee` whose issuer (`0x8c0f...`, Apothem `0x0E2C...`) lists a token (slot 1 not zero) is `ExecError::Unsupported`; with no token listed the capacity map is empty and the step does nothing |
 | 6 | Per transaction: recover the sender, then route | `core/state_processor.go:210`, `:235-258`, `:856-872` | `tx::decode`, `xone_evm::route::route` |
 | 6a | Sign transaction (0x89 from `TIPSigning`): no EVM, no gas, nonce + 1, one log `{0x89}`, legacy receipt, cumulative gas unchanged | `core/state_processor.go:883-933` | `special::apply_sign_tx` |
 | 6b | XDCx empty transaction (0x91-0x94 in the receiver window): no state change, one log `{to}` | `core/state_processor.go:943-975` | `special::apply_empty_tx` |

@@ -4482,7 +4482,6 @@ dependencies = [
  "thiserror",
  "tokio",
  "xone-chainspec",
- "xone-node",
  "xone-primitives",
 ]
 
@@ -4490,12 +4489,28 @@ dependencies = [
 name = "xone-node"
 version = "0.1.0"
 dependencies = [
+ "alloy-primitives",
+ "alloy-rlp",
+ "alloy-trie",
+ "flate2",
+ "getrandom 0.3.4",
+ "secp256k1 0.30.0",
  "serde",
  "serde_json",
  "signal-hook",
  "thiserror",
+ "tokio",
  "toml",
+ "xone-builder",
  "xone-chainspec",
+ "xone-consensus",
+ "xone-db",
+ "xone-executor",
+ "xone-net",
+ "xone-primitives",
+ "xone-rpc",
+ "xone-state",
+ "xone-sync",
 ]
 
 [[package]]

@@ -12,7 +12,7 @@
 
 use crate::{
     changeset::{ChangeSet, StateDiff},
-    flat::{FlatRead, FlatWrite},
+    flat::FlatWrite,
     Account,
 };
 use alloy_primitives::{Address, B256, U256};
@@ -46,6 +46,12 @@ pub trait StateRead {
     fn account(&self, address: Address) -> Option<Account>;
     /// Zero when absent.
     fn storage(&self, address: Address, slot: B256) -> U256;
+    /// The state root after `diff` on top of this state, for a state that has its tables at hand
+    /// (the head view of a [`StateProvider`]). A reader without tables answers [`Missing::Block`]
+    /// with the zero hash; it can serve reads, not roots.
+    fn root_with(&self, _diff: &StateDiff) -> Result<B256, Missing> {
+        Err(Missing::Block(B256::ZERO))
+    }
 }
 
 pub struct StateProvider<F> {
@@ -203,19 +209,17 @@ impl<'a, F> StateView<'a, F> {
     }
 }
 
-impl<F: FlatWrite> StateView<'_, F> {
-    /// The state root after `diff` on top of this view, computed from the flat tables without
-    /// writing ([`crate::trie::root_after`]). Only the head view has its tables at hand: a view with
-    /// side overlays or an older canonical block is [`Missing::Number`].
-    pub fn root_with(&self, diff: &StateDiff) -> Result<B256, Missing> {
+impl<F: FlatWrite> StateRead for StateView<'_, F> {
+    /// Computed from the flat tables without writing ([`crate::trie::root_after`]). Only the head
+    /// view has its tables at hand: a view with side overlays or an older canonical block is
+    /// [`Missing::Number`].
+    fn root_with(&self, diff: &StateDiff) -> Result<B256, Missing> {
         if !self.overlays.is_empty() || self.number != self.provider.head().0 {
             return Err(Missing::Number(self.number));
         }
         Ok(crate::trie::root_after(&self.provider.flat, diff))
     }
-}
 
-impl<F: FlatRead> StateRead for StateView<'_, F> {
     fn account(&self, address: Address) -> Option<Account> {
         if let Some(a) = self.overlays.iter().find_map(|d| d.accounts.get(&address)) {
             return a.clone();

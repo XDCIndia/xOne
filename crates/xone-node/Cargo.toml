@@ -6,13 +6,34 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
-# ADR-007 primitives plus config, datadir marker and the bounded lifecycle (XB-19).
-# toml: the config file format. signal-hook: SIGTERM/SIGINT without unsafe code in
-# this crate; it is small, has no async runtime, and tokio is not in the tree yet.
+# The node: config, datadir marker, bounded lifecycle (XB-19) and the services that wire xone-net,
+# xone-sync, xone-builder and xone-rpc into a runnable follower (`services`). The ADR-007 primitives live
+# in xone-primitives::limits and are re-exported here.
+# toml: the config file format. signal-hook: SIGTERM/SIGINT without unsafe code in this crate.
+# tokio: one runtime owned by the net service. flate2: the gzip checkpoint files of the replay
+# harness. secp256k1: the p2p identity key type of xone-net. getrandom: that key's entropy.
 [dependencies]
+alloy-primitives.workspace = true
+alloy-rlp.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 toml.workspace = true
 signal-hook.workspace = true
+getrandom.workspace = true
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+secp256k1 = { version = "0.30", default-features = false, features = ["global-context", "std"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "sync", "macros", "io-util"] }
+xone-builder.workspace = true
 xone-chainspec.workspace = true
+xone-consensus.workspace = true
+xone-db.workspace = true
+xone-executor.workspace = true
+xone-net = { path = "../xone-net" }
+xone-primitives.workspace = true
+xone-rpc.workspace = true
+xone-state.workspace = true
+xone-sync.workspace = true
+
+[dev-dependencies]
+alloy-trie.workspace = true

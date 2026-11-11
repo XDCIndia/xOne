@@ -9,6 +9,14 @@ pub use wide_balance::{WideBalance, WideBalanceError, MAX_WIDE_BITS};
 
 mod crypto;
 mod header;
+/// ADR-007 resource primitives, moved here from xone-node so that xone-net (rank 6) does not
+/// depend on the node crate (rank 8).
+#[allow(
+    clippy::as_conversions,
+    clippy::expect_used,
+    reason = "moved unchanged from xone-node, which does not opt into the workspace lints; the typed-cast rewrite is tracked under #9"
+)]
+pub mod limits;
 mod seal;
 mod v2;
 

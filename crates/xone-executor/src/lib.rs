@@ -39,7 +39,17 @@ use xone_evm::{
     special::{apply_empty_tx, apply_sign_tx, tip_signing_wipe, Receipt, SpecialError},
 };
 use xone_primitives::{Header, SealError, WideBalance};
-use xone_state::{system_contracts::validator_0x88, FlatWrite, Missing, StateDiff, StateView};
+use xone_state::{system_contracts::validator_0x88, Missing, StateDiff, StateRead};
+
+/// geth `common.TRC21IssuerSMC` per chain (`common/types.go:124`, `:213`, `:229`): Apothem has its own,
+/// every other chain the mainnet one. Its slot 1 holds the length of the token list.
+fn trc21_issuer(chain_id: u64) -> Address {
+    if chain_id == 51 {
+        alloy_primitives::address!("0E2C88753131CE01c7551B726b28BFD04e44003F")
+    } else {
+        alloy_primitives::address!("8c0faeb5C6bEd2129b8674F262Fd45c4e9468bee")
+    }
+}
 
 /// What block execution reads besides the parent state: the chain the block extends and the code
 /// store. Every answer is about the canonical chain of the block being executed.
@@ -123,9 +133,9 @@ fn evm_error(index: usize, e: impl std::fmt::Display) -> ExecError {
 }
 
 /// Execute `header` and `body` on `parent_view`, the state after `ctx.parent`.
-pub fn execute_block<F: FlatWrite, E: Env>(
+pub fn execute_block<S: StateRead, E: Env>(
     spec: &ChainSpec,
-    parent_view: &StateView<'_, F>,
+    parent_view: &S,
     header: &Header,
     body: &Body,
     ctx: &ExecCtx<'_, E>,
@@ -135,9 +145,18 @@ pub fn execute_block<F: FlatWrite, E: Env>(
     HeaderVerifier::new(spec).verify(header, ctx.parent, u64::MAX, ctx.verify)?;
     basefee::verify(spec, number, header.base_fee)?;
     let r = rules(spec, number)?;
-    // TRC21 token fees (`ApplyTRC21TokenFee`, `core/state_processor.go:254`) are XB-08.
-    if spec.effective.tip_trc21_fee.is_active(number) {
-        return Err(ExecError::Unsupported("TRC21 token fees (TIPTRC21Fee)"));
+    // TRC21 token fees (`ApplyTRC21TokenFee`, `core/state_processor.go:254`) are XB-08. They apply to a
+    // transaction sent to a token that the issuer contract lists (`GetTRC21FeeCapacityFromState`,
+    // `core/state/trc21_reader.go:52-67`); with no token listed the capacity map is empty, no
+    // transaction takes that path and `UpdateTRC21Fee` writes nothing (`:134`).
+    if spec.effective.tip_trc21_fee.is_active(number)
+        && !parent_view
+            .storage(trc21_issuer(spec.chain_id), B256::with_last_byte(1))
+            .is_zero()
+    {
+        return Err(ExecError::Unsupported(
+            "TRC21 token fees (TIPTRC21Fee) with tokens registered at the issuer",
+        ));
     }
     let eip158 = spec.eip158.is_active(number);
     let author = block_author(spec, header)?;
@@ -206,7 +225,7 @@ pub fn execute_block<F: FlatWrite, E: Env>(
                     return Err(ExecError::GasLimitReached { index });
                 }
                 evm.ctx.set_tx(tx_env(spec, t));
-                let result = XdcHandler::<Overlay<'_, StateView<'_, F>, E>>::default()
+                let result = XdcHandler::<Overlay<'_, S, E>>::default()
                     .run(&mut evm)
                     .map_err(|e| match e {
                         EVMError::Database(e) => ExecError::State(e),

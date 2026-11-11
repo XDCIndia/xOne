@@ -314,6 +314,11 @@ impl MemStore {
         self.cut
     }
 
+    /// The flat tables of the head, for a node that writes its own state checkpoints.
+    pub fn head_flat(&self) -> &MemFlat {
+        self.d.mdbx.state.flat()
+    }
+
     /// State root over the whole flat state (for tests: equals the head's `state_root`).
     pub fn flat_root(&self) -> B256 {
         flat_root(self.d.mdbx.state.flat())

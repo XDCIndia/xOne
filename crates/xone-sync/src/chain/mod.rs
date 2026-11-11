@@ -122,6 +122,11 @@ impl<S: Store, E: BlockExecutor, H: HeaderCheck> Chain<S, E, H> {
         }
     }
 
+    /// Runs `f` on the store under its read lock, for what the `Store` trait reads but `ChainRead` does not.
+    pub fn with_store<R>(&self, f: impl FnOnce(&S) -> R) -> R {
+        f(&*self.rd())
+    }
+
     pub fn reader(&self) -> Reader<'_, S> {
         Reader(&self.store)
     }

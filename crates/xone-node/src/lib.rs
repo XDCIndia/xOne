@@ -6,21 +6,19 @@
 //! and `lifecycle` do I/O and own threads.
 #![forbid(unsafe_code)]
 
-mod bucket;
 pub mod config;
 pub mod datadir;
 mod disk;
 pub mod enode;
 pub mod lifecycle;
-mod peer;
-mod queue;
+pub mod services;
 
-pub use bucket::TokenBucket;
 pub use config::{Config, ConfigError, Profile};
 pub use disk::{Action, DiskWatermark};
 pub use lifecycle::{Node, NodeError, Service, Shutdown};
-pub use peer::{Disconnect, Offence, PeerBudget, PeerLimits};
-pub use queue::{BoundedQueue, Overflow, Push};
+pub use xone_primitives::limits::{
+    BoundedQueue, Disconnect, Offence, Overflow, PeerBudget, PeerLimits, Push, TokenBucket,
+};
 
 /// Scheduling class (ADR-007 section 3). Lower value runs first.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
