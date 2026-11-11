@@ -7,7 +7,7 @@ is run locally; `.github/workflows/ci.yml` runs the same commands. Toolchain: st
 ## R3 rule 1 and 2: mechanism per rule
 
 Lints live in `[workspace.lints]` (root `Cargo.toml`). A crate opts in with `[lints] workspace = true`.
-Opted in: `xone-chainspec`, `xone-consensus`, `xone-evm`, `xone-state`, `xone-primitives`.
+Opted in: `xone-chainspec`, `xone-consensus`, `xone-evm`, `xone-state`, `xone-primitives`, `xone-signer`.
 `disallowed-*` lists are in `clippy.toml` of each opted-in crate; `ci/rule2.clippy.toml` is the master copy
 and `ci/check-fixtures.sh` fails if a copy differs. (A root `clippy.toml` would also hit `build.rs`,
 `sim` and the spikes, which read the environment on purpose.)
@@ -48,7 +48,8 @@ Consensus and EVM behaviour is unchanged.
 | xone-evm | 2 | 3 files | `unwrap_or_default` (no blob gas price is zero), `as_conversions` (`i64` refund counter to `u64`); 3 integration-test files |
 | xone-state | 1 | 4 files + 1 module | `unwrap_or_default` (unset slot reads zero); integration tests and `tests/common` |
 | xone-primitives | 1 | 2 files | `as_conversions` (`#[repr(u16)]` enum id); `unwrap`/`expect` in 2 integration-test files |
-| Total | 11 | 2 sites + 10 files | |
+| xone-signer | 0 | 4 files | `unwrap`/`expect` in 3 integration-test files and `tests/common` |
+| Total | 11 | 2 sites + 14 files | |
 
 `allow-unwrap-in-tests` and `allow-expect-in-tests` are set in `clippy.toml` for `#[test]` and `cfg(test)` code.
 Integration-test files have a file-level allow, because Clippy does not treat their helper functions as tests.

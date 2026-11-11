@@ -13,6 +13,7 @@ RANK = {
     "xone-chainspec": 1,
     "xone-state": 2,
     "xone-evm": 2,
+    "xone-signer": 2,  # below xone-consensus: its safety unit calls it (ADR-010 section 10)
     "xone-consensus": 3,
     "xone-db": 4,
     "xone-net": 5,
@@ -23,6 +24,11 @@ RANK = {
     "xone-node": 7,
     "xone": 8,  # bin/xone
 }
+# Crates that only a named set of crates may depend on (ADR-010 section 10, issue #40): the V2
+# safety unit lives in xone-consensus, and xone-node holds the node key. Checked for every
+# dependency kind, so a dev-dependency from another crate fails too. A re-export that hands the
+# signer to a third crate needs its own dependency edge, which this rule rejects.
+RESTRICTED = {"xone-signer": {"xone-consensus", "xone-node"}}
 # Test-only trees: may depend on anything, nothing may depend on them.
 TEST_ONLY_DIRS = ("sim", "spikes", "labs", "conformance")
 
@@ -66,6 +72,10 @@ def check(meta):
             dk = d["kind"] or "normal"
             if kind[dst] == "test" and kind[src] != "test":
                 errs.append(f"{src} -> {dst} ({dk}): nothing may depend on a test-only crate")
+            elif dst in RESTRICTED and kind[src] == "layer" and src not in RESTRICTED[dst]:
+                errs.append(
+                    f"{src} -> {dst} ({dk}): only {sorted(RESTRICTED[dst])} may depend on {dst}"
+                )
             elif kind[src] == "layer" and kind[dst] == "layer" and RANK[src] <= RANK[dst]:
                 if (src, dst) in EXCEPTIONS and dk == "normal" and not os.environ.get("LAYERING_NO_EXCEPTIONS"):
                     notes.append(f"exception {src} -> {dst}: {EXCEPTIONS[(src, dst)]}")

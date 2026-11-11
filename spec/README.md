@@ -37,6 +37,12 @@ A rule with no source line is not a rule. A value that a page states must come f
 | [account-leaf](state/account-leaf.md) | the XDC account RLP, its slim form and the secure-trie keys |
 | [changesets](state/changesets.md) | whole-record changesets, the state of a retained block and side-branch execution |
 
+### Keys (xone-signer)
+| Page | Rule |
+| --- | --- |
+| [keystore-v3](keys/keystore-v3.md) | geth keystore v3 files: scrypt and pbkdf2, MAC, address field, where xOne is stricter |
+| [node-key](keys/node-key.md) | the devp2p `nodekey` file and why xOne never regenerates it on a read error |
+
 ### EVM (xone-evm)
 | Page | Rule |
 | --- | --- |
