@@ -1,0 +1,16 @@
+[package]
+name = "xone-db"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+alloy-primitives.workspace = true
+thiserror.workspace = true
+xone-primitives.workspace = true
+
+[features]
+# In-memory fault-injectable stores for tests. Must not be enabled in a release artifact.
+fault-injection = []
