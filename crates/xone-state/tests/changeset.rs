@@ -84,6 +84,19 @@ impl StateRead for Flat<'_> {
 }
 
 proptest! {
+    /// `root_after` (what the executor's `StateView::root_with` calls) is the root of apply then flat_root.
+    #[test]
+    fn root_after_equals_apply_then_root(base in diff(), d in diff()) {
+        let mut flat = MemFlat::default();
+        base.apply(&mut flat).unwrap();
+        let want = {
+            let mut applied = flat.clone();
+            d.apply(&mut applied).unwrap();
+            flat_root(&applied)
+        };
+        prop_assert_eq!(xone_state::trie::root_after(&flat, &d), want);
+    }
+
     #[test]
     fn apply_n_then_revert_n_restores_state_and_root(base in diff(), diffs in prop::collection::vec(diff(), 1..8)) {
         let mut flat = MemFlat::default();

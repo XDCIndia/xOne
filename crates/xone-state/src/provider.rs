@@ -203,6 +203,18 @@ impl<'a, F> StateView<'a, F> {
     }
 }
 
+impl<F: FlatWrite> StateView<'_, F> {
+    /// The state root after `diff` on top of this view, computed from the flat tables without
+    /// writing ([`crate::trie::root_after`]). Only the head view has its tables at hand: a view with
+    /// side overlays or an older canonical block is [`Missing::Number`].
+    pub fn root_with(&self, diff: &StateDiff) -> Result<B256, Missing> {
+        if !self.overlays.is_empty() || self.number != self.provider.head().0 {
+            return Err(Missing::Number(self.number));
+        }
+        Ok(crate::trie::root_after(&self.provider.flat, diff))
+    }
+}
+
 impl<F: FlatRead> StateRead for StateView<'_, F> {
     fn account(&self, address: Address) -> Option<Account> {
         if let Some(a) = self.overlays.iter().find_map(|d| d.accounts.get(&address)) {

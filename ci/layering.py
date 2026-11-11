@@ -15,14 +15,15 @@ RANK = {
     "xone-evm": 2,
     "xone-signer": 2,  # below xone-consensus: its safety unit calls it (ADR-010 section 10)
     "xone-consensus": 3,
-    "xone-db": 4,
-    "xone-net": 5,
-    "xone-snap": 5,
-    "xone-sync": 5,
-    "xone-builder": 6,
-    "xone-rpc": 6,
-    "xone-node": 7,
-    "xone": 8,  # bin/xone
+    "xone-executor": 4,  # block execution: composes primitives, chainspec, state, evm and consensus
+    "xone-db": 5,
+    "xone-net": 6,
+    "xone-snap": 6,
+    "xone-sync": 6,
+    "xone-builder": 7,
+    "xone-rpc": 7,
+    "xone-node": 8,
+    "xone": 9,  # bin/xone
 }
 # Crates that only a named set of crates may depend on (ADR-010 section 10, issue #40): the V2
 # safety unit lives in xone-consensus, and xone-node holds the node key. Checked for every

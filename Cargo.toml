@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/xone-primitives", "crates/xone-chainspec", "crates/xone-db", "crates/xone-state", "crates/xone-consensus", "crates/xone-signer", "crates/xone-node", "sim", "bin/xone", "spikes/wide-balance", "spikes/net", "labs/pq", "crates/xone-evm", "conformance/sweep", "conformance/negative-gen", "crates/xone-net"]
+members = ["crates/xone-primitives", "crates/xone-chainspec", "crates/xone-db", "crates/xone-state", "crates/xone-consensus", "crates/xone-signer", "crates/xone-node", "sim", "bin/xone", "spikes/wide-balance", "spikes/net", "labs/pq", "crates/xone-evm", "conformance/sweep", "conformance/harness", "conformance/negative-gen", "crates/xone-net", "crates/xone-executor"]
 
 [workspace.package]
 version = "0.1.0"
@@ -37,6 +37,7 @@ xone-db = { path = "crates/xone-db" }
 xone-state = { path = "crates/xone-state" }
 xone-consensus = { path = "crates/xone-consensus" }
 xone-evm = { path = "crates/xone-evm" }
+xone-executor = { path = "crates/xone-executor" }
 xone-signer = { path = "crates/xone-signer" }
 
 # R3 rule 1 and 2 (plan #1). Crates opt in with `[lints] workspace = true`; the lint
@@ -63,3 +64,29 @@ opt-level = 3
 opt-level = 3
 [profile.dev.package.hmac]
 opt-level = 3
+
+# The conformance replays run thousands of blocks through revm and the trie in test builds.
+[profile.dev.package.revm-interpreter]
+opt-level = 2
+[profile.dev.package.revm-handler]
+opt-level = 2
+[profile.dev.package.revm-context]
+opt-level = 2
+[profile.dev.package.revm-database]
+opt-level = 2
+[profile.dev.package.revm-state]
+opt-level = 2
+[profile.dev.package.alloy-trie]
+opt-level = 2
+[profile.dev.package.alloy-primitives]
+opt-level = 2
+[profile.dev.package.ruint]
+opt-level = 2
+[profile.dev.package.k256]
+opt-level = 2
+[profile.dev.package.xone-evm]
+opt-level = 2
+[profile.dev.package.xone-state]
+opt-level = 2
+[profile.dev.package.xone-executor]
+opt-level = 2

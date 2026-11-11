@@ -1,0 +1,25 @@
+[package]
+name = "xone-executor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+alloy-primitives.workspace = true
+alloy-rlp.workspace = true
+alloy-trie.workspace = true
+revm = { version = "=43.0.3", default-features = false, features = ["std"] }
+thiserror.workspace = true
+xone-chainspec.workspace = true
+xone-consensus.workspace = true
+xone-evm.workspace = true
+xone-primitives.workspace = true
+xone-state.workspace = true
+
+[dev-dependencies]
+k256.workspace = true
