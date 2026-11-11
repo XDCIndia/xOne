@@ -225,10 +225,11 @@ fn real(cli: Cli) -> Result<ExitCode, String> {
             let source = source.unwrap_or_else(|| root().join(format!("cache/{network}.jsonl")));
             let state_dir = state_dir.unwrap_or_else(|| root().join(format!("state/{network}")));
             let t0 = Instant::now();
-            let blocks = cache::read_limit(&source, usize::try_from(to).map_err(|e| e.to_string())? + 1)?
-                .iter()
-                .map(decode)
-                .collect::<Result<Vec<_>, _>>()?;
+            let blocks =
+                cache::read_limit(&source, usize::try_from(to).map_err(|e| e.to_string())? + 1)?
+                    .iter()
+                    .map(decode)
+                    .collect::<Result<Vec<_>, _>>()?;
             let spec = net.spec();
             let opts = Opts {
                 to,
@@ -431,7 +432,11 @@ fn record(
         if d.mismatches.iter().any(|m| m.field == "stateRoot") {
             rec += &format!(
                 "\n## state diagnosis (archive eth_getProof, prestateTracer)\n\n{}",
-                diagnose(&mut Rpc::for_network(network.parse().map_err(|e| format!("{e}"))?)?, d.block, diff)?
+                diagnose(
+                    &mut Rpc::for_network(network.parse().map_err(|e| format!("{e}"))?)?,
+                    d.block,
+                    diff
+                )?
             );
         }
     }

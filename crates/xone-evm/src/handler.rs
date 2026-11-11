@@ -212,10 +212,11 @@ impl<DB: Database> Handler for XdcHandler<DB> {
     ) -> Result<InitialAndFloorGas, Self::Error> {
         let ctx = evm.ctx_ref();
         let (tx, r) = (ctx.tx(), &ctx.chain().rules);
-        let mut g = ctx.cfg().gas_params().initial_tx_gas_for_tx(tx, None);
+        let info = gas::eip2780(r, tx.value(), tx.kind().to() == Some(&tx.caller()));
+        let mut g = ctx.cfg().gas_params().initial_tx_gas_for_tx(tx, info);
         g.set_floor_gas(
             gas::floor_params(r)
-                .initial_tx_gas_for_tx(tx, None)
+                .initial_tx_gas_for_tx(tx, info)
                 .floor_gas(),
         );
         if g.initial_total_gas() > tx.gas_limit() {

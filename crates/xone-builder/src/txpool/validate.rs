@@ -88,7 +88,13 @@ pub fn basics(pool: &Pool, tx: &PoolTx) -> Result<(), Error> {
     }
     let create = t.to.is_none();
     let (accounts, keys) = access_list_counts(tx);
-    let (intr, floor) = head.gas.of(&t.data, create, accounts, keys);
+    let (intr, floor) = head.gas.of(
+        &t.data,
+        create,
+        accounts,
+        keys,
+        xone_evm::gas::eip2780(&head.rules, t.value, t.to == Some(t.from)),
+    );
     if t.gas < intr {
         return Err(Error::IntrinsicGas {
             gas: t.gas,

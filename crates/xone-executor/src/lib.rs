@@ -250,16 +250,23 @@ pub fn execute_block<V: StateRead, E: Env>(
             Route::SignTx => {
                 let db = evm.ctx.journaled_state.db_and_state_mut().0;
                 let state_nonce = db.account(t.from).map_or(0, |a| a.nonce);
-                let cumulative = if amsterdam { exec_sum.max(state_sum) } else { used };
+                let cumulative = if amsterdam {
+                    exec_sum.max(state_sum)
+                } else {
+                    used
+                };
                 pending.clear();
                 pending.insert(t.from, state_nonce);
-                let (nonce, receipt) = apply_sign_tx(spec, number, state_nonce, t.nonce, cumulative)
-                    .map_err(|error| ExecError::Special { index, error })?;
+                let (nonce, receipt) =
+                    apply_sign_tx(spec, number, state_nonce, t.nonce, cumulative)
+                        .map_err(|error| ExecError::Special { index, error })?;
                 db.set_nonce(t.from, nonce)?;
                 receipts.push(receipt);
             }
             Route::XdcxEmpty if amsterdam => {
-                return Err(ExecError::Unsupported("an XDCx empty transaction in Amsterdam"))
+                return Err(ExecError::Unsupported(
+                    "an XDCx empty transaction in Amsterdam",
+                ))
             }
             Route::XdcxEmpty => {
                 let to =
@@ -285,16 +292,15 @@ pub fn execute_block<V: StateRead, E: Env>(
                 // EIP-7928 for a plain transfer: the accounts the transaction loads and changes.
                 let bal_touched: Vec<(Address, Option<xone_state::Account>)> = if amsterdam {
                     let db = evm.ctx.journaled_state.db_and_state_mut().0;
-                    let to = t
-                        .to
-                        .filter(|to| {
+                    let to =
+                        t.to.filter(|to| {
                             // not a precompile or system address, no code, no data, no token fee
                             to.0[..18] != [0u8; 18]
                                 && t.data.is_empty()
                                 && t.access_list.is_empty()
-                                && db
-                                    .account(*to)
-                                    .is_none_or(|a| a.code_hash == alloy_primitives::KECCAK256_EMPTY)
+                                && db.account(*to).is_none_or(|a| {
+                                    a.code_hash == alloy_primitives::KECCAK256_EMPTY
+                                })
                                 && !tokens_fee.contains_key(to)
                         })
                         .ok_or(ExecError::Unsupported(
@@ -550,7 +556,11 @@ fn prague_pre_execution<S: xone_state::StateRead, E: Env>(
                 db.set_nonce(MULTICALL3, 1)?;
             }
             Some(x) if x.code_hash == alloy_primitives::keccak256(&want) => {}
-            Some(_) => return Err(ExecError::Unsupported("other code at the Multicall3 address")),
+            Some(_) => {
+                return Err(ExecError::Unsupported(
+                    "other code at the Multicall3 address",
+                ))
+            }
         }
     }
     match code_of(db, HISTORY) {
@@ -567,7 +577,11 @@ fn prague_pre_execution<S: xone_state::StateRead, E: Env>(
                 db.set_nonce(HISTORY, 1)?;
             }
             let end = number - 1;
-            let mut start = if end + 1 > WINDOW { end + 1 - WINDOW } else { end };
+            let mut start = if end + 1 > WINDOW {
+                end + 1 - WINDOW
+            } else {
+                end
+            };
             if fork > 0 {
                 start = start.max(fork - 1);
             }
@@ -578,7 +592,11 @@ fn prague_pre_execution<S: xone_state::StateRead, E: Env>(
             }
         }
     }
-    db.set_slot(HISTORY, ring_slot(number - 1), U256::from_be_bytes(parent.0));
+    db.set_slot(
+        HISTORY,
+        ring_slot(number - 1),
+        U256::from_be_bytes(parent.0),
+    );
     Ok(())
 }
 

@@ -289,7 +289,9 @@ impl Chain {
         let mut previous = BTreeMap::new();
         for i in 1..=checkpoint::LIMIT_PENALTY_EPOCH {
             if let Some(k) = n.checked_sub(i * self.epoch).filter(|k| *k > 0) {
-                let h = self.get(k).ok_or(format!("no checkpoint {k} for the penalties"))?;
+                let h = self
+                    .get(k)
+                    .ok_or(format!("no checkpoint {k} for the penalties"))?;
                 previous.insert(k, addresses(&h.header.penalties));
             }
         }

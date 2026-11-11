@@ -161,6 +161,9 @@ struct Ckpt {
     signers: Vec<Address>,
     recents: BTreeMap<u64, Address>,
     signs: BTreeMap<u64, Vec<(Address, B256, bool)>>,
+    /// V2 gap snapshots (the epoch switch after a resume reads the one of its own gap block).
+    #[serde(default)]
+    gaps: BTreeMap<u64, Vec<Address>>,
 }
 
 fn ckpt_path(dir: &std::path::Path, n: u64) -> PathBuf {
@@ -210,6 +213,11 @@ fn save(
                     b.signs.iter().map(|s| (s.sender, s.signed, s.ok)).collect(),
                 )
             })
+            .collect(),
+        gaps: chain
+            .gaps
+            .iter()
+            .map(|(n, g)| (*n, g.candidates.clone()))
             .collect(),
     };
     fs::create_dir_all(dir).map_err(|e| e.to_string())?;
@@ -440,6 +448,11 @@ pub fn run_from(
             f.set_slot(*a, *k, *v);
         }
         chain.codes = c.codes;
+        chain.gaps = c
+            .gaps
+            .into_iter()
+            .map(|(number, candidates)| (number, gap_snapshot::SnapshotV2 { number, candidates }))
+            .collect();
         chain.wide = wide_of(&f);
         snap = Snapshot::new(c.number, c.hash, c.signers);
         snap.recents = c.recents;

@@ -92,6 +92,22 @@ pub fn decode(l: &Line) -> Result<Block, String> {
     }
     let mut rest = rest;
     let uncles = Vec::<Header>::decode(&mut rest).map_err(e)?;
+    // From Amsterdam the body carries a (empty) withdrawals list: keep each item as its encoding.
+    let withdrawals = if rest.is_empty() {
+        None
+    } else {
+        let list = RlpHeader::decode(&mut rest).map_err(e)?;
+        let mut items = &rest[..list.payload_length];
+        let mut out = vec![];
+        while !items.is_empty() {
+            let start = items;
+            let item = RlpHeader::decode(&mut items).map_err(e)?;
+            let len = start.len() - items.len() + item.payload_length;
+            out.push(Bytes::copy_from_slice(&start[..len]));
+            items = &items[item.payload_length..];
+        }
+        Some(out)
+    };
     Ok(Block {
         n: l.n,
         archive_hash: l.hash,
@@ -99,7 +115,7 @@ pub fn decode(l: &Line) -> Result<Block, String> {
         body: Body {
             transactions,
             uncles,
-            withdrawals: None,
+            withdrawals,
         },
     })
 }
@@ -110,7 +126,8 @@ fn last_block(path: &Path) -> Result<Option<u64>, String> {
     let mut f = File::open(path).map_err(|e| e.to_string())?;
     let size = f.metadata().map_err(|e| e.to_string())?.len();
     let tail = size.min(64 << 20);
-    f.seek(SeekFrom::Start(size - tail)).map_err(|e| e.to_string())?;
+    f.seek(SeekFrom::Start(size - tail))
+        .map_err(|e| e.to_string())?;
     let mut buf = Vec::new();
     f.read_to_end(&mut buf).map_err(|e| e.to_string())?;
     // a line is complete when a newline ends it; the first line of the window may be cut
@@ -123,7 +140,10 @@ fn last_block(path: &Path) -> Result<Option<u64>, String> {
         None => Err("a line of the cache is longer than 64 MB".into()),
         Some(l) => {
             let v: serde_json::Value = serde_json::from_slice(l).map_err(|e| e.to_string())?;
-            v["n"].as_u64().map(Some).ok_or("last line has no block number".into())
+            v["n"]
+                .as_u64()
+                .map(Some)
+                .ok_or("last line has no block number".into())
         }
     }
 }
