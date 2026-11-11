@@ -9,7 +9,7 @@
 //! reads come from the MDBX side, the frames carry lengths and digests so that `reconcile` sees real
 //! tails. Not modelled: CRC, MDBX internals, F6 retry behaviour (a failed sync is fail-stop here).
 
-use alloy_primitives::{keccak256, B256};
+use alloy_primitives::{keccak256, Bytes, B256};
 use std::collections::{BTreeMap, HashMap};
 use xone_consensus::{v2::commit::Link, verify::Body};
 use xone_db::{
@@ -17,10 +17,12 @@ use xone_db::{
 };
 use xone_primitives::Header;
 use xone_state::{
-    trie::flat_root, CommitError, MemFlat, Missing, StateDiff, StateProvider, StateRead,
+    trie::flat_root, CommitError, FlatWrite, MemFlat, Missing, StateDiff, StateProvider, StateRead,
 };
 
-use crate::store::{Block, KillPoint, Record, Scan, Stage, Store, StoreError, Unwound};
+use crate::store::{
+    Block, Install, KillPoint, Record, Scan, Stage, StateRows, Store, StoreError, Unwound,
+};
 
 const SEGS: [Segment; 3] = [Segment::Headers, Segment::Bodies, Segment::Receipts];
 const FRAME_HEAD: usize = 12;
@@ -76,6 +78,10 @@ struct Mdbx {
     staged_headers: BTreeMap<u64, Header>,
     staged_bodies: BTreeMap<u64, Body>,
     ckpt: BTreeMap<Stage, u64>,
+    /// Headers below the record floor of a pruned or bootstrapped datadir.
+    headers_only: HashMap<B256, Header>,
+    /// The `Meta[anchor]` row of a datadir bootstrapped from a snapshot.
+    anchor: Option<Bytes>,
 }
 
 /// The persistent image: what survives a process crash.
@@ -138,6 +144,10 @@ fn payloads(rec: &Record) -> [Vec<u8>; 3] {
         v
     });
     [alloy_rlp::encode(&rec.block.header), body, receipts]
+}
+
+fn pivot_first(records: &[Record]) -> u64 {
+    records.first().map_or(0, |r| r.block.number())
 }
 
 impl Disk {
@@ -241,6 +251,8 @@ impl MemStore {
                 staged_headers: BTreeMap::new(),
                 staged_bodies: BTreeMap::new(),
                 ckpt: BTreeMap::new(),
+                headers_only: HashMap::new(),
+                anchor: None,
             },
             segs,
             journal_tmp: None,
@@ -277,6 +289,8 @@ impl MemStore {
                 staged_headers: BTreeMap::new(),
                 staged_bodies: BTreeMap::new(),
                 ckpt: BTreeMap::new(),
+                headers_only: HashMap::new(),
+                anchor: None,
             },
             segs: Default::default(),
             journal_tmp: None,
@@ -464,6 +478,7 @@ impl Store for MemStore {
             .get(&hash)
             .map(|r| r.block.header.clone())
             .or_else(|| m.stateless.get(&hash).map(|b| b.header.clone()))
+            .or_else(|| m.headers_only.get(&hash).cloned())
     }
 
     fn record(&self, hash: B256) -> Option<Record> {
@@ -789,6 +804,191 @@ impl Store for MemStore {
             *c = (*c).min(number);
         }
         self.step(KillPoint::K16)
+    }
+
+    fn state_rows(&self, hash: B256) -> Result<StateRows, Missing> {
+        let (accounts, storage) = self.d.mdbx.state.rows_at(hash)?;
+        Ok(StateRows { accounts, storage })
+    }
+
+    fn anchor(&self) -> Option<Bytes> {
+        self.d.mdbx.anchor.clone()
+    }
+
+    fn install_snapshot(&mut self, s: Install) -> Result<(), StoreError> {
+        self.alive()?;
+        let m = &self.d.mdbx;
+        if m.generation != 0 || m.manifest.is_some() || !m.canonical.is_empty() {
+            return Err(StoreError::NotEmpty);
+        }
+        let bad = StoreError::BadInstall;
+        let (Some(pivot), Some(top)) = (s.records.last(), s.headers.last()) else {
+            return Err(bad("no blocks"));
+        };
+        if pivot.block.hash() != top.hash() || s.headers.len() < s.records.len() {
+            return Err(bad("the last header is not the last record"));
+        }
+        let linked = |h: &[Header]| {
+            h.windows(2)
+                .all(|w| w[1].number == w[0].number + 1 && w[1].parent_hash == w[0].hash())
+        };
+        if !linked(&s.headers)
+            || !s.records.windows(2).all(|w| {
+                w[1].block.number() == w[0].block.number() + 1
+                    && w[1].block.parent() == w[0].block.hash()
+            })
+        {
+            return Err(bad("blocks are not consecutive and linked"));
+        }
+        let (number, hash) = (pivot.block.number(), pivot.block.hash());
+        let mut flat = MemFlat::default();
+        for (a, x) in &s.state.accounts {
+            x.balance.check_legal().map_err(CommitError::from)?;
+            flat.set_account(*a, Some(x.clone()));
+        }
+        for (a, k, v) in &s.state.storage {
+            flat.set_slot(*a, *k, *v);
+        }
+        if flat_root(&flat) != pivot.block.header.state_root {
+            return Err(bad("the state does not give the pivot's state root"));
+        }
+        let first = |h: &Header| h.number;
+        let (h_first, r_first) = (first(&s.headers[0]), pivot_first(&s.records));
+        let mut segs: [Vec<File>; 3] = Default::default();
+        let mut segidx = BTreeMap::new();
+        let mut entries = [SegmentEntry {
+            segment: Segment::Headers,
+            first_block: 0,
+            last_block: number,
+            len: 0,
+            tail_digest: B256::ZERO,
+        }; 3];
+        let mut put =
+            |i: usize, n: u64, p: Vec<u8>, bytes: &mut Vec<u8>, last: &mut (usize, usize)| {
+                let f = frame(n, &p);
+                *last = (bytes.len(), bytes.len() + f.len());
+                segidx.insert(
+                    (i, n),
+                    (if i == 0 { h_first } else { r_first }, last.0, last.1),
+                );
+                bytes.extend_from_slice(&f);
+            };
+        let mut files: [Vec<u8>; 3] = Default::default();
+        let mut tails = [(0usize, 0usize); 3];
+        for h in &s.headers {
+            put(
+                0,
+                h.number,
+                alloy_rlp::encode(h),
+                &mut files[0],
+                &mut tails[0],
+            );
+        }
+        for r in &s.records {
+            let p = payloads(r);
+            put(
+                1,
+                r.block.number(),
+                p[1].clone(),
+                &mut files[1],
+                &mut tails[1],
+            );
+            put(
+                2,
+                r.block.number(),
+                p[2].clone(),
+                &mut files[2],
+                &mut tails[2],
+            );
+        }
+        for (i, bytes) in files.into_iter().enumerate() {
+            let first_block = if i == 0 { h_first } else { r_first };
+            entries[i] = SegmentEntry {
+                segment: SEGS[i],
+                first_block,
+                last_block: number,
+                len: idx(bytes.len()),
+                tail_digest: keccak256(&bytes[tails[i].0..tails[i].1]),
+            };
+            segs[i].push(File {
+                first_block,
+                synced: bytes.len(),
+                bytes,
+                in_dir: true,
+            });
+        }
+        let manifest = Manifest {
+            generation: 1,
+            head_number: number,
+            head_hash: hash,
+            entries,
+        };
+        let m = &mut self.d.mdbx;
+        m.generation = 1;
+        m.manifest = Some(manifest.encode());
+        m.canonical = s.headers.iter().map(|h| (h.number, h.hash())).collect();
+        m.headers_only = s
+            .headers
+            .iter()
+            .filter(|h| h.number < r_first)
+            .map(|h| (h.hash(), h.clone()))
+            .collect();
+        m.records = s.records.into_iter().map(|r| (r.block.hash(), r)).collect();
+        m.state = StateProvider::new(flat, number, hash, s.retention);
+        m.segidx = segidx;
+        m.anchor = (!s.anchor.is_empty()).then_some(s.anchor);
+        self.d.segs = segs;
+        Ok(())
+    }
+
+    fn prune(&mut self, headers_from: u64, records_from: u64) -> Result<(), StoreError> {
+        self.alive()?;
+        let (head, _) = self.head();
+        let Some(mut man) = self.d.manifest() else {
+            return Err(StoreError::Unwind(0));
+        };
+        if headers_from > records_from || records_from > head {
+            return Err(StoreError::Prune {
+                headers_from,
+                records_from,
+                head,
+            });
+        }
+        let (h_from, r_from) = (
+            headers_from.max(man.entries[0].first_block),
+            records_from.max(man.entries[1].first_block),
+        );
+        let m = &mut self.d.mdbx;
+        m.canonical.retain(|n, _| *n >= h_from);
+        m.segidx
+            .retain(|(i, n), _| *n >= if *i == 0 { h_from } else { r_from });
+        let low: Vec<_> = m
+            .records
+            .iter()
+            .filter(|(_, r)| r.block.number() < r_from)
+            .map(|(h, r)| (*h, r.block.number(), r.block.header.clone()))
+            .collect();
+        for (h, n, header) in low {
+            m.records.remove(&h);
+            if n >= h_from {
+                m.headers_only.insert(h, header);
+            }
+        }
+        m.headers_only.retain(|_, h| h.number >= h_from);
+        m.staged_headers = m.staged_headers.split_off(&h_from);
+        m.staged_bodies = m.staged_bodies.split_off(&r_from);
+        for (i, e) in man.entries.iter_mut().enumerate() {
+            e.first_block = if i == 0 { h_from } else { r_from };
+            // A file that holds only blocks below the floor is unlinked; one that straddles it stays.
+            let files = &mut self.d.segs[i];
+            while files.get(1).is_some_and(|f| f.first_block <= e.first_block) {
+                files.remove(0);
+            }
+        }
+        man.generation += 1;
+        m.generation += 1;
+        m.manifest = Some(man.encode());
+        Ok(())
     }
 
     fn scan(&self) -> Scan {

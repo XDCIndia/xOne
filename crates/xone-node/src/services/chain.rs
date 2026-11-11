@@ -289,7 +289,7 @@ impl Follower {
                 let mut at = start;
                 while let (Some(n), true) = (at, u64::try_from(out.len()).is_ok_and(|l| l < amount))
                 {
-                    let Some(s) = usize::try_from(n).ok().and_then(|i| h.blocks.get(i)) else {
+                    let Some(s) = h.at(n) else {
                         break;
                     };
                     out.push(s.header.clone());

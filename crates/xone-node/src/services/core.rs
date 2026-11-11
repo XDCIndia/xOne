@@ -26,16 +26,24 @@ use xone_state::{
     trie::flat_root, Account, FlatRead, FlatWrite, MemFlat, Missing, StateDiff, StateRead,
 };
 use xone_sync::{
+    bootstrap::{
+        minimal::{self, Held},
+        Class, Retention,
+    },
     chain::{insert::Outcome, resume::ResumeError, Chain, ChainRead, HeaderCheck, InsertError},
     executor::{BlockExecutor, ExecError, Execution},
-    store::{Block, Store},
+    store::{Block, Install, Record, StateRows, Store},
     testkit::MemStore,
 };
 
 use super::{
     hist::{reseed, HistInner, Stored},
-    store::{self, Ckpt, FileError, FileStore},
+    store::{self, Ckpt, FileError, FileStore, Loaded},
 };
+
+/// Minimal mode deletes when the floor has moved this many blocks past the first held block: a
+/// rewrite of the segment files every 256 blocks, not every block.
+pub const PRUNE_SLACK: u64 = 256;
 
 /// Blocks above the anchor whose state can be opened (RPC reads at a block, unwind window).
 pub const RETENTION: u64 = 1024;
@@ -54,6 +62,12 @@ pub enum CoreError {
     Insert { number: u64, error: InsertError },
     #[error("{0}")]
     Inconsistent(String),
+    #[error("the datadir was bootstrapped from a snapshot and has no history below its anchor: start it with --minimal")]
+    Anchored,
+    #[error("--minimal starts from the anchor of an imported snapshot, and this datadir has none: run `xone snapshot import` first (a minimal node never syncs from genesis or reads an archive)")]
+    NotAnchored,
+    #[error("minimal mode: {0}")]
+    Minimal(String),
 }
 
 /// The state as a sized reader, so the generic executor and the pool can take a `&dyn StateRead`.
@@ -215,6 +229,47 @@ pub struct Core {
     pub genesis: B256,
     ckpt_every: u64,
     pub head: watch::Sender<(u64, B256)>,
+    /// Started from an imported snapshot: prunes below the retention floor, serves nothing below it.
+    pub minimal: bool,
+}
+
+/// The blocks of the files up to the checkpoint `start`, with the checkpoint's state, as the store's
+/// base: an anchored datadir's snapshot, or a full node's whole chain with its genesis block
+/// (`genesis`). The store then holds the window that an export reads.
+fn install_of(l: &Loaded, start: u64, flat: &MemFlat, genesis: Option<&Header>) -> Install {
+    let take = usize::try_from(start + 1 - l.first).unwrap_or(0);
+    let window = || l.blocks.iter().take(take);
+    let rec = |h: &Header, body: Body, receipts: Vec<Bytes>| Record {
+        block: Block::new(h.clone(), body),
+        receipts,
+        diff: Default::default(),
+        aux: Default::default(),
+    };
+    Install {
+        anchor: l.anchor.clone().unwrap_or_default(),
+        headers: genesis
+            .into_iter()
+            .cloned()
+            .chain(window().map(|b| b.header.clone()))
+            .collect(),
+        records: genesis
+            .map(|g| rec(g, Body::default(), vec![]))
+            .into_iter()
+            .chain(
+                window()
+                    .filter(|b| b.header.number >= l.records_from)
+                    .map(|b| rec(&b.header, b.body.clone(), b.receipts.clone())),
+            )
+            .collect(),
+        state: StateRows {
+            accounts: flat.accounts().collect(),
+            storage: flat
+                .accounts()
+                .flat_map(|(a, _)| flat.slots(a).map(move |(k, v)| (a, k, v)))
+                .collect(),
+        },
+        retention: RETENTION,
+    }
 }
 
 pub fn now() -> u64 {
@@ -286,10 +341,30 @@ impl Core {
         dir: &Path,
         ckpt_every: u64,
     ) -> Result<Self, CoreError> {
+        Self::open_with(spec, genesis, dir, ckpt_every, false)
+    }
+
+    /// [`Core::open`], and with `minimal` the start of a node from the anchor of an imported snapshot
+    /// (`spec/bootstrap/minimal-mode.md`): the datadir must be anchored, holds nothing below its
+    /// first retained block, and prunes to the derived retention floor as the head moves. An
+    /// anchored datadir is never opened as a full node, and a full datadir never as a minimal one.
+    pub fn open_with(
+        spec: ChainSpec,
+        genesis: &Genesis,
+        dir: &Path,
+        ckpt_every: u64,
+        minimal: bool,
+    ) -> Result<Self, CoreError> {
         let (flat0, codes0, g) = genesis_state(genesis, &spec)?;
         std::fs::create_dir_all(dir).map_err(|e| FileError(format!("{}: {e}", dir.display())))?;
         let loaded = store::load(dir)?;
-        if let Some(l) = &loaded {
+        let anchored = loaded.as_ref().is_some_and(|l| l.anchor.is_some());
+        match (anchored, minimal) {
+            (true, false) => return Err(CoreError::Anchored),
+            (false, true) => return Err(CoreError::NotAnchored),
+            _ => {}
+        }
+        if let Some(l) = loaded.as_ref().filter(|_| !anchored) {
             if l.blocks.first().map(|b| b.header.parent_hash) != Some(g.hash()) {
                 return Err(CoreError::Inconsistent(
                     "the stored chain does not start at this genesis".into(),
@@ -298,15 +373,17 @@ impl Core {
         }
         let ck = loaded.as_ref().and_then(|l| {
             store::load_ckpt(dir, l.number, |c| {
-                usize::try_from(c.number)
-                    .ok()
-                    .and_then(|n| l.blocks.get(n.checked_sub(1)?))
+                c.number
+                    .checked_sub(l.first)
+                    .and_then(|n| usize::try_from(n).ok())
+                    .and_then(|n| l.blocks.get(n))
                     .map(|b| b.header.hash())
                     == Some(c.hash)
             })
         });
         let hist_of = |blocks: Vec<Stored>, codes, snaps, gaps| HistInner {
             spec: spec.clone(),
+            base: 0,
             blocks,
             codes,
             wide: BTreeMap::new(),
@@ -347,10 +424,17 @@ impl Core {
                     BTreeMap::from([(c.number, snap)]),
                     gaps,
                 );
-                inner.td = genesis_block.header.difficulty;
-                inner.blocks.push(genesis_block);
-                for (i, b) in l.blocks.iter().take(c.number as usize).enumerate() {
-                    let n = i as u64 + 1;
+                if anchored {
+                    // The history starts at the first retained header. Its total difficulty is not
+                    // known (no block below it is held): the window's own sum is a lower bound, and
+                    // XDPoS peers rank by block number and round, not by difficulty.
+                    inner.base = l.first;
+                } else {
+                    inner.td = genesis_block.header.difficulty;
+                    inner.blocks.push(genesis_block);
+                }
+                for (i, b) in l.blocks.iter().take((c.number + 1 - l.first) as usize).enumerate() {
+                    let n = l.first + i as u64;
                     let s = Stored {
                         hash: b.header.hash(),
                         header: b.header.clone(),
@@ -402,11 +486,31 @@ impl Core {
                 "the state checkpoint of block {start} does not give its state root"
             )));
         }
+        if anchored && ck.is_none() {
+            return Err(CoreError::Inconsistent(
+                "an anchored datadir without a state checkpoint at or below its head".into(),
+            ));
+        }
+        // With a checkpoint the in-memory store is the blocks of the files up to it, installed like a
+        // snapshot: its manifest says what the files hold (`first_block`), and an export, the
+        // retention check and the pruning see the same window the history does.
+        let install = match (&loaded, &ck) {
+            (Some(l), Some(_)) => Some(install_of(l, start, &flat, (!anchored).then_some(&g))),
+            _ => None,
+        };
         let hist = std::sync::Arc::new(History {
             inner: RwLock::new(inner),
             pending: Mutex::new(None),
         });
-        let mem = MemStore::with_anchor(anchor, flat, RETENTION, BLOCKS_PER_FILE);
+        let mem = match install {
+            Some(i) => {
+                let mut m = MemStore::empty(BLOCKS_PER_FILE);
+                m.install_snapshot(i)
+                    .map_err(|e| CoreError::Inconsistent(e.to_string()))?;
+                m
+            }
+            None => MemStore::with_anchor(anchor, flat, RETENTION, BLOCKS_PER_FILE),
+        };
         let files = FileStore::new(mem, dir, loaded.as_ref())?;
         let exec = NodeExec {
             spec: spec.clone(),
@@ -426,9 +530,13 @@ impl Core {
             genesis: g.hash(),
             ckpt_every,
             head,
+            minimal,
         };
+        if minimal {
+            core.check_start()?;
+        }
         if let Some(l) = loaded {
-            for b in l.blocks.into_iter().skip(start as usize) {
+            for b in l.blocks.into_iter().skip((start + 1 - l.first) as usize) {
                 let number = b.header.number;
                 match core.import(b.header, b.body, now())? {
                     Outcome::Extended => {}
@@ -510,6 +618,9 @@ impl Core {
         if self.ckpt_every != 0 && number % self.ckpt_every == 0 {
             self.checkpoint()?;
         }
+        if self.minimal {
+            self.prune()?;
+        }
         Ok(out)
     }
 
@@ -537,11 +648,10 @@ impl Core {
         c.signs = h
             .blocks
             .iter()
-            .enumerate()
-            .filter(|(_, b)| !b.signs.is_empty())
-            .map(|(i, b)| {
+            .filter(|b| !b.signs.is_empty())
+            .map(|b| {
                 (
-                    i as u64,
+                    b.header.number,
                     b.signs.iter().map(|s| (s.sender, s.signed, s.ok)).collect(),
                 )
             })
@@ -552,10 +662,48 @@ impl Core {
             .map(|(n, g)| (*n, g.candidates.clone()))
             .collect();
         store::save_ckpt(&self.dir, &c)?;
+        if self.minimal {
+            store::drop_ckpts_below(&self.dir, n);
+        }
         Ok(Some(n))
     }
 
     pub fn head(&self) -> (u64, B256) {
         self.chain.head()
+    }
+
+    fn check_start(&self) -> Result<(), CoreError> {
+        self.chain
+            .with_store(|s| minimal::check_start(&self.spec, s))
+            .map_err(|e| CoreError::Minimal(e.to_string()))
+    }
+
+    /// What a minimal node holds, for the RPC; `None` on a node that followed from genesis.
+    pub fn held(&self) -> Option<Held> {
+        self.minimal
+            .then(|| {
+                self.chain
+                    .with_store(|s| Held::of_store(&self.spec, s, RETENTION))
+                    .ok()
+            })
+            .flatten()
+    }
+
+    /// Deletes what the retention floor of the head has passed, from the store and the history
+    /// (`minimal::prune`; the committed block is a ceiling).
+    fn prune(&self) -> Result<(), CoreError> {
+        let committed = self.chain.committed().map(|l| l.number);
+        let kept = self
+            .chain
+            .with_store_mut(|s| minimal::prune(&self.spec, s, committed, PRUNE_SLACK))
+            .map_err(|e| CoreError::Minimal(e.to_string()))?;
+        if let Some(k) = kept {
+            let (head, _) = self.chain.head();
+            let gaps_from = Retention::derive(&self.spec, head)
+                .map_err(|e| CoreError::Minimal(e.to_string()))?
+                .floor(Class::GapSnapshot);
+            self.hist.write().prune(k.headers_from, k.records_from, gaps_from);
+        }
+        Ok(())
     }
 }

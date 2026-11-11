@@ -59,11 +59,12 @@ pub fn build(
     }
 
     let core = Arc::new(
-        core::Core::open(
+        core::Core::open_with(
             net.spec(),
             genesis,
             &cfg.datadir.join("xone"),
             CHECKPOINT_EVERY,
+            cfg.sync.minimal,
         )
         .map_err(|e| e.to_string())?,
     );

@@ -5,7 +5,12 @@
 //!   payload | tag`, appended and fsynced before `head.json` moves (ADR-005 sections 5 and 6.1;
 //!   the tag is the first 4 bytes of keccak256 of the rest, not CRC-32C, to add no crate);
 //! * `head.json`: the head and the committed length of each segment, written by tmp file, fsync,
-//!   rename and directory fsync. Bytes of a segment beyond its length are never read;
+//!   rename and directory fsync. Bytes of a segment beyond its length are never read. A datadir
+//!   that was bootstrapped from a snapshot or pruned (minimal mode) starts at `first`, not at block
+//!   1; a body or receipt frame below `records_from` has an empty payload; a rewrite of the
+//!   segments by [`FileStore::prune`] is a new generation `gen` of the files, published by
+//!   `head.json` and deleted behind it (ADR-005 section 10 P-1, P-2);
+//! * `anchor.rlp`: the verified manifest of the snapshot, written before `head.json`;
 //! * `state/ckpt-<number>.json.gz`: the state checkpoints of the replay harness.
 //!
 //! ponytail: the whole chain is held in memory and a restart re-executes the blocks above the newest
@@ -28,7 +33,7 @@ use xone_db::{Action, Cause, Durability};
 use xone_primitives::{Header, WideBalance};
 use xone_state::{Account, FlatRead, FlatWrite, MemFlat, Missing, StateRead};
 use xone_sync::{
-    store::{Block, Record, Scan, Stage, Store, StoreError, Unwound},
+    store::{Block, Install, Record, Scan, Stage, StateRows, Store, StoreError, Unwound},
     testkit::MemStore,
 };
 
@@ -76,11 +81,23 @@ fn payloads(rec: &Record) -> [Vec<u8>; 3] {
     ]
 }
 
+fn one() -> u64 {
+    1
+}
+
 #[derive(Serialize, Deserialize)]
 struct HeadFile {
     number: u64,
     hash: B256,
     lens: [u64; 3],
+    /// The first block of the segments; 1 for a node that followed from genesis.
+    #[serde(default = "one")]
+    first: u64,
+    /// Bodies and receipts below this block are empty frames.
+    #[serde(default = "one")]
+    records_from: u64,
+    #[serde(default)]
+    gen: u64,
 }
 
 /// A block as the files hold it.
@@ -90,10 +107,15 @@ pub struct Stored3 {
     pub receipts: Vec<Bytes>,
 }
 
-/// What a start-up reads from the segment files: blocks `1..=number`.
+/// What a start-up reads from the segment files: blocks `first..=number`.
 pub struct Loaded {
     pub number: u64,
     pub hash: B256,
+    pub first: u64,
+    pub records_from: u64,
+    gen: u64,
+    /// The manifest of the snapshot the datadir was made from.
+    pub anchor: Option<Bytes>,
     pub blocks: Vec<Stored3>,
     ends: BTreeMap<u64, [u64; 3]>,
 }
@@ -112,8 +134,51 @@ fn write_head(dir: &Path, h: &HeadFile) -> Result<(), FileError> {
     sync_dir(dir)
 }
 
-fn seg_path(dir: &Path, i: usize) -> PathBuf {
-    dir.join("static").join(format!("{}.seg", SEGS[i]))
+fn seg_path(dir: &Path, i: usize, gen: u64) -> PathBuf {
+    let name = if gen == 0 {
+        format!("{}.seg", SEGS[i])
+    } else {
+        format!("{}.{gen}.seg", SEGS[i])
+    };
+    dir.join("static").join(name)
+}
+
+/// Deletes the segment files that are not generation `gen`: what a crash before `head.json`
+/// (the new files) or after it (the old ones) left.
+fn sweep(dir: &Path, gen: u64) {
+    for i in 0..3 {
+        let keep = seg_path(dir, i, gen);
+        if let Ok(rd) = fs::read_dir(dir.join("static")) {
+            for e in rd.filter_map(Result::ok) {
+                let n = e.file_name().to_string_lossy().into_owned();
+                let own = n.starts_with(SEGS[i]) && n.ends_with(".seg");
+                if own && e.path() != keep {
+                    let _ = fs::remove_file(e.path());
+                }
+            }
+        }
+    }
+}
+
+/// The frames of one segment file's committed bytes, from block `first`: number and payload.
+fn frames(bytes: &[u8], first: u64, path: &Path) -> Result<Vec<(u64, std::ops::Range<usize>)>, FileError> {
+    let mut out = Vec::new();
+    let (mut at, mut n) = (0usize, first);
+    while at < bytes.len() {
+        let bad = || FileError(format!("{}: damaged frame for block {n}", path.display()));
+        let h = bytes.get(at..at + 12).ok_or_else(bad)?;
+        let plen = u32::from_le_bytes([h[0], h[1], h[2], h[3]]);
+        let number = u64::from_le_bytes([h[4], h[5], h[6], h[7], h[8], h[9], h[10], h[11]]);
+        let end = at + 12 + usize::try_from(plen).unwrap_or(usize::MAX);
+        let payload = bytes.get(at + 12..end).ok_or_else(bad)?;
+        if number != n || bytes.get(end..end + 4) != Some(&tag(plen, number, payload)[..]) {
+            return Err(bad());
+        }
+        out.push((n, at + 12..end));
+        at = end + 4;
+        n += 1;
+    }
+    Ok(out)
 }
 
 /// Reads the committed part of the three segments. `None` for a datadir without a head file.
@@ -129,7 +194,7 @@ pub fn load(dir: &Path) -> Result<Option<Loaded>, FileError> {
     let mut parts: [Vec<Vec<u8>>; 3] = Default::default();
     let mut ends: BTreeMap<u64, [u64; 3]> = BTreeMap::new();
     for (i, part) in parts.iter_mut().enumerate() {
-        let p = seg_path(dir, i);
+        let p = seg_path(dir, i, head.gen);
         let bytes = io(&p, fs::read(&p))?;
         let len = usize::try_from(head.lens[i]).unwrap_or(usize::MAX);
         let bytes = bytes.get(..len).ok_or_else(|| {
@@ -139,43 +204,45 @@ pub fn load(dir: &Path) -> Result<Option<Loaded>, FileError> {
                 head.lens[i]
             ))
         })?;
-        let (mut at, mut n) = (0usize, 1u64);
-        while at < bytes.len() {
-            let bad = || FileError(format!("{}: damaged frame for block {n}", p.display()));
-            let h = bytes.get(at..at + 12).ok_or_else(bad)?;
-            let plen = u32::from_le_bytes([h[0], h[1], h[2], h[3]]);
-            let number = u64::from_le_bytes([h[4], h[5], h[6], h[7], h[8], h[9], h[10], h[11]]);
-            let end = at + 12 + usize::try_from(plen).unwrap_or(usize::MAX);
-            let payload = bytes.get(at + 12..end).ok_or_else(bad)?;
-            if number != n || bytes.get(end..end + 4) != Some(&tag(plen, number, payload)[..]) {
-                return Err(bad());
-            }
-            part.push(payload.to_vec());
-            at = end + 4;
-            ends.entry(n).or_default()[i] = at as u64; // ponytail: usize is u64 here
-            n += 1;
+        for (n, range) in frames(bytes, head.first, &p)? {
+            part.push(bytes[range.clone()].to_vec());
+            ends.entry(n).or_default()[i] = (range.end + 4) as u64; // ponytail: usize is u64 here
         }
     }
     let count = parts[0].len();
-    if parts[1].len() != count || parts[2].len() != count || count as u64 != head.number {
+    if parts[1].len() != count
+        || parts[2].len() != count
+        || count as u64 != head.number + 1 - head.first
+    {
         return Err(FileError(
             "the segments and head.json disagree on the block count".into(),
         ));
     }
     let mut blocks = Vec::with_capacity(count);
     for (i, ((hp, bp), rp)) in parts[0].iter().zip(&parts[1]).zip(&parts[2]).enumerate() {
-        let bad =
-            |what: &str, e: alloy_rlp::Error| FileError(format!("block {}: {what}: {e}", i + 1));
+        let n = head.first + i as u64;
+        let bad = |what: &str, e: alloy_rlp::Error| FileError(format!("block {n}: {what}: {e}"));
         let header = Header::decode(&mut &hp[..]).map_err(|e| bad("header", e))?;
-        let b = BodyFrame::decode(&mut &bp[..]).map_err(|e| bad("body", e))?;
-        let receipts = Vec::<Bytes>::decode(&mut &rp[..]).map_err(|e| bad("receipts", e))?;
+        let (body, receipts) = if n < head.records_from {
+            if !bp.is_empty() || !rp.is_empty() {
+                return Err(FileError(format!("block {n}: a body below records_from")));
+            }
+            (Body::default(), vec![])
+        } else {
+            let b = BodyFrame::decode(&mut &bp[..]).map_err(|e| bad("body", e))?;
+            let r = Vec::<Bytes>::decode(&mut &rp[..]).map_err(|e| bad("receipts", e))?;
+            (
+                Body {
+                    transactions: b.txs,
+                    uncles: b.uncles,
+                    withdrawals: None,
+                },
+                r,
+            )
+        };
         blocks.push(Stored3 {
             header,
-            body: Body {
-                transactions: b.txs,
-                uncles: b.uncles,
-                withdrawals: None,
-            },
+            body,
             receipts,
         });
     }
@@ -184,9 +251,18 @@ pub fn load(dir: &Path) -> Result<Option<Loaded>, FileError> {
             "the last stored header is not the head of head.json".into(),
         ));
     }
+    let anchor = match fs::read(dir.join("anchor.rlp")) {
+        Ok(b) => Some(Bytes::from(b)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => return Err(FileError(format!("anchor.rlp: {e}"))),
+    };
     Ok(Some(Loaded {
         number: head.number,
         hash: head.hash,
+        first: head.first,
+        records_from: head.records_from,
+        gen: head.gen,
+        anchor,
         blocks,
         ends,
     }))
@@ -273,6 +349,23 @@ pub fn save_ckpt(dir: &Path, c: &Ckpt) -> Result<(), FileError> {
     io(&to, fs::rename(&tmp, &to))
 }
 
+/// Minimal mode keeps the newest state checkpoint only: the older ones are state of blocks the node
+/// has pruned.
+pub fn drop_ckpts_below(dir: &Path, number: u64) {
+    if let Ok(rd) = fs::read_dir(ckpt_dir(dir)) {
+        for e in rd.filter_map(Result::ok) {
+            let name = e.file_name().to_string_lossy().into_owned();
+            let n = name
+                .strip_prefix("ckpt-")
+                .and_then(|r| r.strip_suffix(".json.gz"))
+                .and_then(|r| r.parse::<u64>().ok());
+            if n.is_some_and(|n| n < number) {
+                let _ = fs::remove_file(e.path());
+            }
+        }
+    }
+}
+
 /// The newest checkpoint at or below `upto` that `ok` accepts (it is of this chain).
 pub fn load_ckpt(dir: &Path, upto: u64, ok: impl Fn(&Ckpt) -> bool) -> Option<Ckpt> {
     let mut files: Vec<_> = fs::read_dir(ckpt_dir(dir))
@@ -295,18 +388,23 @@ pub struct FileStore {
     /// Head number on disk. Blocks at or below it are replayed from the files and not written again.
     persisted: u64,
     ends: BTreeMap<u64, [u64; 3]>,
+    first: u64,
+    records_from: u64,
+    gen: u64,
 }
 
 impl FileStore {
     pub fn new(inner: MemStore, dir: &Path, loaded: Option<&Loaded>) -> Result<Self, FileError> {
         io(&dir.join("static"), fs::create_dir_all(dir.join("static")))?;
+        let gen = loaded.map_or(0, |l| l.gen);
+        sweep(dir, gen);
         // Bytes beyond the committed length are a torn append or leftovers: cut them, so that the next
         // frame lands where `head.json` says the segment ends.
         let lens = loaded
             .and_then(|l| l.ends.get(&l.number).copied())
             .unwrap_or([0; 3]);
         for (i, len) in lens.iter().enumerate() {
-            let p = seg_path(dir, i);
+            let p = seg_path(dir, i, gen);
             if p.exists() {
                 let f = io(&p, OpenOptions::new().write(true).open(&p))?;
                 if io(&p, f.metadata())?.len() > *len {
@@ -320,12 +418,26 @@ impl FileStore {
             dir: dir.to_owned(),
             persisted: loaded.map_or(0, |l| l.number),
             ends: loaded.map(|l| l.ends.clone()).unwrap_or_default(),
+            first: loaded.map_or(1, |l| l.first),
+            records_from: loaded.map_or(1, |l| l.records_from),
+            gen,
         })
     }
 
     /// The flat tables of the head, for a checkpoint.
     pub fn head_flat(&self) -> &MemFlat {
         self.inner.head_flat()
+    }
+
+    fn head_file(&self, number: u64, hash: B256, lens: [u64; 3]) -> HeadFile {
+        HeadFile {
+            number,
+            hash,
+            lens,
+            first: self.first,
+            records_from: self.records_from,
+            gen: self.gen,
+        }
     }
 
     fn append(&mut self, rec: &Record) -> Result<(), FileError> {
@@ -338,7 +450,7 @@ impl FileStore {
         }
         let mut lens = self.ends.get(&self.persisted).copied().unwrap_or([0; 3]);
         for (i, p) in payloads(rec).iter().enumerate() {
-            let path = seg_path(&self.dir, i);
+            let path = seg_path(&self.dir, i, self.gen);
             let f = frame(n, p);
             let mut file = io(
                 &path,
@@ -349,21 +461,14 @@ impl FileStore {
             lens[i] += f.len() as u64; // ponytail: usize is u64 here
         }
         sync_dir(&self.dir.join("static"))?;
-        write_head(
-            &self.dir,
-            &HeadFile {
-                number: n,
-                hash: rec.block.hash(),
-                lens,
-            },
-        )?;
+        write_head(&self.dir, &self.head_file(n, rec.block.hash(), lens))?;
         self.ends.insert(n, lens);
         self.persisted = n;
         Ok(())
     }
 
     fn cut(&mut self, number: u64) -> Result<(), FileError> {
-        let lens = if number == 0 {
+        let lens = if number + 1 == self.first {
             [0; 3]
         } else {
             *self
@@ -372,16 +477,119 @@ impl FileStore {
                 .ok_or_else(|| FileError(format!("no stored frames for block {number}")))?
         };
         for (i, len) in lens.iter().enumerate() {
-            let p = seg_path(&self.dir, i);
+            let p = seg_path(&self.dir, i, self.gen);
             let f = io(&p, OpenOptions::new().write(true).open(&p))?;
             io(&p, f.set_len(*len))?;
             io(&p, f.sync_all())?;
         }
         let hash = self.inner.canonical_hash(number).unwrap_or_default();
-        write_head(&self.dir, &HeadFile { number, hash, lens })?;
+        write_head(&self.dir, &self.head_file(number, hash, lens))?;
         self.ends.retain(|n, _| *n <= number);
         self.persisted = number;
         Ok(())
+    }
+
+    /// Writes the three segments of generation `gen` holding `blocks` (number, header payload, body
+    /// payload, receipts payload) from `first`, and publishes them with `head.json`. The files of
+    /// the generation before are deleted behind it.
+    fn publish(
+        &mut self,
+        gen: u64,
+        first: u64,
+        records_from: u64,
+        blocks: &[(u64, Vec<u8>, Vec<u8>, Vec<u8>)],
+        head: (u64, B256),
+    ) -> Result<(), FileError> {
+        let mut files: [Vec<u8>; 3] = Default::default();
+        let mut ends = BTreeMap::new();
+        for (n, h, b, r) in blocks {
+            for (i, p) in [h, b, r].into_iter().enumerate() {
+                files[i].extend_from_slice(&frame(*n, p));
+                ends.entry(*n).or_insert([0u64; 3])[i] = files[i].len() as u64; // ponytail: usize is u64 here
+            }
+        }
+        for (i, bytes) in files.iter().enumerate() {
+            let p = seg_path(&self.dir, i, gen);
+            let mut f = io(&p, File::create(&p))?;
+            io(&p, f.write_all(bytes))?;
+            io(&p, f.sync_all())?;
+        }
+        sync_dir(&self.dir.join("static"))?;
+        let lens = ends.get(&head.0).copied().unwrap_or([0; 3]);
+        let old = (self.gen, self.first, self.records_from);
+        (self.gen, self.first, self.records_from) = (gen, first, records_from);
+        if let Err(e) = write_head(&self.dir, &self.head_file(head.0, head.1, lens)) {
+            (self.gen, self.first, self.records_from) = old;
+            return Err(e);
+        }
+        sweep(&self.dir, gen);
+        self.ends = ends;
+        self.persisted = head.0;
+        Ok(())
+    }
+
+    /// Rewrites the segments from the files as they are: frames below `first` dropped, bodies and
+    /// receipts below `records_from` emptied.
+    fn rewrite(&mut self, first: u64, records_from: u64) -> Result<(), FileError> {
+        let mut parts: [Vec<(u64, Vec<u8>)>; 3] = Default::default();
+        for (i, part) in parts.iter_mut().enumerate() {
+            let p = seg_path(&self.dir, i, self.gen);
+            let bytes = io(&p, fs::read(&p))?;
+            let len = self.ends.get(&self.persisted).map_or(0, |e| e[i]);
+            let bytes = &bytes[..usize::try_from(len).unwrap_or(0).min(bytes.len())];
+            for (n, r) in frames(bytes, self.first, &p)? {
+                if n >= first {
+                    part.push((n, bytes[r].to_vec()));
+                }
+            }
+        }
+        let blocks: Vec<_> = (0..parts[0].len())
+            .map(|k| {
+                let n = parts[0][k].0;
+                let keep = |i: usize| {
+                    if i > 0 && n < records_from {
+                        vec![]
+                    } else {
+                        parts[i][k].1.clone()
+                    }
+                };
+                (n, keep(0), keep(1), keep(2))
+            })
+            .collect();
+        let head = (self.persisted, self.inner.canonical_hash(self.persisted).unwrap_or_default());
+        self.publish(self.gen + 1, first, records_from, &blocks, head)
+    }
+
+    /// The files of a datadir that was just installed: every header, the bodies and receipts of the
+    /// records, empty frames for the blocks between the two floors; then the anchor; then
+    /// `head.json`, which is what makes the datadir exist.
+    fn write_install(&mut self, s: &Install) -> Result<(), FileError> {
+        let first = s.headers.first().map_or(1, |h| h.number);
+        let records_from = s.records.first().map_or(first, |r| r.block.number());
+        let by_number: BTreeMap<u64, &Record> =
+            s.records.iter().map(|r| (r.block.number(), r)).collect();
+        let blocks: Vec<_> = s
+            .headers
+            .iter()
+            .map(|h| {
+                let (b, r) = by_number
+                    .get(&h.number)
+                    .map(|rec| {
+                        let p = payloads(rec);
+                        (p[1].clone(), p[2].clone())
+                    })
+                    .unwrap_or_default();
+                (h.number, alloy_rlp::encode(h), b, r)
+            })
+            .collect();
+        let tmp = self.dir.join("anchor.rlp.tmp");
+        let mut f = io(&tmp, File::create(&tmp))?;
+        io(&tmp, f.write_all(&s.anchor))?;
+        io(&tmp, f.sync_all())?;
+        let to = self.dir.join("anchor.rlp");
+        io(&to, fs::rename(&tmp, &to))?;
+        let head = s.headers.last().map_or((0, B256::ZERO), |h| (h.number, h.hash()));
+        self.publish(0, first, records_from, &blocks, head)
     }
 }
 
@@ -462,6 +670,27 @@ impl Store for FileStore {
     }
     fn unwind_stages(&mut self, number: u64) -> Result<(), StoreError> {
         self.inner.unwind_stages(number)
+    }
+    fn state_rows(&self, hash: B256) -> Result<StateRows, Missing> {
+        self.inner.state_rows(hash)
+    }
+    fn anchor(&self) -> Option<Bytes> {
+        self.inner.anchor()
+    }
+    fn install_snapshot(&mut self, s: Install) -> Result<(), StoreError> {
+        if self.persisted != 0 || self.dir.join("head.json").exists() {
+            return Err(StoreError::NotEmpty);
+        }
+        self.inner.install_snapshot(s.clone())?;
+        self.write_install(&s).map_err(degraded)
+    }
+    fn prune(&mut self, headers_from: u64, records_from: u64) -> Result<(), StoreError> {
+        self.inner.prune(headers_from, records_from)?;
+        let (h, r) = (headers_from.max(self.first), records_from.max(self.records_from));
+        if (h, r) != (self.first, self.records_from) {
+            self.rewrite(h, r).map_err(degraded)?;
+        }
+        Ok(())
     }
     fn scan(&self) -> Scan {
         self.inner.scan()

@@ -13,6 +13,7 @@ pub mod enode;
 pub mod lifecycle;
 pub mod observe;
 pub mod services;
+pub mod snapshot;
 
 pub use config::{Config, ConfigError, Profile};
 pub use disk::{Action, DiskWatermark};
