@@ -236,10 +236,7 @@ impl StateTrie {
     }
 
     /// [`Self::from_flat`] with the storage root of the `opaque` accounts given instead of their slots.
-    pub fn from_flat_pruned(
-        flat: &impl crate::FlatRead,
-        opaque: &BTreeMap<Address, B256>,
-    ) -> Self {
+    pub fn from_flat_pruned(flat: &impl crate::FlatRead, opaque: &BTreeMap<Address, B256>) -> Self {
         let mut t = Self {
             opaque: opaque.iter().map(|(a, r)| (keccak256(a), *r)).collect(),
             ..Self::default()
