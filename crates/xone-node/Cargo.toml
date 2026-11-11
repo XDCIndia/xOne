@@ -1,0 +1,10 @@
+[package]
+name = "xone-node"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# std only. No node wiring yet: these are the primitives of ADR-007.
+[dependencies]

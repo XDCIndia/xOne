@@ -3974,6 +3974,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "xone-node"
+version = "0.1.0"
+
+[[package]]
 name = "xone-primitives"
 version = "0.1.0"
 dependencies = [
