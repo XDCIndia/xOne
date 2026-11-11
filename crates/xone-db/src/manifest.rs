@@ -26,6 +26,11 @@ pub enum Segment {
 
 impl Segment {
     pub const ALL: [Segment; 3] = [Segment::Headers, Segment::Bodies, Segment::Receipts];
+
+    /// The byte of the manifest entry and of the `SegIdx` key.
+    pub fn id(self) -> u8 {
+        self as u8
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

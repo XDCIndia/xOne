@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)] // integration test: a panic is the failure report
-//! Restart over the datadir files: the head comes back from `head.json`, the blocks above the newest
-//! state checkpoint are replayed and verified, and a damaged or foreign datadir is refused, never
-//! opened at block 0.
+//! Restart over the datadir (MDBX and segment files, ADR-005): the head comes back from the manifest,
+//! the blocks above the newest state checkpoint are replayed and verified, and a damaged or foreign
+//! datadir is refused, never opened at block 0.
 
 mod common;
 
@@ -91,35 +91,40 @@ fn head_and_blocks_come_back() {
 fn a_torn_tail_is_cut_and_damage_is_refused() {
     let dir = scratch("damage");
     drop(fill(&dir, 0));
-    let seg = |n: &str| dir.join("xone/static").join(n);
+    let seg = |n: &str| {
+        dir.join("xone/static")
+            .join(n)
+            .join("0000000000.seg")
+    };
     // bytes after the committed length (a torn append) are ignored and cut
-    let mut v = std::fs::read(seg("headers.seg")).unwrap();
+    let mut v = std::fs::read(seg("headers")).unwrap();
     let good = v.len();
     v.extend_from_slice(&[0xde, 0xad, 0xbe, 0xef, 1, 2, 3]);
-    std::fs::write(seg("headers.seg"), &v).unwrap();
+    std::fs::write(seg("headers"), &v).unwrap();
     let core = open(&dir, Network::Apothem, 0).unwrap();
     assert_eq!(core.head().0, N as u64);
     assert_eq!(
-        std::fs::metadata(seg("headers.seg")).unwrap().len() as usize,
+        std::fs::metadata(seg("headers")).unwrap().len() as usize,
         good
     );
     drop(core);
 
     // a flipped byte inside a committed frame is refused
-    let mut v = std::fs::read(seg("bodies.seg")).unwrap();
-    v[40] ^= 1;
-    std::fs::write(seg("bodies.seg"), &v).unwrap();
+    let mut v = std::fs::read(seg("bodies")).unwrap();
+    let mid = v.len() / 2;
+    v[mid] ^= 1;
+    std::fs::write(seg("bodies"), &v).unwrap();
     let e = open(&dir, Network::Apothem, 0).err().unwrap();
     assert!(matches!(e, CoreError::File(_)), "{e}");
-    v[40] ^= 1;
-    std::fs::write(seg("bodies.seg"), &v).unwrap();
+    v[mid] ^= 1;
+    std::fs::write(seg("bodies"), &v).unwrap();
     assert!(open(&dir, Network::Apothem, 0).is_ok());
 
-    // a segment shorter than head.json says is refused
-    let v = std::fs::read(seg("receipts.seg")).unwrap();
-    std::fs::write(seg("receipts.seg"), &v[..v.len() - 1]).unwrap();
+    // a segment shorter than the manifest says is refused
+    let v = std::fs::read(seg("receipts")).unwrap();
+    std::fs::write(seg("receipts"), &v[..v.len() - 1]).unwrap();
     let e = open(&dir, Network::Apothem, 0).err().unwrap();
-    assert!(e.to_string().contains("shorter"), "{e}");
+    assert!(e.to_string().contains("SegmentShort"), "{e}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

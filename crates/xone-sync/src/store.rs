@@ -116,9 +116,32 @@ pub enum KillPoint {
     U4b,
     U5a,
     U5b,
+    /// Pruning (ADR-005 section 10): before the floor commit, after it, after the first unlink,
+    /// after the last, directory synced.
+    PR1,
+    PR2,
+    PR3,
+    PR4,
+    PR5,
+    /// Start-up repair (section 7): after a truncate before the file fsync, after the file fsync
+    /// before the directory fsync, after the quarantine copy before the truncate.
+    RP1,
+    RP2,
+    RP3,
 }
 
 impl KillPoint {
+    /// The pruning points, reachable only on a store that prunes (`MdbxStore::prune_to`).
+    pub const PRUNE: [KillPoint; 5] = [
+        KillPoint::PR1,
+        KillPoint::PR2,
+        KillPoint::PR3,
+        KillPoint::PR4,
+        KillPoint::PR5,
+    ];
+    /// The repair points, reachable only when `repair` has something to cut.
+    pub const REPAIR: [KillPoint; 3] = [KillPoint::RP1, KillPoint::RP2, KillPoint::RP3];
+    /// The commit and unwind points of ADR-005 sections 5 and 8: every store has them.
     pub const ALL: [KillPoint; 27] = {
         use KillPoint::*;
         [
@@ -140,6 +163,9 @@ pub enum StoreError {
     State(#[from] CommitError),
     #[error("cannot unwind to {0}: above the head or outside the retained window")]
     Unwind(u64),
+    /// A stored record failed its check (CRC, digest, root or decode). Nothing is served from it.
+    #[error("damaged datadir: {0}")]
+    Damaged(String),
 }
 
 /// What start-up reads from the datadir before `xone_db::reconcile` decides.

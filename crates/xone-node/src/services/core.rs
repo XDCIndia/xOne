@@ -1,8 +1,9 @@
-//! The chain as the node runs it: `xone_sync::chain::Chain` over the [`FileStore`], the executor
-//! adapter (`xone_executor::execute_block`) and the header check adapter (`HeaderVerifier`), both
-//! reading the node's own [`History`]. A restart re-opens the files and replays every block above
-//! the newest state checkpoint through the same `Chain::insert`, so nothing that was stored is
-//! trusted without being verified and executed again.
+//! The chain as the node runs it: `xone_sync::chain::Chain` over the [`NodeStore`] (MDBX and the
+//! segment files, ADR-005), the executor adapter (`xone_executor::execute_block`) and the header
+//! check adapter (`HeaderVerifier`), both reading the node's own [`History`]. A restart reconciles
+//! the store, unwinds it to the newest state checkpoint and replays every block above it through the
+//! same `Chain::insert`, so nothing that was stored is trusted without being verified and executed
+//! again.
 
 use std::{
     collections::BTreeMap,
@@ -26,21 +27,22 @@ use xone_state::{
     trie::flat_root, Account, FlatRead, FlatWrite, MemFlat, Missing, StateDiff, StateRead,
 };
 use xone_sync::{
-    chain::{insert::Outcome, resume::ResumeError, Chain, ChainRead, HeaderCheck, InsertError},
+    chain::{
+        insert::Outcome,
+        resume::{resume, ResumeError, Resumed},
+        Chain, ChainRead, HeaderCheck, InsertError,
+    },
     executor::{BlockExecutor, ExecError, Execution},
-    store::{Block, Store},
-    testkit::MemStore,
+    store::{Block, Store, Unwound},
 };
 
 use super::{
     hist::{reseed, HistInner, Stored},
-    store::{self, Ckpt, FileError, FileStore},
+    store::{self, Ckpt, FileError, NodeStore},
 };
 
 /// Blocks above the anchor whose state can be opened (RPC reads at a block, unwind window).
 pub const RETENTION: u64 = 1024;
-/// Blocks per segment chunk of the in-memory store model.
-const BLOCKS_PER_FILE: u64 = 100_000;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CoreError {
@@ -205,7 +207,7 @@ impl HeaderCheck for NodeCheck {
     }
 }
 
-pub type NodeChain = Chain<FileStore, NodeExec, NodeCheck>;
+pub type NodeChain = Chain<NodeStore, NodeExec, NodeCheck>;
 
 pub struct Core {
     pub spec: ChainSpec,
@@ -288,13 +290,19 @@ impl Core {
     ) -> Result<Self, CoreError> {
         let (flat0, codes0, g) = genesis_state(genesis, &spec)?;
         std::fs::create_dir_all(dir).map_err(|e| FileError(format!("{}: {e}", dir.display())))?;
-        let loaded = store::load(dir)?;
-        if let Some(l) = &loaded {
-            if l.blocks.first().map(|b| b.header.parent_hash) != Some(g.hash()) {
+        let mut node_store = store::open(dir, RETENTION)?;
+        let resumed = resume(&mut node_store)?;
+        let loaded = store::load(&node_store)?;
+        match resumed {
+            Resumed::Fresh => node_store
+                .init_anchor(g.clone(), flat0.clone())
+                .map_err(|e| CoreError::Inconsistent(e.to_string()))?,
+            Resumed::Head { .. } if node_store.canonical_hash(0) != Some(g.hash()) => {
                 return Err(CoreError::Inconsistent(
                     "the stored chain does not start at this genesis".into(),
                 ));
             }
+            Resumed::Head { .. } => {}
         }
         let ck = loaded.as_ref().and_then(|l| {
             store::load_ckpt(dir, l.number, |c| {
@@ -406,8 +414,22 @@ impl Core {
             inner: RwLock::new(inner),
             pending: Mutex::new(None),
         });
-        let mem = MemStore::with_anchor(anchor, flat, RETENTION, BLOCKS_PER_FILE);
-        let files = FileStore::new(mem, dir, loaded.as_ref())?;
+        // The store goes back to the checkpoint: the blocks above it are replayed below.
+        if loaded.as_ref().is_some_and(|l| start < l.number) {
+            node_store
+                .unwind_to(start, Unwound::Drop)
+                .map_err(|e| {
+                    CoreError::Inconsistent(format!(
+                        "no state checkpoint within the last {RETENTION} blocks to replay from: {e}"
+                    ))
+                })?;
+        }
+        if node_store.head() != (start, anchor.hash()) || node_store.flat_root() != anchor.state_root
+        {
+            return Err(CoreError::Inconsistent(format!(
+                "the store at block {start} is not the checkpoint's state"
+            )));
+        }
         let exec = NodeExec {
             spec: spec.clone(),
             hist: hist.clone(),
@@ -416,7 +438,7 @@ impl Core {
             spec: spec.clone(),
             hist: hist.clone(),
         };
-        let (chain, _) = Chain::open(spec.clone(), files, exec, check)?;
+        let chain = Chain::new(spec.clone(), node_store, exec, check);
         let (head, _) = watch::channel((start, hist.read().tip().hash));
         let core = Self {
             spec,

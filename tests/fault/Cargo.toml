@@ -1,0 +1,31 @@
+[package]
+name = "xone-fault"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Test-only: the ADR-005 fault harness (tests/fault/PLAN.md) and the real-process kill harness over MdbxStore. Not shipped."
+
+# Enables `fault-injection` on xone-db and xone-sync: this crate is never a dependency of the release tree.
+[dependencies]
+alloy-primitives.workspace = true
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+serde_json.workspace = true
+xone-chainspec.workspace = true
+xone-consensus.workspace = true
+xone-db = { workspace = true, features = ["fault-injection"] }
+xone-node.workspace = true
+xone-primitives.workspace = true
+xone-state.workspace = true
+xone-sync = { workspace = true, features = ["fault-injection"] }
+alloy-rlp.workspace = true
+xone-net = { path = "../../crates/xone-net" }
+
+[dev-dependencies]
+alloy-trie.workspace = true
+serde.workspace = true
+
+[[bin]]
+name = "xone-db-stress"
+path = "src/bin/stress.rs"

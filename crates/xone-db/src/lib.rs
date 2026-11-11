@@ -1,13 +1,17 @@
 //! Storage interface of xOne (ADR-005). Upper crates see only these traits.
 //!
-//! Implementation (MDBX tables, segment writer) is a later work item. This
-//! crate holds the traits, the manifest byte format and the pure restart
-//! reconciliation decision. It performs no file I/O.
+//! This crate holds the traits, the manifest byte format, the pure restart reconciliation decision
+//! and its two implementations: the MDBX environment ([`mdbx`]) and the static-file segments
+//! ([`segments`]). `libmdbx` is the one dependency that holds `unsafe`; this crate does not.
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "fault-injection")]
+pub mod fault;
 mod manifest;
+pub mod mdbx;
 mod recover;
 pub mod safety;
+pub mod segments;
 
 pub use alloy_primitives::{Address, B256};
 pub use manifest::{
