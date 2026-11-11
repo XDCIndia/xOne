@@ -3445,6 +3445,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "xone-state"
+version = "0.1.0"
+dependencies = [
+ "alloy-primitives",
+ "alloy-rlp",
+ "alloy-trie",
+ "proptest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "xone-chainspec",
+ "xone-primitives",
+]
+
+[[package]]
 name = "zerocopy"
 version = "0.8.63"
 source = "registry+https://github.com/rust-lang/crates.io-index"

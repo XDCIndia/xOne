@@ -34,3 +34,5 @@ A rule with no source line is not a rule. A value that a page states must come f
 | [v2-config-by-round](chainspec/v2-config-by-round.md) | XDPoS v2 parameters are selected by round |
 | [genesis-header](chainspec/genesis-header.md) | always-encoded XDC header fields and the genesis base fee |
 | [non-parameter-switches](chainspec/non-parameter-switches.md) | every rule found at the pin that is not a plain `params` row |
+| [account-leaf](state/account-leaf.md) | the XDC account RLP, its slim form and the secure-trie keys |
+| [changesets](state/changesets.md) | whole-record changesets, the state of a retained block and side-branch execution |
