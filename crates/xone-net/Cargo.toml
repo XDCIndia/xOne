@@ -1,0 +1,30 @@
+[package]
+name = "xone-net"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+# Transport is reth-ecies and reth-network-peers by git revision, unmodified (ADR-002 decision 3;
+# tag v2.3.0, the newest reth tag the 1.94 toolchain accepts). Everything above RLPx is ours.
+[dependencies]
+alloy-primitives.workspace = true
+alloy-rlp.workspace = true
+bytes = "1"
+futures = "0.3"
+reth-ecies = { git = "https://github.com/paradigmxyz/reth", rev = "9384bc53d8c0c77e59cac83fdaaf3b372c6d2216" }
+reth-network-peers = { git = "https://github.com/paradigmxyz/reth", rev = "9384bc53d8c0c77e59cac83fdaaf3b372c6d2216", features = ["secp256k1"] }
+secp256k1 = { version = "0.30", default-features = false, features = ["global-context", "recovery", "std"] }
+snap = "1"
+thiserror.workspace = true
+tokio = { version = "1", features = ["net", "rt", "macros", "time", "sync", "io-util"] }
+xone-node = { path = "../xone-node" }
+xone-primitives.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+xone-chainspec.workspace = true

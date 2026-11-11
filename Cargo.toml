@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/xone-primitives", "crates/xone-chainspec", "crates/xone-db", "crates/xone-state", "crates/xone-consensus", "crates/xone-signer", "crates/xone-node", "sim", "bin/xone", "spikes/wide-balance", "spikes/net", "labs/pq", "crates/xone-evm", "conformance/sweep", "conformance/negative-gen"]
+members = ["crates/xone-primitives", "crates/xone-chainspec", "crates/xone-db", "crates/xone-state", "crates/xone-consensus", "crates/xone-signer", "crates/xone-node", "sim", "bin/xone", "spikes/wide-balance", "spikes/net", "labs/pq", "crates/xone-evm", "conformance/sweep", "conformance/negative-gen", "crates/xone-net"]
 
 [workspace.package]
 version = "0.1.0"

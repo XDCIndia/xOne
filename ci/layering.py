@@ -38,6 +38,9 @@ EXCEPTIONS = {
     ("xone-consensus", "xone-db"): "V2 safety unit uses xone_db::{Durability, Cause}; "
     "plan #1 Layout puts db after consensus. Remove by moving those two types "
     "(and SafetyStore) to xone-primitives or xone-consensus, then delete this line.",
+    ("xone-net", "xone-node"): "xone-net scores peers and bounds its queues with xone_node::{PeerBudget, "
+    "BoundedQueue, Overflow} (ADR-007), which live in xone-node. Remove by moving those "
+    "std-only primitives to a lower crate, then delete this line.",
 }
 
 

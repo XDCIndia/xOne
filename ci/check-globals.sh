@@ -7,6 +7,7 @@ set -u
 cd "$(dirname "$0")/.."
 if [ $# -eq 0 ]; then
   set -- crates/xone-chainspec crates/xone-consensus crates/xone-evm crates/xone-state crates/xone-primitives crates/xone-signer
+  set -- crates/xone-chainspec crates/xone-consensus crates/xone-evm crates/xone-state crates/xone-primitives crates/xone-net
 fi
 if grep -rnE --include='*.rs' '^[^/]*(\bstatic[[:space:]]+mut\b|\blazy_static\b|\bonce_cell\b)' "$@"; then
   echo "check-globals: forbidden global state (R3 rule 2)" >&2

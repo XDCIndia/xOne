@@ -60,3 +60,7 @@ A rule with no source line is not a rule. A value that a page states must come f
 | [header-verification-v1](consensus/header-verification-v1.md) | the order and content of the V1 header checks, seal and double validation |
 | [header-verification-v2](consensus/header-verification-v2.md) | the order and content of the V2 header checks and the quorum certificate |
 | [body-roots](consensus/body-roots.md) | body checks and the roots recomputed from body and receipts |
+| [status62](net/status62.md) | eth/100 and eth/101 status: five fields, no ForkID, TD ranks only |
+| [eth-versions](net/eth-versions.md) | versions 100 and 101, bare and request-id framing, message set and size caps |
+| [bft-gossip](net/bft-gossip.md) | Vote, Timeout and SyncInfo: dedup, one delivery per peer, caps, scoring |
+| [discv4-xdc-ping](net/discv4-xdc-ping.md) | discovery v4 with the XDC ping as packet type 5, no ENR |

@@ -5,6 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 RULE_CRATES=(xone-chainspec xone-consensus xone-evm xone-state xone-primitives xone-signer)
+RULE_CRATES=(xone-chainspec xone-consensus xone-evm xone-state xone-primitives xone-net)
 fail=0
 
 echo "== clippy.toml copies equal ci/rule2.clippy.toml"

@@ -1,0 +1,36 @@
+[package]
+name = "xone-net-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# cargo-fuzz targets for the xone-net decoders (XB-12). Own workspace: not part of `cargo test`.
+# Run: cargo +nightly fuzz run net_status -- -max_total_time=300   (from this directory)
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+xone-net = { path = "../crates/xone-net" }
+alloy-primitives = "1.7"
+alloy-rlp = "0.3"
+
+[[bin]]
+name = "net_status"
+path = "fuzz_targets/net_status.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "net_chain"
+path = "fuzz_targets/net_chain.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "net_bft"
+path = "fuzz_targets/net_bft.rs"
+test = false
+doc = false
