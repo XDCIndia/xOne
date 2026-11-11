@@ -1,0 +1,4 @@
+cache.db
+raw*/
+__pycache__/
+*.log

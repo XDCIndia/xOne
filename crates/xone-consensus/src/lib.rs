@@ -2,5 +2,8 @@
 //! and body validation.
 #![forbid(unsafe_code)]
 
+pub mod chain;
+pub mod penalty;
+pub mod reward;
 pub mod v2;
 pub mod verify;

@@ -18,6 +18,7 @@ thiserror.workspace = true
 xone-chainspec.workspace = true
 xone-db.workspace = true
 xone-primitives.workspace = true
+xone-state.workspace = true
 
 [dev-dependencies]
 serde.workspace = true
