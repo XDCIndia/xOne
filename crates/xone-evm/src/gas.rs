@@ -52,3 +52,46 @@ pub fn intrinsic_gas(
         None,
     )
 }
+
+/// The two gas tables of a block, built once: building them costs far more than pricing a message with
+/// them, and the transaction pool prices every transaction it is offered (XB-16).
+pub struct IntrinsicTables {
+    params: GasParams,
+    floor: GasParams,
+}
+
+impl IntrinsicTables {
+    pub fn new(rules: &XdcRules) -> Self {
+        Self {
+            params: gas_params(rules),
+            floor: floor_params(rules),
+        }
+    }
+
+    /// `(intrinsic gas, EIP-7623 floor)` of a message, as [`intrinsic_gas`] and [`floor_params`] give them.
+    pub fn of(
+        &self,
+        data: &[u8],
+        create: bool,
+        access_list_accounts: u64,
+        access_list_storages: u64,
+    ) -> (u64, u64) {
+        let intrinsic = self.params.initial_tx_gas(
+            data,
+            create,
+            access_list_accounts,
+            access_list_storages,
+            0,
+            None,
+        );
+        let floor = self.floor.initial_tx_gas(
+            data,
+            create,
+            access_list_accounts,
+            access_list_storages,
+            0,
+            None,
+        );
+        (intrinsic.initial_total_gas(), floor.floor_gas())
+    }
+}

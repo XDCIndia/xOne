@@ -76,3 +76,7 @@ A rule with no source line is not a rule. A value that a page states must come f
 | [eth-versions](net/eth-versions.md) | versions 100 and 101, bare and request-id framing, message set and size caps |
 | [bft-gossip](net/bft-gossip.md) | Vote, Timeout and SyncInfo: dedup, one delivery per peer, caps, scoring |
 | [discv4-xdc-ping](net/discv4-xdc-ping.md) | discovery v4 with the XDC ping as packet type 5, no ENR |
+| [admission](txpool/admission.md) | the order of the pool's admission checks against the head, tier floor, wide balance |
+| [special-txs](txpool/special-txs.md) | sign transactions: candidate pool authority (penalised included), price exemption, fast path to pending |
+| [ordering-and-eviction](txpool/ordering-and-eviction.md) | replacement, queue, promotion, demotion, slot bounds, price heaps, expiry |
+| [propagation](txpool/propagation.md) | broadcast, announce and fetch as pure functions; ADR-007 Q5 and Q6 intake |
