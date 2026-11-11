@@ -51,3 +51,16 @@ cargo test --locked
 - Questions Q1 to Q5 in `threat-model.md` section 9.
 - Review by the security owner (the issue's named reviewer).
 - Re-pin: the issue asks to re-pin before work and record the new SHA in the PR. This work used the pin in `conformance/PIN` (`6fc8e8c2088b7f18264f5663036669d04fa7becf`) and did not re-pin.
+
+## Documents
+
+| Document | Issue | Content |
+|---|---|---|
+| [inventory.md](inventory.md) | #17 | every cryptographic use and authority, on chain today and planned |
+| [threat-model.md](threat-model.md) | #17 | harvest-now-forge-later, exposed keys, downgrade paths |
+| [standards.md](standards.md) | #18 | FIPS 203/204/205, SP 800-208/230, IR 8547, errata status |
+| [implementations.md](implementations.md) | #18 | implementation-assurance register (lab inputs until reviewed) |
+| [lab-results-2026-11-11.md](lab-results-2026-11-11.md) | #18 | single-host cost measurements under docs/perf.md, not targets |
+| [bandwidth-model.md](bandwidth-model.md) | #18 | tx, vote and QC fan-out arithmetic, no aggregation assumed |
+
+The lab code lives in `labs/pq` and is excluded from the shipping binary; `labs/pq/tests/no_ship.rs` proves it.

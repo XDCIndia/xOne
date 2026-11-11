@@ -25,3 +25,4 @@ rustc-ice-*.txt
 
 # Oracle checkout, populated by conformance/fetch-geth.sh
 conformance/geth-src
+__pycache__/
