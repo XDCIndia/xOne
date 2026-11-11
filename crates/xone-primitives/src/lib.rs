@@ -6,6 +6,9 @@
 //! fields are omitted from the end; a `None` that precedes a `Some` is written
 //! as the empty string `0x80`.
 
+mod wide_balance;
+pub use wide_balance::{WideBalance, WideBalanceError, MAX_WIDE_BITS};
+
 use alloy_primitives::{keccak256, Address, Bloom, Bytes, B256, B64, U256};
 use alloy_rlp::{BufMut, Decodable, Encodable, Error as RlpError};
 
