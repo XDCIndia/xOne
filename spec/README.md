@@ -46,6 +46,14 @@ A rule with no source line is not a rule. A value that a page states must come f
 | [reorg-and-set-head](chain/reorg-and-set-head.md) | reorg by atomic unwind, the committed-block floor, `set-head` |
 | [resume](chain/resume.md) | resume a consistent head or refuse with a typed error naming the missing record |
 
+### Snap (xone-snap)
+
+| Page | Rule |
+| --- | --- |
+| [messages](snap/messages.md) | the eight snap/1 messages, the RLPx offset, wide-balance slim accounts, response limits, the server and the Q15 bounds |
+| [range-proofs](snap/range-proofs.md) | what a range must prove, when it is refused, healing and resume |
+| [completeness](snap/completeness.md) | the pre-pivot headers, bodies, receipts and gap snapshots without which the sync is not complete |
+
 ### Keys (xone-signer)
 | Page | Rule |
 | --- | --- |
