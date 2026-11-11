@@ -218,3 +218,62 @@ fn sigterm_stops_the_node_and_ten_in_a_row_are_one_stop() {
     );
     let _ = std::fs::remove_dir_all(&d);
 }
+
+/// Blocks 0..=`to` of the committed Apothem vectors, as the blocks of a geth export file.
+fn vector_blocks(to: usize) -> Vec<Vec<u8>> {
+    use std::io::Read;
+    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../conformance/vectors/replay/apothem-0-1800.jsonl.gz");
+    let mut text = String::new();
+    flate2::read::GzDecoder::new(std::fs::File::open(p).unwrap_or_else(|e| panic!("{e}")))
+        .read_to_string(&mut text)
+        .unwrap_or_else(|e| panic!("{e}"));
+    text.lines()
+        .take(to + 1)
+        .map(|l| {
+            let v: serde_json::Value = serde_json::from_str(l).unwrap_or_else(|e| panic!("{e}"));
+            let raw: alloy_primitives::Bytes =
+                serde_json::from_value(v["raw"].clone()).unwrap_or_else(|e| panic!("{e}"));
+            raw.to_vec()
+        })
+        .collect()
+}
+
+#[test]
+fn import_and_export_run_the_pipeline_and_write_geth_block_files() {
+    let dir = scratch("blockfile");
+    std::fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("{e}"));
+    let blocks = vector_blocks(200);
+    let input = dir.join("in.rlp");
+    std::fs::write(&input, blocks.concat()).unwrap_or_else(|e| panic!("{e}"));
+    let input = input.to_str().unwrap_or_default();
+
+    let o = xone(&["import", input]);
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    assert!(out(&o).starts_with("imported 200 blocks"), "{}", out(&o));
+    assert!(out(&o).contains("head 200 0x"), "{}", out(&o));
+
+    // `export <file> from to`: blocks 50..=99 of the file, byte for byte
+    let part = dir.join("part.rlp");
+    let part = part.to_str().unwrap_or_default();
+    let o = xone(&["export", part, "50", "99", "--input", input]);
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    assert_eq!(
+        std::fs::read(part).unwrap_or_else(|e| panic!("{e}")),
+        blocks[50..100].concat()
+    );
+    // without a range: the whole chain, genesis included
+    let all = dir.join("all.rlp");
+    let all = all.to_str().unwrap_or_default();
+    assert!(xone(&["export", all, "--input", input]).status.success());
+    assert_eq!(
+        std::fs::read(all).unwrap_or_else(|e| panic!("{e}")),
+        blocks.concat()
+    );
+    // a range above the head, and a missing file, exit 1 with a message
+    let o = xone(&["export", part, "0", "201", "--input", input]);
+    assert_eq!(o.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&o.stderr).contains("larger than head block 200"));
+    let o = xone(&["import", "/nonexistent/blocks.rlp"]);
+    assert_eq!(o.status.code(), Some(1));
+}

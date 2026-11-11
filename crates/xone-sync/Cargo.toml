@@ -10,8 +10,9 @@ publish.workspace = true
 workspace = true
 
 # Sync: the chain manager (XB-13: import, side branches, fork choice, reorg, set-head and restart
-# recovery over the traits of xone-db, xone-state and xone-consensus) and bootstrap (XA-09: anchor,
-# retention, pivot plan). No I/O, no clock, no threads of its own.
+# recovery over the traits of xone-db, xone-state and xone-consensus), bootstrap (XA-09: anchor,
+# retention, pivot plan) and the XB-14 staged pipeline, follow driver and block files. No clock and no
+# global state; the only I/O is the reader and writer a caller passes in.
 [dependencies]
 alloy-primitives.workspace = true
 alloy-rlp.workspace = true
@@ -19,6 +20,7 @@ thiserror.workspace = true
 xone-chainspec.workspace = true
 xone-consensus.workspace = true
 xone-db.workspace = true
+xone-executor.workspace = true
 xone-primitives.workspace = true
 xone-state.workspace = true
 
@@ -27,3 +29,4 @@ alloy-trie.workspace = true
 k256.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }

@@ -1,6 +1,7 @@
 //! xOne command line (XB-19): geth-compatible flags, `init`, `dumpconfig`, a bounded
 //! start and stop. `--version` and `version` print and exit before anything is read.
 
+mod cmd;
 mod flags;
 
 use std::{ffi::OsString, process::ExitCode, time::Duration};
@@ -47,6 +48,11 @@ fn run(args: impl IntoIterator<Item = OsString>) -> ExitCode {
             }
             Err(e) => fail(e),
         };
+    }
+    match m.subcommand() {
+        Some(("import", s)) => return cmd::import(s),
+        Some(("export", s)) => return cmd::export(s),
+        _ => {}
     }
     let profiles = ["xdcmainnet", "apothem", "xdcdevnet"];
     if profiles.iter().filter(|k| on(k)).count() > 1 {

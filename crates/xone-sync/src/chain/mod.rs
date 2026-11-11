@@ -143,6 +143,16 @@ impl<S: Store, E: BlockExecutor, H: HeaderCheck> Chain<S, E, H> {
             .is_some_and(|v| number > v.switch_block)
     }
 
+    /// Runs `f` on the store under the read lock (checkpoints, rows, test inspection).
+    pub fn with_store<R>(&self, f: impl FnOnce(&S) -> R) -> R {
+        f(&self.rd())
+    }
+
+    /// The store, for the owner of the chain between calls (arming a test store, inspecting it).
+    pub fn store_mut(&mut self) -> &mut S {
+        self.store.get_mut().unwrap_or_else(PoisonError::into_inner)
+    }
+
     pub fn into_store(self) -> S {
         self.store
             .into_inner()

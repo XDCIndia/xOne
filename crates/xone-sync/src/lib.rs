@@ -7,6 +7,12 @@
 //! [`chain::HeaderCheck`]. There is no I/O, no clock and no global state; `now` is an argument.
 //! [`testkit`] holds the in-memory store with the ADR-005 kill points and the test executor.
 //!
+//! [`stages`] is the staged pipeline (XB-14: headers, bodies, senders, execution, finish, one durable
+//! checkpoint each, specification `spec/sync/stages.md`), [`follow`] the live follow at the tip over a
+//! [`follow::PeerSource`] (`spec/sync/follow.md`), [`import`] and [`export`] the geth block file
+//! (`spec/sync/import-export.md`), and [`xdc`] the real [`executor::BlockExecutor`] over
+//! `xone-executor`. The only threads are the scoped workers of the senders stage.
+//!
 //! [`bootstrap`] is what a node must hold, and be able to prove, before it follows the chain from
 //! a snapshot: the anchor manifest, the derived retention window and the pivot plan
 //! (specification: `spec/bootstrap-anchor.md`, `spec/retention.md`).
@@ -15,5 +21,10 @@
 pub mod bootstrap;
 pub mod chain;
 pub mod executor;
+pub mod export;
+pub mod follow;
+pub mod import;
+pub mod stages;
 pub mod store;
 pub mod testkit;
+pub mod xdc;

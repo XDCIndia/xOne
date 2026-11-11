@@ -91,3 +91,11 @@ A rule with no source line is not a rule. A value that a page states must come f
 | [special-txs](txpool/special-txs.md) | sign transactions: candidate pool authority (penalised included), price exemption, fast path to pending |
 | [ordering-and-eviction](txpool/ordering-and-eviction.md) | replacement, queue, promotion, demotion, slot bounds, price heaps, expiry |
 | [propagation](txpool/propagation.md) | broadcast, announce and fetch as pure functions; ADR-007 Q5 and Q6 intake |
+
+### Sync (xone-sync, XB-14)
+
+| Page | Rule |
+| --- | --- |
+| [stages](sync/stages.md) | headers, bodies, senders, execution, finish: one durable checkpoint per stage, bounded windows, resume, unwind |
+| [follow](sync/follow.md) | live follow at the tip: pushed blocks, announcements, gap fill, TD only ranks, caught up is hash equality |
+| [import-export](sync/import-export.md) | geth block files in and out, byte-equal round trip, the offline commands |

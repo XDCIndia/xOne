@@ -4477,9 +4477,15 @@ dependencies = [
 name = "xone"
 version = "0.1.0"
 dependencies = [
+ "alloy-primitives",
  "clap",
+ "flate2",
+ "serde_json",
  "xone-chainspec",
+ "xone-consensus",
  "xone-node",
+ "xone-primitives",
+ "xone-sync",
 ]
 
 [[package]]
@@ -4795,6 +4801,7 @@ dependencies = [
  "alloy-primitives",
  "alloy-rlp",
  "alloy-trie",
+ "flate2",
  "k256",
  "serde",
  "serde_json",
@@ -4802,8 +4809,25 @@ dependencies = [
  "xone-chainspec",
  "xone-consensus",
  "xone-db",
+ "xone-executor",
  "xone-primitives",
  "xone-state",
+]
+
+[[package]]
+name = "xone-sync-live"
+version = "0.1.0"
+dependencies = [
+ "alloy-primitives",
+ "alloy-rlp",
+ "secp256k1 0.30.0",
+ "tokio",
+ "xone-chainspec",
+ "xone-consensus",
+ "xone-net",
+ "xone-primitives",
+ "xone-state",
+ "xone-sync",
 ]
 
 [[package]]

@@ -63,6 +63,7 @@ async fn connect(versions: Vec<u64>) -> (Peers, Receiver<Event>, PeerId, u64) {
             version,
             rank,
             inbound,
+            ..
         } = next(&mut rx).await
         {
             assert_eq!((peer, inbound), (n.id, false));
