@@ -24,6 +24,7 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --locked --all-targets -- -D warnings
       - run: cargo test --locked
+      - run: python3 -I -m unittest discover -s ci/tests -p 'test_*.py'
 
   # XA-10 / XB-02: the R3 rule checks, each proven by a failing fixture; the release tree check.
   # Every command here is also run locally (docs/assurance/README.md); keep them in step.
@@ -59,20 +60,17 @@ jobs:
       - run: rustup toolchain install nightly-2026-03-24 --profile minimal --component miri,rust-src
       - run: cargo +nightly-2026-03-24 miri test -p xone-primitives --lib
 
-  # The oracle fork is private. Without the deploy-key secret (forks, local
-  # runs of the workflow) this job reports that it did nothing and passes; the
-  # cheap parse-and-snapshot check of the committed table is in `cargo test`.
+  # The oracle fork is private. Missing read access fails this qualification;
+  # committed-table smoke tests still run in `check`, but cannot replace drift proof.
   fork-table-drift:
     runs-on: ubuntu-latest
     env:
       GETH_XDC_DEPLOY_KEY: ${{ secrets.GETH_XDC_DEPLOY_KEY }}
     steps:
       - uses: actions/checkout@v4
-      - name: Skip without access to geth-XDC
-        if: env.GETH_XDC_DEPLOY_KEY == ''
-        run: echo "::notice::GETH_XDC_DEPLOY_KEY is not set, generated/forks.json was NOT checked against the pinned geth-XDC"
+      - name: Require the pinned oracle read credential
+        run: bash ci/check-oracle-access.sh
       - name: Fetch geth-XDC at conformance/PIN
-        if: env.GETH_XDC_DEPLOY_KEY != ''
         run: |
           install -m 700 -d ~/.ssh
           printf '%s\n' "$GETH_XDC_DEPLOY_KEY" > ~/.ssh/geth_xdc
@@ -80,13 +78,12 @@ jobs:
           ssh-keyscan github.com >> ~/.ssh/known_hosts
           GIT_SSH_COMMAND="ssh -i $HOME/.ssh/geth_xdc -o IdentitiesOnly=yes" conformance/fetch-geth.sh
       - uses: actions/setup-go@v5
-        if: env.GETH_XDC_DEPLOY_KEY != ''
         with:
           go-version-file: conformance/exporter/go.mod
           cache-dependency-path: conformance/exporter/go.sum
       - name: Regenerate and compare
-        if: env.GETH_XDC_DEPLOY_KEY != ''
         working-directory: conformance/exporter
         run: |
           go vet ./...
           go run . -check
+
