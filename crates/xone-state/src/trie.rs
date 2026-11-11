@@ -53,3 +53,40 @@ pub fn flat_root(flat: &impl FlatRead) -> B256 {
         (a, acc)
     }))
 }
+
+/// State root of `flat` with `diff` applied, without writing: what [`crate::StateDiff::apply`] followed
+/// by [`flat_root`] gives. A deleted account is dropped with its storage, a listed account takes the
+/// new record, and slots in `diff.storage` overlay the flat ones (zero removes).
+pub fn root_after(flat: &impl FlatRead, diff: &crate::StateDiff) -> B256 {
+    let storage_of = |a: Address| {
+        let mut slots: BTreeMap<B256, U256> = flat.slots(a).collect();
+        for (&(_, s), &v) in diff
+            .storage
+            .range((a, B256::ZERO)..=(a, B256::repeat_byte(0xff)))
+        {
+            slots.insert(s, v);
+        }
+        storage_root(slots)
+    };
+    let mut leaves: BTreeMap<Address, Account> = BTreeMap::new();
+    for (a, acc) in flat.accounts() {
+        match diff.accounts.get(&a) {
+            Some(None) => {}
+            Some(Some(new)) => {
+                leaves.insert(a, new.clone());
+            }
+            None => {
+                leaves.insert(a, acc);
+            }
+        }
+    }
+    for (a, new) in &diff.accounts {
+        if let Some(new) = new {
+            leaves.insert(*a, new.clone());
+        }
+    }
+    state_root(leaves.into_iter().map(|(a, mut acc)| {
+        acc.storage_root = storage_of(a);
+        (a, acc)
+    }))
+}

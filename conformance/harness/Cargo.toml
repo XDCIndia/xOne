@@ -1,0 +1,27 @@
+[package]
+name = "xone-harness"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Sequential replay of Apothem on xOne's own state (xone-replay). Test tool, not shipped."
+
+[[bin]]
+name = "xone-replay"
+path = "src/main.rs"
+
+[dependencies]
+alloy-primitives.workspace = true
+alloy-rlp.workspace = true
+clap.workspace = true
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+xone-chainspec.workspace = true
+xone-consensus.workspace = true
+xone-executor.workspace = true
+xone-primitives.workspace = true
+xone-state.workspace = true
+xone-sweep = { path = "../sweep" }
