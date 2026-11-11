@@ -92,6 +92,8 @@ pub enum HeaderError {
     CheckpointOrder,
     #[error("checkpoint penalties differ from the computed list")]
     InvalidCheckpointPenalties,
+    #[error("V2 follower rule: {0}")]
+    SwitchDerivation(crate::v2::Error),
     #[error("V2 switch block {switch_block} is not a multiple of the epoch {epoch}")]
     SwitchBlockNotEpochAligned { switch_block: u64, epoch: u64 },
     #[error("the epoch is zero")]

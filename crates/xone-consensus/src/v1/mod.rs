@@ -17,7 +17,7 @@ pub mod snapshot;
 pub mod switch;
 pub mod turn;
 
-mod gosort;
+pub(crate) mod gosort;
 
 use crate::verify::HeaderError;
 

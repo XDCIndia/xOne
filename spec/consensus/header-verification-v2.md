@@ -57,11 +57,12 @@ Every XDC network with a V2 phase.
 
 ## Where the Rust code is stricter than geth, and why
 
+- minePeriod: enforced as in geth, strictly above the V2 switch block's child (`verifyHeader.go:148`), with the config of the round of the block; negative vectors in `tests/v2_header.rs`.
 - Gap number: geth accepts a mismatch if the QC's gap number names a snapshot whose signer set equals the QC's epoch (`utils.go:440-466`, a bulk-sync repair for an epoch switch it could not resolve). Rust rejects it. A valid vector that needs the tolerance would fail and be listed; none does.
 - `ValidatorOrderBlock` and `SigningTxBoundBlock` are unscheduled on Apothem, so no real vector reaches those branches. The negative vectors `v2_validators_reordered` and `body_too_many_signing_txs` switch the fork on from block 0 for that one vector (`mutation.activate`).
 
 ## Not covered
 
-- The expected masternode list and penalties at an epoch switch come from the archive (`XDPoS_getMasternodesByNumber`). At a switch block the node answers with the list of the header itself, so the corpus tests the comparison, not the derivation. Deriving the list from the 0x88 state (`calcMasternodes`) and the penalties from the sign-transaction history is XB-10 and XB-11.
+- The expected masternode list and penalties at an epoch switch come from the archive (`XDPoS_getMasternodesByNumber`). At a switch block the node answers with the list of the header itself, so the corpus tests the comparison, not the derivation. Deriving the list from the 0x88 state (`calcMasternodes`) and the penalties from the sign-transaction history is XB-11 and XB-10: `HeaderVerifier::verify_derived` does it (`v2-epoch-switch-and-gap-snapshot.md`); `verify` still compares against lists the caller derived.
 - Mutations that need a signature (a different QC round or number, a different coinbase, a different round with a valid seal) cannot be produced without validator keys. The signature covers the field, so such a mutation fails at the signature first, and the rules behind `QcBlockNumber`, `QcRound` and `QcSwitchRound` have no negative vector. The valid vectors cover their accept branch.
 - The vote, timeout, TC and SyncInfo rules (V1-V9 of the checklist) are not header rules and are not in this slice.

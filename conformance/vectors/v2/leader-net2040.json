@@ -1,0 +1,281 @@
+{
+ "network": "net2040",
+ "switch": 82540,
+ "epoch": 900,
+ "blocks": [
+  {
+   "number": 82515,
+   "round": 71973,
+   "miner": "0x00ce9520a9b47db40f28d69c199d85daa7e15bab"
+  },
+  {
+   "number": 82516,
+   "round": 71974,
+   "miner": "0xd907f86a043754d0137af2ad4893b17b20bd5b49"
+  },
+  {
+   "number": 82517,
+   "round": 71975,
+   "miner": "0x359908c3f79ac8e2d674f5bb040665501009b256"
+  },
+  {
+   "number": 82518,
+   "round": 71976,
+   "miner": "0xfe49ac7551a0d2228db5ce011a8b349f09c61c8e"
+  },
+  {
+   "number": 82519,
+   "round": 71977,
+   "miner": "0xc33a1ff762a6bcb2309698021cfee0b93efff976"
+  },
+  {
+   "number": 82520,
+   "round": 71979,
+   "miner": "0x00ce9520a9b47db40f28d69c199d85daa7e15bab"
+  },
+  {
+   "number": 82521,
+   "round": 71980,
+   "miner": "0xd907f86a043754d0137af2ad4893b17b20bd5b49"
+  },
+  {
+   "number": 82522,
+   "round": 71981,
+   "miner": "0x359908c3f79ac8e2d674f5bb040665501009b256"
+  },
+  {
+   "number": 82523,
+   "round": 71982,
+   "miner": "0xfe49ac7551a0d2228db5ce011a8b349f09c61c8e"
+  },
+  {
+   "number": 82524,
+   "round": 71983,
+   "miner": "0xc33a1ff762a6bcb2309698021cfee0b93efff976"
+  },
+  {
+   "number": 82525,
+   "round": 71984,
+   "miner": "0xa0eac3b6d9d97a52aa68d99d18558e8472934ed0"
+  },
+  {
+   "number": 82526,
+   "round": 71985,
+   "miner": "0x00ce9520a9b47db40f28d69c199d85daa7e15bab"
+  },
+  {
+   "number": 82527,
+   "round": 71986,
+   "miner": "0xd907f86a043754d0137af2ad4893b17b20bd5b49"
+  },
+  {
+   "number": 82528,
+   "round": 71987,
+   "miner": "0x359908c3f79ac8e2d674f5bb040665501009b256"
+  },
+  {
+   "number": 82529,
+   "round": 71988,
+   "miner": "0xfe49ac7551a0d2228db5ce011a8b349f09c61c8e"
+  },
+  {
+   "number": 82530,
+   "round": 71990,
+   "miner": "0xa0eac3b6d9d97a52aa68d99d18558e8472934ed0"
+  },
+  {
+   "number": 82531,
+   "round": 71991,
+   "miner": "0x00ce9520a9b47db40f28d69c199d85daa7e15bab"
+  },
+  {
+   "number": 82532,
+   "round": 71992,
+   "miner": "0xd907f86a043754d0137af2ad4893b17b20bd5b49"
+  },
+  {
+   "number": 82533,
+   "round": 71993,
+   "miner": "0x359908c3f79ac8e2d674f5bb040665501009b256"
+  },
+  {
+   "number": 82534,
+   "round": 71994,
+   "miner": "0xfe49ac7551a0d2228db5ce011a8b349f09c61c8e"
+  },
+  {
+   "number": 82535,
+   "round": 71995,
+   "miner": "0xc33a1ff762a6bcb2309698021cfee0b93efff976"
+  },
+  {
+   "number": 82536,
+   "round": 71996,
+   "miner": "0xa0eac3b6d9d97a52aa68d99d18558e8472934ed0"
+  },
+  {
+   "number": 82537,
+   "round": 71997,
+   "miner": "0x00ce9520a9b47db40f28d69c199d85daa7e15bab"
+  },
+  {
+   "number": 82538,
+   "round": 71998,
+   "miner": "0xd907f86a043754d0137af2ad4893b17b20bd5b49"
+  },
+  {
+   "number": 82539,
+   "round": 71999,
+   "miner": "0x359908c3f79ac8e2d674f5bb040665501009b256"
+  },
+  {
+   "number": 82540,
+   "round": 72001,
+   "miner": "0xc33a1ff762a6bcb2309698021cfee0b93efff976"
+  },
+  {
+   "number": 82541,
+   "round": 72002,
+   "miner": "0xa0eac3b6d9d97a52aa68d99d18558e8472934ed0"
+  },
+  {
+   "number": 82542,
+   "round": 72003,
+   "miner": "0x00ce9520a9b47db40f28d69c199d85daa7e15bab"
+  },
+  {
+   "number": 82543,
+   "round": 72004,
+   "miner": "0xd907f86a043754d0137af2ad4893b17b20bd5b49"
+  },
+  {
+   "number": 82544,
+   "round": 72005,
+   "miner": "0x359908c3f79ac8e2d674f5bb040665501009b256"
+  },
+  {
+   "number": 82545,
+   "round": 72006,
+   "miner": "0xfe49ac7551a0d2228db5ce011a8b349f09c61c8e"
+  },
+  {
+   "number": 82546,
+   "round": 72007,
+   "miner": "0xc33a1ff762a6bcb2309698021cfee0b93efff976"
+  },
+  {
+   "number": 82547,
+   "round": 72008,
+   "miner": "0xa0eac3b6d9d97a52aa68d99d18558e8472934ed0"
+  },
+  {
+   "number": 82548,
+   "round": 72009,
+   "miner": "0x00ce9520a9b47db40f28d69c199d85daa7e15bab"
+  },
+  {
+   "number": 82549,
+   "round": 72010,
+   "miner": "0xd907f86a043754d0137af2ad4893b17b20bd5b49"
+  },
+  {
+   "number": 82550,
+   "round": 72011,
+   "miner": "0x359908c3f79ac8e2d674f5bb040665501009b256"
+  },
+  {
+   "number": 82551,
+   "round": 72012,
+   "miner": "0xfe49ac7551a0d2228db5ce011a8b349f09c61c8e"
+  },
+  {
+   "number": 82552,
+   "round": 72013,
+   "miner": "0xc33a1ff762a6bcb2309698021cfee0b93efff976"
+  },
+  {
+   "number": 82553,
+   "round": 72014,
+   "miner": "0xa0eac3b6d9d97a52aa68d99d18558e8472934ed0"
+  },
+  {
+   "number": 82554,
+   "round": 72015,
+   "miner": "0x00ce9520a9b47db40f28d69c199d85daa7e15bab"
+  },
+  {
+   "number": 82555,
+   "round": 72016,
+   "miner": "0xd907f86a043754d0137af2ad4893b17b20bd5b49"
+  },
+  {
+   "number": 82556,
+   "round": 72017,
+   "miner": "0x359908c3f79ac8e2d674f5bb040665501009b256"
+  },
+  {
+   "number": 82557,
+   "round": 72018,
+   "miner": "0xfe49ac7551a0d2228db5ce011a8b349f09c61c8e"
+  },
+  {
+   "number": 82558,
+   "round": 72019,
+   "miner": "0xc33a1ff762a6bcb2309698021cfee0b93efff976"
+  },
+  {
+   "number": 82559,
+   "round": 72020,
+   "miner": "0xa0eac3b6d9d97a52aa68d99d18558e8472934ed0"
+  },
+  {
+   "number": 82560,
+   "round": 72021,
+   "miner": "0x00ce9520a9b47db40f28d69c199d85daa7e15bab"
+  },
+  {
+   "number": 82561,
+   "round": 72022,
+   "miner": "0xd907f86a043754d0137af2ad4893b17b20bd5b49"
+  },
+  {
+   "number": 82562,
+   "round": 72023,
+   "miner": "0x359908c3f79ac8e2d674f5bb040665501009b256"
+  },
+  {
+   "number": 82563,
+   "round": 72024,
+   "miner": "0xfe49ac7551a0d2228db5ce011a8b349f09c61c8e"
+  },
+  {
+   "number": 82564,
+   "round": 72025,
+   "miner": "0xc33a1ff762a6bcb2309698021cfee0b93efff976"
+  }
+ ],
+ "lists": [
+  {
+   "from_number": 82515,
+   "masternodes": [
+    "0xfe49ac7551a0d2228db5ce011a8b349f09c61c8e",
+    "0xc33a1ff762a6bcb2309698021cfee0b93efff976",
+    "0xa0eac3b6d9d97a52aa68d99d18558e8472934ed0",
+    "0x00ce9520a9b47db40f28d69c199d85daa7e15bab",
+    "0xd907f86a043754d0137af2ad4893b17b20bd5b49",
+    "0x359908c3f79ac8e2d674f5bb040665501009b256"
+   ]
+  },
+  {
+   "from_number": 82540,
+   "masternodes": [
+    "0xfe49ac7551a0d2228db5ce011a8b349f09c61c8e",
+    "0xc33a1ff762a6bcb2309698021cfee0b93efff976",
+    "0xa0eac3b6d9d97a52aa68d99d18558e8472934ed0",
+    "0x00ce9520a9b47db40f28d69c199d85daa7e15bab",
+    "0xd907f86a043754d0137af2ad4893b17b20bd5b49",
+    "0x359908c3f79ac8e2d674f5bb040665501009b256"
+   ]
+  }
+ ]
+}

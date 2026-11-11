@@ -8,4 +8,4 @@ mod header;
 
 pub use body::{tx_recipient, Body, BodyVerifier, Receipt};
 pub use error::{BodyError, HeaderError};
-pub use header::{Context, HeaderVerifier, V1Context, V2Context};
+pub use header::{Context, Derive, HeaderVerifier, V1Context, V2Context};

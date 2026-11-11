@@ -1,0 +1,106 @@
+// Overlaid into package engine_v2 of the pinned geth-XDC by run.sh (go build -overlay); the checkout is
+// never written. It exposes the unexported functions of the V2 engine that the oracle calls, and a
+// chain that serves headers from memory. Nothing here re-implements a rule.
+package engine_v2
+
+import (
+	"math/big"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/params"
+)
+
+// OracleChain serves headers from memory.
+type OracleChain struct {
+	Cfg      *params.ChainConfig
+	Head     *types.Header
+	ByHash   map[common.Hash]*types.Header
+	ByNumber map[uint64]*types.Header
+}
+
+func NewOracleChain(cfg *params.ChainConfig) *OracleChain {
+	return &OracleChain{Cfg: cfg, ByHash: map[common.Hash]*types.Header{}, ByNumber: map[uint64]*types.Header{}}
+}
+func (c *OracleChain) Add(h *types.Header) {
+	c.ByHash[h.Hash()] = h
+	c.ByNumber[h.Number.Uint64()] = h
+}
+func (c *OracleChain) Config() *params.ChainConfig                 { return c.Cfg }
+func (c *OracleChain) CurrentHeader() *types.Header                { return c.Head }
+func (c *OracleChain) GetHeaderByNumber(n uint64) *types.Header    { return c.ByNumber[n] }
+func (c *OracleChain) GetHeaderByHash(h common.Hash) *types.Header { return c.ByHash[h] }
+func (c *OracleChain) GetHeader(h common.Hash, n uint64) *types.Header {
+	if x := c.ByHash[h]; x != nil && x.Number.Uint64() == n {
+		return x
+	}
+	return nil
+}
+func (c *OracleChain) GetBlock(common.Hash, uint64) *types.Block { return nil }
+
+var _ consensus.ChainReader = (*OracleChain)(nil)
+
+// OracleEngine is createEngine over an in-memory database, without the forensics goroutine.
+func OracleEngine(cfg *params.ChainConfig) *XDPoS_v2 {
+	x := createEngine(cfg, rawdb.NewMemoryDatabase(), nil, nil)
+	x.ForensicsProcessor = nil
+	return x
+}
+
+// OracleSeed stores a gap snapshot of the version a node that ran the gap block holds (UpdateMasternodesFromHeader).
+func (x *XDPoS_v2) OracleSeed(gap *types.Header, candidates []common.Address) {
+	snap := newSnapshot(gap.Number.Uint64(), gap.Hash(), candidates)
+	snap.Version = 6
+	x.snapshots.Add(snap.Hash, snap)
+}
+
+// OracleCalc is calcMasternodes with HookPenalty answering a fixed list.
+func (x *XDPoS_v2) OracleCalc(chain consensus.ChainReader, number uint64, parent common.Hash, round uint64, penalties []common.Address) ([]common.Address, []common.Address, []common.Address, error) {
+	x.HookPenalty = func(consensus.ChainReader, *big.Int, common.Hash, []common.Address) ([]common.Address, error) {
+		return penalties, nil
+	}
+	return x.calcMasternodes(chain, new(big.Int).SetUint64(number), parent, types.Round(round), nil)
+}
+
+func OracleSort(st *state.StateDB, c []common.Address) []common.Address {
+	return sortCandidatesByStake(st, c)
+}
+
+func (x *XDPoS_v2) OracleStandby(chain consensus.ChainReader, h *types.Header) []common.Address {
+	return x.GetStandbynodes(chain, h)
+}
+
+func (x *XDPoS_v2) OracleIsEpochSwitch(h *types.Header) (bool, uint64, error) {
+	return x.IsEpochSwitch(h)
+}
+func (x *XDPoS_v2) OracleIsEpochSwitchAtRound(r uint64, parent *types.Header) (bool, uint64, error) {
+	return x.isEpochSwitchAtRound(types.Round(r), parent)
+}
+
+// OracleSeedEpoch stores the epoch info verifyQC and verifyTC read for a block hash.
+func (x *XDPoS_v2) OracleSeedEpoch(hash common.Hash, mn []common.Address, sw *types.BlockInfo) {
+	x.epochSwitches.Add(hash, &types.EpochSwitchInfo{Masternodes: mn, MasternodesLen: len(mn), EpochSwitchBlockInfo: sw})
+}
+
+func (x *XDPoS_v2) OracleVerifyQC(chain consensus.ChainReader, qc *types.QuorumCert, parent *types.Header) error {
+	return x.verifyQC(chain, qc, parent, nil)
+}
+func (x *XDPoS_v2) OracleVerifyTC(chain consensus.ChainReader, tc *types.TimeoutCert) error {
+	return x.verifyTC(chain, tc)
+}
+func (x *XDPoS_v2) OracleSyncInfo(chain consensus.ChainReader, si *types.SyncInfo) (bool, error) {
+	return x.VerifySyncInfoMessage(chain, si)
+}
+func (x *XDPoS_v2) OracleCommit(chain consensus.ChainReader, h *types.Header, round uint64, hi *types.BlockInfo) (*types.BlockInfo, bool, error) {
+	x.highestCommitBlock = hi
+	r := types.Round(round)
+	ok, err := x.commitBlocks(chain, h, &r, &types.QuorumCert{})
+	return x.highestCommitBlock, ok, err
+}
+
+func (x *XDPoS_v2) OracleYourTurn(chain consensus.ChainReader, round uint64, parent *types.Header, signer common.Address) (bool, error) {
+	return x.yourturnAligned(chain, types.Round(round), parent, signer)
+}
