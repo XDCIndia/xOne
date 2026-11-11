@@ -4115,6 +4115,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "xone-evm"
+version = "0.1.0"
+dependencies = [
+ "alloy-primitives",
+ "alloy-rlp",
+ "alloy-trie",
+ "revm",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "xone-chainspec",
+ "xone-primitives",
+]
+
+[[package]]
 name = "xone-node"
 version = "0.1.0"
 
@@ -4153,6 +4168,20 @@ dependencies = [
  "serde_json",
  "thiserror",
  "xone-chainspec",
+ "xone-primitives",
+]
+
+[[package]]
+name = "xone-sweep"
+version = "0.1.0"
+dependencies = [
+ "alloy-primitives",
+ "revm",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "xone-chainspec",
+ "xone-evm",
  "xone-primitives",
 ]
 
