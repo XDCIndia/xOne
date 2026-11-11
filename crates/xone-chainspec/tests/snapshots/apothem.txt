@@ -12,6 +12,7 @@ london = 61290000
 eip1559 = 71550000
 cancun = 71551800
 prague = 84333000
+osaka = never
 amsterdam = unscheduled
 tip_fixed_reward = 83600000
 tip_upgrade_penalty = 83600000

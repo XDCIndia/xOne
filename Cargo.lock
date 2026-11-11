@@ -4101,8 +4101,15 @@ name = "xone-consensus"
 version = "0.1.0"
 dependencies = [
  "alloy-primitives",
+ "alloy-rlp",
+ "alloy-trie",
+ "k256",
+ "serde",
+ "serde_json",
  "thiserror",
+ "xone-chainspec",
  "xone-db",
+ "xone-primitives",
 ]
 
 [[package]]
@@ -4126,6 +4133,19 @@ dependencies = [
  "serde_json",
  "thiserror",
  "xone-chainspec",
+ "xone-primitives",
+]
+
+[[package]]
+name = "xone-negative-gen"
+version = "0.1.0"
+dependencies = [
+ "alloy-primitives",
+ "alloy-rlp",
+ "serde",
+ "serde_json",
+ "xone-chainspec",
+ "xone-consensus",
  "xone-primitives",
 ]
 

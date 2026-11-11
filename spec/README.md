@@ -51,3 +51,6 @@ A rule with no source line is not a rule. A value that a page states must come f
 | [pre-berlin-call-gas](evm/pre-berlin-call-gas.md) | call gas and the EIP-158 new-account charge |
 | [fee-recipient](evm/fee-recipient.md) | fee to the coinbase, or to its owner after `TIPTRC21Fee` |
 | [wide-balance](evm/wide-balance.md) | balances above 2^256 - 1 |
+| [header-verification-v1](consensus/header-verification-v1.md) | the order and content of the V1 header checks, seal and double validation |
+| [header-verification-v2](consensus/header-verification-v2.md) | the order and content of the V2 header checks and the quorum certificate |
+| [body-roots](consensus/body-roots.md) | body checks and the roots recomputed from body and receipts |

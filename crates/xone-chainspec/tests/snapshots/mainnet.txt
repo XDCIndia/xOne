@@ -12,6 +12,7 @@ london = 76321000
 eip1559 = 98800200
 cancun = 98802000
 prague = never
+osaka = never
 amsterdam = unscheduled
 tip_fixed_reward = never
 tip_upgrade_penalty = never
