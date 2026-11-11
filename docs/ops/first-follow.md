@@ -1,5 +1,7 @@
 # First follow: xone on a private geth-XDC chain (loopback)
 
+> Source-review note: the transcript below records the earlier development run at `c51c602` plus working-tree changes. It is preserved as historical author-reported evidence, not a test rerun on current main. The review of `876bb8e9679d3df67aabccea32cfe7047a3284c3` found remaining import/datadir, discovery, RPC and sync regressions; see the [current execution plan](../plans/2026-11-11-execution-plan.md) and [review snapshot](../../.audit/current-review.json). The staged-sync and snap components being merged does not establish their full node wiring, durable progress or public qualification.
+
 `xone --xdcdevnet` (or `--apothem`) is now a runnable follower: it dials its peers, imports every block
 it is sent through header verification and execution on its own state, serves JSON-RPC, and resumes at the
 same head after a restart. This page records what runs, the exact commands, and the output of the first
@@ -163,3 +165,4 @@ Read from it:
   no subscription publishes; CORS and virtual hosts are not enforced; the pool is not announced to peers.
 * TRC21 token fees: executed as geth (a transaction to a token the issuer lists takes the token-fee path); none
   is listed on this chain, so the path is empty there.
+
