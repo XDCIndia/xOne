@@ -13,6 +13,7 @@
 
 use crate::replay::Start;
 use alloy_primitives::{keccak256, Address, Bytes, B256, U256};
+use alloy_rlp::Decodable;
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -41,6 +42,9 @@ struct Dump {
     /// Accounts whose slots were left out of a pruned dump (`prune`), with their storage root.
     #[serde(default)]
     opaque: Vec<(Address, B256)>,
+    /// The balances of the possibly wide accounts were read from their leaf (`fix_wide`).
+    #[serde(default)]
+    wide_from_leaf: bool,
 }
 
 fn call(rpc: &mut Rpc, method: &str, params: Value) -> Result<Value, String> {
@@ -119,36 +123,7 @@ fn download_accounts(net: Network, rpc: &mut Rpc, number: u64) -> Result<Dump, S
         }
     }
     eprintln!("accounts: {} in {pages} pages", d.accounts.len());
-    // wide balances from the leaf
-    let mut wide: Vec<Address> = APOTHEM_WIDE.iter().filter_map(|a| a.parse().ok()).collect();
-    if net == Network::Apothem {
-        if let Ok(g) = net.genesis() {
-            wide.extend(
-                g.alloc
-                    .iter()
-                    .filter(|(_, a)| a.balance >= U256::from(1) << 255usize)
-                    .map(|(a, _)| *a),
-            );
-        }
-    }
-    wide.sort();
-    wide.dedup();
-    for chunk in wide.chunks(20) {
-        let calls = chunk
-            .iter()
-            .map(|a| ("eth_getProof", json!([format!("{a:#x}"), [], at])))
-            .collect();
-        for (a, ans) in chunk.iter().zip(rpc.batch(calls)?) {
-            let r = &ans["result"];
-            if r.is_null() {
-                continue; // absent at this block
-            }
-            let bal = WideBalance::from_be_bytes(&hex_be(&r["balance"])?);
-            if let Some(x) = d.accounts.iter_mut().find(|x| x.0 == *a) {
-                x.2 = Bytes::from(bal.to_be_bytes());
-            }
-        }
-    }
+    fix_wide(net, rpc, &mut d)?;
     // code, once per hash
     let empty = keccak256([]);
     let mut first: BTreeMap<B256, Address> = BTreeMap::new();
@@ -175,12 +150,70 @@ fn download_accounts(net: Network, rpc: &mut Rpc, number: u64) -> Result<Dump, S
     Ok(d)
 }
 
+/// The true balance of the accounts that can be above 2^256, from the account leaf: the last node
+/// of the `eth_getProof` account proof is `[path, rlp(account)]`, whose balance item is the whole
+/// integer (the `balance` field of the answer and of `debug_accountRange` is modulo 2^256).
+fn fix_wide(net: Network, rpc: &mut Rpc, d: &mut Dump) -> Result<(), String> {
+    let at = format!("{:#x}", d.number);
+    let mut wide: Vec<Address> = APOTHEM_WIDE.iter().filter_map(|a| a.parse().ok()).collect();
+    if net == Network::Apothem {
+        if let Ok(g) = net.genesis() {
+            wide.extend(
+                g.alloc
+                    .iter()
+                    .filter(|(_, a)| a.balance >= U256::from(1) << 255usize)
+                    .map(|(a, _)| *a),
+            );
+        }
+    }
+    wide.sort();
+    wide.dedup();
+    for chunk in wide.chunks(20) {
+        let calls = chunk
+            .iter()
+            .map(|a| ("eth_getProof", json!([format!("{a:#x}"), [], at])))
+            .collect();
+        for (a, ans) in chunk.iter().zip(rpc.batch(calls)?) {
+            let Some(leaf) = ans["result"]["accountProof"]
+                .as_array()
+                .and_then(|p| p.last())
+            else {
+                continue; // absent at this block
+            };
+            let node = hex_be(leaf)?;
+            let mut buf: &[u8] = &node;
+            let items =
+                Vec::<Bytes>::decode(&mut buf).map_err(|e| format!("proof leaf of {a}: {e}"))?;
+            let acc: Account = alloy_rlp::decode_exact(items.get(1).ok_or("leaf has no value")?)
+                .map_err(|e| format!("account leaf of {a}: {e}"))?;
+            if let Some(x) = d.accounts.iter_mut().find(|x| x.0 == *a) {
+                if acc.nonce != x.1 || acc.code_hash != x.4 {
+                    return Err(format!("leaf of {a} does not match its account entry"));
+                }
+                x.2 = Bytes::from(acc.balance.to_be_bytes());
+            }
+        }
+    }
+    d.wide_from_leaf = true;
+    Ok(())
+}
+
 /// One line of `<path>.storage`: a slot, or the end of an account.
 #[derive(Serialize, Deserialize)]
 enum Line {
     Slot(Address, B256, U256),
+    /// The next key to ask for after the slots written so far.
+    Next(Address, B256),
     Done(Address),
+    /// More slots than `MAX_SLOTS`: the account is kept with its storage root only.
+    Opaque(Address),
 }
+
+/// An account with more slots than this is not downloaded: a handful of NFT contracts hold millions
+/// of slots each, hours of requests, and no block of a window need read them. They go into the
+/// pruned state (`Dump::opaque`) with the storage root the archive reports; the root of the whole
+/// state is still checked against the header, and a block that touched one would not match.
+const MAX_SLOTS: usize = 100_000;
 
 /// Storage of every account with a storage root, appended to `<path>.storage` as it arrives: an
 /// account is final once its `Done` line is there, a restart skips those. A response that cannot be
@@ -190,15 +223,28 @@ fn download_storage(
     d: &mut Dump,
     path: &Path,
     next_hash: B256,
+    max_slots: usize,
 ) -> Result<(), String> {
     use std::io::{BufRead, Write};
     let file = part(path, ".storage");
     let mut done: std::collections::BTreeSet<Address> = Default::default();
+    let mut next: BTreeMap<Address, B256> = BTreeMap::new();
+    let mut counts: BTreeMap<Address, usize> = BTreeMap::new();
+    let mut opaque: std::collections::BTreeSet<Address> = Default::default();
     if let Ok(f) = fs::File::open(&file) {
         for l in std::io::BufReader::new(f).lines() {
             let Ok(l) = l else { break };
             match serde_json::from_str::<Line>(&l) {
-                Ok(Line::Slot(a, k, v)) => d.storage.push((a, k, v)),
+                Ok(Line::Slot(a, k, v)) => {
+                    *counts.entry(a).or_default() += 1;
+                    d.storage.push((a, k, v));
+                }
+                Ok(Line::Opaque(a)) => {
+                    opaque.insert(a);
+                }
+                Ok(Line::Next(a, k)) => {
+                    next.insert(a, k);
+                }
                 Ok(Line::Done(a)) => {
                     done.insert(a);
                 }
@@ -206,16 +252,22 @@ fn download_storage(
             }
         }
     }
-    // slots of an account that was not finished are asked again from the start
-    d.storage.retain(|(a, _, _)| done.contains(a));
+    // an account that was not finished continues from its last `Next` key; one with no `Next` and
+    // no `Done` starts again, so its slots are dropped
+    d.storage
+        .retain(|(a, _, _)| !opaque.contains(a) && (done.contains(a) || next.contains_key(a)));
     let empty_root = keccak256([alloy_rlp::EMPTY_STRING_CODE]);
     let mut pending: Vec<(Address, B256)> = d
         .accounts
         .iter()
-        .filter(|x| x.3 != empty_root && !done.contains(&x.0))
-        .map(|x| (x.0, B256::ZERO))
+        .filter(|x| x.3 != empty_root && !done.contains(&x.0) && !opaque.contains(&x.0))
+        .map(|x| (x.0, next.get(&x.0).copied().unwrap_or(B256::ZERO)))
         .collect();
-    eprintln!("accounts with storage still to fetch: {} ({} done)", pending.len(), done.len());
+    eprintln!(
+        "accounts with storage still to fetch: {} ({} done)",
+        pending.len(),
+        done.len()
+    );
     let mut out = fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -235,7 +287,13 @@ fn download_storage(
                 .map(|(a, k)| {
                     (
                         "debug_storageRangeAt",
-                        json!([format!("{next_hash:#x}"), 0, format!("{a:#x}"), format!("{k:#x}"), 1000]),
+                        json!([
+                            format!("{next_hash:#x}"),
+                            0,
+                            format!("{a:#x}"),
+                            format!("{k:#x}"),
+                            5000
+                        ]),
                     )
                 })
                 .collect();
@@ -259,14 +317,33 @@ fn download_storage(
                     let v = U256::from_be_slice(&hex_be(&s["value"])?);
                     if !v.is_zero() {
                         d.storage.push((*a, key, v));
-                        let l = serde_json::to_string(&Line::Slot(*a, key, v)).map_err(|e| e.to_string())?;
+                        *counts.entry(*a).or_default() += 1;
+                        let l = serde_json::to_string(&Line::Slot(*a, key, v))
+                            .map_err(|e| e.to_string())?;
                         writeln!(out, "{l}").map_err(|e| e.to_string())?;
                     }
                 }
                 match r["nextKey"].as_str() {
-                    Some(n) => again.push((*a, n.parse().map_err(|_| format!("nextKey {n}"))?)),
+                    Some(_) if counts.get(a).copied().unwrap_or(0) > max_slots => {
+                        let l =
+                            serde_json::to_string(&Line::Opaque(*a)).map_err(|e| e.to_string())?;
+                        writeln!(out, "{l}").map_err(|e| e.to_string())?;
+                        opaque.insert(*a);
+                        d.storage.retain(|(x, _, _)| x != a);
+                        eprintln!(
+                            "{a:#x}: more than {MAX_SLOTS} slots, kept as a storage root only"
+                        );
+                    }
+                    Some(n) => {
+                        let n: B256 = n.parse().map_err(|_| format!("nextKey {n}"))?;
+                        let l =
+                            serde_json::to_string(&Line::Next(*a, n)).map_err(|e| e.to_string())?;
+                        writeln!(out, "{l}").map_err(|e| e.to_string())?;
+                        again.push((*a, n));
+                    }
                     None => {
-                        let l = serde_json::to_string(&Line::Done(*a)).map_err(|e| e.to_string())?;
+                        let l =
+                            serde_json::to_string(&Line::Done(*a)).map_err(|e| e.to_string())?;
                         writeln!(out, "{l}").map_err(|e| e.to_string())?;
                     }
                 }
@@ -274,20 +351,43 @@ fn download_storage(
             rest = &rest[n..];
             calls_done += n;
             if calls_done % 2000 < n {
-                eprintln!("storage: {calls_done} account calls, {} slots", d.storage.len());
+                eprintln!(
+                    "storage: {calls_done} account calls, {} slots",
+                    d.storage.len()
+                );
             }
         }
         pending = again;
         round += 1;
         if round > 1 {
-            eprintln!("storage: round {round}, {} accounts continue", pending.len());
+            eprintln!(
+                "storage: round {round}, {} accounts continue",
+                pending.len()
+            );
         }
     }
-    eprintln!("storage: {} slots", d.storage.len());
+    // an account that was cut keeps the root of the accounts table
+    d.opaque = d
+        .accounts
+        .iter()
+        .filter(|x| opaque.contains(&x.0))
+        .map(|x| (x.0, x.3))
+        .collect();
+    eprintln!(
+        "storage: {} slots, {} accounts kept as a storage root only",
+        d.storage.len(),
+        d.opaque.len()
+    );
     Ok(())
 }
 
-fn download(net: Network, rpc: &mut Rpc, path: &Path, number: u64, next_hash: B256) -> Result<Dump, String> {
+fn download(
+    net: Network,
+    rpc: &mut Rpc,
+    path: &Path,
+    number: u64,
+    next_hash: B256,
+) -> Result<Dump, String> {
     let stage1 = part(path, ".stage1");
     let mut d = match read(&stage1).filter(|d| d.number == number) {
         Some(d) => d,
@@ -297,7 +397,7 @@ fn download(net: Network, rpc: &mut Rpc, path: &Path, number: u64, next_hash: B2
             d
         }
     };
-    download_storage(rpc, &mut d, path, next_hash)?;
+    download_storage(rpc, &mut d, path, next_hash, MAX_SLOTS)?;
     Ok(d)
 }
 
@@ -307,6 +407,7 @@ pub fn dump(
     number: u64,
     flat: &MemFlat,
     codes: &BTreeMap<B256, Bytes>,
+    opaque: &BTreeMap<Address, B256>,
 ) -> Result<(), String> {
     let accounts: Vec<_> = flat.accounts().collect();
     let d = Dump {
@@ -318,12 +419,23 @@ pub fn dump(
         accounts: accounts
             .into_iter()
             .map(|(a, x)| {
-                let sr = x.storage_root;
-                (a, x.nonce, Bytes::from(x.balance.to_be_bytes()), sr, x.code_hash)
+                // the storage root field of the flat table is not kept up to date: compute it
+                let sr = opaque
+                    .get(&a)
+                    .copied()
+                    .unwrap_or_else(|| xone_state::trie::storage_root(flat.slots(a)));
+                (
+                    a,
+                    x.nonce,
+                    Bytes::from(x.balance.to_be_bytes()),
+                    sr,
+                    x.code_hash,
+                )
             })
             .collect(),
         codes: codes.clone(),
-        opaque: vec![],
+        opaque: opaque.iter().map(|(a, r)| (*a, *r)).collect(),
+        wide_from_leaf: true,
     };
     write(path, &d)
 }
@@ -372,7 +484,13 @@ pub fn start(
     next_hash: B256,
 ) -> Result<Start, String> {
     let d = match read(path).filter(|d| d.number == number) {
-        Some(d) => d,
+        Some(mut d) => {
+            if !d.wide_from_leaf {
+                fix_wide(net, &mut Rpc::default(), &mut d)?;
+                write(path, &d)?;
+            }
+            d
+        }
         None => {
             let d = download(net, &mut Rpc::default(), path, number, next_hash)?;
             write(path, &d)?;
@@ -404,6 +522,25 @@ pub fn start(
         xone_state::mpt::StateTrie::from_flat_pruned(&flat, &opaque).root()
     };
     if rebuilt != state_root {
+        // which accounts do not hold what the archive says: storage root of the slots against the
+        // account's own root
+        let mut bad = vec![];
+        for (a, _, _, root, _) in &d.accounts {
+            if opaque.contains_key(a) || *root == keccak256([alloy_rlp::EMPTY_STRING_CODE]) {
+                continue;
+            }
+            let have = xone_state::trie::storage_root(flat.slots(*a));
+            if have != *root {
+                bad.push(format!("{a:#x}: slots give {have}, archive root {root}"));
+            }
+        }
+        eprintln!(
+            "{} accounts whose slots do not give the archive's storage root",
+            bad.len()
+        );
+        for b in bad.iter().take(10) {
+            eprintln!("  {b}");
+        }
         return Err(format!(
             "pivot state of block {number} rebuilds to {rebuilt}, the header's stateRoot is {state_root}: refused"
         ));
@@ -418,5 +555,107 @@ pub fn start(
         flat,
         codes: d.codes,
         opaque,
+        gaps: BTreeMap::new(),
     })
+}
+
+/// A map of the slots of one contract, as a state reader that holds no account.
+struct Slots(BTreeMap<B256, U256>);
+
+impl xone_state::StateRead for Slots {
+    fn account(&self, _: Address) -> Option<Account> {
+        None
+    }
+    fn storage(&self, _: Address, slot: B256) -> U256 {
+        self.0.get(&slot).copied().unwrap_or_default()
+    }
+}
+
+/// The gap snapshots of the V2 gap blocks below the pivot that the rules above it read (the pool of
+/// an epoch is fixed at its gap block, which may precede the pivot): each is built from the 0x88
+/// storage of the gap block, read with `debug_storageRangeAt` on the next block (`next_hash(g)` is
+/// the hash of block `g + 1`), as the runner builds one from its own state above the pivot.
+pub fn gap_pools(
+    rpc: &mut Rpc,
+    gaps: &[u64],
+    next_hash: impl Fn(u64) -> Result<B256, String>,
+) -> Result<BTreeMap<u64, xone_consensus::v2::gap_snapshot::SnapshotV2>, String> {
+    let mut out = BTreeMap::new();
+    for &g in gaps {
+        let hash = next_hash(g)?;
+        let mut slots = BTreeMap::new();
+        let mut from = B256::ZERO;
+        loop {
+            let r = call(
+                rpc,
+                "debug_storageRangeAt",
+                json!([
+                    format!("{hash:#x}"),
+                    0,
+                    "0x0000000000000000000000000000000000000088",
+                    format!("{from:#x}"),
+                    2000
+                ]),
+            )?;
+            for (hk, s) in r["storage"].as_object().ok_or("storage")? {
+                let key: B256 = serde_json::from_value(s["key"].clone())
+                    .map_err(|_| format!("slot hash {hk} of 0x88 has no preimage"))?;
+                slots.insert(key, U256::from_be_slice(&hex_be(&s["value"])?));
+            }
+            match r["nextKey"].as_str() {
+                Some(n) => from = n.parse().map_err(|_| format!("nextKey {n}"))?,
+                None => break,
+            }
+        }
+        let pool = xone_consensus::v2::gap_snapshot::build(&Slots(slots), g)
+            .map_err(|e| format!("gap block {g}: {e}"))?;
+        eprintln!(
+            "gap snapshot of block {g}: {} candidates",
+            pool.candidates.len()
+        );
+        out.insert(g, pool);
+    }
+    Ok(out)
+}
+
+/// Downloads the whole storage of the accounts of `want` that the dump at `path` holds as a storage
+/// root only (the ones a window calls), and rewrites the dump with them in full.
+pub fn fill(
+    path: &Path,
+    next_hash: B256,
+    want: &std::collections::BTreeSet<Address>,
+) -> Result<usize, String> {
+    let mut d = read(path).ok_or("no dump")?;
+    let todo: Vec<Address> = d
+        .opaque
+        .iter()
+        .map(|x| x.0)
+        .filter(|a| want.contains(a))
+        .collect();
+    if todo.is_empty() {
+        return Ok(0);
+    }
+    let mut part_d = Dump {
+        number: d.number,
+        accounts: d
+            .accounts
+            .iter()
+            .filter(|x| todo.contains(&x.0))
+            .cloned()
+            .collect(),
+        ..Default::default()
+    };
+    let file = part(path, ".fill");
+    download_storage(
+        &mut Rpc::default(),
+        &mut part_d,
+        &file,
+        next_hash,
+        usize::MAX,
+    )?;
+    fs::remove_file(part(&file, ".storage")).ok();
+    d.opaque.retain(|x| !todo.contains(&x.0));
+    d.storage.extend(part_d.storage);
+    write(path, &d)?;
+    Ok(todo.len())
 }

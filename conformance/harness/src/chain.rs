@@ -111,12 +111,12 @@ impl Chain {
                 let sw = epoch_switch::of_header(v, self.epoch, &p.header)
                     .map_err(|e| format!("block {n}: {e}"))?
                     .0;
+                // the first stored block has no parent here: its epoch is unknown (zero), and no
+                // rule reads it, because every block above it has a switch of its own to read
                 let start = if sw {
                     n
                 } else {
-                    self.get(n - 1)
-                        .ok_or(format!("block {n}: the parent is not stored"))?
-                        .epoch_start
+                    self.get(n - 1).map_or(0, |p| p.epoch_start)
                 };
                 (p.header.coinbase, sw, start)
             }
@@ -140,7 +140,7 @@ impl Chain {
             epoch_switch,
             epoch_start,
         });
-        if n > self.switch {
+        if n > self.switch && self.blocks.len() > 3 {
             self.track_commit(n)?;
         }
         Ok(())
@@ -222,8 +222,8 @@ impl Chain {
                 .header;
             return gap_snapshot::bootstrap(&h.extra_data, self.switch);
         }
-        let gap = gap_snapshot::gap_number(number, self.epoch, self.gap)?
-            .saturating_sub(self.gap_offset);
+        let gap =
+            gap_snapshot::gap_number(number, self.epoch, self.gap)?.saturating_sub(self.gap_offset);
         self.gaps.get(&gap).cloned().ok_or(Error::Missing {
             what: "gap snapshot (state of the gap block not held)",
             number: gap,

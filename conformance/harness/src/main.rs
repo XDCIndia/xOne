@@ -81,6 +81,10 @@ enum Cmd {
         /// Write the accounts whose storage the run wrote, one address per line.
         #[arg(long)]
         written_out: Option<PathBuf>,
+        /// A file of contract addresses, one per line, that the window reaches through internal
+        /// calls (`debug_traceBlockByNumber` callTracer) and that must be held in full.
+        #[arg(long)]
+        callees_file: Option<PathBuf>,
     },
     /// Prune a pivot state dump for a committed test: keep the slots of `--keep` accounts only.
     Prune {
@@ -147,12 +151,18 @@ fn real(cli: Cli) -> Result<ExitCode, String> {
             mut keep,
         } => {
             if let Some(f) = keep_file {
-                for l in std::fs::read_to_string(f).map_err(|e| e.to_string())?.lines() {
+                for l in std::fs::read_to_string(f)
+                    .map_err(|e| e.to_string())?
+                    .lines()
+                {
                     keep.push(l.trim().parse().map_err(|e| format!("{l}: {e}"))?);
                 }
             }
             let (slots, opaque) = pivot::prune(&from, &to, &keep)?;
-            println!("kept {slots} slots of {} accounts, {opaque} accounts with their storage root only", keep.len());
+            println!(
+                "kept {slots} slots of {} accounts, {opaque} accounts with their storage root only",
+                keep.len()
+            );
             Ok(ExitCode::SUCCESS)
         }
         Cmd::DiagnosticPrestate { args } => {
@@ -220,6 +230,7 @@ fn real(cli: Cli) -> Result<ExitCode, String> {
             dump_block,
             mutant,
             written_out,
+            callees_file,
         } => {
             let net: Network = network.parse().map_err(|e| format!("{e}"))?;
             if net != Network::Apothem {
@@ -258,13 +269,48 @@ fn real(cli: Cli) -> Result<ExitCode, String> {
             let (head, next) = (at(block), at(block + 1));
             let path = state_cache
                 .unwrap_or_else(|| root().join(format!("cache/pivot-{network}-{block}.json.gz")));
-            let start = pivot::start(
+            // contracts the window calls must not be held as a storage root only: ask for them in full
+            let mut callees = std::collections::BTreeSet::new();
+            for b in blocks.iter().filter(|b| b.n > block && b.n <= to) {
+                for raw in &b.body.transactions {
+                    if let Ok(t) = xone_executor::tx::decode(raw, spec.chain_id) {
+                        callees.extend(t.to);
+                    }
+                }
+            }
+            if let Some(f) = callees_file {
+                for l in std::fs::read_to_string(f)
+                    .map_err(|e| e.to_string())?
+                    .lines()
+                {
+                    callees.insert(l.trim().parse().map_err(|e| format!("{l}: {e}"))?);
+                }
+            }
+            let filled = pivot::fill(&path, next.header.hash(), &callees)?;
+            if filled > 0 {
+                eprintln!("{filled} contracts of the window downloaded in full");
+            }
+            let mut start = pivot::start(
                 net,
                 &path,
                 block,
                 head.header.state_root,
                 next.header.hash(),
             )?;
+            // the V2 gap blocks below the pivot whose snapshots the rules above it read
+            let (epoch, gap) = (spec.xdpos.epoch, spec.xdpos.gap);
+            let switch = spec.xdpos.v2.as_ref().map_or(u64::MAX, |v| v.switch_block);
+            let gaps: Vec<u64> = (1..=4u64)
+                .filter_map(|i| (block - block % epoch).checked_sub(i * epoch - epoch + gap))
+                .filter(|g| *g >= switch && *g < block)
+                .collect();
+            start.gaps = pivot::gap_pools(&mut Rpc::default(), &gaps, |g| {
+                blocks
+                    .iter()
+                    .find(|b| b.n == g + 1)
+                    .map(|b| b.header.hash())
+                    .ok_or(format!("block {} is not in the cache", g + 1))
+            })?;
             let t_state = t0.elapsed().as_secs_f64();
             eprintln!("state ready in {t_state:.0}s");
             let opts = Opts {
@@ -279,7 +325,11 @@ fn real(cli: Cli) -> Result<ExitCode, String> {
             let t_run = Instant::now();
             let r = run_from(&spec, start, &blocks[..blocks.len() - 1], &opts)?;
             if let Some(p) = written_out {
-                let list: Vec<String> = r.storage_written.iter().map(|a| format!("{a:#x}")).collect();
+                let list: Vec<String> = r
+                    .storage_written
+                    .iter()
+                    .map(|a| format!("{a:#x}"))
+                    .collect();
                 std::fs::write(p, list.join("\n")).map_err(|e| e.to_string())?;
             }
             finish(
@@ -318,8 +368,8 @@ fn finish(
             );
             if r.v2_blocks > 0 {
                 println!(
-                    "{label}V2: {} blocks, {} epoch switches (Validators and Penalties derived by the runner, equal to the header at each), {} gap snapshots from state, 3-chain commit: {} blocks committed, highest {:?} (number, round); per block: first 1,000 blocks {:.3} s total, steady state {:.3} ms",
-                    r.v2_blocks, r.v2_switches, r.gap_snapshots, r.committed_count, r.committed,
+                    "{label}V2: {} blocks, {} epoch switches (Validators and Penalties derived by the runner, equal to the header at each), {} gap snapshots from state (first switches at {:?}), 3-chain commit: {} blocks committed, highest {:?} (number, round); per block: first 1,000 blocks {:.3} s total, steady state {:.3} ms",
+                    r.v2_blocks, r.v2_switches, r.gap_snapshots, r.first_switches, r.committed_count, r.committed,
                     r.first_1000_secs, r.last_1000_secs
                 );
             }

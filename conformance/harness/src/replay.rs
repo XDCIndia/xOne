@@ -81,6 +81,8 @@ pub struct Report {
     /// snapshots built from state, and the 3-chain commit state at the end of the run.
     pub v2_blocks: u64,
     pub v2_switches: u64,
+    /// The first of those switches, by block number.
+    pub first_switches: Vec<u64>,
     pub gap_snapshots: u64,
     pub committed: Option<(u64, u64)>,
     pub committed_count: u64,
@@ -291,6 +293,8 @@ pub struct Start {
     /// Accounts whose slots are not in `flat`, with their storage root (a pruned state, see
     /// `StateProvider::with_opaque`). Empty for a full state.
     pub opaque: BTreeMap<Address, B256>,
+    /// Gap snapshots of V2 gap blocks below `number`, which the rules above it read (`pivot::gap_pools`).
+    pub gaps: BTreeMap<u64, xone_consensus::v2::gap_snapshot::SnapshotV2>,
 }
 
 /// The sign transactions of a block as its transactions show them (senders recovered): what the
@@ -329,6 +333,7 @@ pub fn run(
             flat,
             codes,
             opaque: BTreeMap::new(),
+            gaps: BTreeMap::new(),
         },
         blocks,
         opts,
@@ -345,6 +350,7 @@ pub fn run_from(
     opts: &Opts,
 ) -> Result<Report, String> {
     let mut report = Report::default();
+    let start_opaque = start.opaque.clone();
     let first = blocks.first().ok_or("no blocks")?.n;
     let at = |n: u64| -> Result<&Block, String> {
         blocks
@@ -440,14 +446,10 @@ pub fn run_from(
             );
         };
         chain.codes = start.codes;
+        chain.gaps = start.gaps;
         chain.wide = wide_of(&start.flat);
-        provider = StateProvider::with_opaque(
-            start.flat,
-            start.number,
-            hash,
-            RETENTION,
-            &start.opaque,
-        );
+        provider =
+            StateProvider::with_opaque(start.flat, start.number, hash, RETENTION, &start.opaque);
         tip = start.number;
     }
     report.last_ok = tip;
@@ -500,23 +502,41 @@ pub fn run_from(
         };
         let mut mismatches = compare(b, &o);
         // Consensus auxiliary: the masternode list of a V1 checkpoint is the snapshot's signers
-        // (ascending, `Prepare`, `consensus/XDPoS/xdpos.go:1439-1476`) minus the penalised.
-        if !is_v2 && n % x.epoch == 0 {
-            if b.header.penalties.is_empty() {
-                let listed =
-                    checkpoint::masternodes_of(&b.header.extra_data).map_err(|e| e.to_string())?;
-                let derived = snap.get_signers();
-                if listed != derived {
-                    mismatches.push(Mismatch {
-                        field: "extraData",
-                        expected: format!("{listed:?}"),
-                        actual: format!("{derived:?}"),
-                    });
+        // (ascending, `Prepare`, `consensus/XDPoS/xdpos.go:1439-1476`) minus the penalised: the
+        // header's own `Penalties` and those of the checkpoints 1 to 4 epochs back (`:1468-1472`).
+        if !is_v2 && n.is_multiple_of(x.epoch) {
+            let mut previous = BTreeMap::new();
+            for i in 1..=checkpoint::LIMIT_PENALTY_EPOCH {
+                if let Some(k) = n.checked_sub(i * x.epoch).filter(|k| *k > 0) {
+                    let h = chain
+                        .get(k)
+                        .ok_or(format!("no checkpoint {k} for the penalties"))?;
+                    previous.insert(k, checkpoint::addresses(&h.header.penalties));
                 }
-                report.aux_checked += 1;
-            } else {
-                report.aux_skipped += 1;
             }
+            let removed = checkpoint::checkpoint_penalties(
+                n,
+                x.epoch,
+                &checkpoint::addresses(&b.header.penalties),
+                &previous,
+            )
+            .map_err(|e| e.to_string())?;
+            let derived: std::collections::BTreeSet<_> = snap
+                .get_signers()
+                .into_iter()
+                .filter(|a| !removed.contains(a))
+                .collect();
+            let derived: Vec<_> = derived.into_iter().collect();
+            let listed =
+                checkpoint::masternodes_of(&b.header.extra_data).map_err(|e| e.to_string())?;
+            if listed != derived {
+                mismatches.push(Mismatch {
+                    field: "extraData",
+                    expected: format!("{listed:?}"),
+                    actual: format!("{derived:?}"),
+                });
+            }
+            report.aux_checked += 1;
         }
         let body_error = o.body_check.as_ref().err().map(|e| e.to_string());
         if !mismatches.is_empty() || body_error.is_some() {
@@ -568,14 +588,19 @@ pub fn run_from(
         })?;
         if is_v2 {
             report.v2_blocks += 1;
-            report.v2_switches += u64::from(chain.get(n).is_some_and(|s| s.epoch_switch));
+            if chain.get(n).is_some_and(|s| s.epoch_switch) {
+                report.v2_switches += 1;
+                if report.first_switches.len() < 8 {
+                    report.first_switches.push(n);
+                }
+            }
         }
         tip = n;
         report.last_ok = n;
         report.blocks += 1;
         if let Some((at, path)) = &opts.dump_state {
             if *at == n {
-                crate::pivot::dump(path, n, provider.flat(), &chain.codes)?;
+                crate::pivot::dump(path, n, provider.flat(), &chain.codes, &start_opaque)?;
             }
         }
         if report.blocks == 1000 {
