@@ -37,6 +37,15 @@ A rule with no source line is not a rule. A value that a page states must come f
 | [account-leaf](state/account-leaf.md) | the XDC account RLP, its slim form and the secure-trie keys |
 | [changesets](state/changesets.md) | whole-record changesets, the state of a retained block and side-branch execution |
 
+### Chain manager (xone-sync)
+
+| Page | Rule |
+| --- | --- |
+| [insert](chain/insert.md) | verify, execute on the parent's state, commit or store; no consensus read under the import lock |
+| [fork-choice](chain/fork-choice.md) | the XDC choice, equal-height siblings, the stale-sibling head |
+| [reorg-and-set-head](chain/reorg-and-set-head.md) | reorg by atomic unwind, the committed-block floor, `set-head` |
+| [resume](chain/resume.md) | resume a consistent head or refuse with a typed error naming the missing record |
+
 ### Keys (xone-signer)
 | Page | Rule |
 | --- | --- |

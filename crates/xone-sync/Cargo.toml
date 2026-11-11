@@ -9,15 +9,21 @@ publish.workspace = true
 [lints]
 workspace = true
 
+# Sync: the chain manager (XB-13: import, side branches, fork choice, reorg, set-head and restart
+# recovery over the traits of xone-db, xone-state and xone-consensus) and bootstrap (XA-09: anchor,
+# retention, pivot plan). No I/O, no clock, no threads of its own.
 [dependencies]
 alloy-primitives.workspace = true
 alloy-rlp.workspace = true
 thiserror.workspace = true
 xone-chainspec.workspace = true
 xone-consensus.workspace = true
+xone-db.workspace = true
 xone-primitives.workspace = true
+xone-state.workspace = true
 
 [dev-dependencies]
+alloy-trie.workspace = true
 k256.workspace = true
+serde.workspace = true
 serde_json.workspace = true
-xone-state.workspace = true
