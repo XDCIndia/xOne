@@ -27,7 +27,7 @@ use tokio::net::TcpStream;
 use tokio::sync::{mpsc, Semaphore};
 use tokio::task::JoinHandle;
 use tokio::time::{sleep_until, timeout, Instant};
-use xone_node::{BoundedQueue, Offence, Overflow, Push};
+use xone_primitives::limits::{BoundedQueue, Offence, Overflow, Push};
 
 use crate::bft_gossip::{Gossip, Receive};
 use crate::eth::status62::Local;
@@ -37,7 +37,7 @@ use crate::NetError;
 use score::{Scoreboard, Verdict};
 use trusted::{admit, Admission, Trust};
 
-pub use xone_node::PeerLimits;
+pub use xone_primitives::limits::PeerLimits;
 
 /// Timeouts and limits. Every value is a bound: there is no "wait forever" setting.
 #[derive(Debug, Clone)]

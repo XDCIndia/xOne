@@ -1,0 +1,488 @@
+//! The `chain` service: a minimal live-follow driver over `xone-net` that the XB-14 pipeline replaces.
+//!
+//! It keeps no schedule of its own. The best peer by TD rank is asked for the headers that follow our
+//! head (`GetBlockHeaders` from our head hash, so that the first answer must be our head: a peer that
+//! does not know it is on another chain and is put aside), then for the bodies of those headers; the
+//! blocks go through `Core::import` in order. An empty continuation from the best peer is the
+//! caught-up proof (hash equality: the peer's chain holds our head and nothing above it). `NewBlock`
+//! that extends the head is imported at once. Receipts are not requested: the node executes every
+//! block and compares the roots with the header, so a peer's receipts add nothing to verify.
+//!
+//! ponytail: one request at a time, one peer at a time, no scheduling, no fork handling above what
+//! `Core` supports (the parent of a block must be the head).
+
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
+
+use tokio::{
+    runtime::Handle,
+    sync::{mpsc::Receiver, watch},
+    task::JoinHandle,
+    time::{interval, timeout, Instant},
+};
+use xone_consensus::verify::Body;
+use xone_net::{
+    eth::{BlockAnnounce, BlockBody, GetHeaders, Message, Origin},
+    peers::{Event, Peers},
+    rlpx::PeerId,
+};
+use xone_primitives::Header;
+use xone_sync::chain::insert::Outcome;
+
+use super::{
+    core::{now, Core},
+    from_wire,
+    net::NetHandle,
+    pool::PoolShared,
+    to_wire,
+};
+use crate::lifecycle::{Service, ServiceError};
+
+/// Headers asked for at a time (geth `MaxHeaderFetch` is 192).
+const BATCH: u64 = 128;
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+const BAN: Duration = Duration::from_secs(60);
+
+/// What the RPC and the logs read of the follower.
+#[derive(Default)]
+pub struct Progress {
+    pub start: AtomicU64,
+    pub highest: AtomicU64,
+    /// An empty continuation from the best peer was seen at the current head.
+    pub confirmed: AtomicBool,
+}
+
+struct Peer {
+    version: u64,
+    rank: u64,
+}
+
+enum Stage {
+    Headers,
+    Bodies(Vec<Header>),
+}
+
+struct Inflight {
+    peer: PeerId,
+    id: u64,
+    stage: Stage,
+    deadline: Instant,
+}
+
+struct Follower {
+    core: Arc<Core>,
+    peers: Peers,
+    pool: Arc<PoolShared>,
+    progress: Arc<Progress>,
+    known: HashMap<PeerId, Peer>,
+    banned: HashMap<PeerId, Instant>,
+    next_id: u64,
+    inflight: Option<Inflight>,
+}
+
+fn to_body(b: BlockBody) -> (Body, usize) {
+    let n = b.transactions.len();
+    (
+        Body {
+            transactions: b.transactions.iter().map(from_wire).collect(),
+            uncles: b.uncles,
+            withdrawals: None,
+        },
+        n,
+    )
+}
+
+impl Follower {
+    fn ban(&mut self, p: PeerId, why: &str) {
+        eprintln!("chain: setting peer {} aside for 60 s: {why}", short(&p));
+        self.banned.insert(p, Instant::now() + BAN);
+        if self.inflight.as_ref().is_some_and(|i| i.peer == p) {
+            self.inflight = None;
+        }
+    }
+
+    fn best(&self) -> Option<PeerId> {
+        let t = Instant::now();
+        self.known
+            .iter()
+            .filter(|(id, _)| self.banned.get(*id).is_none_or(|u| *u <= t))
+            .max_by_key(|(id, p)| (p.rank, **id))
+            .map(|(id, _)| *id)
+    }
+
+    fn rid(&mut self, peer: &PeerId) -> (u64, Option<u64>) {
+        self.next_id += 1;
+        let v = self.known.get(peer).map_or(100, |p| p.version);
+        (self.next_id, (v == 101).then_some(self.next_id))
+    }
+
+    /// Starts a poll at the best peer when nothing is in flight.
+    fn kick(&mut self) {
+        if self.inflight.is_some() {
+            return;
+        }
+        let Some(peer) = self.best() else { return };
+        let (id, wire) = self.rid(&peer);
+        let (_, head) = self.core.head();
+        let msg = Message::GetBlockHeaders {
+            id: wire,
+            query: GetHeaders {
+                origin: Origin::Hash(head),
+                amount: BATCH + 1,
+                skip: 0,
+                reverse: false,
+            },
+        };
+        if self.peers.send(&peer, msg).is_ok() {
+            self.inflight = Some(Inflight {
+                peer,
+                id,
+                stage: Stage::Headers,
+                deadline: Instant::now() + REQUEST_TIMEOUT,
+            });
+        }
+    }
+
+    fn matches(&self, peer: &PeerId, id: Option<u64>) -> bool {
+        self.inflight.as_ref().is_some_and(|i| {
+            i.peer == *peer
+                && id == (self.known.get(peer).is_some_and(|p| p.version == 101)).then_some(i.id)
+        })
+    }
+
+    async fn import(&mut self, blocks: Vec<(Header, Body)>) -> Result<usize, String> {
+        let core = self.core.clone();
+        let r = tokio::task::spawn_blocking(move || {
+            let mut n = 0;
+            for (h, b) in blocks {
+                match core.import(h, b, now()) {
+                    Ok(Outcome::Extended) => n += 1,
+                    Ok(o) => return (n, Some(format!("not adopted: {o:?}"))),
+                    Err(e) => return (n, Some(e.to_string())),
+                }
+            }
+            (n, None)
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+        let (head, _) = self.core.head();
+        if r.0 > 0 {
+            let (h, td) = {
+                let g = self.core.hist.read();
+                (g.tip().hash, g.td)
+            };
+            self.peers.set_head(h, td);
+            self.progress.confirmed.store(false, Ordering::Relaxed);
+            eprintln!("chain: imported {} blocks, head {head}", r.0);
+        }
+        match r.1 {
+            None => Ok(r.0),
+            Some(e) => Err(e),
+        }
+    }
+
+    async fn on_headers(&mut self, peer: PeerId, headers: Vec<Header>) {
+        self.inflight = None;
+        let (number, head) = self.core.head();
+        if headers.first().map(Header::hash) != Some(head) {
+            self.ban(peer, "does not know our head");
+            return;
+        }
+        let rest = &headers[1..];
+        if rest.is_empty() {
+            self.progress.confirmed.store(true, Ordering::Relaxed);
+            self.progress.highest.fetch_max(number, Ordering::Relaxed);
+            return;
+        }
+        let linked = headers
+            .windows(2)
+            .all(|w| w[1].parent_hash == w[0].hash() && w[1].number == w[0].number + 1);
+        if !linked {
+            self.ban(peer, "headers do not link");
+            return;
+        }
+        self.progress
+            .highest
+            .fetch_max(rest[rest.len() - 1].number, Ordering::Relaxed);
+        let (id, wire) = self.rid(&peer);
+        let msg = Message::GetBlockBodies {
+            id: wire,
+            hashes: rest.iter().map(Header::hash).collect(),
+        };
+        if self.peers.send(&peer, msg).is_ok() {
+            self.inflight = Some(Inflight {
+                peer,
+                id,
+                stage: Stage::Bodies(rest.to_vec()),
+                deadline: Instant::now() + REQUEST_TIMEOUT,
+            });
+        }
+    }
+
+    async fn on_bodies(&mut self, peer: PeerId, bodies: Vec<BlockBody>) {
+        let Some(Inflight {
+            stage: Stage::Bodies(headers),
+            ..
+        }) = self.inflight.take()
+        else {
+            return;
+        };
+        if bodies.is_empty() {
+            self.ban(peer, "no bodies");
+            return;
+        }
+        let blocks: Vec<_> = headers
+            .into_iter()
+            .zip(bodies)
+            .map(|(h, b)| (h, to_body(b).0))
+            .collect();
+        if let Err(e) = self.import(blocks).await {
+            self.ban(peer, &e);
+            return;
+        }
+        self.kick();
+    }
+
+    async fn on_new_block(&mut self, peer: PeerId, nb: Box<xone_net::eth::NewBlock>) {
+        let rank = u64::try_from(nb.td).unwrap_or(u64::MAX);
+        if let Some(p) = self.known.get_mut(&peer) {
+            p.rank = p.rank.max(rank);
+        }
+        let h = nb.block.header;
+        self.progress.highest.fetch_max(h.number, Ordering::Relaxed);
+        let (number, head) = self.core.head();
+        if h.number <= number {
+            return;
+        }
+        if h.parent_hash == head && h.number == number + 1 && self.inflight.is_none() {
+            let body = Body {
+                transactions: nb.block.transactions.iter().map(from_wire).collect(),
+                uncles: nb.block.uncles,
+                withdrawals: None,
+            };
+            if let Err(e) = self.import(vec![(h, body)]).await {
+                self.ban(peer, &e);
+            }
+            return;
+        }
+        self.progress.confirmed.store(false, Ordering::Relaxed);
+        self.kick();
+    }
+
+    /// Answers a header or body request of a peer from the history.
+    fn serve(&self, peer: &PeerId, msg: &Message) {
+        let h = self.core.hist.read();
+        let reply = match msg {
+            Message::GetBlockHeaders { id, query } => {
+                let amount = query.amount.min(192);
+                let start = match query.origin {
+                    Origin::Number(n) => Some(n),
+                    Origin::Hash(x) => h.by_hash(x).map(|s| s.header.number),
+                };
+                let mut out = vec![];
+                let mut at = start;
+                while let (Some(n), true) = (at, u64::try_from(out.len()).is_ok_and(|l| l < amount))
+                {
+                    let Some(s) = usize::try_from(n).ok().and_then(|i| h.blocks.get(i)) else {
+                        break;
+                    };
+                    out.push(s.header.clone());
+                    let step = query.skip.saturating_add(1);
+                    at = if query.reverse {
+                        n.checked_sub(step)
+                    } else {
+                        n.checked_add(step)
+                    };
+                }
+                Message::BlockHeaders {
+                    id: *id,
+                    headers: out,
+                }
+            }
+            Message::GetBlockBodies { id, hashes } => Message::BlockBodies {
+                id: *id,
+                bodies: hashes
+                    .iter()
+                    .take(128)
+                    .filter_map(|x| h.by_hash(*x))
+                    .map(|s| BlockBody {
+                        transactions: s.body.transactions.iter().map(to_wire).collect(),
+                        uncles: s.body.uncles.clone(),
+                    })
+                    .collect(),
+            },
+            _ => return,
+        };
+        // a full queue of the peer drops the answer; it asks again
+        let _ = self.peers.send(peer, reply);
+    }
+
+    async fn on_event(&mut self, ev: Event) {
+        match ev {
+            Event::Connected {
+                peer,
+                version,
+                rank,
+                ..
+            } => {
+                eprintln!(
+                    "chain: peer {} connected, eth/{version}, rank {rank}",
+                    short(&peer)
+                );
+                self.known.insert(peer, Peer { version, rank });
+                self.kick();
+            }
+            Event::Disconnected { peer } => {
+                self.known.remove(&peer);
+                if self.inflight.as_ref().is_some_and(|i| i.peer == peer) {
+                    self.inflight = None;
+                }
+                self.kick();
+            }
+            Event::Message { peer, msg } => match msg {
+                Message::BlockHeaders { id, headers } if self.matches(&peer, id) => {
+                    if matches!(
+                        self.inflight.as_ref().map(|i| &i.stage),
+                        Some(Stage::Headers)
+                    ) {
+                        self.on_headers(peer, headers).await;
+                    }
+                }
+                Message::BlockBodies { id, bodies } if self.matches(&peer, id) => {
+                    self.on_bodies(peer, bodies).await;
+                }
+                Message::NewBlock(nb) => self.on_new_block(peer, nb).await,
+                Message::NewBlockHashes(list) => {
+                    if let Some(m) = list
+                        .iter()
+                        .map(|BlockAnnounce { number, .. }| *number)
+                        .max()
+                    {
+                        self.progress.highest.fetch_max(m, Ordering::Relaxed);
+                        if m > self.core.head().0 {
+                            self.progress.confirmed.store(false, Ordering::Relaxed);
+                        }
+                    }
+                    self.kick();
+                }
+                Message::Transactions(raws) => self.pool.add_wire(&raws),
+                m @ (Message::GetBlockHeaders { .. } | Message::GetBlockBodies { .. }) => {
+                    self.serve(&peer, &m);
+                }
+                _ => {}
+            },
+        }
+    }
+
+    async fn run(mut self, mut events: Receiver<Event>, mut stop: watch::Receiver<bool>) {
+        let mut tick = interval(Duration::from_secs(1));
+        loop {
+            tokio::select! {
+                _ = stop.changed() => break,
+                ev = events.recv() => match ev {
+                    Some(ev) => self.on_event(ev).await,
+                    None => break,
+                },
+                _ = tick.tick() => {
+                    if let Some(i) = &self.inflight {
+                        if i.deadline <= Instant::now() {
+                            let p = i.peer;
+                            self.ban(p, "request timed out");
+                        }
+                    }
+                    // a quiet follower polls once a second: that is how it learns of blocks that no
+                    // peer announced, and the empty answer is the caught-up proof
+                    self.kick();
+                }
+            }
+        }
+    }
+}
+
+fn short(p: &PeerId) -> String {
+    alloy_primitives::hex::encode(&p[..4])
+}
+
+pub struct ChainService {
+    core: Arc<Core>,
+    rt: Handle,
+    net: NetHandle,
+    pool: Arc<PoolShared>,
+    pub progress: Arc<Progress>,
+    events: Option<Receiver<Event>>,
+    stop: watch::Sender<bool>,
+    task: Option<JoinHandle<()>>,
+}
+
+impl ChainService {
+    pub fn new(
+        core: Arc<Core>,
+        rt: Handle,
+        net: NetHandle,
+        pool: Arc<PoolShared>,
+        events: Receiver<Event>,
+    ) -> Self {
+        let progress = Arc::new(Progress::default());
+        let (n, _) = core.head();
+        progress.start.store(n, Ordering::Relaxed);
+        progress.highest.store(n, Ordering::Relaxed);
+        Self {
+            core,
+            rt,
+            net,
+            pool,
+            progress,
+            events: Some(events),
+            stop: watch::channel(false).0,
+            task: None,
+        }
+    }
+}
+
+impl Service for ChainService {
+    fn name(&self) -> &str {
+        "chain"
+    }
+
+    fn start(&mut self) -> Result<(), ServiceError> {
+        let events = self
+            .events
+            .take()
+            .ok_or_else(|| ServiceError("chain service restarted".into()))?;
+        let f = Follower {
+            core: self.core.clone(),
+            peers: self.net.peers.clone(),
+            pool: self.pool.clone(),
+            progress: self.progress.clone(),
+            known: HashMap::new(),
+            banned: HashMap::new(),
+            next_id: 0,
+            inflight: None,
+        };
+        self.task = Some(self.rt.spawn(f.run(events, self.stop.subscribe())));
+        let (n, h) = self.core.head();
+        eprintln!("chain: following from block {n} {h}");
+        Ok(())
+    }
+
+    fn stop(&mut self) {
+        self.stop.send_replace(true);
+        if let Some(t) = self.task.take() {
+            // a block being imported finishes first; the node's own deadline bounds the wait
+            let _ = self
+                .rt
+                .block_on(async { timeout(Duration::from_millis(1500), t).await });
+        }
+        match self.core.checkpoint() {
+            Ok(Some(n)) => eprintln!("chain: state checkpoint of block {n} written"),
+            Ok(None) => {}
+            Err(e) => eprintln!("chain: no checkpoint written: {e}"),
+        }
+    }
+}

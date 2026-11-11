@@ -1,7 +1,7 @@
 # ADR-007: Operations limits (bounded queues, priority isolation, budgets, logs, disk)
 
 Status: proposed (Gate C design). Issue: XDCIndia/xOne#16 (XA-11). Plan: issue #1 ADR-007 line, R3, K2, A4. Budgets: `docs/perf.md` section 6. Storage: `docs/adr/ADR-005-storage-and-publication.md` section 9.
-Code: `crates/xone-node/` (primitives only, no wiring). Tests: `tests/ops/PLAN.md`.
+Code: `crates/xone-primitives/src/limits/` (the primitives, re-exported by `crates/xone-node/`) and `crates/xone-node/src/services/` (the wiring). Tests: `tests/ops/PLAN.md`.
 
 Tags: **[D]** a decision of this ADR, a proposal, no test has run. **[U]** unverified. Every number is a **proposal for the owner**, not a measured value. Nothing here is tuned (issue non-goal).
 

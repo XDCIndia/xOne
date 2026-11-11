@@ -49,10 +49,10 @@ fn io(path: &Path) -> impl FnOnce(std::io::Error) -> DatadirError + '_ {
     }
 }
 
-/// Chain id and genesis hash of a genesis file. The hash needs the fork schedule, which
-/// only the built-in networks have. The network is found by `config.chainId`; a file
-/// without a config block (the devnet551 export) must equal a built-in genesis.
-pub fn identity(genesis_json: &str) -> Result<Marker, DatadirError> {
+/// The built-in network, the parsed genesis and the identity of a genesis file. The hash needs the
+/// fork schedule, which only the built-in networks have. The network is found by `config.chainId`; a
+/// file without a config block (the devnet551 export) must equal a built-in genesis.
+fn identify(genesis_json: &str) -> Result<(Network, Genesis, Marker), DatadirError> {
     let v: serde_json::Value =
         serde_json::from_str(genesis_json).map_err(|e| DatadirError::GenesisJson(e.to_string()))?;
     let genesis = Genesis::from_json(genesis_json)?;
@@ -67,10 +67,16 @@ pub fn identity(genesis_json: &str) -> Result<Marker, DatadirError> {
             .ok_or_else(|| DatadirError::GenesisJson("config.chainId is missing".into()))?,
     };
     let spec = net.spec();
-    Ok(Marker {
+    let marker = Marker {
         chain_id: spec.chain_id,
         genesis_hash: genesis.hash(&spec)?.to_string(),
-    })
+    };
+    Ok((net, genesis, marker))
+}
+
+/// Chain id and genesis hash of a genesis file.
+pub fn identity(genesis_json: &str) -> Result<Marker, DatadirError> {
+    identify(genesis_json).map(|(_, _, m)| m)
 }
 
 fn read_marker(datadir: &Path) -> Result<Option<Marker>, DatadirError> {
@@ -109,6 +115,11 @@ pub fn init(datadir: &Path, genesis_json: &str) -> Result<Marker, DatadirError> 
 /// Start-up check: pick the genesis (`--override.genesis`, else the profile's built-in,
 /// else XDC mainnet), reject a `--networkid` that disagrees, then [`init`].
 pub fn prepare(cfg: &Config) -> Result<Marker, DatadirError> {
+    prepare_chain(cfg).map(|(m, _, _)| m)
+}
+
+/// [`prepare`], and the network and genesis the node runs.
+pub fn prepare_chain(cfg: &Config) -> Result<(Marker, Network, Genesis), DatadirError> {
     let json = match &cfg.override_genesis {
         Some(p) => std::fs::read_to_string(p).map_err(io(p))?,
         None => cfg
@@ -117,14 +128,14 @@ pub fn prepare(cfg: &Config) -> Result<Marker, DatadirError> {
             .genesis_json()
             .to_owned(),
     };
-    let marker = identity(&json)?;
+    let (net, genesis, marker) = identify(&json)?;
     if let Some(given) = cfg.network_id.filter(|n| *n != marker.chain_id) {
         return Err(DatadirError::NetworkId {
             given,
             genesis: marker.chain_id,
         });
     }
-    init(&cfg.datadir, &json)
+    Ok((init(&cfg.datadir, &json)?, net, genesis))
 }
 
 #[cfg(test)]

@@ -13,7 +13,7 @@
 use std::collections::{BTreeMap, HashSet, VecDeque};
 
 use alloy_primitives::{keccak256, B256};
-use xone_node::Offence;
+use xone_primitives::limits::Offence;
 
 use crate::eth::codes;
 pub use crate::eth::BftMessage;

@@ -4,11 +4,11 @@
 mod cmd;
 mod flags;
 
-use std::{ffi::OsString, process::ExitCode, time::Duration};
+use std::{ffi::OsString, process::ExitCode};
 
 use clap::parser::ValueSource;
 use xone_chainspec::Network;
-use xone_node::{datadir, lifecycle::NoopService, Config, Node, Shutdown};
+use xone_node::{datadir, services, Config, Shutdown};
 
 /// The one place the version stamp comes from.
 pub fn stamp() -> &'static str {
@@ -105,9 +105,10 @@ fn run(args: impl IntoIterator<Item = OsString>) -> ExitCode {
     }
 }
 
-/// Check the datadir marker, then run the (so far empty) service set until SIGTERM or SIGINT.
+/// Check the datadir marker, open the chain (a restart replays what is stored), then run net, chain,
+/// pool and rpc until SIGTERM or SIGINT.
 fn start(cfg: &Config) -> ExitCode {
-    let marker = match datadir::prepare(cfg) {
+    let (marker, net, genesis) = match datadir::prepare_chain(cfg) {
         Ok(m) => m,
         Err(e) => return fail(e),
     };
@@ -115,13 +116,10 @@ fn start(cfg: &Config) -> ExitCode {
     if let Err(e) = shutdown.install_signals() {
         return fail(e);
     }
-    let l = &cfg.limits;
-    let mut node = Node::new(
-        Duration::from_millis(l.service_stop_timeout_ms),
-        Duration::from_millis(l.stop_timeout_ms),
-    );
-    // ponytail: no p2p, sync or rpc services exist yet; they join this list in order.
-    node.add(Box::new(NoopService("noop")));
+    let mut node = match services::build(cfg, &marker, net, &genesis, stamp()) {
+        Ok(b) => b.node,
+        Err(e) => return fail(e),
+    };
     println!(
         "started chain {} genesis {}",
         marker.chain_id, marker.genesis_hash
