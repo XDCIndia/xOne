@@ -1,0 +1,329 @@
+{
+ "accessed": "2026-11-11",
+ "sources": [
+  {
+   "id": "xone-plan",
+   "url": "https://github.com/XDCIndia/xOne/issues/1",
+   "locator": "issue body + comments 6775804053 (Addendum), 6776122276 (Revision 1)",
+   "claim": "plan claims; Revision 1 decisions",
+   "limitations": "advisory; claims verified separately",
+   "confidence": "medium",
+   "license": "LGPL/none (issue text)"
+  },
+  {
+   "id": "xone-review",
+   "url": "https://github.com/XDCIndia/xOne/blob/2e77a4cf516c23a5fd5d7c5421a41d7a58a02dd1/docs/reviews/2026-11-10-architecture-scale-pq-review.md",
+   "locator": "whole",
+   "claim": "review recommendations",
+   "limitations": "design review; no benchmarks run",
+   "confidence": "medium",
+   "license": "repo"
+  },
+  {
+   "id": "geth-account",
+   "url": "https://github.com/XDCIndia/go-ethereum/blob/6fc8e8c2088b7f18264f5663036669d04fa7becf/core/types/state_account.go#L36-L46",
+   "locator": "StateAccount.Balance/BigBalance",
+   "claim": "wrapped balance + BigBalance",
+   "limitations": "oracle, not spec",
+   "confidence": "high",
+   "license": "LGPL-3.0"
+  },
+  {
+   "id": "geth-rlp",
+   "url": "https://github.com/XDCIndia/go-ethereum/blob/6fc8e8c2088b7f18264f5663036669d04fa7becf/core/types/gen_account_rlp.go#L14-L30",
+   "locator": "EncodeRLP",
+   "claim": "unbounded big-int RLP",
+   "limitations": "",
+   "confidence": "high",
+   "license": "LGPL-3.0"
+  },
+  {
+   "id": "geth-getbalance",
+   "url": "https://github.com/XDCIndia/go-ethereum/blob/6fc8e8c2088b7f18264f5663036669d04fa7becf/core/state/statedb.go#L343-L349",
+   "locator": "GetBalance",
+   "claim": "BALANCE sees wrapped value",
+   "limitations": "",
+   "confidence": "high",
+   "license": "LGPL-3.0"
+  },
+  {
+   "id": "geth-subbalance",
+   "url": "https://github.com/XDCIndia/go-ethereum/blob/6fc8e8c2088b7f18264f5663036669d04fa7becf/core/state/statedb.go#L481-L508",
+   "locator": "SubBalance",
+   "claim": "wide debit",
+   "limitations": "",
+   "confidence": "high",
+   "license": "LGPL-3.0"
+  },
+  {
+   "id": "geth-stateobject",
+   "url": "https://github.com/XDCIndia/go-ethereum/blob/6fc8e8c2088b7f18264f5663036669d04fa7becf/core/state/state_object.go#L487-L541",
+   "locator": "AddBalance/SetBalance",
+   "claim": "credit + SetBalance clears BigBalance",
+   "limitations": "",
+   "confidence": "high",
+   "license": "LGPL-3.0"
+  },
+  {
+   "id": "geth-cantransfer",
+   "url": "https://github.com/XDCIndia/go-ethereum/blob/6fc8e8c2088b7f18264f5663036669d04fa7becf/core/evm.go#L151-L165",
+   "locator": "CanTransfer",
+   "claim": "wide sender always passes",
+   "limitations": "",
+   "confidence": "high",
+   "license": "LGPL-3.0"
+  },
+  {
+   "id": "geth-buygas",
+   "url": "https://github.com/XDCIndia/go-ethereum/blob/6fc8e8c2088b7f18264f5663036669d04fa7becf/core/state_transition.go#L554-L571",
+   "locator": "buyGas",
+   "claim": "wrapped pre-check skipped",
+   "limitations": "",
+   "confidence": "high",
+   "license": "LGPL-3.0"
+  },
+  {
+   "id": "geth-calldata",
+   "url": "https://github.com/XDCIndia/go-ethereum/blob/6fc8e8c2088b7f18264f5663036669d04fa7becf/core/state_transition.go#L71-L80",
+   "locator": "XDCPreEIP2028Calldata",
+   "claim": "68 gas until Prague; 5551 exception",
+   "limitations": "",
+   "confidence": "high",
+   "license": "LGPL-3.0"
+  },
+  {
+   "id": "geth-selfdestruct",
+   "url": "https://github.com/XDCIndia/go-ethereum/blob/6fc8e8c2088b7f18264f5663036669d04fa7becf/core/vm/instructions.go#L906-L914",
+   "locator": "opSelfdestruct",
+   "claim": "moves wrapped balance",
+   "limitations": "",
+   "confidence": "high",
+   "license": "LGPL-3.0"
+  },
+  {
+   "id": "geth-apothem",
+   "url": "https://github.com/XDCIndia/go-ethereum/blob/6fc8e8c2088b7f18264f5663036669d04fa7becf/params/config.go#L1035-L1067",
+   "locator": "Apothem ChainConfig",
+   "claim": "fork rows, placeholders, TIPXDCX note",
+   "limitations": "",
+   "confidence": "high",
+   "license": "LGPL-3.0"
+  },
+  {
+   "id": "geth-netconst",
+   "url": "https://github.com/XDCIndia/go-ethereum/blob/6fc8e8c2088b7f18264f5663036669d04fa7becf/consensus/XDPoS/network_constants.go#L86-L97",
+   "locator": "testnet constants",
+   "claim": "fork rows",
+   "limitations": "",
+   "confidence": "high",
+   "license": "LGPL-3.0"
+  },
+  {
+   "id": "geth-signingtx",
+   "url": "https://github.com/XDCIndia/go-ethereum/blob/6fc8e8c2088b7f18264f5663036669d04fa7becf/eth/hooks/engine_v2_hooks.go#L621",
+   "locator": "GetSigningTxCount",
+   "claim": "pre-pivot bodies needed",
+   "limitations": "",
+   "confidence": "high",
+   "license": "LGPL-3.0"
+  },
+  {
+   "id": "geth-vote",
+   "url": "https://github.com/XDCIndia/go-ethereum/blob/6fc8e8c2088b7f18264f5663036669d04fa7becf/consensus/XDPoS/engines/engine_v2/vote.go#L292-L297",
+   "locator": "sendVote",
+   "claim": "persist before broadcast",
+   "limitations": "",
+   "confidence": "high",
+   "license": "LGPL-3.0"
+  },
+  {
+   "id": "geth-bftdb",
+   "url": "https://github.com/XDCIndia/go-ethereum/blob/6fc8e8c2088b7f18264f5663036669d04fa7becf/core/rawdb/accessors_xdc.go#L125-L131",
+   "locator": "WriteBFTHighestVotedRound",
+   "claim": "plain Put",
+   "limitations": "",
+   "confidence": "high",
+   "license": "LGPL-3.0"
+  },
+  {
+   "id": "geth-pebble",
+   "url": "https://github.com/XDCIndia/go-ethereum/blob/6fc8e8c2088b7f18264f5663036669d04fa7becf/ethdb/pebble/pebble.go#L234",
+   "locator": "writeOptions",
+   "claim": "NoSync",
+   "limitations": "",
+   "confidence": "high",
+   "license": "LGPL-3.0"
+  },
+  {
+   "id": "geth-timeout",
+   "url": "https://github.com/XDCIndia/go-ethereum/blob/6fc8e8c2088b7f18264f5663036669d04fa7becf/consensus/XDPoS/engines/engine_v2/timeout.go#L225-L296",
+   "locator": "sendTimeout",
+   "claim": "no persisted record",
+   "limitations": "",
+   "confidence": "high",
+   "license": "LGPL-3.0"
+  },
+  {
+   "id": "tracker-1950",
+   "url": "https://github.com/XDCIndia/go-ethereum/issues/1950",
+   "locator": "comments 6745466170, 6767069167, 6771307267, 6772969385",
+   "claim": "campaign observations",
+   "limitations": "reported, not reproduced",
+   "confidence": "medium",
+   "license": "n/a"
+  },
+  {
+   "id": "geth-1953",
+   "url": "https://github.com/XDCIndia/go-ethereum/pull/1953",
+   "locator": "merged PR",
+   "claim": "syslog flood fix",
+   "limitations": "",
+   "confidence": "high",
+   "license": "LGPL-3.0"
+  },
+  {
+   "id": "xonego",
+   "url": "local xone-anchor @8bfacb137ec059cebf8807b2411cb36da70acc5d",
+   "locator": "pkg/ethcompat/go.mod:11,119; pkg/core/chain/consensus_engine.go:156; commits e54f592a 474c3b02 e8c845bd 932d73d2 0f3b98cd 33e0ffe2",
+   "claim": "xOneGo bug classes + fixes",
+   "limitations": "parent go.mod not read; wide-balance RLP not located",
+   "confidence": "medium",
+   "license": "per repo"
+  },
+  {
+   "id": "reth-xdc",
+   "url": "local reth-apothem-spec @49c5719f1f8ed27426333996ba360cc57862bd12",
+   "locator": "crates/trie/common/src/xdc_overflow.rs:21,67; commits cabcc1550a e2525ed8b0; v2 engine.rs:847,924-936",
+   "claim": "global sidecar; vote record fsync",
+   "limitations": "nonce-unwind bug not found",
+   "confidence": "medium",
+   "license": "MIT/Apache-2.0"
+  },
+  {
+   "id": "erigon-xdc",
+   "url": "local erigon-xdc-epochfix @3b851d75dcf6d72ff8662be90f95ae4912956ba2",
+   "locator": "commit 64f97f9b75; docs/port/APOTHEM_E3_BOOTSTRAP.md:17,29,39",
+   "claim": "penalty scan order; E3 segments",
+   "limitations": "",
+   "confidence": "high",
+   "license": "LGPL-3.0"
+  },
+  {
+   "id": "nethermind-xdc",
+   "url": "XDCIndia/xdc-nethermind-private @d9ca4e4acd7b53e5ad0645c3d12e3c6e40175447",
+   "locator": "src/Nethermind/Nethermind.Core/Account.cs ~20-27",
+   "claim": "mirrors geth wide balance",
+   "limitations": "",
+   "confidence": "medium",
+   "license": "LGPL-3.0"
+  },
+  {
+   "id": "besu-xdc",
+   "url": "XDCIndia/besu-xdc",
+   "locator": "code search",
+   "claim": "not inspected",
+   "limitations": "search returned 0 hits; gap",
+   "confidence": "low",
+   "license": "Apache-2.0"
+  },
+  {
+   "id": "revm",
+   "url": "https://github.com/bluealloy/revm/tree/6b2e655b91f21c3a21770bed78def5b379ed1d17",
+   "locator": "crates/state/src/account_info.rs:68; context/interface/src/journaled_state/entry.rs:126; handler/src/handler.rs:448",
+   "claim": "account-ext; U256 caller check",
+   "limitations": "feature opt-in",
+   "confidence": "high",
+   "license": "MIT"
+  },
+  {
+   "id": "reth",
+   "url": "https://github.com/paradigmxyz/reth",
+   "locator": "v2.8.1 d763342f Cargo.toml:440; v2.10.1 58ebce14 Cargo.toml:435-437,672; PR #25002 merge 9d1638f3; docs/vocs/docs/pages/run/storage.mdx:5-12; crates/snap-sync/README.md:3,83-84",
+   "claim": "evm2 switch; Storage V2; snap/2 only",
+   "limitations": "",
+   "confidence": "high",
+   "license": "MIT/Apache-2.0"
+  },
+  {
+   "id": "alloy-trie",
+   "url": "https://github.com/alloy-rs/trie/pull/156",
+   "locator": "merge 90a71164; v0.9.6",
+   "claim": "fifth RLP extension",
+   "limitations": "",
+   "confidence": "high",
+   "license": "MIT/Apache-2.0"
+  },
+  {
+   "id": "evm2",
+   "url": "https://crates.io/crates/evm2",
+   "locator": "0.0.0-reserved",
+   "claim": "unpublished",
+   "limitations": "",
+   "confidence": "high",
+   "license": "n/a"
+  },
+  {
+   "id": "ethrex",
+   "url": "https://github.com/lambdaclass/ethrex/tree/fd5c57ddada097952660f6b749c739119e4de852/crates/networking/p2p/snap",
+   "locator": "client.rs, server.rs",
+   "claim": "Rust snap/1 reference",
+   "limitations": "tied to ethrex storage",
+   "confidence": "high",
+   "license": "Apache-2.0 (API)"
+  },
+  {
+   "id": "eip-8189",
+   "url": "https://eips.ethereum.org/EIPS/eip-8189",
+   "locator": "front-matter",
+   "claim": "Last Call, deadline 2026-11-01",
+   "limitations": "status may change",
+   "confidence": "medium",
+   "license": "CC0"
+  },
+  {
+   "id": "eest",
+   "url": "https://github.com/ethereum/execution-specs/releases",
+   "locator": "tests@v21.0.2 (2026-10-26)",
+   "claim": "current fixtures",
+   "limitations": "re-check at use",
+   "confidence": "high",
+   "license": "MIT"
+  },
+  {
+   "id": "fips",
+   "url": "https://csrc.nist.gov/pubs/fips/204/final",
+   "locator": "FIPS 203/204/205 pages; FIPS 204 Table 2 p26",
+   "claim": "errata notes; ML-DSA-65 sizes",
+   "limitations": "planned errata not yet published",
+   "confidence": "high",
+   "license": "public domain"
+  },
+  {
+   "id": "rustcrypto-pq",
+   "url": "https://github.com/RustCrypto/signatures",
+   "locator": "ml-dsa/README.md:29; slh-dsa/README.md:16; RustCrypto/KEMs ml-kem/README.md:46",
+   "claim": "not independently audited",
+   "limitations": "",
+   "confidence": "high",
+   "license": "MIT/Apache-2.0"
+  },
+  {
+   "id": "liboqs",
+   "url": "https://github.com/open-quantum-safe/liboqs",
+   "locator": "README.md:92; release 0.16.0",
+   "claim": "prototyping only",
+   "limitations": "",
+   "confidence": "high",
+   "license": "MIT"
+  },
+  {
+   "id": "review-register",
+   "url": "https://github.com/XDCIndia/xOne/blob/2e77a4cf516c23a5fd5d7c5421a41d7a58a02dd1/docs/reviews/2026-11-10-architecture-scale-pq-sources.json",
+   "locator": "40 references",
+   "claim": "reference-system families (Firedancer, Agave, Monad, Sui, Block-STM, Seastar, TigerBeetle, MDBX, RocksDB, Besu, Nethermind, Silkworm, Hive)",
+   "limitations": "re-used, not re-read in this audit except rows above",
+   "confidence": "medium",
+   "license": "various"
+  }
+ ]
+}
