@@ -7,7 +7,7 @@ is run locally; `.github/workflows/ci.yml` runs the same commands. Toolchain: st
 ## R3 rule 1 and 2: mechanism per rule
 
 Lints live in `[workspace.lints]` (root `Cargo.toml`). A crate opts in with `[lints] workspace = true`.
-Opted in: `xone-chainspec`, `xone-consensus`, `xone-evm`, `xone-state`, `xone-primitives`.
+Opted in: `xone-chainspec`, `xone-consensus`, `xone-evm`, `xone-state`, `xone-primitives`, `xone-net`.
 `disallowed-*` lists are in `clippy.toml` of each opted-in crate; `ci/rule2.clippy.toml` is the master copy
 and `ci/check-fixtures.sh` fails if a copy differs. (A root `clippy.toml` would also hit `build.rs`,
 `sim` and the spikes, which read the environment on purpose.)
