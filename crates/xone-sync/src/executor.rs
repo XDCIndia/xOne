@@ -18,6 +18,10 @@ pub struct Execution {
     pub gas_used: u64,
     /// Hash of the block access list the execution produced; `Some` from Amsterdam on.
     pub access_list_hash: Option<B256>,
+    /// Opaque rows the executor needs to continue after a restart (deployed code, sign
+    /// transactions, the V1 snapshot). Persisted in the block's commit ([`crate::store::Record::aux`]);
+    /// empty for an executor that keeps nothing.
+    pub aux: Bytes,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]

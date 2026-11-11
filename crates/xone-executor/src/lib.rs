@@ -39,7 +39,7 @@ use xone_evm::{
     special::{apply_empty_tx, apply_sign_tx, tip_signing_wipe, Receipt, SpecialError},
 };
 use xone_primitives::{Header, SealError, WideBalance};
-use xone_state::{system_contracts::validator_0x88, FlatWrite, Missing, StateDiff, StateView};
+use xone_state::{system_contracts::validator_0x88, Missing, StateDiff, StateRead};
 
 /// What block execution reads besides the parent state: the chain the block extends and the code
 /// store. Every answer is about the canonical chain of the block being executed.
@@ -123,9 +123,9 @@ fn evm_error(index: usize, e: impl std::fmt::Display) -> ExecError {
 }
 
 /// Execute `header` and `body` on `parent_view`, the state after `ctx.parent`.
-pub fn execute_block<F: FlatWrite, E: Env>(
+pub fn execute_block<V: StateRead, E: Env>(
     spec: &ChainSpec,
-    parent_view: &StateView<'_, F>,
+    parent_view: &V,
     header: &Header,
     body: &Body,
     ctx: &ExecCtx<'_, E>,
@@ -206,7 +206,7 @@ pub fn execute_block<F: FlatWrite, E: Env>(
                     return Err(ExecError::GasLimitReached { index });
                 }
                 evm.ctx.set_tx(tx_env(spec, t));
-                let result = XdcHandler::<Overlay<'_, StateView<'_, F>, E>>::default()
+                let result = XdcHandler::<Overlay<'_, V, E>>::default()
                     .run(&mut evm)
                     .map_err(|e| match e {
                         EVMError::Database(e) => ExecError::State(e),
@@ -297,7 +297,7 @@ pub fn execute_block<F: FlatWrite, E: Env>(
     let receipt_encodings: Vec<Bytes> = receipts.iter().map(|x| Bytes::from(x.encode())).collect();
     let receipt_root = ordered_trie_root_encoded(&receipt_encodings);
     let bloom = receipts.iter().fold(Bloom::ZERO, |b, x| b | x.bloom);
-    let state_root = parent_view.root_with(&diff)?;
+    let state_root = StateRead::root_with(parent_view, &diff)?;
     let body_check = BodyVerifier::new(spec).verify(header, body, &receipt_encodings);
     Ok(BlockOutcome {
         hash: header.hash(),

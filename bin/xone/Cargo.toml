@@ -10,4 +10,12 @@ build = "build.rs"
 [dependencies]
 clap.workspace = true
 xone-chainspec.workspace = true
+xone-consensus.workspace = true
 xone-node.workspace = true
+xone-primitives.workspace = true
+xone-sync.workspace = true
+
+[dev-dependencies]
+alloy-primitives.workspace = true
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+serde_json.workspace = true

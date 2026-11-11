@@ -248,6 +248,7 @@ impl World {
                 state_root: root,
                 gas_used: 0,
                 access_list_hash: None,
+                aux: Default::default(),
             },
         );
         Gen { block, flat }
@@ -416,6 +417,34 @@ impl xone_sync::store::Store for Mutant {
     }
     fn put_stateless(&mut self, b: &Block) -> Result<(), xone_sync::store::StoreError> {
         self.inner.put_stateless(b)
+    }
+    fn checkpoint(&self, s: xone_sync::store::Stage) -> u64 {
+        self.inner.checkpoint(s)
+    }
+    fn staged_header(&self, n: u64) -> Option<Header> {
+        self.inner.staged_header(n)
+    }
+    fn staged_body(&self, n: u64) -> Option<Body> {
+        self.inner.staged_body(n)
+    }
+    fn stage_headers(&mut self, h: &[Header]) -> Result<(), xone_sync::store::StoreError> {
+        self.inner.stage_headers(h)
+    }
+    fn stage_bodies(&mut self, f: u64, b: &[Body]) -> Result<(), xone_sync::store::StoreError> {
+        self.inner.stage_bodies(f, b)
+    }
+    fn set_checkpoint(
+        &mut self,
+        s: xone_sync::store::Stage,
+        n: u64,
+    ) -> Result<(), xone_sync::store::StoreError> {
+        self.inner.set_checkpoint(s, n)
+    }
+    fn finish(&mut self, n: u64) -> Result<(), xone_sync::store::StoreError> {
+        self.inner.finish(n)
+    }
+    fn unwind_stages(&mut self, n: u64) -> Result<(), xone_sync::store::StoreError> {
+        self.inner.unwind_stages(n)
     }
     fn scan(&self) -> xone_sync::store::Scan {
         self.inner.scan()

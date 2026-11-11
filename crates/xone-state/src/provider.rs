@@ -26,6 +26,9 @@ pub enum Missing {
     Block(B256),
     #[error("block number {0} is outside the retained window")]
     Number(u64),
+    /// The state is a view that cannot compute a root (see [`StateRead::root_with`]).
+    #[error("this state cannot compute a state root")]
+    NoRoot,
 }
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
@@ -46,6 +49,11 @@ pub trait StateRead {
     fn account(&self, address: Address) -> Option<Account>;
     /// Zero when absent.
     fn storage(&self, address: Address, slot: B256) -> U256;
+    /// The state root after `diff` on top of this state. Only the head view of a provider can
+    /// compute it ([`StateView::root_with`]); any other state is [`Missing::NoRoot`].
+    fn root_with(&self, _diff: &StateDiff) -> Result<B256, Missing> {
+        Err(Missing::NoRoot)
+    }
 }
 
 pub struct StateProvider<F> {
@@ -60,6 +68,14 @@ pub struct StateProvider<F> {
     side: HashMap<B256, (B256, StateDiff)>,
 }
 
+impl<F> StateProvider<F> {
+    pub fn head(&self) -> (u64, B256) {
+        self.chain
+            .last_key_value()
+            .map_or(self.base, |(n, (h, _))| (*n, *h))
+    }
+}
+
 impl<F: FlatWrite> StateProvider<F> {
     /// `flat` is the post-state of block (`number`, `hash`). `retention` is the number of blocks
     /// above the oldest openable one that keep a changeset.
@@ -72,12 +88,6 @@ impl<F: FlatWrite> StateProvider<F> {
             by_hash: HashMap::from([(hash, number)]),
             side: HashMap::new(),
         }
-    }
-
-    pub fn head(&self) -> (u64, B256) {
-        self.chain
-            .last_key_value()
-            .map_or(self.base, |(n, (h, _))| (*n, *h))
     }
 
     /// The head state, read-only. For roots (`crate::trie::flat_root`) and tests.
@@ -203,7 +213,7 @@ impl<'a, F> StateView<'a, F> {
     }
 }
 
-impl<F: FlatWrite> StateView<'_, F> {
+impl<F: FlatRead> StateView<'_, F> {
     /// The state root after `diff` on top of this view, computed from the flat tables without
     /// writing ([`crate::trie::root_after`]). Only the head view has its tables at hand: a view with
     /// side overlays or an older canonical block is [`Missing::Number`].
@@ -216,6 +226,10 @@ impl<F: FlatWrite> StateView<'_, F> {
 }
 
 impl<F: FlatRead> StateRead for StateView<'_, F> {
+    fn root_with(&self, diff: &StateDiff) -> Result<B256, Missing> {
+        StateView::root_with(self, diff)
+    }
+
     fn account(&self, address: Address) -> Option<Account> {
         if let Some(a) = self.overlays.iter().find_map(|d| d.accounts.get(&address)) {
             return a.clone();
