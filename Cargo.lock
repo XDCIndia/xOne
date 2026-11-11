@@ -4583,6 +4583,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "xone-snap"
+version = "0.1.0"
+dependencies = [
+ "alloy-primitives",
+ "alloy-rlp",
+ "alloy-trie",
+ "proptest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "xone-primitives",
+ "xone-state",
+]
+
+[[package]]
+name = "xone-snap-conformance"
+version = "0.1.0"
+dependencies = [
+ "alloy-primitives",
+ "reth-network-peers",
+ "secp256k1 0.30.0",
+ "tokio",
+ "xone-chainspec",
+ "xone-net",
+ "xone-primitives",
+ "xone-snap",
+ "xone-state",
+ "xone-sync",
+]
+
+[[package]]
 name = "xone-state"
 version = "0.1.0"
 dependencies = [
