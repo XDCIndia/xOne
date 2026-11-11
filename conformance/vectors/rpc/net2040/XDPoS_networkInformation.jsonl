@@ -1,0 +1,1 @@
+{"block":null,"class":"live","network":"net2040","request":{"id":1,"jsonrpc":"2.0","method":"XDPoS_networkInformation","params":[]},"response":{"id":1,"jsonrpc":"2.0","result":{"epoch":900,"networkId":2040,"v2SwitchBlock":10800,"xdcValidators":108}}}

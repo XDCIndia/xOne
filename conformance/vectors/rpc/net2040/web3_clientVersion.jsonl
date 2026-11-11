@@ -1,0 +1,1 @@
+{"block":null,"class":"live","network":"net2040","request":{"id":1,"jsonrpc":"2.0","method":"web3_clientVersion","params":[]},"response":{"error":{"code":-32601,"message":"the method web3_clientVersion does not exist/is not available"},"id":1,"jsonrpc":"2.0"}}

@@ -1,0 +1,20 @@
+# R3 rule 2. Identical in every crate that opts into the workspace lints
+# (ci/check-fixtures.sh diffs the copies against ci/rule2.clippy.toml).
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+
+disallowed-methods = [
+    { path = "std::env::var", reason = "R3 rule 2: no environment reads in rule crates" },
+    { path = "std::env::var_os", reason = "R3 rule 2: no environment reads in rule crates" },
+    { path = "std::env::vars", reason = "R3 rule 2: no environment reads in rule crates" },
+    { path = "std::env::vars_os", reason = "R3 rule 2: no environment reads in rule crates" },
+    { path = "core::option::Option::unwrap_or_default", reason = "R3 rule 2: a missing value is a typed error, not a default" },
+    { path = "core::result::Result::unwrap_or_default", reason = "R3 rule 2: a failure is a typed error, not a default" },
+]
+
+disallowed-types = [
+    { path = "std::sync::OnceLock", reason = "R3 rule 2: no global state" },
+    { path = "std::sync::LazyLock", reason = "R3 rule 2: no global state" },
+    { path = "std::cell::OnceCell", reason = "R3 rule 2: no lazy cells as globals" },
+    { path = "std::cell::LazyCell", reason = "R3 rule 2: no lazy cells as globals" },
+]

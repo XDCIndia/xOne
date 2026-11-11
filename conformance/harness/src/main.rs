@@ -127,6 +127,7 @@ fn real(cli: Cli) -> Result<ExitCode, String> {
                 state_dir: Some(state_dir),
                 every: checkpoint_every,
                 resume,
+                keep: false,
             };
             let r = run(net, &spec, &blocks, &opts)?;
             let secs = t0.elapsed().as_secs_f64();

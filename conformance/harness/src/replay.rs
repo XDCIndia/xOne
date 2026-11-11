@@ -32,6 +32,20 @@ pub struct Opts {
     pub state_dir: Option<PathBuf>,
     pub every: u64,
     pub resume: bool,
+    /// Keep what each block's execution produced in `Report::executed` (the RPC parity sweep).
+    pub keep: bool,
+}
+
+/// What one executed block produced: its receipts, state diff, deployed code and the V1 snapshot
+/// after it.
+#[derive(Debug, Clone)]
+pub struct Executed {
+    pub number: u64,
+    pub hash: B256,
+    pub receipts: Vec<Bytes>,
+    pub diff: StateDiff,
+    pub codes: BTreeMap<B256, Bytes>,
+    pub snapshot: Snapshot,
 }
 
 #[derive(Debug, Clone)]
@@ -66,6 +80,8 @@ pub struct Report {
     pub aux_skipped: u64,
     pub resumed_from: Option<u64>,
     pub divergence: Option<Divergence>,
+    /// With `Opts::keep`, every block executed in this run, in order.
+    pub executed: Vec<Executed>,
 }
 
 fn hex(v: impl std::fmt::LowerHex) -> String {
@@ -73,7 +89,7 @@ fn hex(v: impl std::fmt::LowerHex) -> String {
 }
 
 /// Genesis state, code and header hash of `net`, after the genesis hash and root checks.
-fn genesis(
+pub fn genesis(
     net: Network,
     spec: &ChainSpec,
 ) -> Result<(MemFlat, BTreeMap<B256, Bytes>, xone_primitives::Header), String> {
@@ -438,6 +454,16 @@ pub fn run(
             &provider.at(o.hash).map_err(|e| e.to_string())?,
             n,
         )?;
+        if opts.keep {
+            report.executed.push(Executed {
+                number: n,
+                hash: o.hash,
+                receipts: o.receipt_encodings.clone(),
+                diff: o.diff.clone(),
+                codes: o.codes.clone(),
+                snapshot: snap.clone(),
+            });
+        }
         chain.codes.extend(o.codes);
         for (a, acc) in &o.diff.accounts {
             match acc {

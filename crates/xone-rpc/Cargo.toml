@@ -1,0 +1,33 @@
+[package]
+name = "xone-rpc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+# JSON-RPC 2.0 server (XB-22): core, handlers over traits, HTTP/WS/IPC transports, subscriptions.
+# The node wires the traits (chain, state, pool, peers, consensus) and the ADR-007 quotas' clock.
+[dependencies]
+alloy-primitives.workspace = true
+alloy-rlp.workspace = true
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+http-body-util = "0.1"
+hyper = { version = "1", features = ["http1", "server"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "time", "macros", "io-util"] }
+tokio-tungstenite = "0.29"
+xone-chainspec.workspace = true
+xone-consensus.workspace = true
+xone-executor.workspace = true
+xone-primitives.workspace = true
+xone-state.workspace = true
+xone-sync.workspace = true
+
+[dev-dependencies]
