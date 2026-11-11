@@ -226,10 +226,11 @@ impl<DB: Database> Handler for XdcHandler<DB> {
             cfg,
         )?;
         if !cfg.is_fee_charge_disabled() {
-            let spend = tx.effective_balance_spending(
-                block.basefee() as u128,
-                block.blob_gasprice().unwrap_or_default(),
-            )? - tx.value();
+            // a transaction without blobs has no blob gas price: zero, as in revm
+            #[allow(clippy::disallowed_methods)]
+            let blob_price = block.blob_gasprice().unwrap_or_default();
+            let spend = tx.effective_balance_spending(u128::from(block.basefee()), blob_price)?
+                - tx.value();
             acc.decr_balance(spend);
         }
         if tx.kind().is_call() {
@@ -277,9 +278,14 @@ impl<DB: Database> Handler for XdcHandler<DB> {
         }
         let g = exec.gas();
         let caller = ctx.tx().caller();
-        let price = ctx.tx().effective_gas_price(ctx.block().basefee() as u128);
-        let unused = g.remaining() + g.reservoir() + g.refunded() as u64;
-        let amount = U256::from(price.saturating_mul(unused as u128));
+        let price = ctx
+            .tx()
+            .effective_gas_price(u128::from(ctx.block().basefee()));
+        // `refunded()` is an i64 counter; the cast keeps revm's reimbursement arithmetic bit for bit
+        #[allow(clippy::as_conversions)]
+        let refunded = g.refunded() as u64;
+        let unused = g.remaining() + g.reservoir() + refunded;
+        let amount = U256::from(price.saturating_mul(u128::from(unused)));
         if !ctx
             .journal_mut()
             .load_account_mut(caller)?
@@ -301,8 +307,8 @@ impl<DB: Database> Handler for XdcHandler<DB> {
             return Ok(());
         }
         let g = exec.gas();
-        let used = g.used().saturating_sub(g.reservoir()) as u128;
-        let basefee = block.basefee() as u128;
+        let used = u128::from(g.used().saturating_sub(g.reservoir()));
+        let basefee = u128::from(block.basefee());
         let price = tx.effective_gas_price(basefee);
         // geth `core/state_transition.go:881-930`.
         let (to, per_gas) = if chain.rules.fee_to_owner {

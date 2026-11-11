@@ -1,3 +1,9 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::as_conversions,
+    clippy::disallowed_methods
+)] // integration test: a panic is the failure report
 //! Every switch reads the chain spec: no source file of this crate compares a chain id to a literal.
 //! The chain-id rules live in `xone-chainspec` (`is_pre_eip2028_calldata`, `installs_multicall3`).
 

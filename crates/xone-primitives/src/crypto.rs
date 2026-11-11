@@ -43,7 +43,10 @@ impl AlgorithmId {
     pub const EXPERIMENTAL: std::ops::RangeInclusive<u16> = 0xF000..=0xFFFF;
 
     pub fn id(self) -> u16 {
-        self as u16
+        #[allow(clippy::as_conversions)]
+        // fieldless #[repr(u16)] enum: the cast is the discriminant
+        let id = self as u16;
+        id
     }
 
     /// Only an active value converts; unassigned and experimental ids are errors.

@@ -26,3 +26,18 @@ xone-db = { path = "crates/xone-db" }
 xone-state = { path = "crates/xone-state" }
 xone-consensus = { path = "crates/xone-consensus" }
 xone-evm = { path = "crates/xone-evm" }
+
+# R3 rule 1 and 2 (plan #1). Crates opt in with `[lints] workspace = true`; the lint
+# set is per crate, see docs/assurance/README.md. disallowed-* lists live in each
+# opted-in crate's clippy.toml (ci/check-fixtures.sh keeps the copies identical).
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+unwrap_or_default = "deny"
+unused_result_ok = "deny"
+as_conversions = "deny"
+disallowed_methods = "deny"
+disallowed_types = "deny"

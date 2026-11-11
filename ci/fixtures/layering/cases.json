@@ -1,0 +1,10 @@
+{
+  "_doc": "name -> {ok, crates: {workspace-relative dir: [dependency crate names]}}. check-layering.sh --fixtures generates each as a tiny workspace and runs the check on it.",
+  "good-db-depends-on-consensus": {"ok": true, "crates": {"crates/xone-primitives": [], "crates/xone-chainspec": ["xone-primitives"], "crates/xone-consensus": ["xone-chainspec"], "crates/xone-db": ["xone-consensus"], "sim": ["xone-db"]}},
+  "wrong-direction-primitives-to-chainspec": {"ok": false, "crates": {"crates/xone-primitives": ["xone-chainspec"], "crates/xone-chainspec": []}},
+  "wrong-direction-consensus-to-db": {"ok": false, "crates": {"crates/xone-consensus": ["xone-db"], "crates/xone-db": []}},
+  "same-rank-state-to-evm": {"ok": false, "crates": {"crates/xone-state": ["xone-evm"], "crates/xone-evm": []}},
+  "crate-depends-on-sim": {"ok": false, "crates": {"crates/xone-evm": ["xone-sim"], "sim": []}},
+  "bin-depends-on-lab": {"ok": false, "crates": {"bin/xone": ["pq-lab"], "labs/pq": []}},
+  "unknown-crate": {"ok": false, "crates": {"crates/xone-mystery": []}}
+}

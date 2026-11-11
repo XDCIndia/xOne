@@ -14,7 +14,9 @@ pub enum Kind {
 
 impl Kind {
     fn idx(self) -> usize {
-        self as usize - 1
+        #[allow(clippy::as_conversions)] // fieldless enum discriminant (1..=3)
+        let d = self as usize;
+        d - 1
     }
 }
 
@@ -59,7 +61,9 @@ impl Intent {
     /// `kind u8 | round u64 LE | digest 32`. The context is not stored: a retry is matched on these 41 bytes.
     pub fn to_bytes(&self) -> [u8; 41] {
         let mut b = [0; 41];
-        b[0] = self.kind as u8;
+        #[allow(clippy::as_conversions)] // fieldless enum discriminant (1..=3)
+        let kind = self.kind as u8;
+        b[0] = kind;
         b[1..9].copy_from_slice(&self.round.to_le_bytes());
         b[9..].copy_from_slice(self.digest.as_slice());
         b
@@ -143,8 +147,11 @@ impl SafetyRecord {
             b.extend_from_slice(&s.round.to_le_bytes());
             b.extend_from_slice(s.digest.as_slice());
         }
-        b.push(self.lock_qc.is_some() as u8);
-        put_ref(&mut b, &self.lock_qc.unwrap_or_default());
+        b.push(u8::from(self.lock_qc.is_some()));
+        // absent lock encodes as an all-zero ref after the flag byte; the flag disambiguates
+        #[allow(clippy::disallowed_methods)]
+        let lock = self.lock_qc.unwrap_or_default();
+        put_ref(&mut b, &lock);
         put_ref(&mut b, &self.highest_qc);
         b.extend_from_slice(&self.highest_tc.to_le_bytes());
         let sum = keccak256(&b);
@@ -213,7 +220,7 @@ impl SafetyRecord {
                 changed = true;
             }
         }
-        self.seq += changed as u64;
+        self.seq += u64::from(changed);
         changed
     }
 
@@ -276,7 +283,10 @@ impl Reader<'_> {
         h
     }
     fn u64(&mut self) -> u64 {
-        u64::from_le_bytes(self.take(8).try_into().unwrap_or_default())
+        // take(8) is exactly 8 bytes (caller checked the total length), so the default is unreachable
+        #[allow(clippy::disallowed_methods)]
+        let b = self.take(8).try_into().unwrap_or_default();
+        u64::from_le_bytes(b)
     }
     fn b256(&mut self) -> B256 {
         B256::from_slice(self.take(32))
@@ -630,13 +640,13 @@ mod tests {
     fn decisions_only_raise_the_record() {
         let mut r = rec();
         for n in 1..40u64 {
-            let kind = [Kind::Vote, Kind::Timeout, Kind::Propose][(n % 3) as usize];
+            let kind = [Kind::Vote, Kind::Timeout, Kind::Propose][usize::try_from(n % 3).unwrap()];
             let i = Intent {
                 ctx: VoteCtx {
                     qc_round: n,
                     extends_lock: true,
                 },
-                ..Intent::new(kind, n / 2 + 1, d((n % 4) as u8))
+                ..Intent::new(kind, n / 2 + 1, d(u8::try_from(n % 4).unwrap()))
             };
             if let Ok(next) = decide(&r, &i, Durability::Durable) {
                 assert!(next.dominates(&r));

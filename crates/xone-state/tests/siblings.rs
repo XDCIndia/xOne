@@ -1,3 +1,9 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::as_conversions,
+    clippy::disallowed_methods
+)] // integration test: a panic is the failure report
 //! Real data. `tests/vectors/sibling_diffs.json` holds, for net2040 619,712 and 619,713 and Apothem
 //! 85,209,326 and 85,214,323, the block-level state diff read from the xdc02 archives
 //! (`tools/fetch_sibling_diffs.py`: prestateTracer diffMode merged over the block's transactions,

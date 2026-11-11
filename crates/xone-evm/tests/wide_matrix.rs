@@ -1,3 +1,9 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::as_conversions,
+    clippy::disallowed_methods
+)] // integration test: a panic is the failure report
 //! The XA-02 wide-balance matrix (`spikes/wide-balance/vectors/matrix.json`, printed by the geth-XDC
 //! Go oracle) through the production `WideJournal` and `XdcHandler`: every balance, storage slot,
 //! transaction outcome and the state root must equal geth. Adapted from the spike harness; gas is

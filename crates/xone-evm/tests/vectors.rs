@@ -1,3 +1,9 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::as_conversions,
+    clippy::disallowed_methods
+)] // integration test: a panic is the failure report
 //! Rule switches, precompile sets and intrinsic gas against the geth-XDC oracle, at every height a
 //! fork row of the generated table can flip at (row - 1, row, row + 1).
 //! Vectors: `conformance/vectors/evm/{precompiles,rules}.json`, written by `oracle/run.sh`.
