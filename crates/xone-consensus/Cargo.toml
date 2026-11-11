@@ -1,0 +1,12 @@
+[package]
+name = "xone-consensus"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+alloy-primitives.workspace = true
+thiserror.workspace = true
+xone-db.workspace = true

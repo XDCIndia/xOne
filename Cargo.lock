@@ -2462,6 +2462,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "xone-consensus"
+version = "0.1.0"
+dependencies = [
+ "alloy-primitives",
+ "thiserror",
+ "xone-db",
+]
+
+[[package]]
 name = "xone-db"
 version = "0.1.0"
 dependencies = [
@@ -2476,6 +2485,15 @@ version = "0.1.0"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
+]
+
+[[package]]
+name = "xone-sim"
+version = "0.1.0"
+dependencies = [
+ "alloy-primitives",
+ "xone-consensus",
+ "xone-db",
 ]
 
 [[package]]

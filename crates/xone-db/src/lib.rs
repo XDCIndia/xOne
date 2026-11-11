@@ -7,6 +7,7 @@
 
 mod manifest;
 mod recover;
+pub mod safety;
 
 pub use alloy_primitives::{Address, B256};
 pub use manifest::{
