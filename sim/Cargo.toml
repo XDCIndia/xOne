@@ -9,5 +9,7 @@ description = "Test-only simulator of the V2 vote path. No other crate may depen
 
 [dependencies]
 alloy-primitives.workspace = true
+xone-chainspec.workspace = true
 xone-consensus.workspace = true
 xone-db = { workspace = true, features = ["fault-injection"] }
+xone-primitives.workspace = true

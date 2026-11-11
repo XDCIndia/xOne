@@ -97,18 +97,21 @@ pub fn decode(l: &Line) -> Result<Block, String> {
     })
 }
 
-/// Append blocks `from..=to` that the cache at `path` does not hold yet (it must hold `0..from`).
-/// At most 5 calls per request and 4 requests per second, as `Rpc` paces them.
+/// Append blocks `from..=to` that the cache at `path` does not hold yet. A cache starts at the
+/// block of its first line and must stay contiguous: a new file may start anywhere, an existing
+/// one continues after its last line. Batches of `BATCH` blocks, one request every 260 ms, so at
+/// most 4 requests per second (`xone_sweep::fetch::Rpc`).
 pub fn fetch(path: &Path, from: u64, to: u64) -> Result<u64, String> {
-    let have = if path.exists() {
-        read(path)?.len() as u64
+    const BATCH: u64 = 200;
+    let next = if path.exists() {
+        read(path)?.last().map_or(from, |l| l.n + 1)
     } else {
-        0
+        from
     };
-    let start = from.max(have);
-    if start > have {
+    let start = from.max(next);
+    if start > next {
         return Err(format!(
-            "the cache holds {have} blocks, cannot start at {start}"
+            "the cache ends before block {next}, cannot start at {start}"
         ));
     }
     if let Some(dir) = path.parent() {
@@ -122,7 +125,7 @@ pub fn fetch(path: &Path, from: u64, to: u64) -> Result<u64, String> {
     let mut rpc = Rpc::default();
     let mut n = start;
     while n <= to {
-        let last = (n + 4).min(to);
+        let last = (n + BATCH - 1).min(to);
         let mut calls = vec![];
         for k in n..=last {
             calls.push(("debug_getRawBlock", json!([format!("{k:#x}")])));
@@ -157,7 +160,7 @@ pub fn fetch(path: &Path, from: u64, to: u64) -> Result<u64, String> {
             .map_err(|e| e.to_string())?;
         }
         n = last + 1;
-        if n % 500 < 5 {
+        if n % 10_000 < BATCH {
             eprintln!("fetched to {}", n - 1);
         }
     }

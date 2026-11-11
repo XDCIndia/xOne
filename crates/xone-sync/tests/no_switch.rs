@@ -9,7 +9,7 @@
 //! (`every_check_runs_on_every_import`, `header_check_runs_before_anything_is_stored`).
 
 const INSERT: &str = include_str!("../src/chain/insert.rs");
-const SOURCES: [(&str, &str); 14] = [
+const SOURCES: [(&str, &str); 24] = [
     ("lib.rs", include_str!("../src/lib.rs")),
     ("executor.rs", include_str!("../src/executor.rs")),
     ("store.rs", include_str!("../src/store.rs")),
@@ -32,6 +32,25 @@ const SOURCES: [(&str, &str); 14] = [
     ("testkit/mod.rs", include_str!("../src/testkit/mod.rs")),
     ("testkit/mem.rs", include_str!("../src/testkit/mem.rs")),
     ("testkit/exec.rs", include_str!("../src/testkit/exec.rs")),
+    ("xdc.rs", include_str!("../src/xdc.rs")),
+    ("follow.rs", include_str!("../src/follow.rs")),
+    ("import.rs", include_str!("../src/import.rs")),
+    ("export.rs", include_str!("../src/export.rs")),
+    ("stages/mod.rs", include_str!("../src/stages/mod.rs")),
+    (
+        "stages/headers.rs",
+        include_str!("../src/stages/headers.rs"),
+    ),
+    ("stages/bodies.rs", include_str!("../src/stages/bodies.rs")),
+    (
+        "stages/senders.rs",
+        include_str!("../src/stages/senders.rs"),
+    ),
+    (
+        "stages/execute.rs",
+        include_str!("../src/stages/execute.rs"),
+    ),
+    ("stages/finish.rs", include_str!("../src/stages/finish.rs")),
     ("Cargo.toml", include_str!("../Cargo.toml")),
 ];
 
@@ -129,7 +148,7 @@ fn nothing_in_the_crate_can_switch_a_check_off() {
             assert!(!code.contains(w), "{file}: `{w}`");
         }
     }
-    let manifest = SOURCES[13].1;
+    let manifest = SOURCES[23].1;
     assert!(
         !manifest.contains("[features]"),
         "a Cargo feature could switch a check"

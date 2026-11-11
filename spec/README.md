@@ -46,6 +46,14 @@ A rule with no source line is not a rule. A value that a page states must come f
 | [reorg-and-set-head](chain/reorg-and-set-head.md) | reorg by atomic unwind, the committed-block floor, `set-head` |
 | [resume](chain/resume.md) | resume a consistent head or refuse with a typed error naming the missing record |
 
+### Snap (xone-snap)
+
+| Page | Rule |
+| --- | --- |
+| [messages](snap/messages.md) | the eight snap/1 messages, the RLPx offset, wide-balance slim accounts, response limits, the server and the Q15 bounds |
+| [range-proofs](snap/range-proofs.md) | what a range must prove, when it is refused, healing and resume |
+| [completeness](snap/completeness.md) | the pre-pivot headers, bodies, receipts and gap snapshots without which the sync is not complete |
+
 ### Keys (xone-signer)
 | Page | Rule |
 | --- | --- |
@@ -68,6 +76,9 @@ A rule with no source line is not a rule. A value that a page states must come f
 | [wide-balance](evm/wide-balance.md) | balances above 2^256 - 1 |
 | [rewards-v1](consensus/rewards-v1.md) | V1 and V2 checkpoint window, count, flat payout, 90/10 split, parent-state holders |
 | [rewards-v2-tiered-proportional](consensus/rewards-v2-tiered-proportional.md) | Reward 2.0 tiers, the float tier reward, fixed and proportional payout |
+| [v2-bft-vote-path](consensus/v2-bft-vote-path.md) | V2 proposals, the voting rule with the lock QC, the vote pool, QC formation, the sibling vote |
+| [v2-timeouts-and-syncinfo](consensus/v2-timeouts-and-syncinfo.md) | the round timer and its exponential schedule, timeouts and TC, SyncInfo origination and handling, seeding, minePeriod |
+| [v2-forensics](consensus/v2-forensics.md) | two conflicting QCs make one proof with the id of `generateForensicsId` |
 | [penalties-and-comeback](consensus/penalties-and-comeback.md) | V1 and V2 penalties, comeback windows, the switch-plus-one case |
 | [header-verification-v1](consensus/header-verification-v1.md) | the order and content of the V1 header checks, seal and double validation |
 | [header-verification-v2](consensus/header-verification-v2.md) | the order and content of the V2 header checks and the quorum certificate |
@@ -80,3 +91,11 @@ A rule with no source line is not a rule. A value that a page states must come f
 | [special-txs](txpool/special-txs.md) | sign transactions: candidate pool authority (penalised included), price exemption, fast path to pending |
 | [ordering-and-eviction](txpool/ordering-and-eviction.md) | replacement, queue, promotion, demotion, slot bounds, price heaps, expiry |
 | [propagation](txpool/propagation.md) | broadcast, announce and fetch as pure functions; ADR-007 Q5 and Q6 intake |
+
+### Sync (xone-sync, XB-14)
+
+| Page | Rule |
+| --- | --- |
+| [stages](sync/stages.md) | headers, bodies, senders, execution, finish: one durable checkpoint per stage, bounded windows, resume, unwind |
+| [follow](sync/follow.md) | live follow at the tip: pushed blocks, announcements, gap fill, TD only ranks, caught up is hash equality |
+| [import-export](sync/import-export.md) | geth block files in and out, byte-equal round trip, the offline commands |

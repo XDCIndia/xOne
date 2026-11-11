@@ -4,7 +4,7 @@
 # fail `cargo clippy -D warnings` and the failure output must contain <text>.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-RULE_CRATES=(xone-chainspec xone-consensus xone-evm xone-state xone-primitives xone-signer xone-net xone-executor xone-sync xone-builder xone-rpc)
+RULE_CRATES=(xone-chainspec xone-consensus xone-evm xone-state xone-primitives xone-signer xone-net xone-executor xone-sync xone-snap xone-builder xone-rpc)
 fail=0
 
 echo "== clippy.toml copies equal ci/rule2.clippy.toml"

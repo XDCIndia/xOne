@@ -1,6 +1,6 @@
-# V2 follower vectors (XB-11)
+# V2 follower vectors (XB-11) and BFT vectors (XB-15)
 
-Read by `crates/xone-consensus/tests/v2_vectors.rs` and `v2_header.rs`. Never edit by hand: the archive builders are in `build/`, the pinned-geth oracle is `crates/xone-consensus/oracle/v2` (PIN = `conformance/PIN`).
+Read by `crates/xone-consensus/tests/v2_vectors.rs`, `v2_header.rs` and (the `bft-*` files) `bft_vectors.rs`. Never edit by hand: the archive builders are in `build/`, the pinned-geth oracle is `crates/xone-consensus/oracle/v2` (PIN = `conformance/PIN`).
 
 | file | from | what |
 | --- | --- | --- |
@@ -12,6 +12,9 @@ Read by `crates/xone-consensus/tests/v2_vectors.rs` and `v2_header.rs`. Never ed
 | `cert.json` | oracle `cert` | `verifyQC`, `verifyTC`, `VerifySyncInfoMessage`, `rlp.DecodeBytes`: 220 cases, 22 decodings, 24 threshold edges |
 | `commit.json` | oracle `commit` | `commitBlocks` on 40 chains, 1,600 cases |
 | `midadd.json` | oracle `midadd` | `yourturnAligned` across a mid-epoch masternode addition, 17 cases |
+| `bft-timer.json` | oracle `bft timer` | the round timer of the pinned engine (`setNewRound`, `Reset`, `GetTimeout`, `onTimeout`): every V2 config row of mainnet, Apothem, devnet, devnet551 and net2040, and synthetic rows; 300 steps |
+| `bft-rule.json` | oracle `bft rule` | `verifyVotingRule` on 3,027 explicit inputs, and the net2040 619,712/619,713 sibling shape (9 cases) |
+| `bft-forensics.json` | oracle `bft forensics` | `ForensicsMonitoring` on 150 generated chains with a fork: the event, its id and its paths (109 events) |
 
 ## Regenerating
 
@@ -24,6 +27,9 @@ python3 -I leader.py apothem ../leader-apothem.json
 python3 -I leader.py net2040 ../leader-net2040.json
 cd ../../../../crates/xone-consensus/oracle/v2
 GETH_SRC=<geth-XDC checkout at PIN> ./run.sh sort > ../../../../conformance/vectors/v2/sort.json   # likewise calc epoch cert commit midadd
+cd ../bft   # the BFT vectors; the oracle is crates/xone-consensus/oracle/bft (same PIN)
+GETH_SRC=<geth-XDC checkout at PIN> ./run.sh rule > ../../../../conformance/vectors/v2/bft-rule.json   # likewise forensics
+GETH_SRC=<geth-XDC checkout at PIN> ./run.sh timer ../../../xone-chainspec/generated/forks.json ../../../../conformance/vectors/consensus/net2040.forks.json > ../../../../conformance/vectors/v2/bft-timer.json
 ```
 
 `build/*.py` import `../../reward/build/arch.py` (ssh + curl, cached in `cache.db`, which is ignored). Python 3 with `pycryptodome`. The oracle needs Go 1.25 with `GOTOOLCHAIN=local`; its overlay adds `export.go.txt` to the engine package for the build only.

@@ -9,6 +9,8 @@
 //!   (`core/state_transition.go:497-557`);
 //! * `run_exec_loop`: STATICCALL touches the callee only from the Istanbul rules
 //!   (`core/vm/evm.go:513`);
+//! * a TRC21 token-fee transaction ([`XdcChain::token_fee`]): the token's capacity must cover the
+//!   gas, the sender is neither charged nor refunded (`core/state_transition.go:503-510`, `:1203`);
 //! * `reimburse_caller`, `reward_beneficiary`: a credit above the legal balance bound is an error,
 //!   and the fee goes to the coinbase or, after `TIPTRC21Fee`, to the coinbase owner
 //!   (`core/state_transition.go:881-930`, [`fees::credit`]);
@@ -55,6 +57,10 @@ pub struct XdcChain {
     /// `None` credits nothing, as geth does with no registered owner. Derive it with
     /// [`fees::coinbase_owner`] from the state at the start of the block.
     pub fee_owner: Option<Address>,
+    /// The fee capacity of the TRC21 token the transaction being executed is sent to (geth
+    /// `Message.BalanceTokenFee`, `core/state_transition.go:314-319`), `None` for any other
+    /// transaction. The executor sets it per transaction ([`fees::trc21_gas_price`] is the price).
+    pub token_fee: Option<U256>,
 }
 
 pub type XdcCtx<DB> = Context<BlockEnv, TxEnv, CfgEnv, DB, WideJournal<DB>, XdcChain>;
@@ -163,6 +169,7 @@ pub fn build_evm_with_rules<DB: Database>(
     let ctx = ctx.with_chain(XdcChain {
         rules: r,
         fee_owner,
+        token_fee: None,
     });
     Evm::new(ctx, instr, precompiles)
 }
@@ -227,8 +234,31 @@ impl<DB: Database> Handler for XdcHandler<DB> {
         evm: &mut Self::Evm,
         _: &mut InitialAndFloorGas,
     ) -> Result<(), Self::Error> {
-        let (block, tx, cfg, journal, _, _) = evm.ctx().all_mut();
+        let (block, tx, cfg, journal, chain, _) = evm.ctx().all_mut();
         let caller = tx.caller();
+        // TRC21 token fee, geth `buyGas` (`core/state_transition.go:503-510`): the capacity must
+        // cover `gasLimit * gasPrice`; the sender's balance is not checked or charged. The nonce and
+        // sender checks are those of `preCheck` (`:593-615`).
+        if let Some(capacity) = chain.token_fee {
+            let need = U256::from(tx.gas_limit()) * U256::from(tx.gas_price());
+            if capacity < need {
+                return Err(InvalidTransaction::LackOfFundForMaxFee {
+                    fee: Box::new(need),
+                    balance: Box::new(capacity),
+                }
+                .into());
+            }
+            let mut acc = journal.load_account_with_code_mut(caller)?.data;
+            pre_execution::validate_account_nonce_and_code_with_components(
+                &acc.account().info,
+                tx,
+                cfg,
+            )?;
+            if tx.kind().is_call() {
+                acc.bump_nonce();
+            }
+            return Ok(());
+        }
         // Narrow sender: stock revm, with a fast path in the journal.
         if !journal.true_balance(caller)?.is_wide() {
             return pre_execution::validate_against_state_and_deduct_caller(evm.ctx());
@@ -289,7 +319,8 @@ impl<DB: Database> Handler for XdcHandler<DB> {
         exec: &mut FrameResult,
     ) -> Result<(), Self::Error> {
         let ctx = evm.ctx();
-        if ctx.cfg().is_fee_charge_disabled() {
+        // A token-fee sender paid nothing, so nothing returns (`core/state_transition.go:1203`).
+        if ctx.cfg().is_fee_charge_disabled() || ctx.chain().token_fee.is_some() {
             return Ok(());
         }
         let g = exec.gas();

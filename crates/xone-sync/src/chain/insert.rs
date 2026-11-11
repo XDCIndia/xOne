@@ -173,6 +173,7 @@ impl<S: Store, E: BlockExecutor, H: HeaderCheck> Chain<S, E, H> {
                 block,
                 receipts: ex.receipts,
                 diff: ex.diff,
+                aux: ex.aux,
             },
             false,
         )

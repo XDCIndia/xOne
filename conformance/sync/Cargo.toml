@@ -1,0 +1,20 @@
+[package]
+name = "xone-sync-live"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Follow mode of xone-sync over real xone-net sessions against a loopback geth-XDC. Test tool, not shipped."
+
+[dependencies]
+alloy-primitives.workspace = true
+alloy-rlp.workspace = true
+secp256k1 = { version = "0.30", default-features = false, features = ["global-context", "recovery", "std"] }
+tokio = { version = "1", features = ["net", "rt", "macros", "time", "sync", "io-util"] }
+xone-chainspec.workspace = true
+xone-consensus.workspace = true
+xone-net = { path = "../../crates/xone-net" }
+xone-primitives.workspace = true
+xone-state.workspace = true
+xone-sync.workspace = true

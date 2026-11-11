@@ -67,6 +67,9 @@ impl Backing {
             every: 0,
             resume: false,
             keep: true,
+            progress: 0,
+            gap_offset: 0,
+            dump_state: None,
         };
         let rep = replay::run(Network::Apothem, &spec, &blocks, &opts)?;
         if let Some(d) = &rep.divergence {

@@ -499,6 +499,32 @@ pub fn command() -> Command {
                 ),
         )
         .subcommand(
+            Command::new("import")
+                .about(
+                    "Import a geth block file through the staged pipeline with the real executor.",
+                )
+                .arg(Arg::new("file").value_name("file").required(true))
+                .arg(Arg::new("network").long("network").value_parser(
+                    clap::builder::PossibleValuesParser::new(xone_chainspec::Network::NAMES),
+                )),
+        )
+        .subcommand(
+            Command::new("export")
+                .about("Write blocks of the chain imported from --input as a geth block file.")
+                .arg(Arg::new("file").value_name("file").required(true))
+                .arg(Arg::new("from").value_name("from"))
+                .arg(Arg::new("to").value_name("to"))
+                .arg(
+                    Arg::new("input")
+                        .long("input")
+                        .required(true)
+                        .value_name("blockfile"),
+                )
+                .arg(Arg::new("network").long("network").value_parser(
+                    clap::builder::PossibleValuesParser::new(xone_chainspec::Network::NAMES),
+                )),
+        )
+        .subcommand(
             Command::new("genesis-hash")
                 .about("Print the genesis block hash of a built-in network.")
                 .arg(
@@ -568,5 +594,5 @@ Source column: file:line in geth-XDC (`XDCIndia/go-ethereum` at `6fc8e8c2`; `fla
             x.source
         );
     }
-    s + "\nSubcommands: `init <genesis.json>`, `version`, `dumpconfig`, `genesis-hash --network <name>`.\n"
+    s + "\nSubcommands: `init <genesis.json>`, `version`, `dumpconfig`, `genesis-hash --network <name>`, `import <file>`, `export <file> [from] [to] --input <blockfile>`.\n"
 }

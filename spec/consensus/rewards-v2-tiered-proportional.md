@@ -27,10 +27,14 @@ From `TIPFixedReward` or `TIPProportionalReward` (`IsTIPTieredReward` is the OR 
 
 Apothem from 83,600,000 (fixed) and 84,733,000 (proportional). net2040 from its own `tipFixedRewardBlock` 16,200 (no proportional row). Mainnet: unscheduled.
 
+## Executor
+
+The MintedRecord bookkeeping (`:173-212`) and the burnt fee of the ended epoch are done by `xone-executor` (`record_minted`, `spec/execution/block-processing-order.md` row 9): the slots are `xone_state::system_contracts::minted_record_0x9a`.
+
 ## Rust
 
 `xone_consensus::reward::{rule, tier_reward, tiered::{config, tiers, fixed, rewards}, proportional::payout}`.
 
 ## Not covered
 
-The MintedRecord and burnt-fee bookkeeping (`:173-212`); `legacyStandbyPool` of devnet 5551; protector and observer tiers on the archive, because the Apothem checkpoints sampled have an empty pool (no standby beyond the masternodes and penalties): those two tiers are checked by synthetic cases against the oracle only.
+`legacyStandbyPool` of devnet 5551; protector and observer tiers on the archive, because the Apothem checkpoints sampled have an empty pool (no standby beyond the masternodes and penalties): those two tiers are checked by synthetic cases against the oracle only.

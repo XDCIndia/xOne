@@ -27,7 +27,7 @@ use tokio::net::TcpStream;
 use tokio::sync::{mpsc, Semaphore};
 use tokio::task::JoinHandle;
 use tokio::time::{sleep_until, timeout, Instant};
-use xone_node::{BoundedQueue, Offence, Overflow, Push};
+use xone_primitives::limits::{BoundedQueue, Offence, Overflow, Push};
 
 use crate::bft_gossip::{Gossip, Receive};
 use crate::eth::status62::Local;
@@ -37,7 +37,7 @@ use crate::NetError;
 use score::{Scoreboard, Verdict};
 use trusted::{admit, Admission, Trust};
 
-pub use xone_node::PeerLimits;
+pub use xone_primitives::limits::PeerLimits;
 
 /// Timeouts and limits. Every value is a bound: there is no "wait forever" setting.
 #[derive(Debug, Clone)]
@@ -107,6 +107,8 @@ pub enum Event {
         version: u64,
         /// The peer's TD, saturated. Ranking only.
         rank: u64,
+        /// The head hash of the peer's Status.
+        head: B256,
         inbound: bool,
     },
     /// Any message except Status. A BFT message arrives once, after dedup; call
@@ -265,7 +267,7 @@ impl Peers {
             .handshakes
             .try_acquire()
             .map_err(|_| NetError::Rejected(DisconnectReason::TooManyPeers))?;
-        let (conn, rank) = timeout(self.cfg.handshake_timeout, self.handshake(io, remote))
+        let (conn, rank, head) = timeout(self.cfg.handshake_timeout, self.handshake(io, remote))
             .await
             .map_err(|_| NetError::Timeout("handshake"))??;
         drop(slot);
@@ -313,6 +315,7 @@ impl Peers {
                                     version,
                                     inbound,
                                     rank,
+                                    head,
                                 },
                                 rx,
                             ));
@@ -337,7 +340,7 @@ impl Peers {
         &self,
         io: Io,
         remote: Option<PeerId>,
-    ) -> Result<(Conn<Io>, u64), NetError>
+    ) -> Result<(Conn<Io>, u64, B256), NetError>
     where
         Io: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
@@ -374,7 +377,7 @@ impl Peers {
             genesis: self.cfg.genesis,
         };
         match theirs.validate(&local, conn.eth_version) {
-            Ok(rank) => Ok((conn, rank)),
+            Ok(rank) => Ok((conn, rank, theirs.head)),
             Err(e) => {
                 bye(&mut conn, DisconnectReason::SubprotocolError, d).await;
                 Err(e.into())
@@ -468,6 +471,7 @@ struct Session {
     version: u64,
     inbound: bool,
     rank: u64,
+    head: B256,
 }
 
 /// Message classes and their per-peer queue (ADR-007 section 2).
@@ -612,6 +616,7 @@ where
             peer: s.id,
             version: s.version,
             rank: s.rank,
+            head: s.head,
             inbound: s.inbound,
         })
         .await;

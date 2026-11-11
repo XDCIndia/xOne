@@ -11,7 +11,7 @@
 
 use alloy_primitives::{keccak256, B256};
 use std::collections::{BTreeMap, HashMap};
-use xone_consensus::v2::commit::Link;
+use xone_consensus::{v2::commit::Link, verify::Body};
 use xone_db::{
     Action, Cause, Durability, Manifest, ManifestState, Segment, SegmentEntry, SegmentTail,
 };
@@ -20,7 +20,7 @@ use xone_state::{
     trie::flat_root, CommitError, MemFlat, Missing, StateDiff, StateProvider, StateRead,
 };
 
-use crate::store::{Block, KillPoint, Record, Scan, Store, StoreError, Unwound};
+use crate::store::{Block, KillPoint, Record, Scan, Stage, Store, StoreError, Unwound};
 
 const SEGS: [Segment; 3] = [Segment::Headers, Segment::Bodies, Segment::Receipts];
 const FRAME_HEAD: usize = 12;
@@ -72,6 +72,10 @@ struct Mdbx {
     committed: Option<Link>,
     /// (segment index, block) to (first block of the file, frame start, frame end).
     segidx: BTreeMap<(usize, u64), (u64, usize, usize)>,
+    /// Staged sync rows and the checkpoints of `Stage::{Headers, Bodies, Senders, Finish}`.
+    staged_headers: BTreeMap<u64, Header>,
+    staged_bodies: BTreeMap<u64, Body>,
+    ckpt: BTreeMap<Stage, u64>,
 }
 
 /// The persistent image: what survives a process crash.
@@ -190,6 +194,7 @@ impl MemStore {
             block,
             receipts: Vec::new(),
             diff: StateDiff::default(),
+            aux: Default::default(),
         };
         let mut segs: [Vec<File>; 3] = Default::default();
         let mut segidx = BTreeMap::new();
@@ -233,6 +238,9 @@ impl MemStore {
                 state: StateProvider::new(flat, number, hash, retention),
                 committed: None,
                 segidx,
+                staged_headers: BTreeMap::new(),
+                staged_bodies: BTreeMap::new(),
+                ckpt: BTreeMap::new(),
             },
             segs,
             journal_tmp: None,
@@ -266,6 +274,9 @@ impl MemStore {
                 state: StateProvider::new(MemFlat::default(), 0, B256::ZERO, 0),
                 committed: None,
                 segidx: BTreeMap::new(),
+                staged_headers: BTreeMap::new(),
+                staged_bodies: BTreeMap::new(),
+                ckpt: BTreeMap::new(),
             },
             segs: Default::default(),
             journal_tmp: None,
@@ -312,6 +323,11 @@ impl MemStore {
     /// The cut the armed fault implies: `Power` loses unsynced data, the others keep it.
     pub fn natural_cut(&self) -> Cut {
         self.cut
+    }
+
+    /// The flat tables of the head, for a node that writes its own state checkpoints.
+    pub fn head_flat(&self) -> &MemFlat {
+        self.d.mdbx.state.flat()
     }
 
     /// State root over the whole flat state (for tests: equals the head's `state_root`).
@@ -661,6 +677,9 @@ impl Store for MemStore {
             }
         }
         m.segidx.retain(|(_, b), _| *b <= number);
+        if let Some(c) = m.ckpt.get_mut(&Stage::Finish) {
+            *c = (*c).min(number); // Finish never stands above the head
+        }
         m.generation += 1;
         m.manifest = Some(manifest.encode());
         self.step(U3b)?;
@@ -699,6 +718,76 @@ impl Store for MemStore {
         self.alive()?;
         self.step(KillPoint::K14)?;
         self.d.mdbx.stateless.insert(block.hash(), block.clone());
+        self.step(KillPoint::K16)
+    }
+
+    fn checkpoint(&self, stage: Stage) -> u64 {
+        match stage {
+            Stage::Execution => self.head().0,
+            s => self.d.mdbx.ckpt.get(&s).copied().unwrap_or(0),
+        }
+    }
+
+    fn staged_header(&self, number: u64) -> Option<Header> {
+        self.d.mdbx.staged_headers.get(&number).cloned()
+    }
+
+    fn staged_body(&self, number: u64) -> Option<Body> {
+        self.d.mdbx.staged_bodies.get(&number).cloned()
+    }
+
+    fn stage_headers(&mut self, headers: &[Header]) -> Result<(), StoreError> {
+        self.alive()?;
+        self.step(KillPoint::K14)?;
+        let m = &mut self.d.mdbx;
+        for h in headers {
+            m.staged_headers.insert(h.number, h.clone());
+        }
+        if let Some(h) = headers.last() {
+            m.ckpt.insert(Stage::Headers, h.number);
+        }
+        self.step(KillPoint::K16)
+    }
+
+    fn stage_bodies(&mut self, from: u64, bodies: &[Body]) -> Result<(), StoreError> {
+        self.alive()?;
+        self.step(KillPoint::K14)?;
+        let m = &mut self.d.mdbx;
+        for (n, b) in (from..).zip(bodies) {
+            m.staged_bodies.insert(n, b.clone());
+        }
+        if !bodies.is_empty() {
+            m.ckpt.insert(Stage::Bodies, from + idx(bodies.len()) - 1);
+        }
+        self.step(KillPoint::K16)
+    }
+
+    fn set_checkpoint(&mut self, stage: Stage, number: u64) -> Result<(), StoreError> {
+        self.alive()?;
+        self.step(KillPoint::K14)?;
+        self.d.mdbx.ckpt.insert(stage, number);
+        self.step(KillPoint::K16)
+    }
+
+    fn finish(&mut self, up_to: u64) -> Result<(), StoreError> {
+        self.alive()?;
+        self.step(KillPoint::K14)?;
+        let m = &mut self.d.mdbx;
+        m.staged_headers = m.staged_headers.split_off(&(up_to + 1));
+        m.staged_bodies = m.staged_bodies.split_off(&(up_to + 1));
+        m.ckpt.insert(Stage::Finish, up_to);
+        self.step(KillPoint::K16)
+    }
+
+    fn unwind_stages(&mut self, number: u64) -> Result<(), StoreError> {
+        self.alive()?;
+        self.step(KillPoint::K14)?;
+        let m = &mut self.d.mdbx;
+        let _ = m.staged_headers.split_off(&(number + 1));
+        let _ = m.staged_bodies.split_off(&(number + 1));
+        for c in m.ckpt.values_mut() {
+            *c = (*c).min(number);
+        }
         self.step(KillPoint::K16)
     }
 

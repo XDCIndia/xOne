@@ -29,23 +29,63 @@ struct TimeoutForSign {
     gap_number: u64,
 }
 
-pub fn qc_digest(qc: &QuorumCert) -> B256 {
+/// geth `VoteSigHash` (`core/types/consensus_v2.go:233`): what a vote of `info` in the epoch of `gap` signs.
+pub fn vote_digest(info: &BlockInfo, gap: u64) -> B256 {
     keccak256(alloy_rlp::encode(VoteForSign {
-        proposed_block_info: &qc.proposed_block_info,
-        gap_number: qc.gap_number,
+        proposed_block_info: info,
+        gap_number: gap,
     }))
 }
 
-pub fn tc_digest(tc: &TimeoutCert) -> B256 {
+/// geth `TimeoutSigHash` (`core/types/consensus_v2.go:244`).
+pub fn timeout_digest(round: u64, gap: u64) -> B256 {
     keccak256(alloy_rlp::encode(TimeoutForSign {
-        round: tc.round,
-        gap_number: tc.gap_number,
+        round,
+        gap_number: gap,
     }))
+}
+
+pub fn qc_digest(qc: &QuorumCert) -> B256 {
+    vote_digest(&qc.proposed_block_info, qc.gap_number)
+}
+
+pub fn tc_digest(tc: &TimeoutCert) -> B256 {
+    timeout_digest(tc.round, tc.gap_number)
+}
+
+/// How a signature becomes a signer. Production is [`Secp`]. The simulator (`sim/`) swaps in a hash
+/// stand-in so that 10,000 seeds of many validators do not spend their time in ECDSA; every rule above
+/// this seam is the real code.
+pub trait Scheme {
+    fn recover(&self, digest: &B256, sig: &[u8]) -> Result<Address, Error>;
+}
+
+/// geth `verifyMsgSignature` and `hasLowS`: secp256k1 recovery, then the low-S form.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Secp;
+
+impl Scheme for Secp {
+    fn recover(&self, digest: &B256, sig: &[u8]) -> Result<Address, Error> {
+        let who = ecrecover(digest, sig).map_err(|_| Error::SignatureUnrecoverable)?;
+        if !low_s(sig) {
+            return Err(Error::SignatureHighS);
+        }
+        Ok(who)
+    }
 }
 
 /// geth `recoverUniqueSigners` with the allowed set: the distinct masternodes that signed `digest`.
 /// Byte-identical signatures recover the same address, so the repeat is skipped (`utils.go:221-227`).
 pub fn unique_signers(
+    digest: &B256,
+    signatures: &[Bytes],
+    masternodes: &[Address],
+) -> Result<BTreeSet<Address>, Error> {
+    unique_signers_with(&Secp, digest, signatures, masternodes)
+}
+
+pub fn unique_signers_with<S: Scheme + ?Sized>(
+    scheme: &S,
     digest: &B256,
     signatures: &[Bytes],
     masternodes: &[Address],
@@ -56,10 +96,7 @@ pub fn unique_signers(
         if !seen.insert(sig) {
             continue;
         }
-        let who = ecrecover(digest, sig).map_err(|_| Error::SignatureUnrecoverable)?;
-        if !low_s(sig) {
-            return Err(Error::SignatureHighS);
-        }
+        let who = scheme.recover(digest, sig)?;
         if !masternodes.contains(&who) {
             return Err(Error::SignerNotMasternode(who));
         }
@@ -105,10 +142,19 @@ fn check(unique: usize, masternodes: usize, threshold: f64) -> Result<(), Error>
 /// 0 (the V2 switch block) passes the threshold with no signature, but every signature it carries
 /// must still be valid. Gap number and block info are checked by the caller (header verifier).
 pub fn verify_qc(qc: &QuorumCert, masternodes: &[Address], threshold: f64) -> Result<(), Error> {
+    verify_qc_with(&Secp, qc, masternodes, threshold)
+}
+
+pub fn verify_qc_with<S: Scheme + ?Sized>(
+    scheme: &S,
+    qc: &QuorumCert,
+    masternodes: &[Address],
+    threshold: f64,
+) -> Result<(), Error> {
     if masternodes.is_empty() {
         return Err(Error::NoMasternodes);
     }
-    let signers = unique_signers(&qc_digest(qc), &qc.signatures, masternodes)?;
+    let signers = unique_signers_with(scheme, &qc_digest(qc), &qc.signatures, masternodes)?;
     if qc.proposed_block_info.round > 0 {
         check(signers.len(), masternodes.len(), threshold)?;
     }
@@ -130,13 +176,21 @@ pub struct TcContext<'a> {
 /// geth `verifyTC` (`timeout.go:373-465`, gate `:436`). There is no round-0 exemption: a TC with no signatures
 /// fails the threshold.
 pub fn verify_tc(tc: &TimeoutCert, ctx: &TcContext<'_>) -> Result<(), Error> {
+    verify_tc_with(&Secp, tc, ctx)
+}
+
+pub fn verify_tc_with<S: Scheme + ?Sized>(
+    scheme: &S,
+    tc: &TimeoutCert,
+    ctx: &TcContext<'_>,
+) -> Result<(), Error> {
     if ctx.snapshot_candidates == 0 {
         return Err(Error::SnapshotEmpty);
     }
     if ctx.masternodes.is_empty() {
         return Err(Error::NoMasternodes);
     }
-    let signers = unique_signers(&tc_digest(tc), &tc.signatures, ctx.masternodes)?;
+    let signers = unique_signers_with(scheme, &tc_digest(tc), &tc.signatures, ctx.masternodes)?;
     check(signers.len(), ctx.masternodes.len(), ctx.threshold)
 }
 
@@ -149,10 +203,18 @@ pub fn is_blank_tc(tc: &TimeoutCert) -> bool {
 /// The TC of a SyncInfo, `VerifySyncInfoMessage` (`utils.go:672-733`, blank TC `:714`): the blank bootstrap TC passes
 /// unverified, every other TC goes through [`verify_tc`]. This is the only place geth accepts it.
 pub fn verify_sync_info_tc(tc: &TimeoutCert, ctx: &TcContext<'_>) -> Result<(), Error> {
+    verify_sync_info_tc_with(&Secp, tc, ctx)
+}
+
+pub fn verify_sync_info_tc_with<S: Scheme + ?Sized>(
+    scheme: &S,
+    tc: &TimeoutCert,
+    ctx: &TcContext<'_>,
+) -> Result<(), Error> {
     if is_blank_tc(tc) {
         return Ok(());
     }
-    verify_tc(tc, ctx)
+    verify_tc_with(scheme, tc, ctx)
 }
 
 /// geth `rlp.DecodeBytes` into a TC: exactly one value, canonical integers, no extra element.

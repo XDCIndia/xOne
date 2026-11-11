@@ -21,7 +21,7 @@ const MUTANTS: &[(&str, &str, &str, &str, &str)] = &[
     ("non-member counted", "v2/cert.rs", "if !masternodes.contains(&who) {", "if false {", "v2_vectors"),
     ("high-S signature counted", "v2/cert.rs", ".is_some_and(|s| s.normalize_s().is_none())", ".is_some()", "v2_vectors"),
     ("blank TC accepted everywhere", "v2/cert.rs", "    if ctx.snapshot_candidates == 0 {\n        return Err(Error::SnapshotEmpty);", "    if is_blank_tc(tc) {\n        return Ok(());\n    }\n    if ctx.snapshot_candidates == 0 {\n        return Err(Error::SnapshotEmpty);", "v2_vectors"),
-    ("blank TC rejected in SyncInfo", "v2/cert.rs", "    if is_blank_tc(tc) {\n        return Ok(());\n    }\n    verify_tc(tc, ctx)", "    verify_tc(tc, ctx)", "v2_vectors"),
+    ("blank TC rejected in SyncInfo", "v2/cert.rs", "    if is_blank_tc(tc) {\n        return Ok(());\n    }\n    verify_tc_with(scheme, tc, ctx)", "    verify_tc_with(scheme, tc, ctx)", "v2_vectors"),
     ("QC of round 0 held to the threshold", "v2/cert.rs", "if qc.proposed_block_info.round > 0 {", "if true {", "v2_vectors"),
     ("epoch switch detected by block number", "v2/epoch_switch.rs", "Ok((qc.round < start, num))", "Ok((number % epoch == 0, num))", "v2_vectors"),
     ("epoch switch at round misses the V2 switch block as parent", "v2/epoch_switch.rs", "if parent_number == v2.switch_block {", "if false {", "v2_vectors"),

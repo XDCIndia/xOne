@@ -58,7 +58,8 @@ impl<'a, S: StateRead, E: Env> Overlay<'a, S, E> {
         }
     }
 
-    fn slot(&self, a: Address, k: B256) -> U256 {
+    /// A slot as this block sees it (geth `GetState`).
+    pub fn slot(&self, a: Address, k: B256) -> U256 {
         if let Some(v) = self.storage.get(&(a, k)) {
             return *v;
         }
@@ -96,6 +97,21 @@ impl<'a, S: StateRead, E: Env> Overlay<'a, S, E> {
     pub fn credit(&mut self, a: Address, amount: U256, eip158: bool) -> Result<(), OverlayError> {
         let mut acc = self.account(a).unwrap_or_else(blank);
         acc.balance = acc.balance.checked_add(amount)?;
+        self.set(a, acc, eip158).map(|_| ())
+    }
+
+    /// geth `SetState`: writing a slot of an account that does not exist creates it.
+    pub fn set_slot(&mut self, a: Address, k: B256, v: U256) {
+        if self.account(a).is_none() {
+            self.accounts.insert(a, Some(blank()));
+        }
+        self.storage.insert((a, k), v);
+    }
+
+    /// `SubBalance` with the EIP-161 finalise that follows it.
+    pub fn debit(&mut self, a: Address, amount: U256, eip158: bool) -> Result<(), OverlayError> {
+        let mut acc = self.account(a).unwrap_or_else(blank);
+        acc.balance = acc.balance.checked_sub(amount)?;
         self.set(a, acc, eip158).map(|_| ())
     }
 

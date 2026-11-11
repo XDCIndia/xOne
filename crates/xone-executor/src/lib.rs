@@ -11,7 +11,7 @@ pub mod tx;
 pub use overlay::OverlayError;
 pub use tx::{Tx, TxError};
 
-use alloy_primitives::{Address, Bloom, Bytes, B256};
+use alloy_primitives::{address, Address, Bloom, Bytes, B256, U256};
 use alloy_trie::root::ordered_trie_root_encoded;
 use overlay::Overlay;
 use revm::{
@@ -24,14 +24,16 @@ use std::collections::BTreeMap;
 use xone_chainspec::ChainSpec;
 use xone_consensus::{
     chain::{self, BlockReader, SignTxCounter},
-    reward::{self, v1 as reward_v1, Holders, RewardWindow, Rule},
+    reward::{self, tiered, v1 as reward_v1, v2 as reward_v2, Holders, RewardWindow, Rule},
+    v2::epoch_switch,
     verify::{
-        Body, BodyError, BodyVerifier, Context as VerifyContext, HeaderError, HeaderVerifier,
+        Body, BodyError, BodyVerifier, Context as VerifyContext, Derive, HeaderError,
+        HeaderVerifier,
     },
 };
 use xone_evm::{
     basefee::{self, BaseFeeError},
-    fees::block_author,
+    fees::{self, block_author},
     handler::{build_evm_with_rules, XdcHandler},
     journal::account_true_balance,
     route::{route, Route},
@@ -39,7 +41,10 @@ use xone_evm::{
     special::{apply_empty_tx, apply_sign_tx, tip_signing_wipe, Receipt, SpecialError},
 };
 use xone_primitives::{Header, SealError, WideBalance};
-use xone_state::{system_contracts::validator_0x88, FlatWrite, Missing, StateDiff, StateView};
+use xone_state::{
+    system_contracts::{minted_record_0x9a as minted, trc21_issuer, validator_0x88},
+    Missing, StateDiff, StateRead,
+};
 
 /// What block execution reads besides the parent state: the chain the block extends and the code
 /// store. Every answer is about the canonical chain of the block being executed.
@@ -53,6 +58,13 @@ pub trait Env: BlockReader {
     fn wide_balances(&self) -> Vec<(Address, WideBalance)>;
     /// Contract code by hash.
     fn code(&self, hash: B256) -> Option<Bytes>;
+    /// geth `GetStandbynodes` (`engine_v2/engine.go:3351-3375`) for the epoch-switch header
+    /// `switch`: the candidates of the epoch's gap snapshot minus its masternodes and penalties.
+    /// `None` when the snapshot is not held.
+    fn standby_pool(&self, switch: u64) -> Option<Vec<Address>>;
+    /// `baseFee * gasUsed` of canonical block `number`, zero when its header has no base fee (the
+    /// burnt amount the tiered reward records, `engine_v2_hooks.go:967-969`).
+    fn burn(&self, number: u64) -> Option<U256>;
 }
 
 pub struct ExecCtx<'a, E> {
@@ -60,6 +72,10 @@ pub struct ExecCtx<'a, E> {
     /// What the header verifier needs of the block's epoch (masternodes, snapshot signers).
     pub verify: &'a VerifyContext,
     pub env: &'a E,
+    /// V2 only: computes the `Validators` and `Penalties` an epoch-switch header must carry, from
+    /// the gap snapshot and the penalty engine. With it a V2 header goes through
+    /// `HeaderVerifier::verify_derived`; without it `verify` compares with the lists in `verify`.
+    pub derive: Option<Derive<'a>>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -86,6 +102,14 @@ pub enum ExecError {
     Reward(#[from] chain::Error),
     #[error("state view: {0}")]
     View(#[from] Missing),
+    #[error("v2: {0}")]
+    V2(#[from] xone_consensus::v2::Error),
+    #[error("the extra data of block {0} has no V2 fields")]
+    NoV2Fields(u64),
+    #[error("the standby pool of epoch switch {0} is not available")]
+    NoStandby(u64),
+    #[error("the burnt fees of block {0} are not available")]
+    NoBurn(u64),
     #[error("not supported by the block executor: {0}")]
     Unsupported(&'static str),
 }
@@ -123,22 +147,23 @@ fn evm_error(index: usize, e: impl std::fmt::Display) -> ExecError {
 }
 
 /// Execute `header` and `body` on `parent_view`, the state after `ctx.parent`.
-pub fn execute_block<F: FlatWrite, E: Env>(
+pub fn execute_block<V: StateRead, E: Env>(
     spec: &ChainSpec,
-    parent_view: &StateView<'_, F>,
+    parent_view: &V,
     header: &Header,
     body: &Body,
     ctx: &ExecCtx<'_, E>,
 ) -> Result<BlockOutcome, ExecError> {
     let number = header.number;
     // geth `engine.VerifyHeader` and `eip1559.VerifyEIP1559Header`: before any state is touched.
-    HeaderVerifier::new(spec).verify(header, ctx.parent, u64::MAX, ctx.verify)?;
+    match (ctx.verify, ctx.derive) {
+        (VerifyContext::V2(c), Some(derive)) => {
+            HeaderVerifier::new(spec).verify_derived(header, ctx.parent, u64::MAX, c, derive)?
+        }
+        _ => HeaderVerifier::new(spec).verify(header, ctx.parent, u64::MAX, ctx.verify)?,
+    }
     basefee::verify(spec, number, header.base_fee)?;
     let r = rules(spec, number)?;
-    // TRC21 token fees (`ApplyTRC21TokenFee`, `core/state_processor.go:254`) are XB-08.
-    if spec.effective.tip_trc21_fee.is_active(number) {
-        return Err(ExecError::Unsupported("TRC21 token fees (TIPTRC21Fee)"));
-    }
     let eip158 = spec.eip158.is_active(number);
     let author = block_author(spec, header)?;
     let txs = body
@@ -154,6 +179,9 @@ pub fn execute_block<F: FlatWrite, E: Env>(
     // `ApplyTIPSigningHardFork`, `core/state_processor.go:152`, `:321-327`: before the first transaction.
     if let Some(wiped) = tip_signing_wipe(spec, number) {
         overlay.delete(wiped);
+    }
+    if spec.prague.is_active(number) {
+        prague_pre_execution(&mut overlay, number, header.parent_hash)?;
     }
     // `getCoinbaseOwner`, `core/state_processor.go:103`, `:182`: the fee owner is read before the loop, from the parent state.
     let owner = if r.fee_to_owner {
@@ -180,6 +208,14 @@ pub fn execute_block<F: FlatWrite, E: Env>(
         evm.ctx.journaled_state.side.insert(a, w);
     }
 
+    // TRC21 token fees: the capacity of every registered token is read once from the state before the
+    // block and drawn down as the block executes (`core/state_processor.go:184-191`).
+    let issuer = trc21_issuer::issuer(spec.chain_id);
+    let mut tokens_fee = trc21_issuer::capacities(parent_view, issuer);
+    let mut fee_updated: BTreeMap<Address, U256> = BTreeMap::new();
+    let mut total_fee_used = U256::ZERO;
+    let token_price = fees::trc21_gas_price(spec, number);
+
     let mut receipts: Vec<Receipt> = Vec::with_capacity(txs.len());
     let mut used = 0u64;
     for (index, t) in txs.iter().enumerate() {
@@ -205,8 +241,17 @@ pub fn execute_block<F: FlatWrite, E: Env>(
                 if t.gas > header.gas_limit.saturating_sub(used) {
                     return Err(ExecError::GasLimitReached { index });
                 }
-                evm.ctx.set_tx(tx_env(spec, t));
-                let result = XdcHandler::<Overlay<'_, StateView<'_, F>, E>>::default()
+                // `ApplyTRC21TokenFee`, `core/state_processor.go:977-993`
+                let token =
+                    t.to.and_then(|to| tokens_fee.get(&to).map(|capacity| (to, *capacity)));
+                evm.ctx.chain.token_fee = token.map(|(_, capacity)| capacity);
+                let mut env = tx_env(spec, t);
+                if token.is_some() {
+                    env.gas_price = token_price;
+                    env.gas_priority_fee = env.gas_priority_fee.map(|_| token_price);
+                }
+                evm.ctx.set_tx(env);
+                let result = XdcHandler::<Overlay<'_, V, E>>::default()
                     .run(&mut evm)
                     .map_err(|e| match e {
                         EVMError::Database(e) => ExecError::State(e),
@@ -238,48 +283,35 @@ pub fn execute_block<F: FlatWrite, E: Env>(
                 for a in gone {
                     evm.ctx.journaled_state.side.forget(&a);
                 }
+                // `SettleTRC21TokenFee`, `core/state_processor.go:999-1010`
+                if let Some((token, capacity)) = token {
+                    let db = evm.ctx.journaled_state.db_and_state_mut().0;
+                    if !success {
+                        pay_fee_on_failure(db, t.from, token);
+                    }
+                    let fee = U256::from(gas) * U256::from(token_price);
+                    let left = capacity.checked_sub(fee).ok_or(ExecError::Unsupported(
+                        "a TRC21 fee above the token capacity",
+                    ))?;
+                    tokens_fee.insert(token, left);
+                    fee_updated.insert(token, left);
+                    total_fee_used += fee;
+                }
                 used += gas;
                 receipts.push(Receipt::new(t.ty, success, used, gas, logs));
             }
         }
     }
 
-    // `Finalize`, `consensus/XDPoS/xdpos.go:1498`, `:1593-1612`: at a V1 checkpoint the reward is
-    // paid from the state read before the transactions.
     let db = evm.ctx.journaled_state.db_and_state_mut().0;
-    let period = reward_v1::checkpoint_period(spec);
-    if number.is_multiple_of(period) {
-        // `eth/hooks/engine_v2_hooks.go:81`: `number > rCheckpoint`; the first checkpoint pays nothing.
-        if number > period {
-            if reward::rule(spec, number) != Rule::V1 {
-                return Err(ExecError::Unsupported(
-                    "checkpoint rewards of V2 and the tiered rules",
-                ));
-            }
-            let at = reward_v1::locate(spec, number)?;
-            let blocks =
-                SignTxCounter::new(ctx.env).collect((header.parent_hash, number - 1), at.start)?;
-            let masternodes =
-                ctx.env
-                    .masternodes_at(at.checkpoint)
-                    .ok_or(chain::Error::Missing {
-                        what: "checkpoint header",
-                        number: at.checkpoint,
-                        hash: B256::ZERO,
-                    })?;
-            let window = RewardWindow::new(at.start, at.end, blocks, masternodes, vec![], vec![])?;
-            let holders = Holders::read(
-                ctx.parent.state_root,
-                parent_view,
-                window.masternodes().iter().copied(),
-            );
-            for (holder, amount) in
-                reward_v1::rewards(spec, number, &window, &holders, ctx.parent.state_root)?
-            {
-                db.credit(holder, amount, eip158)?;
-            }
+    // `UpdateTRC21Fee`, `core/state/trc21_reader.go:135-148`: after the loop, before `Finalize`.
+    if !fee_updated.is_empty() {
+        for (token, capacity) in &fee_updated {
+            db.set_slot(issuer, trc21_issuer::capacity_slot(*token), *capacity);
         }
+        db.debit(issuer, total_fee_used, eip158)?;
     }
+    pay_checkpoint_reward(spec, ctx, parent_view, header, db, eip158)?;
 
     let signs = txs
         .iter()
@@ -297,7 +329,7 @@ pub fn execute_block<F: FlatWrite, E: Env>(
     let receipt_encodings: Vec<Bytes> = receipts.iter().map(|x| Bytes::from(x.encode())).collect();
     let receipt_root = ordered_trie_root_encoded(&receipt_encodings);
     let bloom = receipts.iter().fold(Bloom::ZERO, |b, x| b | x.bloom);
-    let state_root = parent_view.root_with(&diff)?;
+    let state_root = StateRead::root_with(parent_view, &diff)?;
     let body_check = BodyVerifier::new(spec).verify(header, body, &receipt_encodings);
     Ok(BlockOutcome {
         hash: header.hash(),
@@ -338,4 +370,200 @@ fn tx_env(spec: &ChainSpec, t: &Tx) -> TxEnv {
             .into(),
         ..Default::default()
     }
+}
+
+/// geth `PayFeeWithTRC21TxFail` (`core/state/trc21_reader.go:71-91`): a failed token-fee
+/// transaction costs its sender the token's `minFee` (at most the sender's token balance), paid to
+/// the token's issuer.
+fn pay_fee_on_failure<S: xone_state::StateRead, E: Env>(
+    db: &mut Overlay<'_, S, E>,
+    from: Address,
+    token: Address,
+) {
+    let balance_key = trc21_issuer::balance_slot(from);
+    let balance = db.slot(token, balance_key);
+    if balance.is_zero() {
+        return;
+    }
+    let issuer = trc21_issuer::token_issuer(db.slot(token, trc21_issuer::token_issuer_slot()));
+    let fee = db.slot(token, trc21_issuer::min_fee_slot());
+    let used = fee.min(balance);
+    db.set_slot(token, balance_key, balance - used);
+    let issuer_key = trc21_issuer::balance_slot(issuer);
+    let issuer_balance = db.slot(token, issuer_key);
+    db.set_slot(token, issuer_key, issuer_balance.wrapping_add(used));
+}
+
+/// geth `ApplyMulticall3HardFork` and `ProcessParentBlockHash` (`core/state_processor.go:101-120`,
+/// `:591-664`) on a Prague block whose state already holds both contracts: the history contract
+/// stores the parent hash at `(number - 1) % 8191` (EIP-2935, `historyStorageKey`, `:672`). The
+/// Prague block itself deploys the two contracts, which is not implemented.
+fn prague_pre_execution<S: xone_state::StateRead, E: Env>(
+    db: &mut Overlay<'_, S, E>,
+    number: u64,
+    parent: B256,
+) -> Result<(), ExecError> {
+    const MULTICALL3: Address = address!("cA11bde05977b3631167028862bE2a173976CA11");
+    const HISTORY: Address = address!("0000F90827F1C53a10cb7A02335B175320002935");
+    const WINDOW: u64 = 8191;
+    let has_code = |a: Address| {
+        db.account(a)
+            .is_some_and(|x| x.code_hash != alloy_primitives::KECCAK256_EMPTY)
+    };
+    if !has_code(MULTICALL3) || !has_code(HISTORY) {
+        return Err(ExecError::Unsupported(
+            "the Prague block deploy of Multicall3 and the EIP-2935 history contract",
+        ));
+    }
+    let slot = B256::from(U256::from((number - 1) % WINDOW).to_be_bytes::<32>());
+    db.set_slot(HISTORY, slot, U256::from_be_bytes(parent.0));
+    Ok(())
+}
+
+/// The reward of a checkpoint or epoch switch, paid from the state read before the transactions
+/// (`Finalize`, `consensus/XDPoS/xdpos.go:1498`, `:1593-1612`; V2: `engine_v2/engine.go:769-797`).
+///
+/// A V1 block (the V2 switch block included) pays when `number % RewardCheckpoint == 0`, a V2 block
+/// when it is an epoch switch. Then `HookReward` (`eth/hooks/engine_v2_hooks.go:60-305`): nothing at
+/// the first V2 block (`:76`) or up to the first checkpoint (`:81`); a V1 block counts its fixed
+/// window (`GetSigningTxCount`, `:621`, V1 branch), a V2 block the window of the epoch switches
+/// (`:680-720`, `:949-995`); the tiered rule from `TIPFixedReward` (`:93`) also records the minted
+/// and burnt totals in the MintedRecord contract (`:173-212`).
+fn pay_checkpoint_reward<V: StateRead, E: Env>(
+    spec: &ChainSpec,
+    ctx: &ExecCtx<'_, E>,
+    parent_view: &V,
+    header: &Header,
+    db: &mut Overlay<'_, V, E>,
+    eip158: bool,
+) -> Result<(), ExecError> {
+    let number = header.number;
+    let period = reward_v1::checkpoint_period(spec);
+    let v2 = spec.xdpos.v2.as_ref();
+    let is_v2_block = v2.is_some_and(|v| number > v.switch_block);
+    let due = match v2 {
+        Some(v) if is_v2_block => epoch_switch::of_header(v, spec.xdpos.epoch, header)?.0,
+        _ => number.is_multiple_of(period),
+    };
+    if !due || number <= period || v2.is_some_and(|v| number == v.switch_block.saturating_add(1)) {
+        return Ok(());
+    }
+    let root = ctx.parent.state_root;
+    let missing = |n| chain::Error::Missing {
+        what: "epoch-switch header",
+        number: n,
+        hash: B256::ZERO,
+    };
+    let paid: reward::RewardMap;
+    let mut burned = U256::ZERO;
+    let mut epoch_number = 0;
+    if !is_v2_block {
+        let at = reward_v1::locate(spec, number)?;
+        let blocks =
+            SignTxCounter::new(ctx.env).collect((header.parent_hash, number - 1), at.start)?;
+        let masternodes = ctx
+            .env
+            .masternodes_at(at.checkpoint)
+            .ok_or(missing(at.checkpoint))?;
+        let window = RewardWindow::new(at.start, at.end, blocks, masternodes, vec![], vec![])?;
+        let holders = Holders::read(root, parent_view, window.masternodes().iter().copied());
+        paid = reward_v1::rewards(spec, number, &window, &holders, root)?;
+    } else {
+        let at = reward_v2::locate(spec, ctx.env, number, header.parent_hash)?;
+        let blocks =
+            SignTxCounter::new(ctx.env).collect((header.parent_hash, number - 1), at.start)?;
+        let masternodes = ctx
+            .env
+            .masternodes_at(at.switch.1)
+            .ok_or(missing(at.switch.1))?;
+        match reward::rule(spec, number) {
+            Rule::V1 => return Err(ExecError::Unsupported("a V1 reward rule in a V2 block")),
+            Rule::V2 => {
+                let window =
+                    RewardWindow::new(at.start, at.end, blocks, masternodes, vec![], vec![])?;
+                let holders =
+                    Holders::read(root, parent_view, window.masternodes().iter().copied());
+                paid = reward_v2::rewards(spec, number, &window, &holders, root)?;
+            }
+            Rule::Tiered { .. } => {
+                let round = header
+                    .extra_fields_v2()
+                    .map_err(|_| ExecError::NoV2Fields(number))?
+                    .round;
+                let cfg = tiered::config(spec, round)?;
+                let pool = ctx
+                    .env
+                    .standby_pool(at.switch.1)
+                    .ok_or(ExecError::NoStandby(at.switch.1))?;
+                let (protectors, observers) = tiered::tiers(cfg, &pool);
+                let nodes: Vec<Address> = masternodes
+                    .iter()
+                    .chain(&protectors)
+                    .chain(&observers)
+                    .copied()
+                    .collect();
+                let window = RewardWindow::new(
+                    at.start,
+                    at.end,
+                    blocks,
+                    masternodes,
+                    protectors,
+                    observers,
+                )?;
+                let holders = Holders::read(root, parent_view, nodes);
+                paid = tiered::rewards(spec, number, cfg, &window, &holders, root)?;
+                for n in at.end + 1..number {
+                    burned += ctx.env.burn(n).ok_or(ExecError::NoBurn(n))?;
+                }
+                let v = v2.ok_or(chain::Error::NoV2)?;
+                epoch_number = v.switch_epoch + round / spec.xdpos.epoch;
+            }
+        }
+    }
+    let mut sum = U256::ZERO;
+    for (holder, amount) in paid {
+        db.credit(holder, amount, eip158)?;
+        sum += amount;
+    }
+    if matches!(reward::rule(spec, number), Rule::Tiered { .. }) && is_v2_block {
+        record_minted(db, epoch_number, number, sum, burned)?;
+    }
+    Ok(())
+}
+
+/// The MintedRecord bookkeeping of the tiered reward (`engine_v2_hooks.go:173-212`): the first
+/// record stores the onset epoch and block, later ones continue the totals of the nearest earlier
+/// epoch that has any; the nonce is incremented so the account is never empty.
+fn record_minted<S: xone_state::StateRead, E: Env>(
+    db: &mut Overlay<'_, S, E>,
+    epoch: u64,
+    number: u64,
+    reward_sum: U256,
+    burned_in_epoch: U256,
+) -> Result<(), ExecError> {
+    let a = minted::ADDRESS;
+    let nonce = db.account(a).map_or(0, |x| x.nonce);
+    let (mut total_minted, mut total_burned) = (U256::ZERO, U256::ZERO);
+    if nonce == 0 {
+        db.set_slot(a, minted::onset_epoch(), U256::from(epoch));
+        db.set_slot(a, minted::onset_block(), U256::from(number));
+    } else {
+        let mut e = epoch;
+        while e > 0 {
+            e -= 1;
+            total_minted = db.slot(a, minted::post_minted(e));
+            total_burned = db.slot(a, minted::post_burned(e));
+            if !total_minted.is_zero() || !total_burned.is_zero() {
+                break;
+            }
+        }
+    }
+    // the total saturates at 2^256 - 1 (`engine_v2_hooks.go:196`, `:207`)
+    total_minted = total_minted.saturating_add(reward_sum);
+    db.set_slot(a, minted::post_minted(epoch), total_minted);
+    db.set_slot(a, minted::post_reward_block(epoch), U256::from(number));
+    total_burned = total_burned.saturating_add(burned_in_epoch);
+    db.set_slot(a, minted::post_burned(epoch), total_burned);
+    db.set_nonce(a, nonce + 1)?;
+    Ok(())
 }

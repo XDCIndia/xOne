@@ -59,3 +59,44 @@ pub fn credit(
     };
     Some((who, U256::from(per_gas) * U256::from(gas_used)))
 }
+
+/// geth `params.TRC21GasPriceForBlock` (`params/xdc_trc21.go:39-50`): the gas price of a transaction
+/// to a registered TRC21 token, which replaces the transaction's own. The Gas2500x tier is the base
+/// fee of that tier (`XDCBaseFeeForBlock`, `params/xdc_gas.go:36-42`), from `Gas50xBlock` 12.5 gwei
+/// (`common.GasPrice50x`), strictly after `TIPTRC21Fee` 0.25 gwei (`common.TRC21GasPrice`), else
+/// 2500 wei (`common.TRC21GasPriceBefore`), `common/types.go:132-134`.
+pub fn trc21_gas_price(spec: &ChainSpec, number: u64) -> u128 {
+    use xone_chainspec::ForkBlock;
+    if spec.gas2500x.is_active(number) {
+        u128::from(crate::basefee::XDC_BASE_FEE * crate::basefee::GAS_2500X_MULTIPLIER)
+    } else if spec.effective.gas50x.is_active(number) {
+        12_500_000_000
+    } else if matches!(spec.effective.tip_trc21_fee, ForkBlock::At(b) if number > b) {
+        250_000_000
+    } else {
+        2500
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use xone_chainspec::Network;
+
+    /// The tiers of `TRC21GasPriceForBlock` on Apothem: strictly after `TIPTRC21Fee`, from
+    /// `Gas50xBlock`, from `Gas2500xBlock`.
+    #[test]
+    fn trc21_gas_price_tiers() {
+        let s = Network::Apothem.spec();
+        for (n, want) in [
+            (23_779_191, 2_500),
+            (23_779_192, 250_000_000),
+            (56_828_699, 250_000_000),
+            (56_828_700, 12_500_000_000),
+            (83_599_999, 12_500_000_000),
+            (83_600_000, 625_000_000_000),
+        ] {
+            assert_eq!(trc21_gas_price(&s, n), want, "block {n}");
+        }
+    }
+}

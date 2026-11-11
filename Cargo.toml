@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/xone-primitives", "crates/xone-chainspec", "crates/xone-db", "crates/xone-state", "crates/xone-consensus", "crates/xone-signer", "crates/xone-node", "sim", "bin/xone", "spikes/wide-balance", "spikes/net", "labs/pq", "crates/xone-evm", "conformance/sweep", "conformance/harness", "conformance/negative-gen", "crates/xone-net", "crates/xone-executor", "crates/xone-sync", "crates/xone-builder", "crates/xone-rpc", "conformance/rpc-parity"]
+members = ["crates/xone-primitives", "crates/xone-chainspec", "crates/xone-db", "crates/xone-state", "crates/xone-consensus", "crates/xone-signer", "crates/xone-node", "sim", "bin/xone", "spikes/wide-balance", "spikes/net", "labs/pq", "crates/xone-evm", "conformance/sweep", "conformance/harness", "conformance/negative-gen", "crates/xone-net", "crates/xone-executor", "crates/xone-sync", "crates/xone-builder", "crates/xone-rpc", "conformance/rpc-parity", "crates/xone-snap", "conformance/snap", "conformance/sync"]
 
 [workspace.package]
 version = "0.1.0"
@@ -42,6 +42,7 @@ xone-builder = { path = "crates/xone-builder" }
 xone-signer = { path = "crates/xone-signer" }
 xone-sync = { path = "crates/xone-sync" }
 xone-rpc = { path = "crates/xone-rpc" }
+xone-snap = { path = "crates/xone-snap" }
 
 # R3 rule 1 and 2 (plan #1). Crates opt in with `[lints] workspace = true`; the lint
 # set is per crate, see docs/assurance/README.md. disallowed-* lists live in each
