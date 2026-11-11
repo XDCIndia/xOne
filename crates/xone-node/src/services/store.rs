@@ -219,8 +219,7 @@ pub fn save_ckpt(dir: &Path, c: &Ckpt) -> Result<(), FileError> {
     io(&to, fs::rename(&tmp, &to))
 }
 
-/// Minimal mode keeps the newest state checkpoint only: the older ones are state of blocks the node
-/// has pruned.
+/// Removes the state checkpoints below `number` (`Core::checkpoint` says which are kept).
 pub fn drop_ckpts_below(dir: &Path, number: u64) {
     if let Ok(rd) = fs::read_dir(ckpt_dir(dir)) {
         for e in rd.filter_map(Result::ok) {

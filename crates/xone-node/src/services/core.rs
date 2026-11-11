@@ -683,9 +683,15 @@ impl Core {
             .collect();
         drop(h);
         store::save_ckpt(&self.dir, &c)?;
-        if self.minimal {
-            store::drop_ckpts_below(&self.dir, n);
-        }
+        // A restart replays from the newest checkpoint at or below the head and within the unwind
+        // window, so an older one is never read: a minimal node keeps the newest only, a full node
+        // also the one before it (the newest may be above a head that a crash took back).
+        let keep_from = if self.minimal {
+            n
+        } else {
+            n.saturating_sub(self.ckpt_every)
+        };
+        store::drop_ckpts_below(&self.dir, keep_from);
         Ok(Some(n))
     }
 
