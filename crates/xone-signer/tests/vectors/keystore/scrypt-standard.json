@@ -1,0 +1,26 @@
+{
+  "name": "scrypt-standard",
+  "password": "throwaway-password-1",
+  "address": "6b768a5d6be6156b71ed529e5639764bace04ca2",
+  "keystore": {
+    "address": "6b768a5d6be6156b71ed529e5639764bace04ca2",
+    "crypto": {
+      "cipher": "aes-128-ctr",
+      "ciphertext": "30e401ebbd32f8f61068d2cc22c03c1c556e35a3e21e13c4d8b799370d62607e",
+      "cipherparams": {
+        "iv": "39306c12dbc7463a7ee3518240fd73c8"
+      },
+      "kdf": "scrypt",
+      "kdfparams": {
+        "dklen": 32,
+        "n": 262144,
+        "p": 1,
+        "r": 8,
+        "salt": "94ed88cf7bdec89bd762e64c231754ecea3a1728dc295173441f73ff3aaf5388"
+      },
+      "mac": "1da7440d37b00f051c83262512306965d6a28368def4802112f90ef1831081aa"
+    },
+    "id": "15ef8efd-df2c-4dff-a68f-c12a35c411bc",
+    "version": 3
+  }
+}

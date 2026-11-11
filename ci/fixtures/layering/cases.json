@@ -6,5 +6,9 @@
   "same-rank-state-to-evm": {"ok": false, "crates": {"crates/xone-state": ["xone-evm"], "crates/xone-evm": []}},
   "crate-depends-on-sim": {"ok": false, "crates": {"crates/xone-evm": ["xone-sim"], "sim": []}},
   "bin-depends-on-lab": {"ok": false, "crates": {"bin/xone": ["pq-lab"], "labs/pq": []}},
+  "good-signer-callers-are-consensus-and-node": {"ok": true, "crates": {"crates/xone-primitives": [], "crates/xone-signer": ["xone-primitives"], "crates/xone-consensus": ["xone-signer"], "crates/xone-node": ["xone-signer", "xone-consensus"]}},
+  "signer-depends-on-consensus": {"ok": false, "crates": {"crates/xone-signer": ["xone-consensus"], "crates/xone-consensus": []}},
+  "signer-called-by-db": {"ok": false, "crates": {"crates/xone-signer": [], "crates/xone-db": ["xone-signer"]}},
+  "signer-called-by-bin": {"ok": false, "crates": {"crates/xone-signer": [], "bin/xone": ["xone-signer"]}},
   "unknown-crate": {"ok": false, "crates": {"crates/xone-mystery": []}}
 }

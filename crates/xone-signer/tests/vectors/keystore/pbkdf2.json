@@ -1,0 +1,25 @@
+{
+  "name": "pbkdf2",
+  "password": "throwaway-password-pbkdf2",
+  "address": "947ee476ba6c5fc95aee211b1f975f681daa39af",
+  "keystore": {
+    "address": "947ee476ba6c5fc95aee211b1f975f681daa39af",
+    "crypto": {
+      "cipher": "aes-128-ctr",
+      "cipherparams": {
+        "iv": "0c86f86aceb512f287c712b1f6653454"
+      },
+      "ciphertext": "1e90d5f791407d02ce536a718de17a9906e182e95c51d12a5f54fdef938ce673",
+      "kdf": "pbkdf2",
+      "kdfparams": {
+        "c": 262144,
+        "dklen": 32,
+        "prf": "hmac-sha256",
+        "salt": "5029114a193ba488f01fb3068940281121953303e0c3f63b0c8e71b2574297dd"
+      },
+      "mac": "bb596b758b29b621dd900ad3853053f25b031a9f6b0e93b5bb3685833340d58a"
+    },
+    "id": "f7f1c10b-9d70-4dc0-b60f-9b3bd8ad7672",
+    "version": 3
+  }
+}
