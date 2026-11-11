@@ -49,6 +49,10 @@ pub struct Switch {
 
 pub struct HistInner {
     pub spec: ChainSpec,
+    /// The canonical blocks from number `base`, consecutive. `base` is 0 on a node that followed
+    /// from genesis; a minimal node starts at its first retained header and drops from the front
+    /// as the retention floor moves ([`HistInner::prune`]).
+    pub base: u64,
     pub blocks: Vec<Stored>,
     pub codes: BTreeMap<B256, Bytes>,
     /// Accounts above 2^256 in the state of the tip, kept in step with every committed diff.
@@ -65,7 +69,7 @@ pub struct HistInner {
 
 impl BlockReader for HistInner {
     fn header(&self, hash: B256, number: u64) -> Option<HeaderView> {
-        let s = self.blocks.get(usize::try_from(number).ok()?)?;
+        let s = self.at(number)?;
         (s.hash == hash).then_some(HeaderView {
             number,
             hash,
@@ -75,18 +79,15 @@ impl BlockReader for HistInner {
         })
     }
     fn sign_txs(&self, hash: B256, number: u64) -> Option<Vec<SignTx>> {
-        let s = self.blocks.get(usize::try_from(number).ok()?)?;
+        let s = self.at(number)?;
         (s.hash == hash).then(|| s.signs.clone())
     }
 }
 
 impl PenaltyHistory for HistInner {
     fn penalties(&self, hash: B256, back: usize) -> Option<Vec<Address>> {
-        let number = self.blocks.iter().rposition(|b| b.hash == hash)?;
-        let at = self
-            .switches
-            .iter()
-            .rposition(|w| usize::try_from(w.number).is_ok_and(|n| n <= number))?;
+        let number = self.by_hash(hash)?.header.number;
+        let at = self.switches.iter().rposition(|w| w.number <= number)?;
         let w = &self.switches[at.checked_sub(back)?];
         Some(self.switch_penalties(w.number))
     }
@@ -94,10 +95,10 @@ impl PenaltyHistory for HistInner {
 
 impl Env for HistInner {
     fn hash_of(&self, number: u64) -> Option<B256> {
-        Some(self.blocks.get(usize::try_from(number).ok()?)?.hash)
+        Some(self.at(number)?.hash)
     }
     fn masternodes_at(&self, checkpoint: u64) -> Option<Vec<Address>> {
-        let s = self.blocks.get(usize::try_from(checkpoint).ok()?)?;
+        let s = self.at(checkpoint)?;
         masternodes_of(&s.header.extra_data).ok()
     }
     fn wide_balances(&self) -> Vec<(Address, WideBalance)> {
@@ -160,7 +161,44 @@ impl HistInner {
     }
 
     pub fn tip_number(&self) -> u64 {
-        self.blocks.len() as u64 - 1
+        self.base + self.blocks.len() as u64 - 1
+    }
+
+    /// The stored block `number`, `None` below the first retained one or above the tip.
+    pub fn at(&self, number: u64) -> Option<&Stored> {
+        self.blocks
+            .get(usize::try_from(number.checked_sub(self.base)?).ok()?)
+    }
+
+    /// Minimal mode: drops what the store dropped. Headers below `headers_from` go, bodies and
+    /// receipts below `records_from` are cleared (the RPC refuses them by class, `Held`), the V1
+    /// snapshots and the transaction index follow, gap pools below `gaps_from` go, and so do the
+    /// switches below the last one at or under `headers_from` (the epoch of the first header).
+    pub fn prune(&mut self, headers_from: u64, records_from: u64, gaps_from: u64) {
+        let drop = usize::try_from(headers_from.saturating_sub(self.base)).unwrap_or(usize::MAX);
+        let drop = drop.min(self.blocks.len().saturating_sub(1));
+        self.blocks.drain(..drop);
+        self.base += drop as u64;
+        let base = self.base;
+        for b in self
+            .blocks
+            .iter_mut()
+            .take_while(|b| b.header.number < records_from)
+        {
+            b.body = Body::default();
+            b.receipts.clear();
+            b.signs.clear();
+        }
+        self.tx_index
+            .retain(|_, (n, _)| *n >= records_from.max(base));
+        self.snaps = self.snaps.split_off(&base);
+        self.gaps = self.gaps.split_off(&gaps_from);
+        let keep = self
+            .switches
+            .iter()
+            .rposition(|w| w.number <= base)
+            .unwrap_or(0);
+        self.switches.drain(..keep);
     }
 
     pub fn by_hash(&self, hash: B256) -> Option<&Stored> {
@@ -179,11 +217,7 @@ impl HistInner {
         let h = if cp == x && x == own.number {
             own
         } else {
-            &self
-                .blocks
-                .get(usize::try_from(cp).map_err(|e| e.to_string())?)
-                .ok_or(format!("no checkpoint {cp}"))?
-                .header
+            &self.at(cp).ok_or(format!("no checkpoint {cp}"))?.header
         };
         masternodes_of(&h.extra_data).map_err(|e| e.to_string())
     }
@@ -194,8 +228,7 @@ impl HistInner {
         let cp = n - n % self.spec.xdpos.epoch;
         let checkpoint = if cp != n {
             Some(
-                self.blocks
-                    .get(usize::try_from(cp).map_err(|e| e.to_string())?)
+                self.at(cp)
                     .ok_or(format!("no checkpoint {cp}"))?
                     .header
                     .clone(),
@@ -218,10 +251,7 @@ impl HistInner {
     }
 
     fn switch_list(&self, w: &Switch) -> Vec<Address> {
-        let Some(s) = usize::try_from(w.number)
-            .ok()
-            .and_then(|n| self.blocks.get(n))
-        else {
+        let Some(s) = self.at(w.number) else {
             return vec![];
         };
         if self.v2_cfg().is_some_and(|v| v.switch_block == w.number) {
@@ -232,9 +262,7 @@ impl HistInner {
     }
 
     fn switch_penalties(&self, number: u64) -> Vec<Address> {
-        usize::try_from(number)
-            .ok()
-            .and_then(|n| self.blocks.get(n))
+        self.at(number)
             .map(|s| addresses(&s.header.penalties))
             .unwrap_or_default()
     }
@@ -253,13 +281,10 @@ impl HistInner {
         let (epoch, gap) = (self.spec.xdpos.epoch, self.spec.xdpos.gap);
         let sw = self.v2_cfg().ok_or(v2::Error::NoV2)?.switch_block;
         if gap_snapshot::uses_v1_list(number, epoch, sw)? {
-            let s = usize::try_from(sw)
-                .ok()
-                .and_then(|n| self.blocks.get(n))
-                .ok_or(v2::Error::Missing {
-                    what: "V1 switch block",
-                    number: sw,
-                })?;
+            let s = self.at(sw).ok_or(v2::Error::Missing {
+                what: "V1 switch block",
+                number: sw,
+            })?;
             return gap_snapshot::bootstrap(&s.header.extra_data, sw);
         }
         let g = gap_snapshot::gap_number(number, epoch, gap)?;

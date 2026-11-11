@@ -36,6 +36,15 @@ pub enum Profile {
 }
 
 impl Profile {
+    pub fn of(n: Network) -> Option<Self> {
+        match n {
+            Network::Mainnet => Some(Self::Mainnet),
+            Network::Apothem => Some(Self::Apothem),
+            Network::Devnet => Some(Self::Devnet),
+            _ => None,
+        }
+    }
+
     pub fn network(self) -> Network {
         match self {
             Self::Mainnet => Network::Mainnet,
@@ -77,6 +86,8 @@ pub struct SyncCfg {
     /// full or archive.
     pub gcmode: String,
     pub from_block: Option<u64>,
+    /// Start from the anchor of an imported snapshot and keep only the retention window.
+    pub minimal: bool,
     pub cache_mb: u32,
     /// Blocks of transaction index kept; 0 is the whole chain.
     pub tx_history: u64,
@@ -212,6 +223,7 @@ defaults!(SyncCfg {
     mode: "snap".into(),
     gcmode: "full".into(),
     from_block: None,
+    minimal: false,
     cache_mb: 4096,
     tx_history: 2_350_000
 });
@@ -349,6 +361,7 @@ impl Config {
             "syncmode" => self.sync.mode = one_of(key, v, &["snap", "fast", "full"])?,
             "gcmode" => self.sync.gcmode = one_of(key, v, &["full", "archive"])?,
             "syncfromblock" => self.sync.from_block = Some(num(key, v)?),
+            "minimal" => self.sync.minimal = flag(key, v)?,
             "cache" => self.sync.cache_mb = num(key, v)?,
             "history.transactions" | "txlookuplimit" => self.sync.tx_history = num(key, v)?,
             "port" => self.p2p.port = num(key, v)?,

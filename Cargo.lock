@@ -4818,6 +4818,7 @@ dependencies = [
  "alloy-trie",
  "flate2",
  "k256",
+ "proptest",
  "serde",
  "serde_json",
  "thiserror",

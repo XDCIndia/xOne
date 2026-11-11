@@ -91,6 +91,14 @@ pub const FLAGS: &[Flag] = &[
         "not in geth-XDC at the pin; task list",
     ),
     f(
+        "minimal",
+        B,
+        "false",
+        "true",
+        "Start from the anchor of an imported snapshot (`xone snapshot import`), keep only the retention window, never sync from genesis or read an archive.",
+        "not in geth-XDC at the pin; issue #38",
+    ),
+    f(
         "cache",
         N,
         "4096",
@@ -483,6 +491,43 @@ pub fn normalise(args: impl IntoIterator<Item = OsString>) -> (Vec<OsString>, Ve
     (out, warns)
 }
 
+fn snapshot() -> Command {
+    let net =
+        || {
+            Arg::new("network").long("network").value_parser(
+                clap::builder::PossibleValuesParser::new(xone_chainspec::Network::NAMES),
+            )
+        };
+    let dir = || {
+        Arg::new("datadir")
+            .long("datadir")
+            .required(true)
+            .value_name("dir")
+    };
+    let secs = |n: &'static str| Arg::new(n).long(n).value_name("seconds");
+    Command::new("snapshot")
+        .about("Export or import an anchored snapshot of the chain state (issue #38).")
+        .subcommand_required(true)
+        .subcommand(
+            Command::new("export")
+                .about("Write an anchored snapshot of the datadir's own state at --at (default: the latest committed epoch switch, on V1 the highest sealed block).")
+                .arg(dir())
+                .arg(Arg::new("out").long("out").required(true).value_name("file"))
+                .arg(Arg::new("at").long("at").value_name("block"))
+                .arg(secs("max-age"))
+                .arg(net()),
+        )
+        .subcommand(
+            Command::new("import")
+                .about("Verify a snapshot against the pins and install it into an empty datadir; an interrupted run resumes.")
+                .arg(dir())
+                .arg(Arg::new("in").long("in").required(true).value_name("file"))
+                .arg(Arg::new("pins").long("pins").value_name("file"))
+                .arg(secs("max-age-cap"))
+                .arg(net()),
+        )
+}
+
 pub fn command() -> Command {
     let mut c = Command::new("xone")
         .about("XDC xOne execution client")
@@ -524,6 +569,7 @@ pub fn command() -> Command {
                     clap::builder::PossibleValuesParser::new(xone_chainspec::Network::NAMES),
                 )),
         )
+        .subcommand(snapshot())
         .subcommand(
             Command::new("genesis-hash")
                 .about("Print the genesis block hash of a built-in network.")
@@ -594,5 +640,5 @@ Source column: file:line in geth-XDC (`XDCIndia/go-ethereum` at `6fc8e8c2`; `fla
             x.source
         );
     }
-    s + "\nSubcommands: `init <genesis.json>`, `version`, `dumpconfig`, `genesis-hash --network <name>`, `import <file>`, `export <file> [from] [to] --input <blockfile>`.\n"
+    s + "\nSubcommands: `init <genesis.json>`, `version`, `dumpconfig`, `genesis-hash --network <name>`, `import <file>`, `export <file> [from] [to] --input <blockfile>`, `snapshot export --datadir <dir> --out <file> [--at <block>]`, `snapshot import --datadir <dir> --in <file> --pins <file>`.\n"
 }

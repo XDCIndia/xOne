@@ -90,6 +90,16 @@ fn read_marker(datadir: &Path) -> Result<Option<Marker>, DatadirError> {
     }
 }
 
+/// The chain marker of a datadir, which must have one.
+pub fn marker(datadir: &Path) -> Result<Marker, DatadirError> {
+    read_marker(datadir)?.ok_or_else(|| {
+        DatadirError::BadMarker(
+            datadir.join(MARKER),
+            "no chain marker: pass --network".into(),
+        )
+    })
+}
+
 /// Write the marker for `genesis_json`, or check an existing one against it.
 pub fn init(datadir: &Path, genesis_json: &str) -> Result<Marker, DatadirError> {
     let want = identity(genesis_json)?;

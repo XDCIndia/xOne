@@ -66,7 +66,7 @@ impl ChainApi for RpcChain {
     }
     fn hash_by_number(&self, number: u64) -> Option<B256> {
         let h = self.core.hist.read();
-        Some(h.blocks.get(usize::try_from(number).ok()?)?.hash)
+        Some(h.at(number)?.hash)
     }
     fn block(&self, hash: B256) -> Option<BlockView> {
         let h = self.core.hist.read();
@@ -93,10 +93,14 @@ impl ChainApi for RpcChain {
     fn tx_location(&self, tx: B256) -> Option<(B256, u64)> {
         let h = self.core.hist.read();
         let (n, i) = *h.tx_index.get(&tx)?;
-        Some((h.blocks.get(usize::try_from(n).ok()?)?.hash, u64::from(i)))
+        Some((h.at(n)?.hash, u64::from(i)))
     }
-    fn history(&self, _class: Class, _block: u64) -> Result<(), Missing> {
-        Ok(()) // the node holds every block it has followed, from genesis
+    fn history(&self, class: Class, block: u64) -> Result<(), Missing> {
+        // A node that followed from genesis holds every block. A minimal node holds what its
+        // store holds, and answers for the rest with the typed error, never an empty list.
+        self.core
+            .held()
+            .map_or(Ok(()), |h| h.is_within(class, block))
     }
     fn syncing(&self) -> Option<(u64, u64, u64)> {
         let (head, _) = self.core.head();
@@ -305,8 +309,7 @@ impl ConsensusApi for RpcConsensus {
         }
         let cp = n - n % self.core.spec.xdpos.epoch;
         let s = h
-            .blocks
-            .get(usize::try_from(cp).map_err(|e| RpcError::server(e.to_string()))?)
+            .at(cp)
             .ok_or_else(|| RpcError::server("no checkpoint header"))?;
         masternodes_of(&s.header.extra_data).map_err(|e| RpcError::server(e.to_string()))
     }
@@ -341,7 +344,8 @@ impl ConsensusApi for RpcConsensus {
             &pool.candidates,
             &h.switch_masternodes(w),
             &addresses(
-                &h.blocks[usize::try_from(w.number).unwrap_or(0)]
+                &h.at(w.number)
+                    .ok_or_else(|| RpcError::server("no switch header"))?
                     .header
                     .penalties,
             ),

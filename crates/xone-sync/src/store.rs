@@ -2,11 +2,11 @@
 //! [`crate::testkit::MemStore`]. Every write method is one ADR-005 step with its kill points; a
 //! method that returns `Ok` has published its generation (the commit returned).
 
-use alloy_primitives::{Bytes, B256};
+use alloy_primitives::{Address, Bytes, B256, U256};
 use xone_consensus::{v2::commit::Link, verify::Body};
 use xone_db::{Action, Cause, Durability, ManifestState, SegmentTail};
 use xone_primitives::Header;
-use xone_state::{CommitError, Missing, StateDiff, StateRead};
+use xone_state::{Account, CommitError, Missing, StateDiff, StateRead};
 
 /// A block with its hash, computed once.
 #[derive(Debug, Clone)]
@@ -140,6 +140,45 @@ pub enum StoreError {
     State(#[from] CommitError),
     #[error("cannot unwind to {0}: above the head or outside the retained window")]
     Unwind(u64),
+    /// `install_snapshot` on a datadir that already holds blocks.
+    #[error("the datadir is not empty")]
+    NotEmpty,
+    /// `install_snapshot` input that does not hold together (not the importer's doing: the importer
+    /// has checked all of this, the store checks it again before the one commit).
+    #[error("snapshot rejected by the store: {0}")]
+    BadInstall(&'static str),
+    /// `prune` with floors that are not `headers_from <= records_from <= head`.
+    #[error("cannot prune to {headers_from}/{records_from}: head is {head}")]
+    Prune {
+        headers_from: u64,
+        records_from: u64,
+        head: u64,
+    },
+}
+
+/// The plain state of one block: what a snapshot carries as its account and storage tables.
+/// Order is not specified; zero slots are absent.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct StateRows {
+    pub accounts: Vec<(Address, Account)>,
+    pub storage: Vec<(Address, B256, U256)>,
+}
+
+/// A verified snapshot, to be the whole content of an empty datadir ([`Store::install_snapshot`]).
+/// The last entry of `headers` and of `records` is the pivot, whose state is `state`.
+#[derive(Debug, Clone)]
+pub struct Install {
+    /// The anchor manifest as it was verified (RLP), kept so that a restart knows the datadir is
+    /// anchored and at which format.
+    pub anchor: Bytes,
+    /// Consecutive headers, first retained to pivot.
+    pub headers: Vec<Header>,
+    /// Consecutive blocks with their bodies and receipts, first retained to pivot. Their state
+    /// diffs and executor rows are empty.
+    pub records: Vec<Record>,
+    pub state: StateRows,
+    /// Blocks above the pivot whose state stays openable (the store's `retention`).
+    pub retention: u64,
 }
 
 /// What start-up reads from the datadir before `xone_db::reconcile` decides.
@@ -197,6 +236,23 @@ pub trait Store {
     fn finish(&mut self, up_to: u64) -> Result<(), StoreError>;
     /// Reorg: deletes the staged rows above `number` and cuts every checkpoint but `Execution` to it.
     fn unwind_stages(&mut self, number: u64) -> Result<(), StoreError>;
+
+    // ---- bootstrap (XB-18)
+    /// The plain state after the canonical block `hash`, inside the retained state window.
+    fn state_rows(&self, hash: B256) -> Result<StateRows, Missing>;
+    /// Makes an empty datadir the anchored datadir of `s`: one generation holds the state, the
+    /// canonical index, the headers, the records, the anchor manifest and the segment manifest
+    /// whose `first_block` is the first retained block of each segment (ADR-005 sections 6.3, 12).
+    /// [`StoreError::NotEmpty`] on a datadir that holds anything.
+    fn install_snapshot(&mut self, s: Install) -> Result<(), StoreError>;
+    /// The anchor manifest installed by [`Store::install_snapshot`], `None` on a datadir that was
+    /// not bootstrapped from a snapshot.
+    fn anchor(&self) -> Option<Bytes>;
+    /// ADR-005 section 10: headers below `headers_from` and records (bodies and receipts, state
+    /// diffs, executor rows) below `records_from` stop being visible and are deleted; a header
+    /// between the two floors stays. A floor below the current one is a no-op (the manifest
+    /// `first_block` only grows), one above the head is [`StoreError::Prune`].
+    fn prune(&mut self, headers_from: u64, records_from: u64) -> Result<(), StoreError>;
 
     // ---- restart
     fn scan(&self) -> Scan;

@@ -148,6 +148,13 @@ impl<S: Store, E: BlockExecutor, H: HeaderCheck> Chain<S, E, H> {
         f(&self.rd())
     }
 
+    /// Runs `f` on the store under the import lock and the write lock: the one writer that is not an
+    /// import (minimal-mode pruning). No import runs while it does.
+    pub fn with_store_mut<R>(&self, f: impl FnOnce(&mut S) -> R) -> R {
+        let _g = self.import.lock().unwrap_or_else(PoisonError::into_inner);
+        f(&mut self.store.write().unwrap_or_else(PoisonError::into_inner))
+    }
+
     /// The store, for the owner of the chain between calls (arming a test store, inspecting it).
     pub fn store_mut(&mut self) -> &mut S {
         self.store.get_mut().unwrap_or_else(PoisonError::into_inner)

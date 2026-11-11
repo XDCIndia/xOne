@@ -1,0 +1,1062 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::as_conversions,
+    clippy::disallowed_methods,
+    reason = "test code: a panic is the failure report"
+)]
+//! Snapshot export and import (XB-18, issue #38): the container, the state round trip, resume,
+//! the malicious manifests of XA-09, damaged content, and minimal-mode pruning.
+//!
+//! The chain is synthetic and signed with keys made here: Apothem's rules at pivot 85,000,101, so
+//! the window is the real derived one (4,500 headers, 1,799 bodies, 3,149 blocks of gap pools), the
+//! 3-chain proof above the pivot carries real secp256k1 QCs, and the state has contracts, wide
+//! balances and a few hundred slots.
+
+use std::{
+    io::{Cursor, Read, Seek, SeekFrom},
+    time::Instant,
+};
+
+use alloy_primitives::{keccak256, Address, Bytes, B256, U256};
+use alloy_trie::EMPTY_ROOT_HASH;
+use k256::ecdsa::SigningKey;
+use xone_chainspec::{ChainSpec, Network};
+use xone_consensus::v2::{cert::qc_digest, gap_snapshot};
+use xone_consensus::verify::Body;
+use xone_primitives::{BlockInfo, ExtraFieldsV2, Header, QuorumCert, WideBalance};
+use xone_state::{trie::flat_root, Account, FlatRead, FlatWrite, MemFlat};
+use xone_sync::{
+    bootstrap::{
+        export::{export, ExportError, Params},
+        format::{Kind, Reader, Trailer, Writer, HEAD_LEN},
+        import::{import, verify, Config, ImportError},
+        manifest::{parse_pins, Side, SignRow},
+        minimal::{check_start, keep_from, prune, Held, MinimalError},
+        pivot_plan, Anchor, AnchorError, Class, Context, Missing, Retention,
+    },
+    store::{Block, Install, Record, Store},
+    testkit::MemStore,
+};
+
+const E: u64 = 900;
+const G: u64 = 450;
+/// The first header of the V2 proof: an Apothem epoch switch.
+const S: u64 = 85_000_100;
+const PIVOT: u64 = S + 1;
+const R0: u64 = 28_800_000;
+const NOW: u64 = 1_800_000_000;
+const DAY: u64 = 86_400;
+const CHUNK: usize = 8 * 1024;
+
+fn key(i: u8) -> SigningKey {
+    SigningKey::from_slice(&[i + 1; 32]).unwrap()
+}
+
+fn address_of(k: &SigningKey) -> Address {
+    let p = k.verifying_key().to_encoded_point(false);
+    Address::from_slice(&keccak256(&p.as_bytes()[1..])[12..])
+}
+
+fn sign(k: &SigningKey, digest: &B256) -> Bytes {
+    let (sig, id) = k.sign_prehash_recoverable(digest.as_slice()).unwrap();
+    let mut v = sig.to_bytes().to_vec();
+    v.push(id.to_byte());
+    v.into()
+}
+
+fn masters() -> Vec<SigningKey> {
+    (0..9).map(key).collect()
+}
+
+/// A header with the roots of an empty block, so that an empty body and no receipts verify.
+fn plain(n: u64, parent: B256, root: B256) -> Header {
+    Header {
+        number: n,
+        parent_hash: parent,
+        state_root: root,
+        tx_root: EMPTY_ROOT_HASH,
+        receipt_root: EMPTY_ROOT_HASH,
+        uncle_hash: keccak256([alloy_rlp::EMPTY_LIST_CODE]),
+        difficulty: U256::from(1),
+        ..Header::default()
+    }
+}
+
+/// The state of the pivot: contracts with storage, a wide balance, plain accounts.
+fn state() -> (MemFlat, Side) {
+    let mut flat = MemFlat::default();
+    let mut side = Side::default();
+    for i in 0..60u32 {
+        let a = Address::from_slice(&keccak256(i.to_be_bytes())[..20]);
+        let mut acc = Account {
+            nonce: u64::from(i),
+            balance: WideBalance::from(U256::from(i) * U256::from(10u64.pow(18))),
+            ..Default::default()
+        };
+        if i % 7 == 0 {
+            let code = Bytes::from(vec![0x60, i as u8, 0x60, 0x00, 0x55, 0x00]);
+            acc.code_hash = keccak256(&code);
+            side.codes.insert(acc.code_hash, code);
+            for s in 0..20u32 {
+                flat.set_slot(a, keccak256([s as u8]), U256::from(s + 1 + i));
+            }
+        }
+        if i == 3 {
+            // 2^256 + 5: a balance that does not fit in 256 bits
+            let mut b = vec![1u8];
+            b.extend_from_slice(&[0u8; 31]);
+            b.push(5);
+            acc.balance = WideBalance::from_be_bytes(&b);
+            assert!(acc.balance.is_wide());
+        }
+        flat.set_account(a, Some(acc));
+    }
+    (flat, side)
+}
+
+type Signer<'a> = &'a dyn Fn(usize, &B256) -> Vec<Bytes>;
+
+struct Fix {
+    spec: ChainSpec,
+    store: MemStore,
+    side: Side,
+    headers: Vec<Header>,
+    root: B256,
+    flat: MemFlat,
+}
+
+/// The chain: plain blocks up to S-1, then the V2 epoch switch S, the pivot S+1 and three blocks
+/// whose QCs commit it. `signer(i, digest)` is who signs the QC of proof header `i`.
+fn fixture(signer: Signer<'_>) -> Fix {
+    let spec = Network::Apothem.spec();
+    let (flat, mut side) = state();
+    let root = flat_root(&flat);
+    let ms = masters();
+    let set: Vec<Address> = ms.iter().map(address_of).collect();
+    let plan = xone_sync::bootstrap::plan_at(&spec, PIVOT).unwrap();
+    let first = plan.of(Class::Header).next().unwrap().first;
+    let mut headers: Vec<Header> = Vec::new();
+    for n in first..S {
+        let parent = headers.last().map_or(B256::ZERO, Header::hash);
+        headers.push(plain(n, parent, keccak256(n.to_le_bytes())));
+    }
+    let gap = gap_snapshot::gap_number(S, E, G).unwrap();
+    let rounds: Vec<u64> = (0..5).map(|i| R0 + i).collect();
+    let n0 = headers.len();
+    for (i, round) in rounds.iter().enumerate() {
+        let n = S + u64::try_from(i).unwrap();
+        let state_root = if n == PIVOT {
+            root
+        } else {
+            keccak256(n.to_le_bytes())
+        };
+        let mut h = plain(n, headers.last().unwrap().hash(), state_root);
+        let mut qc = QuorumCert {
+            proposed_block_info: BlockInfo {
+                hash: h.parent_hash,
+                round: if i == 0 { round - 1 } else { rounds[i - 1] },
+                number: n - 1,
+            },
+            signatures: vec![],
+            gap_number: gap,
+        };
+        if i > 0 {
+            qc.signatures = signer(i, &qc_digest(&qc));
+        } else {
+            h.validators = set.iter().flat_map(|a| a.0).collect::<Vec<u8>>().into();
+        }
+        h.extra_data = ExtraFieldsV2 {
+            round: *round,
+            quorum_cert: qc,
+        }
+        .encode_extra()
+        .into();
+        headers.push(h);
+    }
+    assert_eq!(headers[n0 + 1].number, PIVOT);
+    for g in plan.of(Class::GapSnapshot) {
+        side.gaps.insert(g.first, set.clone());
+    }
+    for n in PIVOT - 20..=PIVOT {
+        side.signs.insert(
+            n,
+            vec![SignRow {
+                sender: set[0],
+                signed: keccak256(n.to_le_bytes()),
+                ok: true,
+            }],
+        );
+    }
+    let mut store = MemStore::with_anchor(headers[0].clone(), flat.clone(), 64, 100_000);
+    for h in &headers[1..] {
+        let rec = Record {
+            block: Block::new(h.clone(), Body::default()),
+            receipts: vec![],
+            diff: Default::default(),
+            aux: Default::default(),
+        };
+        store.commit_block(&rec, None).unwrap();
+    }
+    Fix {
+        spec,
+        store,
+        side,
+        headers,
+        root,
+        flat,
+    }
+}
+
+fn good() -> Fix {
+    let ms = masters();
+    fixture(&|_, d| ms[..7].iter().map(|k| sign(k, d)).collect())
+}
+
+fn params() -> Params {
+    Params {
+        at: PIVOT,
+        now: NOW - 3600,
+        max_age: DAY,
+        chunk_bytes: CHUNK,
+    }
+}
+
+fn pins(f: &Fix) -> Vec<(u64, B256)> {
+    let h = &f.headers[usize::try_from(PIVOT - f.headers[0].number).unwrap()];
+    vec![(PIVOT, h.hash())]
+}
+
+fn cfg<'a>(f: &'a Fix, pins: &'a [(u64, B256)]) -> Config<'a> {
+    Config {
+        spec: &f.spec,
+        ctx: Context {
+            now: NOW,
+            pins,
+            max_age_cap: 7 * DAY,
+        },
+        retention: 64,
+    }
+}
+
+fn exported(f: &Fix) -> Vec<u8> {
+    let mut out = Vec::new();
+    export(&f.spec, &f.store, &f.side, &params(), &mut out).unwrap();
+    out
+}
+
+fn untouched(s: &MemStore) -> bool {
+    !s.scan().has_records && s.anchor().is_none()
+}
+
+/// Reads a file into its chunks (not the trailer) and its trailer.
+fn parse(file: &[u8]) -> (Vec<(Kind, Vec<u8>)>, Trailer) {
+    let mut r = Reader::new(file).unwrap();
+    let mut chunks = vec![];
+    let mut trailer = None;
+    while let Some(c) = r.read_chunk().unwrap() {
+        if c.kind == Kind::Trailer {
+            trailer = Some(alloy_rlp::decode_exact(&c.raw).unwrap());
+        } else {
+            chunks.push((c.kind, c.raw));
+        }
+    }
+    (chunks, trailer.unwrap())
+}
+
+/// The same chunks after `f`, under a trailer that is consistent with them.
+fn rewrite(file: &[u8], f: impl FnOnce(&mut Vec<(Kind, Vec<u8>)>, &mut (u64, u64))) -> Vec<u8> {
+    let (mut chunks, t) = parse(file);
+    let mut firsts = (t.headers_first, t.records_first);
+    f(&mut chunks, &mut firsts);
+    let mut out = Vec::new();
+    let mut w = Writer::new(&mut out).unwrap();
+    for (k, raw) in &chunks {
+        w.chunk(*k, raw).unwrap();
+    }
+    let manifest = chunks.iter().find(|c| c.0 == Kind::Manifest).unwrap();
+    w.finish(keccak256(&manifest.1), firsts.0, firsts.1)
+        .unwrap();
+    out
+}
+
+fn mutate_anchor(file: &[u8], f: impl FnOnce(&mut Anchor)) -> Vec<u8> {
+    rewrite(file, |c, _| {
+        let mut a = Anchor::decode(&c[0].1).unwrap();
+        f(&mut a);
+        c[0].1 = a.encode();
+    })
+}
+
+fn run(f: &Fix, file: &[u8]) -> Result<(), ImportError> {
+    let pins = pins(f);
+    let mut store = MemStore::empty(100_000);
+    let mut stage: Vec<u8> = vec![];
+    import(
+        &cfg(f, &pins),
+        &mut Cursor::new(file),
+        &mut stage,
+        &mut store,
+    )
+    .map(|_| ())?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn export_then_import_reaches_the_same_state_root() {
+    let f = good();
+    let t0 = Instant::now();
+    let file = exported(&f);
+    let t_export = t0.elapsed();
+    let again = exported(&f);
+    assert_eq!(file, again, "the same state gives the same bytes");
+
+    let pins = pins(&f);
+    let mut store = MemStore::empty(100_000);
+    let mut stage: Vec<u8> = vec![];
+    let t0 = Instant::now();
+    let done = import(
+        &cfg(&f, &pins),
+        &mut Cursor::new(&file),
+        &mut stage,
+        &mut store,
+    )
+    .unwrap();
+    let t_import = t0.elapsed();
+    eprintln!(
+        "snapshot: {} bytes ({} chunks), {} accounts, {} slots, {} codes, {} headers, {} bodies; export {:?}, import {:?}",
+        file.len(),
+        done.stats.chunks,
+        done.stats.accounts,
+        done.stats.slots,
+        done.stats.codes,
+        done.stats.headers,
+        done.stats.bodies,
+        t_export,
+        t_import,
+    );
+    assert!(
+        stage.is_empty(),
+        "the staging area is cleared after the write"
+    );
+
+    let (head, hash) = store.head();
+    assert_eq!(head, PIVOT);
+    assert_eq!(store.canonical_hash(PIVOT), Some(hash));
+    assert_eq!(flat_root(store.head_flat()), f.root);
+    assert_eq!(store.flat_root(), f.root);
+    assert_eq!(
+        store.head_flat(),
+        &f.flat,
+        "accounts, slots and the wide balance, row for row"
+    );
+    assert_eq!(store.header(hash).unwrap().state_root, f.root);
+    assert_eq!(done.side.codes, f.side.codes);
+    assert_eq!(store.anchor().unwrap().as_ref(), done.anchor.encode());
+    assert_eq!(done.anchor.number, PIVOT);
+
+    // the window the plan names is there, down to the first block and not one below
+    let plan = pivot_plan(&f.spec, &done.anchor).unwrap();
+    let (h_first, b_first) = (
+        plan.of(Class::Header).next().unwrap().first,
+        plan.of(Class::Body).next().unwrap().first,
+    );
+    assert_eq!(h_first, PIVOT + 1 - 4500);
+    assert_eq!(b_first, PIVOT + 1 - 1799);
+    assert!(store.canonical_hash(h_first).is_some());
+    assert!(store.canonical_hash(h_first - 1).is_none());
+    let rec = store
+        .record(store.canonical_hash(b_first).unwrap())
+        .unwrap();
+    assert!(rec.block.body.transactions.is_empty());
+    assert!(store
+        .record(store.canonical_hash(b_first - 1).unwrap())
+        .is_none());
+    assert!(store
+        .header(store.canonical_hash(b_first - 1).unwrap())
+        .is_some());
+    assert_eq!(
+        done.side.gaps.keys().copied().collect::<Vec<_>>(),
+        plan.of(Class::GapSnapshot)
+            .map(|n| n.first)
+            .collect::<Vec<_>>()
+    );
+    // the datadir can be started as a minimal node
+    check_start(&f.spec, &store).unwrap();
+    // a second import is refused: the datadir is not empty
+    let mut again = Cursor::new(&file);
+    let mut stage: Vec<u8> = vec![];
+    assert!(matches!(
+        import(&cfg(&f, &pins), &mut again, &mut stage, &mut store),
+        Err(ImportError::Store(xone_sync::store::StoreError::NotEmpty))
+    ));
+}
+
+#[test]
+fn a_pins_file_is_required_and_is_the_trust_root() {
+    let f = good();
+    let file = exported(&f);
+    let mut store = MemStore::empty(100_000);
+    let mut stage: Vec<u8> = vec![];
+    let none: [(u64, B256); 0] = [];
+    assert!(matches!(
+        import(
+            &cfg(&f, &none),
+            &mut Cursor::new(&file),
+            &mut stage,
+            &mut store
+        ),
+        Err(ImportError::NoPins)
+    ));
+    // a pin for another block of the chain: the manifest binds the right bytes of an unpinned chain
+    let other = [(PIVOT, B256::repeat_byte(9))];
+    assert!(matches!(
+        import(
+            &cfg(&f, &other),
+            &mut Cursor::new(&file),
+            &mut stage,
+            &mut store
+        ),
+        Err(ImportError::Anchor(AnchorError::NotPinned))
+    ));
+    assert!(untouched(&store) && stage.is_empty());
+    // the file of pins
+    let text = format!(
+        "# apothem epoch switch\n{S} {}\n{PIVOT} {}  # the checkpoint\n",
+        pins(&f)[0].1,
+        pins(&f)[0].1
+    );
+    assert_eq!(parse_pins(&text).unwrap().len(), 2);
+    assert!(parse_pins("85000100\n").is_err());
+    assert!(parse_pins("x 0x00\n").is_err());
+}
+
+/// Each malicious manifest of XA-09 is refused with its typed error, and nothing is written: not
+/// the store, not the staging area.
+#[test]
+fn every_malicious_manifest_is_refused_before_any_write() {
+    let f = good();
+    let file = exported(&f);
+    let check =
+        |name: &str, bytes: &[u8], f: &Fix, want: fn(&ImportError) -> bool, now: Option<u64>| {
+            let pins = pins(f);
+            let mut cfg = cfg(f, &pins);
+            if let Some(n) = now {
+                cfg.ctx.now = n;
+            }
+            let mut store = MemStore::empty(100_000);
+            let mut stage: Vec<u8> = vec![];
+            let e = import(&cfg, &mut Cursor::new(bytes), &mut stage, &mut store)
+                .err()
+                .unwrap_or_else(|| panic!("{name}: accepted"));
+            assert!(want(&e), "{name}: {e:?}");
+            assert!(untouched(&store), "{name}: the store was written");
+            assert!(stage.is_empty(), "{name}: the staging area was written");
+        };
+    check(
+        "wrong chain",
+        &mutate_anchor(&file, |a| a.chain_id = 50),
+        &f,
+        |e| {
+            matches!(
+                e,
+                ImportError::Anchor(AnchorError::WrongChain { want: 51, got: 50 })
+            )
+        },
+        None,
+    );
+    check(
+        "wrong genesis",
+        &mutate_anchor(&file, |a| {
+            a.genesis_hash = Network::Mainnet.spec().genesis_hash
+        }),
+        &f,
+        |e| matches!(e, ImportError::Anchor(AnchorError::WrongGenesis { .. })),
+        None,
+    );
+    check(
+        "wrong root",
+        &mutate_anchor(&file, |a| a.state_root = B256::repeat_byte(5)),
+        &f,
+        |e| matches!(e, ImportError::Anchor(AnchorError::RootMismatch { .. })),
+        None,
+    );
+    check(
+        "stale",
+        &file,
+        &f,
+        |e| matches!(e, ImportError::Anchor(AnchorError::Stale { .. })),
+        Some(NOW + 3 * DAY),
+    );
+    check(
+        "from the future",
+        &file,
+        &f,
+        |e| matches!(e, ImportError::Anchor(AnchorError::FromFuture { .. })),
+        Some(NOW - 7200),
+    );
+    check(
+        "future manifest version",
+        &mutate_anchor(&file, |a| a.version = 2),
+        &f,
+        |e| {
+            matches!(
+                e,
+                ImportError::Anchor(AnchorError::UnsupportedFormat { found: 2, .. })
+            )
+        },
+        None,
+    );
+    let mut future_file = file.clone();
+    future_file[4] = 2; // the file's own version
+    check(
+        "future file version",
+        &future_file,
+        &f,
+        |e| {
+            matches!(
+                e,
+                ImportError::Format(
+                    xone_sync::bootstrap::format::FormatError::UnsupportedFormat { found: 2, .. }
+                )
+            )
+        },
+        None,
+    );
+    // certificates: made by the exporter from a chain whose QCs are forged or short
+    let ms = masters();
+    let outsider = key(40);
+    let forged = fixture(&|_, d| {
+        let mut s: Vec<Bytes> = ms[..6].iter().map(|k| sign(k, d)).collect();
+        s.push(sign(&outsider, d));
+        s
+    });
+    check(
+        "forged certificate",
+        &exported(&forged),
+        &forged,
+        |e| matches!(e, ImportError::Anchor(AnchorError::ForgedCertificate(_))),
+        None,
+    );
+    let short = fixture(&|_, d| ms[..6].iter().map(|k| sign(k, d)).collect());
+    check(
+        "under threshold",
+        &exported(&short),
+        &short,
+        |e| {
+            matches!(
+                e,
+                ImportError::Anchor(AnchorError::UnderThreshold {
+                    unique: 6,
+                    required: 7,
+                    ..
+                })
+            )
+        },
+        None,
+    );
+}
+
+#[test]
+fn the_state_tables_must_give_the_manifests_root() {
+    let f = good();
+    let file = exported(&f);
+    // one nonce changed: the manifest is fine, the state is not the state of the root
+    let bad = rewrite(&file, |c, _| {
+        let at = c.iter().position(|x| x.0 == Kind::Accounts).unwrap();
+        let mut rows: Vec<xone_sync::bootstrap::manifest::AccountRow> =
+            alloy_rlp::decode_exact(&c[at].1).unwrap();
+        rows[2].nonce += 1;
+        c[at].1 = alloy_rlp::encode(&rows);
+    });
+    assert!(matches!(run(&f, &bad), Err(ImportError::StateRoot { .. })));
+    // rows out of order
+    let bad = rewrite(&file, |c, _| {
+        let at = c.iter().position(|x| x.0 == Kind::Accounts).unwrap();
+        let mut rows: Vec<xone_sync::bootstrap::manifest::AccountRow> =
+            alloy_rlp::decode_exact(&c[at].1).unwrap();
+        rows.swap(0, 1);
+        c[at].1 = alloy_rlp::encode(&rows);
+    });
+    assert!(matches!(run(&f, &bad), Err(ImportError::Content { .. })));
+    // a code that is not its hash
+    let bad = rewrite(&file, |c, _| {
+        let at = c.iter().position(|x| x.0 == Kind::Codes).unwrap();
+        let mut rows: Vec<xone_sync::bootstrap::manifest::CodeRow> =
+            alloy_rlp::decode_exact(&c[at].1).unwrap();
+        rows[0].code = Bytes::from_static(&[0xfe]);
+        c[at].1 = alloy_rlp::encode(&rows);
+    });
+    assert!(matches!(run(&f, &bad), Err(ImportError::Content { .. })));
+    // no code chunk at all
+    let bad = rewrite(&file, |c, _| c.retain(|x| x.0 != Kind::Codes));
+    assert!(matches!(run(&f, &bad), Err(ImportError::Content { .. })));
+}
+
+#[test]
+fn the_window_must_hold_and_link_to_the_pivot() {
+    let f = good();
+    let file = exported(&f);
+    // the trailer says the headers start later than the plan allows
+    let bad = rewrite(&file, |c, firsts| {
+        let at = c.iter().position(|x| x.0 == Kind::Headers).unwrap();
+        let rows: Vec<Header> = alloy_rlp::decode_exact(&c[at].1).unwrap();
+        c[at].1 = alloy_rlp::encode(rows[1..].to_vec());
+        firsts.0 += 1;
+    });
+    assert!(matches!(
+        run(&f, &bad),
+        Err(ImportError::ShortWindow {
+            class: Class::Header,
+            ..
+        })
+    ));
+    // a header that does not link
+    let bad = rewrite(&file, |c, _| {
+        let at = c.iter().position(|x| x.0 == Kind::Headers).unwrap();
+        let mut rows: Vec<Header> = alloy_rlp::decode_exact(&c[at].1).unwrap();
+        rows[3].extra_data = Bytes::from_static(b"x");
+        c[at].1 = alloy_rlp::encode(&rows);
+    });
+    assert!(matches!(run(&f, &bad), Err(ImportError::Content { .. })));
+    // a body whose transactions are not the header's tx root
+    let bad = rewrite(&file, |c, _| {
+        let at = c.iter().position(|x| x.0 == Kind::Bodies).unwrap();
+        let mut rows: Vec<xone_sync::bootstrap::manifest::BodyRow> =
+            alloy_rlp::decode_exact(&c[at].1).unwrap();
+        rows[1].txs.push(Bytes::from_static(&[0xc0]));
+        c[at].1 = alloy_rlp::encode(&rows);
+    });
+    assert!(matches!(run(&f, &bad), Err(ImportError::Block { .. })));
+    // a gap pool the plan does not name
+    let bad = rewrite(&file, |c, _| {
+        let at = c.iter().position(|x| x.0 == Kind::Side).unwrap();
+        let mut row: xone_sync::bootstrap::manifest::SideRow =
+            alloy_rlp::decode_exact(&c[at].1).unwrap();
+        row.gaps.pop();
+        c[at].1 = alloy_rlp::encode(&row);
+    });
+    assert!(matches!(run(&f, &bad), Err(ImportError::Content { .. })));
+}
+
+#[test]
+fn a_damaged_container_is_refused() {
+    let f = good();
+    let file = exported(&f);
+    // a flipped byte anywhere in the compressed payload of a chunk
+    for at in [HEAD_LEN + 20, file.len() as u64 / 2, file.len() as u64 - 9] {
+        let mut bad = file.clone();
+        bad[usize::try_from(at).unwrap()] ^= 1;
+        assert!(
+            matches!(run(&f, &bad), Err(ImportError::Format(_))),
+            "flip at {at}"
+        );
+    }
+    // a trailer that names other chunks than the ones before it
+    let (chunks, t) = parse(&file);
+    let mut out = Vec::new();
+    let mut w = Writer::new(&mut out).unwrap();
+    for (k, raw) in chunks.iter().filter(|c| c.0 != Kind::Receipts).take(100) {
+        w.chunk(*k, raw).unwrap();
+    }
+    w.finish_with(&t).unwrap();
+    assert!(matches!(run(&f, &out), Err(ImportError::Trailer(_))));
+    // bytes after the trailer
+    let mut bad = file.clone();
+    bad.push(0);
+    assert!(matches!(
+        run(&f, &bad),
+        Err(ImportError::Format(_) | ImportError::Trailing)
+    ));
+    // not a snapshot
+    assert!(matches!(
+        run(&f, b"hello, this is not a snapshot"),
+        Err(ImportError::Format(_))
+    ));
+}
+
+struct Counting<R> {
+    inner: R,
+    read: u64,
+}
+
+impl<R: Read> Read for Counting<R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let n = self.inner.read(buf)?;
+        self.read += u64::try_from(n).unwrap();
+        Ok(n)
+    }
+}
+
+impl<R: Seek> Seek for Counting<R> {
+    fn seek(&mut self, p: SeekFrom) -> std::io::Result<u64> {
+        self.inner.seek(p)
+    }
+}
+
+/// The file is cut after five different chunks, and once inside a chunk. Every time the staging
+/// area ends on a whole chunk, the store has not been written, and the next run reads the file from
+/// the cut and imports it.
+#[test]
+fn an_interrupted_import_resumes_from_the_last_whole_chunk() {
+    let f = good();
+    let file = exported(&f);
+    let pins = pins(&f);
+    let mut ends = vec![];
+    let mut r = Reader::new(&file[..]).unwrap();
+    while r.read_chunk().unwrap().is_some() {
+        ends.push(r.position().0);
+    }
+    let chunks = ends.len();
+    assert!(chunks > 12, "{chunks} chunks");
+    let first_len = ends[0];
+    let cuts: Vec<(usize, bool)> = vec![
+        (1, false),
+        (3, false),
+        (chunks / 2, false),
+        (chunks - 3, false),
+        (chunks - 2, false),
+        (chunks / 3, true),
+    ];
+    for (k, torn) in cuts {
+        let boundary = ends[k - 1];
+        let at = if torn { boundary + 7 } else { boundary };
+        let mut store = MemStore::empty(100_000);
+        let mut stage: Vec<u8> = vec![];
+        let e = verify(
+            &cfg(&f, &pins),
+            &mut Cursor::new(&file[..usize::try_from(at).unwrap()]),
+            &mut stage,
+        )
+        .err()
+        .expect("a cut file is not complete");
+        match (&e, torn) {
+            (ImportError::Incomplete { chunks, offset }, false) => {
+                assert_eq!((*chunks, *offset), (u32::try_from(k).unwrap(), boundary));
+            }
+            (
+                ImportError::Format(xone_sync::bootstrap::format::FormatError::Truncated {
+                    offset,
+                    ..
+                }),
+                true,
+            ) => {
+                assert_eq!(*offset, boundary);
+            }
+            _ => panic!("cut after chunk {k} (torn {torn}): {e:?}"),
+        }
+        assert_eq!(
+            u64::try_from(stage.len()).unwrap(),
+            boundary,
+            "staging is the whole chunks"
+        );
+        assert!(untouched(&store));
+
+        let mut input = Counting {
+            inner: Cursor::new(&file),
+            read: 0,
+        };
+        let done = import(&cfg(&f, &pins), &mut input, &mut stage, &mut store).unwrap();
+        assert_eq!(done.stats.resumed_from, Some(boundary));
+        assert!(
+            input.read <= u64::try_from(file.len()).unwrap() - boundary + first_len + 7,
+            "cut {k}: read {} of {} from byte {boundary}",
+            input.read,
+            file.len()
+        );
+        assert_eq!(store.flat_root(), f.root);
+        assert!(stage.is_empty());
+    }
+    // staging that belongs to another snapshot is dropped, not mixed in
+    let g = fixture(&|_, d| masters()[..8].iter().map(|k| sign(k, d)).collect());
+    let (other, other_pins) = (exported(&g), self::pins(&g));
+    let mut stage: Vec<u8> = vec![];
+    verify(
+        &cfg(&g, &other_pins),
+        &mut Cursor::new(&other[..usize::try_from(ends[4]).unwrap()]),
+        &mut stage,
+    )
+    .err()
+    .unwrap();
+    assert!(!stage.is_empty());
+    let mut store = MemStore::empty(100_000);
+    let done = import(
+        &cfg(&f, &pins),
+        &mut Cursor::new(&file),
+        &mut stage,
+        &mut store,
+    )
+    .unwrap();
+    assert_eq!(done.stats.resumed_from, None);
+    assert_eq!(store.flat_root(), f.root);
+}
+
+#[test]
+fn export_refuses_what_it_cannot_prove_or_does_not_hold() {
+    let f = good();
+    let mut sink = Vec::new();
+    // above the head, and the 3-chain is not there yet
+    for at in [S + 4, S + 9] {
+        let e = export(
+            &f.spec,
+            &f.store,
+            &f.side,
+            &Params { at, ..params() },
+            &mut sink,
+        );
+        assert!(matches!(e, Err(ExportError::Proof(_))), "{at}: {e:?}");
+    }
+    // a pool the plan needs and the side data lacks
+    let mut side = f.side.clone();
+    let g = *side.gaps.keys().next().unwrap();
+    side.gaps.remove(&g);
+    assert!(matches!(
+        export(&f.spec, &f.store, &side, &params(), &mut sink),
+        Err(ExportError::MissingGap(n)) if n == g
+    ));
+    // a code that the state refers to and the side data lacks
+    let mut side = f.side.clone();
+    let c = *side.codes.keys().next().unwrap();
+    side.codes.remove(&c);
+    assert!(matches!(
+        export(&f.spec, &f.store, &side, &params(), &mut sink),
+        Err(ExportError::MissingCode(h)) if h == c
+    ));
+    assert!(
+        sink.is_empty(),
+        "nothing is written for a snapshot that cannot be made"
+    );
+    // a node that is itself pruned cannot give the window
+    let mut pruned = good();
+    pruned.store.prune(PIVOT - 100, PIVOT - 100).unwrap();
+    assert!(matches!(
+        export(
+            &pruned.spec,
+            &pruned.store,
+            &pruned.side,
+            &params(),
+            &mut sink
+        ),
+        Err(ExportError::NotRetained { .. })
+    ));
+}
+
+// ------------------------------------------------------------------ minimal mode
+
+#[test]
+fn start_refuses_a_datadir_that_holds_less_than_the_rules_need() {
+    let f = good();
+    let spec = &f.spec;
+    let inst = |h_from: u64, r_from: u64| {
+        let skip = |n: u64| usize::try_from(n - f.headers[0].number).unwrap();
+        let mut store = MemStore::empty(100_000);
+        store
+            .install_snapshot(Install {
+                anchor: Bytes::from_static(b"anchor"),
+                headers: f.headers[skip(h_from)..=skip(PIVOT)].to_vec(),
+                records: f.headers[skip(r_from)..=skip(PIVOT)]
+                    .iter()
+                    .map(|h| Record {
+                        block: Block::new(h.clone(), Body::default()),
+                        receipts: vec![],
+                        diff: Default::default(),
+                        aux: Default::default(),
+                    })
+                    .collect(),
+                state: xone_sync::store::StateRows {
+                    accounts: f.flat.accounts().collect(),
+                    storage: f
+                        .flat
+                        .accounts()
+                        .flat_map(|(a, _)| f.flat.slots(a).map(move |(k, v)| (a, k, v)))
+                        .collect(),
+                },
+                retention: 64,
+            })
+            .unwrap();
+        store
+    };
+    let need = keep_from(spec, PIVOT, None).unwrap();
+    assert_eq!(
+        (need.headers_from, need.records_from),
+        (PIVOT + 1 - 4500, PIVOT + 1 - 1799)
+    );
+    check_start(spec, &inst(need.headers_from, need.records_from)).unwrap();
+    check_start(spec, &inst(need.headers_from, need.records_from - 10)).unwrap(); // more is fine
+    assert_eq!(
+        check_start(spec, &inst(need.headers_from + 1, need.records_from)),
+        Err(MinimalError::Shrunk {
+            class: Class::Header,
+            have: need.headers_from + 1,
+            need: need.headers_from
+        })
+    );
+    assert!(matches!(
+        check_start(spec, &inst(need.headers_from, need.records_from + 1)),
+        Err(MinimalError::Shrunk {
+            class: Class::Body,
+            ..
+        })
+    ));
+    // a datadir that was not made from a snapshot has no anchor
+    assert_eq!(check_start(spec, &f.store), Err(MinimalError::NoAnchor));
+}
+
+/// Pruning follows the head and the derived floor: nothing at or above the floor goes, nothing goes
+/// until the floor has passed it, and the committed block is a ceiling.
+#[test]
+fn pruning_deletes_only_what_the_floor_has_passed_and_the_rest_is_a_typed_error() {
+    let f = good();
+    let mut store = f.store;
+    let spec = &f.spec;
+    // the head is three above the pivot: the floors are 4,500 and 1,799 below it
+    let k = keep_from(spec, S + 4, None).unwrap();
+    assert_eq!(k.headers_from, S + 5 - 4500);
+    assert_eq!(k.records_from, S + 5 - 1799);
+    // the store starts at the first block of the window of the pivot, three below this floor: a
+    // slack larger than the move keeps everything
+    assert_eq!(f.headers[0].number, k.headers_from - 3);
+    // (the fixture holds 4,500 records, 2,701 more than the rules need: slack 3,000 covers that too)
+    assert_eq!(prune(spec, &mut store, None, 3000).unwrap(), None);
+    // slack 0: the floor has passed the first block by 4, they go
+    let kept = prune(spec, &mut store, None, 0).unwrap().unwrap();
+    assert_eq!(kept, k);
+    let held = Held::of_store(spec, &store, 64).unwrap();
+    assert_eq!(
+        (held.headers_from, held.records_from),
+        (k.headers_from, k.records_from)
+    );
+    assert!(store.canonical_hash(k.headers_from - 1).is_none());
+    assert!(store.canonical_hash(k.headers_from).is_some());
+    assert!(held.is_within(Class::Header, k.headers_from).is_ok());
+    assert_eq!(
+        held.is_within(Class::Header, k.headers_from - 1),
+        Err(Missing::UnsupportedHistory {
+            class: Class::Header,
+            block: k.headers_from - 1,
+            floor: k.headers_from,
+            pivot: S + 4
+        })
+    );
+    assert!(matches!(
+        held.is_within(Class::Body, k.records_from - 1),
+        Err(Missing::UnsupportedHistory {
+            class: Class::Body,
+            ..
+        })
+    ));
+    assert!(held.is_within(Class::State, S + 4).is_ok());
+    // a second call with the same head does nothing
+    assert_eq!(prune(spec, &mut store, None, 0).unwrap(), None);
+    // the committed block is a ceiling: a stalled committed block holds the floor back
+    let mut s2 = good().store;
+    let low = S - 3000;
+    let kept = prune(spec, &mut s2, Some(low), 0).unwrap().unwrap();
+    assert_eq!(kept.records_from, low);
+    assert_eq!(kept.headers_from, low.min(k.headers_from));
+}
+
+mod property {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        /// For any head and any committed block: the keep floor is never above the derived floor
+        /// of a node at that head (nothing inside the window is deleted), never above the committed
+        /// block, and never decreases as the head grows.
+        #[test]
+        fn the_keep_floor_never_cuts_into_the_window(
+            head in 5_000u64..120_000_000,
+            lag in 0u64..5_000,
+            step in 1u64..2_000,
+            stalled in prop::option::of(0u64..1_000_000),
+        ) {
+            let spec = Network::Apothem.spec();
+            let committed = stalled.map(|s| head.saturating_sub(s));
+            let k = keep_from(&spec, head, committed).unwrap();
+            let r = Retention::derive(&spec, head).unwrap();
+            prop_assert!(k.headers_from <= r.floor(Class::Header));
+            prop_assert!(k.records_from <= r.floor(Class::Body).min(r.floor(Class::Receipt)));
+            prop_assert!(k.headers_from <= k.records_from);
+            prop_assert!(k.records_from <= committed.unwrap_or(head).min(head));
+            // a block inside the window is held, one below the floor is the typed error
+            let held = Held { pivot: head, headers_from: k.headers_from, records_from: k.records_from, gaps_from: r.floor(Class::GapSnapshot), state_from: head };
+            for c in [Class::Header, Class::Body, Class::Receipt] {
+                prop_assert!(held.is_within(c, r.floor(c)).is_ok());
+                prop_assert!(held.is_within(c, head).is_ok());
+            }
+            if k.headers_from > 0 {
+                prop_assert!(held.is_within(Class::Header, k.headers_from - 1).is_err());
+            }
+            let later = head + step + lag;
+            let k2 = keep_from(&spec, later, committed.map(|c| c + step + lag)).unwrap();
+            prop_assert!(k2.headers_from >= k.headers_from || stalled.is_some());
+        }
+    }
+
+    fn small_spec() -> ChainSpec {
+        let mut spec = Network::Apothem.spec();
+        spec.xdpos.epoch = 20;
+        spec.xdpos.gap = 10;
+        spec.xdpos.reward_checkpoint = 20;
+        spec.xdpos.v2 = None;
+        spec
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(40))]
+        /// A store that grows and is pruned at random heads, with a committed block that lags by a
+        /// random amount: after every prune each header and each record that the rules need at
+        /// that head is still there, and what is gone is below the floor and answers with the typed
+        /// error.
+        #[test]
+        fn pruning_a_growing_store_never_deletes_inside_the_window(
+            ops in prop::collection::vec((1u64..180, 0u64..40), 1..8),
+            stalled in prop::option::of(0u64..300),
+        ) {
+            let spec = small_spec();
+            let mut flat = MemFlat::default();
+            flat.set_account(Address::repeat_byte(1), Some(Account::default()));
+            let g = plain(0, B256::ZERO, flat_root(&flat));
+            let mut store = MemStore::with_anchor(g.clone(), flat, 8, 100_000);
+            let mut parent = g.hash();
+            let mut head = 0u64;
+            for (grow, slack) in ops {
+                for _ in 0..grow {
+                    head += 1;
+                    let h = plain(head, parent, store.head_flat().accounts().next().map_or(B256::ZERO, |_| flat_root(store.head_flat())));
+                    parent = h.hash();
+                    let rec = Record { block: Block::new(h, Body::default()), receipts: vec![], diff: Default::default(), aux: Default::default() };
+                    store.commit_block(&rec, None).unwrap();
+                }
+                // a chain with a committed block (V2) keeps it a fixed distance behind the head
+                let committed = stalled.map(|s| head.saturating_sub(s));
+                prune(&spec, &mut store, committed, slack).unwrap();
+                let need = keep_from(&spec, head, committed).unwrap();
+                let r = Retention::derive(&spec, head).unwrap();
+                let held = Held::of_store(&spec, &store, 8).unwrap();
+                // everything the rules read at this head is held ...
+                for n in r.floor(Class::Header).min(need.headers_from)..=head {
+                    prop_assert!(store.canonical_hash(n).is_some(), "header {n} at head {head}");
+                    prop_assert!(held.is_within(Class::Header, n).is_ok());
+                }
+                for n in r.floor(Class::Body).min(r.floor(Class::Receipt)).min(need.records_from)..=head {
+                    prop_assert!(store.record(store.canonical_hash(n).unwrap()).is_some(), "record {n} at head {head}");
+                    prop_assert!(held.is_within(Class::Body, n).is_ok() && held.is_within(Class::Receipt, n).is_ok());
+                }
+                // ... and nothing above the committed block is ever below the first held block
+                if let Some(c) = committed {
+                    prop_assert!(held.records_from <= c && held.headers_from <= c);
+                }
+                // what is gone is typed, never empty
+                if held.headers_from > 0 {
+                    prop_assert!(store.canonical_hash(held.headers_from - 1).is_none());
+                    let e = held.is_within(Class::Header, held.headers_from - 1);
+                    prop_assert!(e.is_err());
+                }
+            }
+        }
+    }
+}

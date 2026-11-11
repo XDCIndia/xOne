@@ -13,6 +13,7 @@ Source column: file:line in geth-XDC (`XDCIndia/go-ethereum` at `6fc8e8c2`; `fla
 | `--syncmode snap|fast|full` |  | snap | Blockchain sync mode. | flags.go:299 ; geth,xone |
 | `--gcmode full|archive` |  | full | State garbage collection mode. | flags.go:338 |
 | `--syncfromblock <n>` |  | unset | First block to import; unset means from genesis. xone-defined. | not in geth-XDC at the pin; task list |
+| `--minimal` |  | false | Start from the anchor of an imported snapshot (`xone snapshot import`), keep only the retention window, never sync from genesis or read an archive. | not in geth-XDC at the pin; issue #38 |
 | `--cache <n>` |  | 4096 | Megabytes of memory for internal caches. | flags.go:556 |
 | `--history.transactions <n>` | `-txlookuplimit` (deprecated) | 2350000 | Recent blocks whose transactions stay indexed; 0 is the whole chain. | flags.go:379 |
 | `--port <n>` |  | 30303 | P2P listening port (TCP). | flags.go:969 ; geth,xone |
@@ -58,4 +59,4 @@ Source column: file:line in geth-XDC (`XDCIndia/go-ethereum` at `6fc8e8c2`; `fla
 | `--pprof.port <n>` |  | 6060 | Profiling listen port. | internal/debug/flags.go:111 |
 | `--version` | `-V` | false | Print the version stamp and exit; never opens the datadir. Short form -V. | join.sh:481 (xOneGo lesson) |
 
-Subcommands: `init <genesis.json>`, `version`, `dumpconfig`, `genesis-hash --network <name>`, `import <file>`, `export <file> [from] [to] --input <blockfile>`.
+Subcommands: `init <genesis.json>`, `version`, `dumpconfig`, `genesis-hash --network <name>`, `import <file>`, `export <file> [from] [to] --input <blockfile>`, `snapshot export --datadir <dir> --out <file> [--at <block>]`, `snapshot import --datadir <dir> --in <file> --pins <file>`.
