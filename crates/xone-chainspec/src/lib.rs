@@ -1,22 +1,27 @@
 //! XDC chain specifications and genesis handling.
 //!
-//! Values are ported from geth-XDC `params/config.go` at the SHA recorded in
-//! `genesis/PIN`; the genesis JSON files are byte-exact copies from that pin.
+//! The fork table is `generated/forks.json`, written by `conformance/exporter`
+//! from geth-XDC at the SHA recorded in `genesis/PIN`; nothing in it is typed
+//! by hand. The genesis JSON files are byte-exact copies from that pin.
 
 mod genesis;
 mod networks;
 
 use std::collections::BTreeMap;
 
-use alloy_primitives::Address;
+use alloy_primitives::{Address, B256};
 
 pub use genesis::Genesis;
-pub use networks::{apothem, devnet, devnet551, mainnet, Network};
+pub use networks::{apothem, devnet, devnet551, load, mainnet, Network};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("required fork block `{0}` is absent from the chain config")]
     MissingFork(&'static str),
+    #[error("network `{0}` has no row in the generated fork table")]
+    MissingNetwork(&'static str),
+    #[error("the generated fork table sets `{0}`, which this crate does not model")]
+    UnmodelledFork(String),
     #[error("unknown network `{0}`")]
     UnknownNetwork(String),
     #[error("invalid genesis json: {0}")]
@@ -45,9 +50,35 @@ pub enum ForkBlock {
     Never,
 }
 
+impl Error {
+    fn invalid(field: &'static str, value: &str) -> Self {
+        Self::InvalidValue {
+            field,
+            value: value.to_owned(),
+        }
+    }
+}
+
 impl ForkBlock {
     pub fn is_active(self, number: u64) -> bool {
         matches!(self, Self::At(at) if number >= at)
+    }
+
+    /// Read one row of the generated table: an absent key is an error, `null`
+    /// is geth `nil` ([`ForkBlock::Never`]) and geth's far-future placeholder is
+    /// [`ForkBlock::Unscheduled`]. Values are decimal strings.
+    fn from_table(
+        table: &BTreeMap<String, Option<String>>,
+        key: &'static str,
+    ) -> Result<Self, Error> {
+        match table.get(key).ok_or(Error::MissingFork(key))? {
+            None => Ok(Self::Never),
+            Some(v) => match v.parse::<u64>() {
+                Ok(UNSCHEDULED_BLOCK) => Ok(Self::Unscheduled),
+                Ok(n) => Ok(Self::At(n)),
+                Err(_) => Err(Error::invalid(key, v)),
+            },
+        }
     }
 
     /// Value of a fork a custom genesis must define; absence is a start-up error.
@@ -56,22 +87,57 @@ impl ForkBlock {
     }
 }
 
-// One list drives the struct, the all-`Never` base and the row listing, so a
-// new fork cannot be added to one and forgotten in another.
+/// An error for any non-null key of `table` outside `known`: geth sets a fork
+/// this crate has no field for, so it must not be dropped silently.
+fn reject_unmodelled(
+    table: &BTreeMap<String, Option<String>>,
+    known: &[&str],
+) -> Result<(), Error> {
+    match table
+        .iter()
+        .find(|(k, v)| v.is_some() && !known.contains(&k.as_str()))
+    {
+        Some((k, _)) => Err(Error::UnmodelledFork(k.clone())),
+        None => Ok(()),
+    }
+}
+
+// One list drives the struct, the loader and the row listing, so a new fork
+// cannot be added to one and forgotten in another. `name = "jsonKey"`.
 macro_rules! chain_spec {
-    ($($fork:ident),* $(,)?) => {
+    ($($fork:ident = $key:literal),* $(,)?) => {
         /// Chain id, fork schedule and XDPoS parameters of one network.
         #[derive(Debug, Clone, PartialEq)]
         pub struct ChainSpec {
             pub chain_id: u64,
             $(pub $fork: ForkBlock,)*
+            /// Activations geth really uses; see [`Effective`].
+            pub effective: Effective,
             pub xdpos: XdposConfig,
+            /// `Genesis.ToBlock().Hash()` at the pin.
+            pub genesis_hash: B256,
+            /// `Genesis.ToBlock().Root()` at the pin.
+            pub genesis_state_root: B256,
         }
 
         impl ChainSpec {
-            /// Every fork `Never`; built-ins override what geth sets.
-            fn base(chain_id: u64, xdpos: XdposConfig) -> Self {
-                Self { chain_id, $($fork: ForkBlock::Never,)* xdpos }
+            /// Every `*Block` row of the generated table must be present.
+            fn from_table(
+                chain_id: u64,
+                blocks: &BTreeMap<String, Option<String>>,
+                effective: Effective,
+                xdpos: XdposConfig,
+                genesis: (B256, B256),
+            ) -> Result<Self, Error> {
+                reject_unmodelled(blocks, &[$($key),*])?;
+                Ok(Self {
+                    chain_id,
+                    $($fork: ForkBlock::from_table(blocks, $key)?,)*
+                    effective,
+                    xdpos,
+                    genesis_hash: genesis.0,
+                    genesis_state_root: genesis.1,
+                })
             }
 
             /// `(name, activation)` for every fork, in declaration order.
@@ -83,45 +149,125 @@ macro_rules! chain_spec {
 }
 
 chain_spec!(
-    homestead,
-    eip150,
-    eip155,
-    eip158,
-    byzantium,
-    constantinople,
-    petersburg,
-    istanbul,
-    berlin,
-    london,
-    eip1559,
-    cancun,
-    prague,
-    amsterdam,
-    tip_fixed_reward,
-    tip_upgrade_penalty,
-    tip_proportional_reward,
-    gas2500x,
-    dynamic_gas_limit,
-    signing_tx_bound,
-    validator_order,
-    parole_dedup,
-    tip_signing,
-    tip2019,
-    tip_randomize,
-    tip_increase_masternodes,
-    denylist,
-    tip_no_halving_mn_reward,
-    tip_xdcx,
-    tip_xdcx_lending,
-    tip_xdcx_cancellation_fee,
-    tip_trc21_fee,
-    gas50x,
-    tip_xdcx_miner_disable,
-    tip_xdcx_receiver_disable,
-    tip_epoch_halving,
-    merge,
-    shanghai,
+    homestead = "homesteadBlock",
+    eip150 = "eip150Block",
+    eip155 = "eip155Block",
+    eip158 = "eip158Block",
+    byzantium = "byzantiumBlock",
+    constantinople = "constantinopleBlock",
+    petersburg = "petersburgBlock",
+    istanbul = "istanbulBlock",
+    berlin = "berlinBlock",
+    london = "londonBlock",
+    eip1559 = "eip1559Block",
+    cancun = "cancunBlock",
+    prague = "pragueBlock",
+    amsterdam = "amsterdamBlock",
+    tip_fixed_reward = "tipFixedRewardBlock",
+    tip_upgrade_penalty = "tipUpgradePenaltyBlock",
+    tip_proportional_reward = "tipProportionalRewardBlock",
+    gas2500x = "gas2500xBlock",
+    dynamic_gas_limit = "dynamicGasLimitBlock",
+    signing_tx_bound = "signingTxBoundBlock",
+    validator_order = "validatorOrderBlock",
+    parole_dedup = "paroleDedupBlock",
+    tip_signing = "tipSigningBlock",
+    tip2019 = "tip2019Block",
+    tip_randomize = "tipRandomizeBlock",
+    tip_increase_masternodes = "tipIncreaseMasternodesBlock",
+    denylist = "denylistBlock",
+    tip_no_halving_mn_reward = "tipNoHalvingMNRewardBlock",
+    tip_xdcx = "tipXDCXBlock",
+    tip_xdcx_lending = "tipXDCXLendingBlock",
+    tip_xdcx_cancellation_fee = "tipXDCXCancellationFeeBlock",
+    tip_trc21_fee = "tipTRC21FeeBlock",
+    gas50x = "gas50xBlock",
+    tip_xdcx_miner_disable = "tipXDCXMinerDisableBlock",
+    tip_xdcx_receiver_disable = "tipXDCXReceiverDisableBlock",
+    tip_epoch_halving = "tipEpochHalvingBlock",
+    merge = "mergeBlock",
+    shanghai = "shanghaiBlock",
 );
+
+macro_rules! effective {
+    ($($field:ident = $key:literal),* $(,)?) => {
+        /// First block at which geth's own predicate holds, found by the
+        /// exporter. Differs from the raw row where geth does not read the
+        /// row alone: a global TIP constant, or a fallback such as
+        /// `IsIstanbul` also firing at `TIPXDCXCancellationFee`.
+        #[derive(Debug, Clone, Copy, PartialEq)]
+        pub struct Effective {
+            $(pub $field: ForkBlock,)*
+        }
+
+        impl Effective {
+            fn from_table(table: &BTreeMap<String, Option<String>>) -> Result<Self, Error> {
+                reject_unmodelled(table, &[$($key),*])?;
+                Ok(Self { $($field: ForkBlock::from_table(table, $key)?,)* })
+            }
+        }
+    };
+}
+
+effective!(
+    constantinople = "constantinople",
+    eip1559 = "eip1559",
+    gas50x = "gas50x",
+    istanbul = "istanbul",
+    petersburg = "petersburg",
+    tip2019 = "tip2019",
+    tip_no_halving_mn_reward = "tipNoHalvingMNReward",
+    tip_randomize = "tipRandomize",
+    tip_signing = "tipSigning",
+    tip_trc21_fee = "tipTRC21Fee",
+    tip_xdcx = "tipXDCX",
+    tip_xdcx_cancellation_fee = "tipXDCXCancellationFee",
+    tip_xdcx_miner_disable = "tipXDCXMinerDisable",
+);
+
+/// Rules that geth derives from the table but not from one row. All are pure
+/// functions of the table; see `spec/chainspec/non-parameter-switches.md`.
+impl ChainSpec {
+    /// geth `IsIstanbul`: the Istanbul row, or `TIPXDCXCancellationFee`.
+    pub fn is_istanbul(&self, n: u64) -> bool {
+        self.istanbul.is_active(n) || self.effective.tip_xdcx_cancellation_fee.is_active(n)
+    }
+
+    /// geth `IsPetersburg`: `TIPXDCXCancellationFee`, the Petersburg row, or
+    /// Constantinople when the Petersburg row is `nil`.
+    pub fn is_petersburg(&self, n: u64) -> bool {
+        self.effective.tip_xdcx_cancellation_fee.is_active(n)
+            || self.petersburg.is_active(n)
+            || (self.petersburg == ForkBlock::Never && self.constantinople.is_active(n))
+    }
+
+    /// geth `IsEIP1559`: the `eip1559` row alone. There is no London fallback.
+    pub fn is_eip1559(&self, n: u64) -> bool {
+        self.eip1559.is_active(n)
+    }
+
+    /// geth `Rules.IsEIP2929` on XDC: Eip1559Block, not Berlin.
+    pub fn is_eip2929(&self, n: u64) -> bool {
+        self.is_eip1559(n)
+    }
+
+    /// geth `Rules.IsEIP3860` on XDC: Eip1559Block, not Shanghai.
+    pub fn is_eip3860(&self, n: u64) -> bool {
+        self.is_eip1559(n)
+    }
+
+    /// geth `XDCPreEIP2028Calldata`: 68 gas per non-zero calldata byte before
+    /// Prague, and on chain 5551 at every height.
+    pub fn is_pre_eip2028_calldata(&self, n: u64) -> bool {
+        !self.prague.is_active(n) || self.chain_id == 5551
+    }
+
+    /// geth `ApplyMulticall3HardFork`: Multicall3 code is installed on Prague
+    /// blocks after genesis, except on chain 5551.
+    pub fn installs_multicall3(&self, n: u64) -> bool {
+        n != 0 && self.prague.is_active(n) && self.chain_id != 5551
+    }
+}
 
 /// XDPoS consensus parameters (geth `XDPoSConfig`).
 #[derive(Debug, Clone, PartialEq)]
@@ -260,5 +406,288 @@ mod tests {
             let want = std::fs::read_to_string(&path).unwrap();
             assert_eq!(got, want, "{} fork rows changed", net.name());
         }
+    }
+
+    /// XDPoS parameters and every v2 round entry, one file per network, so a
+    /// change in `generated/forks.json` shows up as a diff of
+    /// `tests/snapshots/<net>.xdpos.txt`. Regenerate with `XONE_BLESS=1 cargo test`.
+    #[test]
+    fn xdpos_snapshot() {
+        for net in Network::ALL {
+            let got = format!("{:#?}\n", net.spec().xdpos);
+            let path = format!(
+                "{}/tests/snapshots/{}.xdpos.txt",
+                env!("CARGO_MANIFEST_DIR"),
+                net.name()
+            );
+            if std::env::var_os("XONE_BLESS").is_some() {
+                std::fs::write(&path, &got).unwrap();
+            }
+            let want = std::fs::read_to_string(&path).unwrap();
+            assert_eq!(got, want, "{} xdpos config changed", net.name());
+        }
+    }
+
+    fn at(f: ForkBlock) -> u64 {
+        match f {
+            ForkBlock::At(n) => n,
+            other => panic!("expected an active fork, got {other:?}"),
+        }
+    }
+
+    /// `forks.json` with `edit` applied, loaded as `net`.
+    fn load_edited(
+        net: Network,
+        edit: impl FnOnce(&mut serde_json::Value),
+    ) -> Result<ChainSpec, Error> {
+        let mut v: serde_json::Value =
+            serde_json::from_str(include_str!("../generated/forks.json")).unwrap();
+        edit(&mut v);
+        load(net, &v.to_string())
+    }
+
+    #[test]
+    fn generated_table_loads_and_matches_genesis() {
+        let table: serde_json::Value =
+            serde_json::from_str(include_str!("../generated/forks.json")).unwrap();
+        assert_eq!(
+            table["pin"].as_str().unwrap(),
+            include_str!("../genesis/PIN").trim()
+        );
+        for net in Network::ALL {
+            let spec = net.try_spec().unwrap();
+            let g = net.genesis().unwrap();
+            assert_eq!(g.hash(&spec).unwrap(), spec.genesis_hash, "{}", net.name());
+            assert_eq!(g.state_root(), spec.genesis_state_root, "{}", net.name());
+        }
+    }
+
+    #[test]
+    fn placeholder_is_unscheduled_and_null_is_never() {
+        let edit = |apothem_amsterdam: serde_json::Value| {
+            load_edited(Network::Apothem, |v| {
+                v["networks"]["apothem"]["blocks"]["amsterdamBlock"] = apothem_amsterdam;
+                v["networks"]["apothem"]["blocks"]["pragueBlock"] = serde_json::Value::Null;
+            })
+            .unwrap()
+        };
+        let s = edit("99999999999".into());
+        assert_eq!(s.amsterdam, ForkBlock::Unscheduled);
+        assert!(!s.amsterdam.is_active(u64::MAX));
+        assert_eq!(s.prague, ForkBlock::Never);
+        assert_eq!(edit("7".into()).amsterdam, ForkBlock::At(7));
+        // One above the placeholder is a real (absurd) height, not the sentinel.
+        assert_eq!(
+            edit("100000000000".into()).amsterdam,
+            ForkBlock::At(100_000_000_000)
+        );
+    }
+
+    #[test]
+    fn damaged_table_is_a_typed_error_not_a_default() {
+        let drop_key = |net: &'static str, section: &'static str, key: &'static str| {
+            load_edited(Network::Mainnet, |v| {
+                v["networks"][net][section]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove(key);
+            })
+        };
+        assert!(matches!(
+            drop_key("mainnet", "blocks", "eip1559Block"),
+            Err(Error::MissingFork("eip1559Block"))
+        ));
+        assert!(matches!(
+            drop_key("mainnet", "effective", "istanbul"),
+            Err(Error::MissingFork("istanbul"))
+        ));
+        assert!(matches!(
+            load_edited(Network::Mainnet, |v| {
+                v["networks"].as_object_mut().unwrap().remove("mainnet");
+            }),
+            Err(Error::MissingNetwork("mainnet"))
+        ));
+        // geth sets a fork this crate has no field for.
+        assert!(matches!(
+            load_edited(Network::Mainnet, |v| {
+                v["networks"]["mainnet"]["blocks"]["osakaBlock"] = "5".into();
+            }),
+            Err(Error::UnmodelledFork(k)) if k == "osakaBlock"
+        ));
+        assert!(matches!(
+            load_edited(Network::Mainnet, |v| {
+                v["networks"]["mainnet"]["blocks"]["londonBlock"] = "0x10".into();
+            }),
+            Err(Error::InvalidValue {
+                field: "londonBlock",
+                ..
+            })
+        ));
+        // A field the exporter adds must not be ignored here.
+        assert!(matches!(
+            load_edited(Network::Mainnet, |v| {
+                v["networks"]["mainnet"]["extra"] = 1.into();
+            }),
+            Err(Error::Json(_))
+        ));
+    }
+
+    /// Every block a rule can flip at, on each network, from the table itself.
+    fn probe_heights(spec: &ChainSpec) -> Vec<u64> {
+        let mut forks: Vec<ForkBlock> = spec.fork_rows().into_iter().map(|(_, f)| f).collect();
+        let e = &spec.effective;
+        forks.extend([
+            e.istanbul,
+            e.petersburg,
+            e.eip1559,
+            e.tip_xdcx_cancellation_fee,
+        ]);
+        let mut hs: Vec<u64> = forks
+            .into_iter()
+            .filter_map(|f| match f {
+                ForkBlock::At(n) => Some([n.saturating_sub(1), n, n + 1]),
+                _ => None,
+            })
+            .flatten()
+            .collect();
+        hs.sort_unstable();
+        hs.dedup();
+        hs
+    }
+
+    #[test]
+    fn derived_rules_equal_what_geth_exported() {
+        for net in Network::ALL {
+            let s = net.spec();
+            for n in probe_heights(&s) {
+                let name = net.name();
+                assert_eq!(
+                    s.is_istanbul(n),
+                    s.effective.istanbul.is_active(n),
+                    "{name} istanbul {n}"
+                );
+                assert_eq!(
+                    s.is_petersburg(n),
+                    s.effective.petersburg.is_active(n),
+                    "{name} petersburg {n}"
+                );
+                assert_eq!(
+                    s.is_eip1559(n),
+                    s.effective.eip1559.is_active(n),
+                    "{name} eip1559 {n}"
+                );
+                // Constantinople has no fallback: the row is the rule.
+                assert_eq!(
+                    s.constantinople.is_active(n),
+                    s.effective.constantinople.is_active(n),
+                    "{name} constantinople {n}"
+                );
+            }
+        }
+    }
+
+    /// `(minus one, exact, plus one)` of `rule` around `boundary`.
+    fn edge(rule: impl Fn(u64) -> bool, boundary: u64) -> (bool, bool, bool) {
+        (rule(boundary - 1), rule(boundary), rule(boundary + 1))
+    }
+
+    #[test]
+    fn istanbul_and_petersburg_fire_at_tipxdcx_cancellation_fee() {
+        for net in [Network::Mainnet, Network::Apothem] {
+            let s = net.spec();
+            let b = at(s.effective.tip_xdcx_cancellation_fee);
+            // The row is later than the effective block: the fallback is what fires.
+            assert!(at(s.istanbul) > b && at(s.petersburg) > b, "{}", net.name());
+            assert_eq!(
+                edge(|n| s.is_istanbul(n), b),
+                (false, true, true),
+                "{}",
+                net.name()
+            );
+            assert_eq!(
+                edge(|n| s.is_petersburg(n), b),
+                (false, true, true),
+                "{}",
+                net.name()
+            );
+            // The row itself changes nothing more once the fallback is active.
+            let r = at(s.istanbul);
+            assert_eq!(
+                edge(|n| s.is_istanbul(n), r),
+                (true, true, true),
+                "{}",
+                net.name()
+            );
+            // Constantinople has no fallback.
+            assert_eq!(
+                edge(|n| s.constantinople.is_active(n), at(s.constantinople)),
+                (false, true, true)
+            );
+            assert!(!s.constantinople.is_active(b));
+        }
+    }
+
+    #[test]
+    fn eip1559_is_its_own_row_not_london() {
+        for net in [Network::Mainnet, Network::Apothem] {
+            let s = net.spec();
+            let b = at(s.eip1559);
+            assert!(at(s.london) < b, "{}", net.name());
+            assert_eq!(
+                edge(|n| s.is_eip1559(n), b),
+                (false, true, true),
+                "{}",
+                net.name()
+            );
+            assert_eq!(
+                edge(|n| s.is_eip2929(n), b),
+                (false, true, true),
+                "{}",
+                net.name()
+            );
+            assert_eq!(
+                edge(|n| s.is_eip3860(n), b),
+                (false, true, true),
+                "{}",
+                net.name()
+            );
+            // London alone does not turn the fee market on.
+            assert!(!s.is_eip1559(at(s.london)), "{}", net.name());
+        }
+        // No London fallback when the row is absent.
+        let mut s = Network::Apothem.spec();
+        s.eip1559 = ForkBlock::Never;
+        assert!(!s.is_eip1559(u64::MAX));
+    }
+
+    #[test]
+    fn calldata_price_exception_for_chain_5551() {
+        let s = Network::Apothem.spec();
+        assert_eq!(
+            edge(|n| s.is_pre_eip2028_calldata(n), at(s.prague)),
+            (true, false, false)
+        );
+        // Mainnet has no Prague yet: 68 gas at every height.
+        assert!(Network::Mainnet.spec().is_pre_eip2028_calldata(u64::MAX));
+        // Devnet 5551 activates Prague and keeps 68 gas.
+        let d = Network::Devnet.spec();
+        assert_eq!(
+            edge(|n| d.is_pre_eip2028_calldata(n), at(d.prague)),
+            (true, true, true)
+        );
+        let d551 = Network::Devnet551.spec();
+        assert!(!d551.is_pre_eip2028_calldata(at(d551.prague)));
+
+        // Multicall3 is installed from Prague on, but never on 5551.
+        assert_eq!(
+            edge(|n| s.installs_multicall3(n), at(s.prague)),
+            (false, true, true)
+        );
+        assert_eq!(
+            edge(|n| d551.installs_multicall3(n), at(d551.prague)),
+            (false, true, true)
+        );
+        assert!(!d.installs_multicall3(at(d.prague)) && !d.installs_multicall3(u64::MAX));
+        assert!(!Network::Mainnet.spec().installs_multicall3(u64::MAX));
     }
 }

@@ -1,15 +1,14 @@
-//! The four built-in XDC networks, ported from geth-XDC `params/config.go`
-//! (`XDC{Mainnet,Apothem,Devnet,Devnet551}ChainConfig` and the `*V2Configs`).
+//! The four built-in XDC networks, loaded from `generated/forks.json`.
 
 use std::{collections::BTreeMap, str::FromStr};
 
-use alloy_primitives::address;
+use alloy_primitives::{Address, B256};
+use serde::Deserialize;
 
-use crate::{
-    ChainSpec, Error, ExpTimeoutConfig,
-    ForkBlock::{At, Unscheduled},
-    Genesis, V2Config, XdposConfig, V2,
-};
+use crate::{ChainSpec, Effective, Error, ExpTimeoutConfig, Genesis, V2Config, XdposConfig, V2};
+
+/// Written by `conformance/exporter` from the pinned geth-XDC. Never edit it.
+const FORKS_JSON: &str = include_str!("../generated/forks.json");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Network {
@@ -27,13 +26,16 @@ impl Network {
         Self::NAMES[self as usize]
     }
 
+    /// The built-in spec, or the typed error of a damaged generated table.
+    pub fn try_spec(self) -> Result<ChainSpec, Error> {
+        load(self, FORKS_JSON)
+    }
+
+    /// The built-in spec. `generated/forks.json` is part of the build and a
+    /// test loads every network from it, so this cannot fail in a shipped binary.
     pub fn spec(self) -> ChainSpec {
-        match self {
-            Self::Mainnet => mainnet(),
-            Self::Apothem => apothem(),
-            Self::Devnet => devnet(),
-            Self::Devnet551 => devnet551(),
-        }
+        self.try_spec()
+            .expect("generated/forks.json is checked by the test suite")
     }
 
     /// The byte-exact genesis file from the geth-XDC pin.
@@ -61,244 +63,167 @@ impl FromStr for Network {
     }
 }
 
-/// A v2 entry with the fields every geth entry sets.
-fn v2cfg(max_masternodes: u64, cert_threshold: f64, sync: u64, timeout: u64) -> V2Config {
-    V2Config {
-        max_masternodes,
-        cert_threshold,
-        timeout_sync_threshold: sync,
-        timeout_period: timeout,
-        mine_period: 2,
-        exp_timeout: ExpTimeoutConfig {
-            base: 1.0,
-            max_exponent: 0,
-        },
-        ..Default::default()
-    }
-}
-
-/// A v2 entry with the node tiers, tiered rewards and penalty parameters
-/// (geth v2.8.0+). `tiers` is (protector, observer) caps, `rewards` is
-/// (masternode, protector, observer).
-fn v2tiered(base: V2Config, tiers: (u64, u64), rewards: (f64, f64, f64)) -> V2Config {
-    V2Config {
-        max_protector_nodes: tiers.0,
-        max_observer_nodes: tiers.1,
-        masternode_reward: rewards.0,
-        protector_reward: rewards.1,
-        observer_reward: rewards.2,
-        minimum_miner_block_per_epoch: 5,
-        limit_penalty_epoch: 5,
-        minimum_signing_tx: 30,
-        ..base
-    }
-}
-
-fn v2(switch_block: u64, switch_epoch: u64, configs: Vec<(u64, V2Config)>) -> Option<V2> {
-    Some(V2 {
-        switch_block,
-        switch_epoch,
-        configs: BTreeMap::from_iter(configs),
-    })
-}
-
-fn xdpos(reward: u64, foundation_wallet: alloy_primitives::Address, v2: Option<V2>) -> XdposConfig {
-    XdposConfig {
-        period: 2,
-        epoch: 900,
-        reward,
-        reward_checkpoint: 900,
-        gap: 450,
-        foundation_wallet,
-        max_masternodes_v2: 0,
-        v2,
-    }
-}
-
 /// Chain 50.
 pub fn mainnet() -> ChainSpec {
-    let c = v2cfg;
-    let configs = vec![
-        (0, c(108, 0.667, 3, 30)),
-        (2000, c(108, 0.667, 2, 600)),
-        (8000, c(108, 0.667, 2, 60)),
-        (220_000, c(108, 0.667, 2, 30)),
-        (460_000, c(108, 0.667, 2, 20)),
-        (3_200_000, c(108, 0.667, 3, 10)),
-        (17_579_700, c(108, 0.667, 3, 60)),
-    ];
-    ChainSpec {
-        homestead: At(1),
-        eip150: At(2),
-        eip155: At(3),
-        eip158: At(3),
-        byzantium: At(4),
-        constantinople: At(76_321_000),
-        petersburg: At(76_321_000),
-        istanbul: At(76_321_000),
-        berlin: At(76_321_000),
-        london: At(76_321_000),
-        eip1559: At(98_800_200),
-        cancun: At(98_802_000),
-        amsterdam: Unscheduled,
-        signing_tx_bound: Unscheduled,
-        validator_order: Unscheduled,
-        parole_dedup: Unscheduled,
-        ..ChainSpec::base(
-            50,
-            xdpos(
-                5000,
-                address!("92a289fe95a85c53b8d0d113cbaef0c1ec98ac65"),
-                v2(80_370_000, 89_300, configs),
-            ),
-        )
-    }
+    Network::Mainnet.spec()
 }
 
 /// Chain 51.
 pub fn apothem() -> ChainSpec {
-    let c = v2cfg;
-    let configs = vec![
-        (0, c(15, 0.45, 3, 60)),
-        (900_000, c(108, 0.667, 3, 60)),
-        (20_277_000, c(108, 0.667, 3, 10)),
-        (
-            27_360_000,
-            v2tiered(c(25, 0.667, 3, 10), (3, 2), (63.42, 50.27, 25.13)),
-        ),
-        (
-            27_400_500,
-            v2tiered(
-                c(108, 0.667, 3, 10),
-                (432, 99_999),
-                (63.4196, 50.7357, 25.3678),
-            ),
-        ),
-    ];
-    ChainSpec {
-        homestead: At(1),
-        eip150: At(2),
-        eip155: At(3),
-        eip158: At(3),
-        byzantium: At(4),
-        constantinople: At(61_290_000),
-        petersburg: At(61_290_000),
-        istanbul: At(61_290_000),
-        berlin: At(61_290_000),
-        london: At(61_290_000),
-        eip1559: At(71_550_000),
-        cancun: At(71_551_800),
-        tip_fixed_reward: At(83_600_000),
-        tip_upgrade_penalty: At(83_600_000),
-        tip_proportional_reward: At(84_733_000),
-        gas2500x: At(83_600_000),
-        dynamic_gas_limit: At(83_600_000),
-        prague: At(84_333_000),
-        amsterdam: Unscheduled,
-        signing_tx_bound: Unscheduled,
-        validator_order: Unscheduled,
-        parole_dedup: Unscheduled,
-        ..ChainSpec::base(
-            51,
-            xdpos(
-                5000,
-                address!("746249c61f5832c5eed53172776b460491bdcd5c"),
-                v2(56_828_700, 63_143, configs),
-            ),
-        )
-    }
+    Network::Apothem.spec()
 }
 
 /// Chain 5551.
 pub fn devnet() -> ChainSpec {
-    let c = v2cfg;
-    let configs = vec![
-        (0, c(108, 0.667, 3, 10)),
-        (
-            50_000,
-            v2tiered(c(108, 0.667, 3, 10), (324, 2000), (63.42, 50.27, 25.13)),
-        ),
-    ];
-    ChainSpec {
-        homestead: At(0),
-        eip150: At(0),
-        eip155: At(0),
-        eip158: At(0),
-        byzantium: At(0),
-        constantinople: At(0),
-        petersburg: At(0),
-        istanbul: At(0),
-        berlin: At(0),
-        london: At(0),
-        eip1559: At(25_000),
-        cancun: At(25_000),
-        prague: At(50_000),
-        tip_proportional_reward: At(50_000),
-        tip_upgrade_penalty: At(50_000),
-        ..ChainSpec::base(
-            5551,
-            xdpos(
-                7125,
-                address!("4f288181b1d1aa599c6d7629f1168d46d5f96338"),
-                v2(2700, 3, configs),
-            ),
-        )
-    }
+    Network::Devnet.spec()
 }
 
 /// Chain 551.
 pub fn devnet551() -> ChainSpec {
-    let c = v2cfg;
-    let configs = vec![
-        (0, c(18, 0.667, 3, 10)),
-        (
-            45_000,
-            v2tiered(c(10, 0.667, 3, 10), (3, 10), (63.42, 50.27, 25.13)),
-        ),
-        (
-            1_683_000,
-            v2tiered(c(10, 0.667, 3, 10), (3, 10), (63.4196, 50.7357, 25.3678)),
-        ),
-    ];
-    let mut x = xdpos(
-        1026,
-        address!("f8b10955abe83acfdae2dbd4b5d351fc5e1c3672"),
-        v2(2700, 3, configs),
-    );
-    x.max_masternodes_v2 = 18;
-    ChainSpec {
-        homestead: At(0),
-        eip150: At(0),
-        eip155: At(0),
-        eip158: At(0),
-        byzantium: At(0),
-        constantinople: At(0),
-        petersburg: At(0),
-        istanbul: At(0),
-        berlin: At(0),
-        london: At(0),
-        merge: At(0),
-        shanghai: At(0),
-        tip2019: At(0),
-        tip_signing: At(0),
-        tip_randomize: At(0),
-        tip_increase_masternodes: At(0),
-        denylist: At(0),
-        tip_no_halving_mn_reward: At(0),
-        tip_xdcx: At(0),
-        tip_xdcx_lending: At(0),
-        tip_xdcx_cancellation_fee: At(0),
-        tip_trc21_fee: At(0),
-        gas50x: At(0),
-        gas2500x: At(1_385_100),
-        tip_xdcx_miner_disable: At(0),
-        tip_xdcx_receiver_disable: At(0),
-        eip1559: At(25_000),
-        cancun: At(25_000),
-        prague: At(50_000),
-        dynamic_gas_limit: At(50_000),
-        tip_fixed_reward: At(50_000),
-        tip_upgrade_penalty: At(50_000),
-        ..ChainSpec::base(551, x)
-    }
+    Network::Devnet551.spec()
+}
+
+// Shapes of generated/forks.json. Unknown keys are an error so that a field
+// added to the exporter cannot be ignored here.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawFile {
+    #[allow(dead_code)] // checked against genesis/PIN by a test
+    pin: String,
+    networks: BTreeMap<String, RawNetwork>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RawNetwork {
+    chain_id: String,
+    blocks: BTreeMap<String, Option<String>>,
+    effective: BTreeMap<String, Option<String>>,
+    xdpos: RawXdpos,
+    genesis: RawGenesis,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RawGenesis {
+    hash: B256,
+    state_root: B256,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RawXdpos {
+    period: u64,
+    epoch: u64,
+    reward: u64,
+    reward_checkpoint: u64,
+    gap: u64,
+    foudation_wallet_addr: Address,
+    max_masternodes_v2: u64,
+    v2: RawV2,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RawV2 {
+    switch_block: String,
+    switch_epoch: u64,
+    all_configs: BTreeMap<u64, RawV2Config>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RawV2Config {
+    // geth leaves it unset on several entries; the map key is authoritative.
+    #[allow(dead_code)]
+    switch_round: u64,
+    mine_period: u64,
+    timeout_sync_threshold: u64,
+    timeout_period: u64,
+    #[serde(rename = "certificateThreshold")]
+    cert_threshold: f64,
+    max_masternodes: u64,
+    max_protector_nodes: u64,
+    max_observer_nodes: u64,
+    masternode_reward: f64,
+    protector_reward: f64,
+    observer_reward: f64,
+    minimum_miner_block_per_epoch: u64,
+    limit_penalty_epoch: u64,
+    minimum_signing_tx: u64,
+    exp_timeout_config: RawExpTimeout,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RawExpTimeout {
+    base: f64,
+    max_exponent: u8,
+}
+
+/// Build the spec of `net` from the text of a generated fork table. A row the
+/// table lacks, a value that is not a decimal block number, or a fork this
+/// crate does not model is an error; nothing defaults.
+pub fn load(net: Network, json: &str) -> Result<ChainSpec, Error> {
+    let mut file: RawFile = serde_json::from_str(json)?;
+    let raw = file
+        .networks
+        .remove(net.name())
+        .ok_or(Error::MissingNetwork(net.name()))?;
+    let x = raw.xdpos;
+    let switch_block =
+        x.v2.switch_block
+            .parse()
+            .map_err(|_| Error::invalid("v2.switchBlock", &x.v2.switch_block))?;
+    let configs =
+        x.v2.all_configs
+            .into_iter()
+            .map(|(round, c)| {
+                let cfg = V2Config {
+                    mine_period: c.mine_period,
+                    timeout_sync_threshold: c.timeout_sync_threshold,
+                    timeout_period: c.timeout_period,
+                    cert_threshold: c.cert_threshold,
+                    max_masternodes: c.max_masternodes,
+                    max_protector_nodes: c.max_protector_nodes,
+                    max_observer_nodes: c.max_observer_nodes,
+                    masternode_reward: c.masternode_reward,
+                    protector_reward: c.protector_reward,
+                    observer_reward: c.observer_reward,
+                    minimum_miner_block_per_epoch: c.minimum_miner_block_per_epoch,
+                    limit_penalty_epoch: c.limit_penalty_epoch,
+                    minimum_signing_tx: c.minimum_signing_tx,
+                    exp_timeout: ExpTimeoutConfig {
+                        base: c.exp_timeout_config.base,
+                        max_exponent: c.exp_timeout_config.max_exponent,
+                    },
+                };
+                (round, cfg)
+            })
+            .collect();
+    let xdpos = XdposConfig {
+        period: x.period,
+        epoch: x.epoch,
+        reward: x.reward,
+        reward_checkpoint: x.reward_checkpoint,
+        gap: x.gap,
+        foundation_wallet: x.foudation_wallet_addr,
+        max_masternodes_v2: x.max_masternodes_v2,
+        v2: Some(V2 {
+            switch_block,
+            switch_epoch: x.v2.switch_epoch,
+            configs,
+        }),
+    };
+    let chain_id = raw
+        .chain_id
+        .parse()
+        .map_err(|_| Error::invalid("chainId", &raw.chain_id))?;
+    ChainSpec::from_table(
+        chain_id,
+        &raw.blocks,
+        Effective::from_table(&raw.effective)?,
+        xdpos,
+        (raw.genesis.hash, raw.genesis.state_root),
+    )
 }

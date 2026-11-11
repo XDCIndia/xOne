@@ -12,6 +12,8 @@ Only genesis and chain-spec code exist so far. There is no sync, EVM, consensus,
 | `crates/xone-chainspec` | Chain specs for mainnet (50), apothem (51), devnet (5551) and devnet551 (551), and genesis loading |
 | `bin/xone` | `--version` stamp and `genesis-hash` |
 
+The fork table in `crates/xone-chainspec/generated/forks.json` is generated from the pinned geth-XDC by `conformance/exporter` (`cd conformance/exporter && go run .`; `go run . -check` is the drift gate, needs `conformance/fetch-geth.sh` and read access to the private fork). Rule pages are in [`spec/`](spec/README.md).
+
 The genesis hashes are tested against the constants in geth-XDC `params/config.go`. The pinned geth-XDC commit is in `crates/xone-chainspec/genesis/PIN`.
 
 ## Build and run
