@@ -42,14 +42,15 @@ Apothem (51) and every other XDC network with a V1 phase. On chain 51 steps 10 a
 
 ## Rust
 
-- `xone_consensus::verify::HeaderVerifier::verify` with a `Context::V1(V1Context)` (`crates/xone-consensus/src/verify/header.rs`, `verify_v1`, `verify_seal_v1`, `v1_assigned_validator`).
+- `xone_consensus::verify::HeaderVerifier::verify` with a `Context::V1(V1Context)` (`crates/xone-consensus/src/verify/header.rs`, `verify_v1`, `verify_seal_v1`). The timestamp, difficulty, creator and double-validation rules are the pure functions of `xone_consensus::v1` (`check_timestamp`, `turn::difficulty`, `turn::authorize`, `double_validation::assigned_validator`, `check_double_validation`); see `v1-snapshot.md`, `v1-checkpoint-masternodes.md`, `v1-penalties.md` and `v1-double-validation.md`.
+- Where geth skips the difficulty comparison because its `YourTurn` fails (no masternodes, a parent whose seal does not recover), the verifier returns a typed error (`MissingMasternodes`, `Seal`): a missing input is never a pass.
 - Inputs the caller supplies, from the archive in the corpus: `masternodes` (`XDPoS_getMasternodes(n)`), `parent_masternodes` (`XDPoS_getMasternodes(n-1)`), `signers` (`XDPoS_getSignersAtHash(parent)`), the checkpoint header of the epoch, and for a checkpoint block `checkpoint_signers` (`XDPoS_getSignersAtHash(block)`).
 - Typed errors: `HeaderError` in `crates/xone-consensus/src/verify/error.rs`; its variant names are the `expect` of a negative vector.
 - Corpus: `crates/xone-consensus/tests/corpus.rs`; rules with their recipes in `conformance/negative-gen/src/main.rs` (names starting `v1_` and the common ones).
 
 ## Not covered
 
-- Checkpoint penalties (`errInvalidCheckpointPenalties`, `xdpos.go:1075`) and the removal of penalties of the previous epochs from the expected signers (`:1085`) need the sign-transaction history of the previous epochs: XB-10. The caller passes the final expected signer list instead, which the archive supplies as the snapshot at the checkpoint. That list is read from the same node that produced the header, so it proves the comparison and not the list.
+- Checkpoint penalties (`errInvalidCheckpointPenalties`, `xdpos.go:1075`) and the removal of penalties of the previous epochs from the expected signers (`:1085`): the list is derived in `v1::checkpoint` and `v1::penalty` and tested against the archive's checkpoint headers (`v1-checkpoint-masternodes.md`, `v1-penalties.md`); only the comeback part is XB-10. `HeaderVerifier` still takes the final expected signer list from its caller, which the archive supplies as the snapshot at the checkpoint, so for a header that list is read from the same node that produced it.
 - The ignore list `IgnoreSignerCheckBlocksMainnet` and its Apothem twin (`consensus/XDPoS/constants.go:162-184`) skips the checkpoint signer compare on a few blocks of chain 50 and 51; chain 51 skips it anyway and no mainnet vector exists.
 - The recent-signers rule uses the creator of the parent. geth reads the snapshot's `Recents` map; the newest entry of that map is the parent's creator (`snapshot.go` apply), and only that entry can be within two blocks.
 - Seal check order matters for the negative vectors: a V1 header is sealed over every field but the last 65 bytes of `extraData`, `validators`, `validator` and `penalties`, so a mutated field changes the recovered creator. A rule is therefore only testable if geth rejects before it recovers or the rule does not depend on the creator (see the recipes).

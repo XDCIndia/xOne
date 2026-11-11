@@ -20,10 +20,12 @@ use xone_chainspec::{ChainSpec, V2};
 use xone_primitives::{ecrecover, BlockInfo, Header, QuorumCert, EXTRA_SEAL};
 
 use super::error::HeaderError;
+use crate::v1::{
+    checkpoint::{addresses, same_set},
+    double_validation, switch, turn,
+};
 
 const EXTRA_VANITY: usize = 32;
-/// geth `EpocBlockRandomize` (`consensus/XDPoS/constants.go:38`).
-const EPOCH_BLOCK_RANDOMIZE: u64 = 900;
 /// geth `params.XDCBaseFee`, 12.5 gwei (`params/protocol_params.go:175`).
 const XDC_BASE_FEE: u64 = 12_500_000_000;
 /// geth `gas2500xMultiplier` (`params/xdc_gas.go:32`).
@@ -79,35 +81,6 @@ pub enum Context {
 
 pub struct HeaderVerifier<'a> {
     spec: &'a ChainSpec,
-}
-
-fn addresses(bytes: &[u8]) -> Vec<Address> {
-    // geth `contracts.ExtractAddressFromBytes`: a trailing partial address is dropped.
-    bytes
-        .chunks_exact(Address::len_bytes())
-        .map(Address::from_slice)
-        .collect()
-}
-
-/// geth `utils.CompareSignersLists`: equal as multisets.
-fn same_set(a: &[Address], b: &[Address]) -> bool {
-    let (mut a, mut b) = (a.to_vec(), b.to_vec());
-    a.sort();
-    b.sort();
-    a == b
-}
-
-fn position(list: &[Address], x: Address) -> i64 {
-    list.iter().position(|a| *a == x).map_or(-1, |i| i as i64)
-}
-
-/// geth `Hop` (`consensus/XDPoS/utils/utils.go:25`).
-fn hop(len: i64, pre: i64, cur: i64) -> i64 {
-    match pre.cmp(&cur) {
-        std::cmp::Ordering::Less => cur - (pre + 1),
-        std::cmp::Ordering::Greater => (len - pre) + (cur - 1),
-        std::cmp::Ordering::Equal => len - 1,
-    }
 }
 
 fn nonce_ok(h: &Header) -> bool {
@@ -247,13 +220,7 @@ impl<'a> HeaderVerifier<'a> {
         }
         // Cascading fields.
         self.parent_link(h, parent)?;
-        if parent.timestamp.wrapping_add(x.period) > h.timestamp {
-            return Err(HeaderError::InvalidTimestamp {
-                time: h.timestamp,
-                parent: parent.timestamp,
-                period: x.period,
-            });
-        }
+        crate::v1::check_timestamp(parent.timestamp, h.timestamp, x.period)?;
         let full_verify = self.spec.chain_id != APOTHEM_CHAIN_ID;
         if checkpoint && full_verify {
             let listed = addresses(&h.extra_data[EXTRA_VANITY..len - EXTRA_SEAL]);
@@ -277,100 +244,36 @@ impl<'a> HeaderVerifier<'a> {
         // The parent's creator is geth `whoIsCreator(parent)`, which is also the
         // newest entry of the snapshot's recent signers.
         let parent_creator = (parent.number != 0)
-            .then(|| parent.v1_signer().ok())
-            .flatten();
-        let want = self.v1_difficulty(parent, parent_creator, creator, &ctx.parent_masternodes);
-        let have = h.difficulty.as_limbs()[0] as i64;
-        if want != 0 && have != want {
-            return Err(HeaderError::InvalidDifficulty { have, want });
-        }
-
-        if !ctx.signers.contains(&creator) && !ctx.masternodes.contains(&creator) {
-            return Err(HeaderError::Unauthorized(creator));
-        }
-        if ctx.masternodes.len() > 1 && n % epoch != 0 && parent_creator == Some(creator) {
-            return Err(HeaderError::Unauthorized(creator));
-        }
+            .then(|| parent.v1_signer())
+            .transpose()?;
+        let want = turn::difficulty(
+            &ctx.parent_masternodes,
+            parent.number,
+            parent_creator,
+            creator,
+        )?;
+        turn::check_difficulty(h.difficulty.as_limbs()[0] as i64, want)?;
+        turn::authorize(
+            creator,
+            &ctx.signers,
+            &ctx.masternodes,
+            parent_creator,
+            n,
+            epoch,
+        )?;
 
         if double_validation && n > epoch {
-            if h.validator.is_empty() {
-                return Err(HeaderError::NoValidatorSignature);
-            }
-            let validator = ecrecover(&h.seal_hash(), &h.validator)
-                .map_err(|_| HeaderError::InvalidValidatorSignature)?;
-            let assigned = self.v1_assigned_validator(h, creator, ctx)?;
-            if validator != assigned {
-                return Err(HeaderError::FailedDoubleValidation { creator, validator });
-            }
+            double_validation::check_double_validation(h, creator, || {
+                double_validation::assigned_validator(
+                    h,
+                    creator,
+                    ctx.checkpoint.as_ref(),
+                    epoch,
+                    self.spec.effective.tip_randomize.is_active(n),
+                )
+            })?;
         }
         Ok(())
-    }
-
-    /// geth `calcDifficulty` over `YourTurn` (`xdpos.go:1875`, `:1983`). `0` stands for the
-    /// cases where `YourTurn` fails and geth skips the comparison.
-    fn v1_difficulty(
-        &self,
-        parent: &Header,
-        parent_creator: Option<Address>,
-        creator: Address,
-        masternodes: &[Address],
-    ) -> i64 {
-        let len = masternodes.len() as i64;
-        if len == 0 {
-            return 0;
-        }
-        let pre = match (parent.number, parent_creator) {
-            (0, _) => -1,
-            (_, Some(p)) => position(masternodes, p),
-            (_, None) => return 0,
-        };
-        len - hop(len, pre, position(masternodes, creator))
-    }
-
-    /// geth `getValidatorWithParents` and `getM1M2` (`xdpos_api.go:126`, `double_validation.go:57`).
-    fn v1_assigned_validator(
-        &self,
-        h: &Header,
-        creator: Address,
-        ctx: &V1Context,
-    ) -> Result<Address, HeaderError> {
-        let epoch = self.spec.xdpos.epoch;
-        let cp_no = h.number - h.number % epoch;
-        if cp_no == 0 {
-            return Ok(Address::ZERO);
-        }
-        let cp = if h.number.is_multiple_of(epoch) {
-            h
-        } else {
-            ctx.checkpoint.as_ref().ok_or(HeaderError::M2Assignment)?
-        };
-        if cp.number != cp_no || cp.number % EPOCH_BLOCK_RANDOMIZE != 0 {
-            return Err(HeaderError::M2Assignment);
-        }
-        let masternodes = match cp.extra_data.len().checked_sub(EXTRA_VANITY + EXTRA_SEAL) {
-            Some(_) => addresses(&cp.extra_data[EXTRA_VANITY..cp.extra_data.len() - EXTRA_SEAL]),
-            None => vec![],
-        };
-        let max = masternodes.len() as i64;
-        let tokens = m2_tokens(&cp.validators);
-        if (tokens.len() as i64) < max {
-            return Err(HeaderError::M2Assignment);
-        }
-        if max == 0 {
-            return Ok(Address::ZERO);
-        }
-        let move_m2 = if self.spec.effective.tip_randomize.is_active(h.number) {
-            ((h.number % epoch) / max as u64) % max as u64
-        } else {
-            0
-        };
-        Ok(masternodes
-            .iter()
-            .position(|m| *m == creator)
-            .map_or(Address::ZERO, |i| {
-                let index = ((tokens[i] % max) as u64 + move_m2) % max as u64;
-                masternodes[index as usize]
-            }))
     }
 
     // ---------------------------------------------------------------- V2
@@ -521,8 +424,7 @@ impl<'a> HeaderVerifier<'a> {
         let info = &qc.proposed_block_info;
         let masternodes = if parent.number == v2.switch_block {
             // The switch block lists its masternodes in `extra_data`, as a V1 checkpoint.
-            let end = parent.extra_data.len().saturating_sub(EXTRA_SEAL);
-            addresses(parent.extra_data.get(EXTRA_VANITY..end).unwrap_or_default())
+            switch::switch_masternodes(parent)?
         } else {
             ctx.parent_masternodes.clone().unwrap_or_default()
         };
@@ -600,26 +502,4 @@ impl<'a> HeaderVerifier<'a> {
 
 fn parent_epoch_base(switch: u64, epoch: u64) -> u64 {
     switch - switch % epoch
-}
-
-/// geth `ExtractValidatorsFromBytes` (`xdpos.go:2732`): 4-byte ASCII decimal tokens, with
-/// NUL padding trimmed from both ends; one bad token empties the list.
-fn m2_tokens(bytes: &[u8]) -> Vec<i64> {
-    let mut out = vec![];
-    for chunk in bytes.chunks_exact(4) {
-        let start = chunk.iter().position(|b| *b != 0);
-        let end = chunk.iter().rposition(|b| *b != 0);
-        let text = match (start, end) {
-            (Some(s), Some(e)) => &chunk[s..=e],
-            _ => &[][..],
-        };
-        match std::str::from_utf8(text)
-            .ok()
-            .and_then(|t| t.parse::<i64>().ok())
-        {
-            Some(v) => out.push(v),
-            None => return vec![],
-        }
-    }
-    out
 }
