@@ -1,6 +1,10 @@
 //! Typed rejection reasons. Each variant names the geth-XDC error it stands for;
 //! the mapping with file and line is in `spec/consensus/`. [`HeaderError::code`]
 //! and [`BodyError::code`] give the variant name, which the corpus stores.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "error display only; no consensus effect"
+)]
 
 use alloy_primitives::{Address, B256};
 use thiserror::Error;

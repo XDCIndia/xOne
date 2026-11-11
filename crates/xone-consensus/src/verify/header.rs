@@ -2,6 +2,14 @@
 //! order, with the strict (full verification) branch everywhere geth has a
 //! bulk-sync tolerance. Pure: the caller supplies the parent, the clock and the
 //! masternode data of the context; nothing is read from the environment.
+#![allow(
+    clippy::as_conversions,
+    reason = "mirrors geth int64/float64 consensus arithmetic (masternode index, M2 rotation, QC threshold); operands are bounded by the masternode count and the epoch; a typed-cast rewrite is tracked under #9"
+)]
+#![allow(
+    clippy::disallowed_methods,
+    reason = "extra-data and parent masternode reads fall back to an empty list exactly as geth does at the cited lines; turning them into typed Missing errors is tracked under #9"
+)]
 
 use std::collections::BTreeSet;
 

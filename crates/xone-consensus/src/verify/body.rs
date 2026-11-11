@@ -1,6 +1,10 @@
 //! Body checks of geth-XDC `core/block_validator.go` `ValidateBody` and the
 //! receipt part of `ValidateState`. Every commitment is recomputed from the
 //! body and the receipts; none is taken from the input.
+#![allow(
+    clippy::as_conversions,
+    reason = "signing-tx cap and address-count arithmetic mirror geth int conversions; operands are bounded by the block size; tracked under #9"
+)]
 
 use alloy_primitives::{keccak256, logs_bloom, Address, Bloom, Bytes, B256};
 use alloy_rlp::{Decodable, Encodable, Header as RlpHeader, RlpDecodable, RlpEncodable};
