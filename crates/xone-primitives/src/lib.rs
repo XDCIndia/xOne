@@ -4,6 +4,9 @@
 
 #![forbid(unsafe_code)]
 
+mod wide_balance;
+pub use wide_balance::{WideBalance, WideBalanceError, MAX_WIDE_BITS};
+
 mod header;
 mod seal;
 mod v2;

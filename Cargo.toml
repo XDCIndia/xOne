@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/xone-primitives", "crates/xone-chainspec", "bin/xone"]
+members = ["crates/xone-primitives", "crates/xone-chainspec", "bin/xone", "spikes/wide-balance"]
 
 [workspace.package]
 version = "0.1.0"
@@ -13,6 +13,8 @@ publish = false
 alloy-primitives = { version = "1.7", features = ["serde", "rlp"] }
 alloy-rlp = { version = "0.3", features = ["derive"] }
 alloy-trie = { version = "0.9", features = ["ethereum"] }
+num-bigint = "0.4"
+proptest = "1"
 clap = { version = "4.6", features = ["derive"] }
 k256 = { version = "0.13", default-features = false, features = ["ecdsa"] }
 serde = { version = "1", features = ["derive"] }
