@@ -34,3 +34,20 @@ A rule with no source line is not a rule. A value that a page states must come f
 | [v2-config-by-round](chainspec/v2-config-by-round.md) | XDPoS v2 parameters are selected by round |
 | [genesis-header](chainspec/genesis-header.md) | always-encoded XDC header fields and the genesis base fee |
 | [non-parameter-switches](chainspec/non-parameter-switches.md) | every rule found at the pin that is not a plain `params` row |
+
+### EVM (xone-evm)
+
+| Page | Rule |
+| --- | --- |
+| [istanbul-rules-from-tipxdcx-cancellation-fee](evm/istanbul-rules-from-tipxdcx-cancellation-fee.md) | the Istanbul table starts at `TIPXDCXCancellationFee` |
+| [eip1559-bundle](evm/eip1559-bundle.md) | EIP-2929, 3529, 2565, 3860, 3541 start together at `Eip1559Block` |
+| [marker-opcodes](evm/marker-opcodes.md) | BASEFEE, PREVRANDAO, PUSH0 from `londonBlock` with Istanbul pricing |
+| [prevrandao-keccak-of-block-number](evm/prevrandao-keccak-of-block-number.md) | PREVRANDAO is `keccak256(number)`; DIFFICULTY before London |
+| [refund-cap](evm/refund-cap.md) | refund cap 1/2 until `Eip1559Block` |
+| [calldata-price](evm/calldata-price.md) | 68 gas per non-zero byte before Prague; 5551 keeps 68 |
+| [static-call-touch](evm/static-call-touch.md) | STATICCALL touches the callee from the Istanbul rules |
+| [modexp-and-precompile-sets](evm/modexp-and-precompile-sets.md) | precompile sets per fork row; MODEXP without EIP-2565 |
+| [pre-berlin-call-gas](evm/pre-berlin-call-gas.md) | call gas and the EIP-158 new-account charge |
+| [fee-recipient](evm/fee-recipient.md) | fee to the coinbase, or to its owner after `TIPTRC21Fee` |
+| [wide-balance](evm/wide-balance.md) | balances above 2^256 - 1 |
+

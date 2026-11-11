@@ -1,6 +1,13 @@
 [workspace]
 resolver = "2"
-members = ["crates/xone-primitives", "crates/xone-chainspec", "bin/xone", "spikes/wide-balance"]
+members = [
+    "crates/xone-primitives",
+    "crates/xone-chainspec",
+    "crates/xone-evm",
+    "bin/xone",
+    "spikes/wide-balance",
+    "conformance/sweep",
+]
 
 [workspace.package]
 version = "0.1.0"
@@ -22,3 +29,4 @@ serde_json = "1"
 thiserror = "2"
 xone-primitives = { path = "crates/xone-primitives" }
 xone-chainspec = { path = "crates/xone-chainspec" }
+xone-evm = { path = "crates/xone-evm" }
