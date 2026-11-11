@@ -4318,6 +4318,8 @@ name = "xone-sweep"
 version = "0.1.0"
 dependencies = [
  "alloy-primitives",
+ "alloy-rlp",
+ "alloy-trie",
  "revm",
  "serde",
  "serde_json",
@@ -4325,6 +4327,7 @@ dependencies = [
  "xone-chainspec",
  "xone-evm",
  "xone-primitives",
+ "xone-state",
 ]
 
 [[package]]

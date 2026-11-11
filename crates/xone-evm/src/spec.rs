@@ -51,6 +51,10 @@ pub struct XdcRules {
     pub header_has_basefee: bool,
     /// The transaction fee goes to the coinbase owner (TRC21 routing), not to the coinbase.
     pub fee_to_owner: bool,
+    /// A transaction to 0x89 is a sign transaction: no EVM (geth `IsTIPSigning`, `>=`).
+    pub sign_tx_route: bool,
+    /// A transaction to 0x91 to 0x94 is an empty transaction (geth `IsTIPXDCXReceiver`).
+    pub xdcx_empty_route: bool,
 }
 
 fn active_after(f: ForkBlock, n: u64) -> bool {
@@ -109,6 +113,8 @@ pub fn rules(spec: &ChainSpec, n: u64) -> Result<XdcRules, SpecError> {
         prevrandao_is_number_hash: london,
         header_has_basefee: bundle,
         fee_to_owner: active_after(spec.effective.tip_trc21_fee, n),
+        sign_tx_route: spec.effective.tip_signing.is_active(n),
+        xdcx_empty_route: spec.is_tip_xdcx_receiver(n),
     })
 }
 

@@ -9,6 +9,8 @@ description = "Replays real Apothem transactions on archive prestate through xon
 
 [dependencies]
 alloy-primitives.workspace = true
+alloy-rlp.workspace = true
+alloy-trie.workspace = true
 revm = { version = "=43.0.3", default-features = false, features = ["std"] }
 serde.workspace = true
 serde_json.workspace = true
@@ -16,3 +18,4 @@ thiserror.workspace = true
 xone-chainspec.workspace = true
 xone-evm.workspace = true
 xone-primitives.workspace = true
+xone-state.workspace = true

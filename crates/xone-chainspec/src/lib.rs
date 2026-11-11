@@ -224,6 +224,7 @@ effective!(
     tip_xdcx = "tipXDCX",
     tip_xdcx_cancellation_fee = "tipXDCXCancellationFee",
     tip_xdcx_miner_disable = "tipXDCXMinerDisable",
+    tip_xdcx_receiver_disable = "tipXDCXReceiverDisable",
 );
 
 /// Rules that geth derives from the table but not from one row. All are pure
@@ -240,6 +241,13 @@ impl ChainSpec {
         self.effective.tip_xdcx_cancellation_fee.is_active(n)
             || self.petersburg.is_active(n)
             || (self.petersburg == ForkBlock::Never && self.constantinople.is_active(n))
+    }
+
+    /// geth `IsTIPXDCXReceiver` (`params/config.go:3477-3480`): the window from `TIPXDCX` up to, not
+    /// including, `TIPXDCXReceiverDisable`. XDCx transactions are empty transactions inside it.
+    pub fn is_tip_xdcx_receiver(&self, n: u64) -> bool {
+        self.effective.tip_xdcx.is_active(n)
+            && !self.effective.tip_xdcx_receiver_disable.is_active(n)
     }
 
     /// geth `IsEIP1559`: the `eip1559` row alone. There is no London fallback.

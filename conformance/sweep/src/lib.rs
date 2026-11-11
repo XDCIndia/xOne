@@ -20,3 +20,4 @@ pub use case::{Case, ERAS};
 pub use replay::{compare, replay, replay_with, Outcome, ReplayError};
 pub mod fetch;
 pub mod mutants;
+pub mod special;

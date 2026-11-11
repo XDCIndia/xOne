@@ -183,7 +183,19 @@ func effective(cfg *params.ChainConfig) object {
 		{"tipXDCX", firstActive(cfg.IsTIPXDCX)},
 		{"tipXDCXCancellationFee", firstActive(cfg.IsTIPXDCXCancellationFee)},
 		{"tipXDCXMinerDisable", firstActive(cfg.IsTIPXDCXMiner)},
+		{"tipXDCXReceiverDisable", receiverDisable(cfg)},
 	}
+}
+
+// receiverDisable is the block from which geth stops routing XDCx transactions as empty
+// transactions: the genesis row when set, else the per-chain global (params.ChainConfig.IsTIPXDCXReceiver
+// reads it through the unexported xdcTIPBlock). IsTIPXDCXReceiver rises at tipXDCX and falls here, so
+// firstActive cannot find it.
+func receiverDisable(cfg *params.ChainConfig) string {
+	if cfg.TIPXDCXReceiverDisableBlock != nil {
+		return cfg.TIPXDCXReceiverDisableBlock.String()
+	}
+	return common.TIPXDCXReceiverDisable.String()
 }
 
 func xdposOf(c *params.XDPoSConfig) xdpos {

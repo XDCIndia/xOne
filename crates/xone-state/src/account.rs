@@ -38,7 +38,6 @@ pub enum SlimError {
 }
 
 impl Account {
-    /// The trie leaf value (`StateAccount.EncodeRLP`).
     pub fn rlp(&self) -> Vec<u8> {
         alloy_rlp::encode(self)
     }

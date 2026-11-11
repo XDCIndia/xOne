@@ -62,7 +62,8 @@
         "tipTRC21Fee": "23779191",
         "tipXDCX": "23779191",
         "tipXDCXCancellationFee": "23779191",
-        "tipXDCXMinerDisable": "61290000"
+        "tipXDCXMinerDisable": "61290000",
+        "tipXDCXReceiverDisable": "66825000"
       },
       "xdpos": {
         "period": 2,
@@ -245,7 +246,8 @@
         "tipTRC21Fee": "0",
         "tipXDCX": "0",
         "tipXDCXCancellationFee": "0",
-        "tipXDCXMinerDisable": "0"
+        "tipXDCXMinerDisable": "0",
+        "tipXDCXReceiverDisable": "100000000000000000"
       },
       "xdpos": {
         "period": 2,
@@ -368,7 +370,8 @@
         "tipTRC21Fee": "0",
         "tipXDCX": "0",
         "tipXDCXCancellationFee": "0",
-        "tipXDCXMinerDisable": "0"
+        "tipXDCXMinerDisable": "0",
+        "tipXDCXReceiverDisable": "0"
       },
       "xdpos": {
         "period": 2,
@@ -511,7 +514,8 @@
         "tipTRC21Fee": "38383838",
         "tipXDCX": "38383838",
         "tipXDCXCancellationFee": "38383838",
-        "tipXDCXMinerDisable": "80370000"
+        "tipXDCXMinerDisable": "80370000",
+        "tipXDCXReceiverDisable": "80370900"
       },
       "xdpos": {
         "period": 2,

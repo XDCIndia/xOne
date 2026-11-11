@@ -16,7 +16,7 @@ How this list was made: grep of the pinned tree (not tests, not `cmd/`) for `IsX
 | A6 | TIP gates whose value is the config row when set, else a global: `TIP2019`, `TIPSigning`, `TIPNoHalvingMNReward`, `TIPRandomize`, `TIPTRC21Fee`, `Gas50x`, `TIPXDCX`, `TIPXDCXMinerDisable` | `params/config.go:3292`, `:3299`, `:3313`, `:3318`, `:3348`, `:3362`, `:3464`, `:3470` | all (rows are `nil` on mainnet and apothem) | `effective.tip2019`, `tip_signing`, `tip_no_halving_mn_reward`, `tip_randomize`, `tip_trc21_fee`, `gas50x`, `tip_xdcx`, `tip_xdcx_miner_disable` |
 | A7 | Genesis `tipSigningBlock` overrides the global `TIPSigning`; genesis `denylistBlock` overrides `BlackListHFNumber` | `eth/backend.go:252-255`, `:263-266`; `params/config.go:3307-3309` | custom genesis; devnet551 sets `tipSigningBlock` | `effective.tip_signing` (devnet551 row is `tip_signing`) |
 | A8 | `isBlockForked(nil, n)` is false | `params/config.go:3897-3902` | all | `ForkBlock::Never` |
-| A9 | `IsTIPXDCXReceiver` is a window: after `TIPXDCX` and before `TIPXDCXReceiverDisable` | `params/config.go:3477-3480` | all | none (Gap G1) |
+| A9 | `IsTIPXDCXReceiver` is a window: after `TIPXDCX` and before `TIPXDCXReceiverDisable` | `params/config.go:3477-3480` | all | `effective.tip_xdcx_receiver_disable` (the block it ends at, exported as the row else the global) and `ChainSpec::is_tip_xdcx_receiver` |
 | A10 | `IsTIPIncreaseMasternodes` returns false unless the row is set; the real value is `consensus/XDPoS.TIPIncreaseMasternodes` from `SetNetworkConstants` | `params/config.go:3324-3332`; `consensus/XDPoS/network_constants.go:57`, `:85`, `:121`, `:155`, `:185`, `:247`; `consensus/XDPoS/constants.go:70`, `:127` | all | none (Gap G2) |
 
 ## B. EIP-1559 decoupled from London (see [eip1559-decoupled-from-london](eip1559-decoupled-from-london.md))
@@ -61,7 +61,7 @@ How this list was made: grep of the pinned tree (not tests, not `cmd/`) for `IsX
 
 ## Gaps (not exported yet)
 
-- G1: `TIPXDCXReceiverDisable` window (A9). The exporter finds first-active blocks of monotone predicates; this one rises and then falls.
+- ~~G1~~ closed by XB-08: `TIPXDCXReceiverDisable` is exported as `effective.tip_xdcx_receiver_disable`.
 - G2: `consensus/XDPoS.TIPIncreaseMasternodes` and the other `NetworkConstants` fields (A10), including `BlackListHFNumber` and the V2 switch constants at `network_constants.go:86-97`.
 - G3: chain-id branches C3 and C4 have no `ChainSpec` method yet. They belong with the XA-04 and XA-05 consensus items.
 - G4: `IgnoreSignerCheckBlocks` maps (C5).

@@ -16,6 +16,7 @@ use std::{collections::BTreeMap, str::FromStr};
 use xone_chainspec::Network;
 use xone_evm::{
     handler::{build_evm_with_rules, XdcHandler},
+    route::Route,
     spec::{XdcBlock, XdcRules},
 };
 
@@ -73,6 +74,12 @@ pub fn replay_with(c: &Case, tweak: &dyn Fn(&mut XdcRules)) -> Result<Outcome, R
     let mut rules = xone_evm::spec::rules(&spec, block.number)
         .map_err(|e| ReplayError::Unsupported(e.to_string()))?;
     tweak(&mut rules);
+    // geth `RouteTransaction`: a sign or XDCx empty transaction never reaches the EVM.
+    let to = c.tx.to.as_deref().map(addr);
+    match xone_evm::route::route(&rules, to) {
+        Route::SignTx | Route::XdcxEmpty => return replay_non_evm(c, &spec, &rules, to),
+        Route::RandomizeTx | Route::Evm => {}
+    }
     let mut evm = build_evm_with_rules(CaseDb::new(c), &spec, rules, &block, owner);
 
     let t = &c.tx;
@@ -161,6 +168,54 @@ pub fn replay_with(c: &Case, tweak: &dyn Fn(&mut XdcRules)) -> Result<Outcome, R
         success,
         created,
         logs,
+        accounts,
+    })
+}
+
+/// Replay of a sign or empty transaction through `xone_evm::special`, with a running gas total of
+/// zero: the block-level vectors check the cumulative gas.
+fn replay_non_evm(
+    c: &Case,
+    spec: &xone_chainspec::ChainSpec,
+    rules: &XdcRules,
+    to: Option<Address>,
+) -> Result<Outcome, ReplayError> {
+    use xone_evm::special::{apply_empty_tx, apply_sign_tx};
+    let from = addr(&c.tx.from);
+    let n = c.block.number;
+    let rej = |e: xone_evm::special::SpecialError| ReplayError::Rejected(e.to_string());
+    let mut accounts = BTreeMap::new();
+    let receipt = if xone_evm::route::route(rules, to) == Route::SignTx {
+        let state_nonce = c
+            .pre
+            .iter()
+            .find(|(k, _)| addr(k) == from)
+            .map_or(0, |(_, p)| p.nonce.unwrap_or(0));
+        let (nonce, r) = apply_sign_tx(spec, n, state_nonce, c.tx.nonce, 0).map_err(rej)?;
+        let (b, _, h) = pre_norm(c, &from);
+        accounts.insert(
+            from,
+            Fin {
+                deleted: false,
+                balance: b,
+                nonce,
+                code_hash: h,
+                slots: BTreeMap::new(),
+            },
+        );
+        r
+    } else {
+        apply_empty_tx(spec, n, to.unwrap_or_default(), 0).map_err(rej)?
+    };
+    Ok(Outcome {
+        gas_used: receipt.gas_used,
+        success: receipt.success,
+        created: None,
+        logs: receipt
+            .logs
+            .iter()
+            .map(|l| (l.address, l.data.topics().to_vec(), l.data.data.to_vec()))
+            .collect(),
         accounts,
     })
 }

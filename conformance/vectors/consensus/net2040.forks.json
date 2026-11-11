@@ -62,7 +62,8 @@
         "tipTRC21Fee": "7200",
         "tipXDCX": "7200",
         "tipXDCXCancellationFee": "7200",
-        "tipXDCXMinerDisable": "10800"
+        "tipXDCXMinerDisable": "10800",
+        "tipXDCXReceiverDisable": "11700"
       },
       "xdpos": {
         "period": 2,

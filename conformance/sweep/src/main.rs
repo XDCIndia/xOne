@@ -4,6 +4,8 @@
 //! xone-sweep fetch <per-era> [seed]   sample contract-call txs per era into cache/ (needs ssh xdc02)
 //! xone-sweep named                    fetch the named regression transactions (needs ssh xdc02)
 //! xone-sweep run [filter] [mutant]    replay everything in cache/ offline; exit 1 on a divergence
+//!                                     (`run special` replays vectors/special/cases/: sign, randomize and XDCx txs)
+//! xone-sweep special <sign|cases|...>  export the XB-08 vectors to conformance/vectors/special/
 //! xone-sweep export                   copy the named cases to conformance/vectors/evm/regression/
 //! ```
 
@@ -22,7 +24,7 @@ use xone_sweep::{
     db::bytes,
     fetch::{author, fetch_case, hex_u64, is_special, Rpc},
     mutants::{general, mutant_of, MUTANTS},
-    replay, replay_with, ReplayError,
+    replay, replay_with, special, ReplayError,
 };
 
 fn root() -> PathBuf {
@@ -120,7 +122,7 @@ fn fetch_era(rpc: &mut Rpc, era: usize, want: usize, rng: &mut Lcg) {
                 log_excluded(
                     n,
                     t["hash"].as_str().unwrap_or(""),
-                    "special tx (sign 0x89, randomize 0x90, XDCx 0x91-0x94): XB-08",
+                    "special tx (sign 0x89, randomize 0x90, XDCx 0x91-0x94): not sampled here, see `special cases` and `run special`",
                 );
             }
             for t in txs.iter().filter(|t| candidate(t)).take(2) {
@@ -300,7 +302,14 @@ fn fetch_named(rpc: &mut Rpc) {
 
 fn load_all(filter: &str) -> Vec<Case> {
     let mut out = Vec::new();
-    for dir in [cache(), cache().join("named")] {
+    // `run special`: the committed special-transaction cases, replayed through the router.
+    let special = root().join("../vectors/special/cases");
+    let dirs = if filter == "special" {
+        vec![special]
+    } else {
+        vec![cache(), cache().join("named")]
+    };
+    for dir in dirs {
         for e in fs::read_dir(&dir).into_iter().flatten().flatten() {
             let p = e.path();
             if p.extension().is_some_and(|x| x == "json") && p.to_string_lossy().contains(filter) {
@@ -504,6 +513,20 @@ fn main() -> ExitCode {
             } else {
                 ExitCode::FAILURE
             }
+        }
+        Some("special") => {
+            let num = |i: usize, d: u64| a.get(i).and_then(|x| x.parse().ok()).unwrap_or(d);
+            match a.get(1).map(String::as_str) {
+                Some("sign") => special::sign_blocks(&mut rpc, num(2, 60) as usize, num(3, 1)),
+                Some("cases") => special::cases(&mut rpc, num(2, 1)),
+                Some("tip-signing") => special::tip_signing(&mut rpc),
+                Some("slots") => special::slots(&mut rpc, num(2, 100) as usize, num(3, 1)),
+                Some("fees") => special::fees(&mut rpc, num(2, 15) as usize, num(3, 1)),
+                Some("base-fee") => special::base_fee(&mut rpc, num(2, 1)),
+                Some("oog") => special::oog(&mut rpc),
+                _ => return ExitCode::from(2),
+            }
+            ExitCode::SUCCESS
         }
         Some("fix-miner") => {
             fix_miner(&mut rpc);

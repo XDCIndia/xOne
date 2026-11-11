@@ -134,7 +134,7 @@ macro_rules! get {
 }
 
 /// The RPC block object as an XDC header (geth `gen_header_json.go`).
-fn header_of(v: &Value) -> Result<Header, String> {
+pub fn header_of(v: &Value) -> Result<Header, String> {
     let q = |k: &str| -> Result<u64, String> {
         let x: alloy_primitives::U64 = get!(v, k);
         Ok(x.to())
@@ -170,17 +170,8 @@ fn header_of(v: &Value) -> Result<Header, String> {
 /// the seal): the header's `miner` field is zero for V1 blocks.
 pub fn author(block: &Value) -> Result<alloy_primitives::Address, String> {
     let h = header_of(block)?;
-    let switch = Network::Apothem
-        .spec()
-        .xdpos
-        .v2
-        .map_or(u64::MAX, |v| v.switch_block);
-    let who = if h.number > switch {
-        h.v2_signer()
-    } else {
-        h.v1_signer()
-    };
-    who.map_err(|e| format!("block {}: {e}", h.number))
+    xone_evm::fees::block_author(&Network::Apothem.spec(), &h)
+        .map_err(|e| format!("block {}: {e}", h.number))
 }
 
 /// Why a transaction is not part of the sweep.
@@ -331,7 +322,7 @@ pub fn fetch_case(
             "TRC21 token-fee tx (sender pays no gas): fee path is XB-08".into(),
         ));
     }
-    if let Some(to) = &case.tx.to {
+    if let Some(to) = case.tx.to.as_ref().filter(|t| !is_special(t)) {
         let has_code = case
             .pre
             .get(&to.to_lowercase())

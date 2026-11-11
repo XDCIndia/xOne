@@ -3,20 +3,23 @@
 //! Stock revm runs unchanged except where geth-XDC differs:
 //!
 //! * `validate_initial_tx_gas`: the EIP-7623 floor does not follow the calldata price;
+//! * `validate_env`: a special transaction (to 0x89 or 0x90) is exempt from the fee-cap floor
+//!   (`core/state_transition.go:684`);
 //! * `validate_against_state_and_deduct_caller`: geth `buyGas` for a wide sender
 //!   (`core/state_transition.go:497-557`);
 //! * `run_exec_loop`: STATICCALL touches the callee only from the Istanbul rules
 //!   (`core/vm/evm.go:513`);
 //! * `reimburse_caller`, `reward_beneficiary`: a credit above the legal balance bound is an error,
 //!   and the fee goes to the coinbase or, after `TIPTRC21Fee`, to the coinbase owner
-//!   (`core/state_transition.go:881-930`);
+//!   (`core/state_transition.go:881-930`, [`fees::credit`]);
 //! * the BASEFEE, PREVRANDAO and PUSH0 instructions while `spec_id` is below London
 //!   (`core/vm/jump_table.go:81-132`).
 
 use crate::{
-    gas,
+    fees, gas,
     journal::WideJournal,
     precompiles::XdcPrecompiles,
+    route::is_special_tx,
     spec::{rules, SpecError, XdcBlock, XdcRules},
 };
 use alloy_primitives::{Address, U256};
@@ -49,8 +52,8 @@ use xone_primitives::WideBalanceError;
 pub struct XdcChain {
     pub rules: XdcRules,
     /// Coinbase owner of the block (geth `GetCandidateOwner`); used when `rules.fee_to_owner`.
-    /// `None` credits nothing, as geth does with no registered owner. Its derivation from state
-    /// belongs to XB-08.
+    /// `None` credits nothing, as geth does with no registered owner. Derive it with
+    /// [`fees::coinbase_owner`] from the state at the start of the block.
     pub fee_owner: Option<Address>,
 }
 
@@ -176,6 +179,19 @@ impl<DB: Database> Handler for XdcHandler<DB> {
     type Evm = XdcEvm<DB>;
     type Error = XdcError<DB>;
     type HaltReason = HaltReason;
+
+    /// A special transaction (to 0x89 or 0x90) is exempt from the fee-cap floor: it is minted with
+    /// a zero fee cap and geth skips `ErrFeeCapTooLow` for it (`core/state_transition.go:684`). revm's
+    /// check compares against the block's base fee, so it runs against zero for such a transaction.
+    fn validate_env(&self, evm: &mut Self::Evm) -> Result<(), Self::Error> {
+        if !is_special_tx(evm.ctx_ref().tx().kind().to().copied()) {
+            return revm::handler::validation::validate_env(evm.ctx());
+        }
+        let basefee = std::mem::take(&mut evm.ctx().block.basefee);
+        let r = revm::handler::validation::validate_env(evm.ctx());
+        evm.ctx().block.basefee = basefee;
+        r
+    }
 
     fn validate_initial_tx_gas(
         &self,
@@ -307,29 +323,20 @@ impl<DB: Database> Handler for XdcHandler<DB> {
             return Ok(());
         }
         let g = exec.gas();
-        let used = u128::from(g.used().saturating_sub(g.reservoir()));
+        let used = g.used().saturating_sub(g.reservoir());
         let basefee = u128::from(block.basefee());
-        let price = tx.effective_gas_price(basefee);
-        // geth `core/state_transition.go:881-930`.
-        let (to, per_gas) = if chain.rules.fee_to_owner {
-            (chain.fee_owner, price)
-        } else {
-            let header_basefee = if chain.rules.header_has_basefee {
-                basefee
-            } else {
-                0
-            };
-            (
-                Some(block.beneficiary()),
-                price.saturating_sub(header_basefee),
-            )
-        };
-        if let Some(to) = to {
-            if !journal
-                .load_account_mut(to)?
-                .data
-                .incr_balance(U256::from(per_gas.saturating_mul(used)))
-            {
+        let to = tx.kind().to().copied();
+        // geth `core/state_transition.go:881-930`, see [`fees::credit`].
+        if let Some((who, amount)) = fees::credit(
+            &chain.rules,
+            to,
+            block.beneficiary(),
+            chain.fee_owner,
+            tx.effective_gas_price(basefee),
+            basefee,
+            used,
+        ) {
+            if !journal.load_account_mut(who)?.data.incr_balance(amount) {
                 return Err(wide::<DB>(WideBalanceError::AboveBound));
             }
         }
