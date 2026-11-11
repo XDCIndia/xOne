@@ -4202,6 +4202,7 @@ dependencies = [
  "xone-chainspec",
  "xone-db",
  "xone-primitives",
+ "xone-state",
 ]
 
 [[package]]

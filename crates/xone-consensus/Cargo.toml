@@ -22,3 +22,4 @@ xone-primitives.workspace = true
 [dev-dependencies]
 serde.workspace = true
 serde_json.workspace = true
+xone-state.workspace = true

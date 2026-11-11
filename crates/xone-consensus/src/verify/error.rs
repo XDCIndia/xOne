@@ -67,8 +67,35 @@ pub enum HeaderError {
         creator: Address,
         validator: Address,
     },
-    #[error("the V1 checkpoint header for the M2 assignment is absent or malformed")]
+    #[error("the V1 checkpoint header for the M2 assignment is malformed")]
     M2Assignment,
+    // V1 module (`crate::v1`): missing inputs are typed, never an empty list.
+    #[error("missing input: the checkpoint header {0} for the M2 assignment")]
+    MissingCheckpointHeader(u64),
+    #[error("missing input: no masternode list")]
+    MissingMasternodes,
+    #[error("missing input: the creator of the parent block")]
+    MissingParentCreator,
+    #[error("missing input: the snapshot has no signers")]
+    MissingSigners,
+    #[error("missing input: no candidates in the validator contract state")]
+    MissingCandidates,
+    #[error("missing input: the penalties of checkpoint header {0}")]
+    MissingPenaltyHeader(u64),
+    #[error("missing input: no signing data for the epoch")]
+    MissingSignData,
+    #[error("snapshot headers are not a chain that starts after the snapshot")]
+    InvalidVotingChain,
+    #[error("the checkpoint masternode list is empty after the penalties")]
+    EmptyCheckpointList,
+    #[error("checkpoint masternodes are in a different order than the snapshot's")]
+    CheckpointOrder,
+    #[error("checkpoint penalties differ from the computed list")]
+    InvalidCheckpointPenalties,
+    #[error("V2 switch block {switch_block} is not a multiple of the epoch {epoch}")]
+    SwitchBlockNotEpochAligned { switch_block: u64, epoch: u64 },
+    #[error("the epoch is zero")]
+    ZeroEpoch,
     // V2
     #[error("no validator signature")]
     NoValidatorSignatureV2,
