@@ -41,7 +41,10 @@ fn vectors(count: usize) -> Result<Vec<WireBlock>, String> {
 
 fn run() -> Result<(), String> {
     let mut args = std::env::args().skip(1);
-    let dir = PathBuf::from(args.next().ok_or("usage: xone-db-stress <datadir> <blocks>")?);
+    let dir = PathBuf::from(
+        args.next()
+            .ok_or("usage: xone-db-stress <datadir> <blocks>")?,
+    );
     let count: usize = args
         .next()
         .ok_or("usage: xone-db-stress <datadir> <blocks>")?

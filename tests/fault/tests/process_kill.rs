@@ -129,7 +129,10 @@ fn twenty_sigkills_during_the_apothem_import_never_lose_or_wipe_the_datadir() {
             assert!(!row.starts_with("REFUSE"), "kill {k}: {row}");
             assert!(!row.starts_with("Fresh"), "kill {k}: the datadir was wiped");
             rows.push(row.clone());
-            assert!(*head >= newest_checkpoint(&dir), "kill {k}: head {head} is below a state checkpoint");
+            assert!(
+                *head >= newest_checkpoint(&dir),
+                "kill {k}: head {head} is below a state checkpoint"
+            );
             assert!(*head >= highest.min(newest_checkpoint(&dir)));
         }
         let (mut child, out) = spawn(&dir);
@@ -152,7 +155,8 @@ fn twenty_sigkills_during_the_apothem_import_never_lose_or_wipe_the_datadir() {
             if lines == 2 {
                 let e = OsDir::open(&dir.join("xone"));
                 assert!(
-                    e.as_ref().is_err_and(|e| e.kind() == std::io::ErrorKind::WouldBlock),
+                    e.as_ref()
+                        .is_err_and(|e| e.kind() == std::io::ErrorKind::WouldBlock),
                     "a second process took the datadir"
                 );
             }
@@ -167,7 +171,11 @@ fn twenty_sigkills_during_the_apothem_import_never_lose_or_wipe_the_datadir() {
             "kill {k:>2}: SIGKILL after {lines} lines, last head {:?}, +{} us{}",
             last_head,
             jitter.as_micros(),
-            if finished { " (the child had finished)" } else { "" }
+            if finished {
+                " (the child had finished)"
+            } else {
+                ""
+            }
         );
         assert!(finished || !status.success());
         if let Some(h) = last_head {
@@ -192,7 +200,10 @@ fn twenty_sigkills_during_the_apothem_import_never_lose_or_wipe_the_datadir() {
     }
     assert!(child.wait().unwrap().success());
     let done = done.expect("the child never finished");
-    println!("{done}  (wall {:?} for {KILLS} kills and the final run)", started.elapsed());
+    println!(
+        "{done}  (wall {:?} for {KILLS} kills and the final run)",
+        started.elapsed()
+    );
     // the archive's hash of block 1,800 and an independent look at the datadir
     let want: B256 = {
         use std::io::Read;
@@ -207,8 +218,12 @@ fn twenty_sigkills_during_the_apothem_import_never_lose_or_wipe_the_datadir() {
     };
     assert!(done.ends_with(&format!("{want}")), "{done} vs {want}");
     let root = dir.join("xone");
-    let mut store =
-        MdbxStore::open(&root.join("chain.mdbx"), OsDir::open(&root).unwrap(), cfg(1024, 100_000)).unwrap();
+    let mut store = MdbxStore::open(
+        &root.join("chain.mdbx"),
+        OsDir::open(&root).unwrap(),
+        cfg(1024, 100_000),
+    )
+    .unwrap();
     resume(&mut store).unwrap();
     assert_eq!(store.head(), (BLOCKS, want));
     for n in 0..=BLOCKS {

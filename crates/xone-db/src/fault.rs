@@ -11,7 +11,7 @@ use std::{
     sync::{Arc, Mutex, MutexGuard, PoisonError},
 };
 
-use crate::segments::{SegDir, SegFile};
+use crate::segments::{Probe, SegDir, SegFile};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Errno {
@@ -112,6 +112,8 @@ struct Fs {
     syncs: u64,
     writes: u64,
     reads: u64,
+    armed: Option<(String, Probe, usize)>,
+    visited: Vec<&'static str>,
 }
 
 /// A cloneable handle: the store owns one, the test keeps another to crash the disk.
@@ -144,6 +146,8 @@ impl MemDir {
             syncs: 0,
             writes: 0,
             reads: 0,
+            armed: None,
+            visited: Vec::new(),
         })))
     }
 
@@ -244,7 +248,19 @@ impl MemDir {
             syncs: 0,
             writes: 0,
             reads: 0,
+            armed: None,
+            visited: Vec::new(),
         })))
+    }
+
+    /// The next time the store reaches kill point `point` (after `skip` earlier visits), `probe` fires.
+    pub fn arm(&self, point: &str, probe: Probe, skip: usize) {
+        self.fs().armed = Some((point.into(), probe, skip));
+    }
+
+    /// Kill points the store has passed, in order.
+    pub fn visited(&self) -> Vec<&'static str> {
+        self.fs().visited.clone()
     }
 
     /// A hash of the live image (names and bytes): crash images that are equal need one run.
@@ -467,6 +483,18 @@ impl SegDir for MemDir {
     }
     fn boot_id(&self) -> String {
         self.fs().boot.clone()
+    }
+    fn probe(&self, point: &'static str) -> Option<Probe> {
+        let mut f = self.fs();
+        f.visited.push(point);
+        let a = f.armed.as_mut().filter(|a| a.0 == point)?;
+        if a.2 > 0 {
+            a.2 -= 1;
+            return None;
+        }
+        let p = a.1;
+        f.armed = None;
+        Some(p)
     }
 }
 

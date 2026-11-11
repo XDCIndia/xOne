@@ -7,10 +7,14 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-use xone_db::fault::MemDir;
+use xone_db::{fault::MemDir, segments::Probe};
 use xone_primitives::Header;
 use xone_state::MemFlat;
-use xone_sync::mdbx::{Config, MdbxStore};
+use xone_sync::{
+    mdbx::{Config, MdbxStore},
+    store::KillPoint,
+    testkit::Fault,
+};
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
 
@@ -71,9 +75,41 @@ pub fn anchored(
 /// A copy of an MDBX directory (the store that held it is dropped): one image per crash case.
 pub fn copy_dir(from: &Path, to: &Path) {
     std::fs::create_dir_all(to).unwrap_or_else(|e| panic!("{e}"));
-    for e in std::fs::read_dir(from).unwrap_or_else(|e| panic!("{e}")).flatten() {
+    for e in std::fs::read_dir(from)
+        .unwrap_or_else(|e| panic!("{e}"))
+        .flatten()
+    {
         if e.file_name() != "mdbx.lck" {
             std::fs::copy(e.path(), to.join(e.file_name())).unwrap_or_else(|e| panic!("{e}"));
         }
+    }
+}
+
+/// Arming and the kill-point log of a store on the in-memory disk.
+pub trait Arm {
+    /// The next time `point` is reached (after `skip` earlier visits), `fault` happens.
+    fn arm(&mut self, point: KillPoint, fault: Fault, skip: usize);
+    /// The kill points passed so far.
+    fn log(&self) -> Vec<KillPoint>;
+}
+
+impl Arm for MdbxStore<MemDir> {
+    fn arm(&mut self, point: KillPoint, fault: Fault, skip: usize) {
+        let probe = match fault {
+            Fault::Kill | Fault::Power => Probe::Crash,
+            Fault::Io => Probe::Io,
+            Fault::IoCommitted => Probe::IoCommitted,
+        };
+        self.segs().dir.arm(point.name(), probe, skip);
+    }
+    fn log(&self) -> Vec<KillPoint> {
+        let seen = self.segs().dir.visited();
+        KillPoint::ALL
+            .iter()
+            .chain(&KillPoint::PRUNE)
+            .chain(&KillPoint::REPAIR)
+            .filter(|k| seen.contains(&k.name()))
+            .copied()
+            .collect()
     }
 }

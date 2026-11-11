@@ -14,15 +14,15 @@ use std::{
 use xone_chainspec::Network;
 use xone_consensus::verify::Body;
 use xone_consensus::verify::HeaderError;
-use xone_primitives::Header;
 use xone_db::fault::{MemDir, Pick};
-use xone_fault::{anchored, cfg, copy_dir, Scratch};
+use xone_fault::{anchored, cfg, copy_dir, Arm, Scratch};
+use xone_primitives::Header;
 use xone_sync::{
     chain::{resume::resume, Chain, ChainRead},
-    mdbx::MdbxStore,
     export::encode_block,
     export::export,
     import::{decode_block, FileSource},
+    mdbx::MdbxStore,
     stages::{
         self, bodies, execute, finish, headers, senders, Limits, Source, SourceError, SyncError,
     },
@@ -258,7 +258,11 @@ fn a_kill_at_any_of_ten_points_resumes_at_the_stage_checkpoint() {
             assert!(rounds < 200, "{tag}: never reached the kill point");
             for st in Stage::ALL {
                 if st == stage && !armed {
-                    chain.store_mut().arm(point, if power { Fault::Power } else { Fault::Kill }, skip);
+                    chain.store_mut().arm(
+                        point,
+                        if power { Fault::Power } else { Fault::Kill },
+                        skip,
+                    );
                     armed = true;
                 }
                 let r: Result<u64, SyncError> = match st {
@@ -295,7 +299,11 @@ fn a_kill_at_any_of_ten_points_resumes_at_the_stage_checkpoint() {
         copy_dir(&path, &rsc.path().join("chain.mdbx"));
         let reopened = reopen(
             &rsc.path().join("chain.mdbx"),
-            dir.crash(if power { Pick::Nothing } else { Pick::Everything }),
+            dir.crash(if power {
+                Pick::Nothing
+            } else {
+                Pick::Everything
+            }),
         );
         // restart: no stage went back, and none is ahead of its predecessor
         let post: Vec<u64> = Stage::ALL

@@ -54,10 +54,7 @@ pub struct Dead {
 }
 
 pub fn take(store: MStore) -> Dead {
-    assert!(
-        !store.durability().may_sign(),
-        "a dead store may not sign"
-    );
+    assert!(!store.durability().may_sign(), "a dead store may not sign");
     take_any(store)
 }
 
@@ -83,7 +80,14 @@ impl Dead {
             v.push(('4', Pick::Except(i)));
             v.push(('5', Pick::Prefix(i)));
             for grid in [512, 64, 1] {
-                v.push(('3', Pick::Torn { keep: i, grid, seed: i as u64 + 1 }));
+                v.push((
+                    '3',
+                    Pick::Torn {
+                        keep: i,
+                        grid,
+                        seed: i as u64 + 1,
+                    },
+                ));
             }
         }
         v.extend((0..seeds).map(|seed| ('4', Pick::Random { seed })));
@@ -114,12 +118,7 @@ pub fn restart(
     let row = classify(&reconcile(scan.generation, &scan.manifest, &scan.tails));
     (
         row,
-        Chain::open(
-            p.spec.clone(),
-            store,
-            p.exec.clone(),
-            accept as Accept,
-        ),
+        Chain::open(p.spec.clone(), store, p.exec.clone(), accept as Accept),
     )
 }
 

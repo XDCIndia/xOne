@@ -17,7 +17,7 @@ use xone_db::{
     segments::{chunk_path, frame, SegDir, SegFile},
     Manifest, Refuse, Segment, GEN_KEY, MANIFEST_KEY,
 };
-use xone_fault::{cfg, Scratch};
+use xone_fault::{cfg, Arm, Scratch};
 use xone_sync::{
     chain::{Chain, ResumeError, Resumed},
     mdbx::MdbxStore,
@@ -104,7 +104,11 @@ fn d1_a_new_datadir_is_fresh() {
     let store = MdbxStore::open(&sc.path().join("chain.mdbx"), MemDir::new(), cfg(64, 4)).unwrap();
     let scan = store.scan();
     assert_eq!(
-        classify(&xone_db::reconcile(scan.generation, &scan.manifest, &scan.tails)),
+        classify(&xone_db::reconcile(
+            scan.generation,
+            &scan.manifest,
+            &scan.tails
+        )),
         Row::Fresh
     );
     let (_, r) = Chain::open(p.spec.clone(), store, p.exec.clone(), accept as Accept).unwrap();
@@ -121,7 +125,10 @@ fn d2_segments_with_no_mdbx_authority_are_not_cut() {
     let g = &p.t.blocks["s0"].block.header;
     assert!(s.init_anchor(g.clone(), Default::default()).is_err());
     let d = take(s);
-    assert_eq!(refused_on(&p, &d, Pick::Everything), (Refuse::OrphanSegments, true));
+    assert_eq!(
+        refused_on(&p, &d, Pick::Everything),
+        (Refuse::OrphanSegments, true)
+    );
     // a kill before any segment byte leaves a datadir that is simply new
     let mut s = MdbxStore::open(&sc.path().join("c2.mdbx"), MemDir::new(), cfg(64, 4)).unwrap();
     s.arm(KillPoint::K03, Fault::Kill, 0);
@@ -132,7 +139,11 @@ fn d2_segments_with_no_mdbx_authority_are_not_cut() {
     let store = MdbxStore::open(&d.path, img, cfg(64, 4)).unwrap();
     let scan = store.scan();
     assert_eq!(
-        classify(&xone_db::reconcile(scan.generation, &scan.manifest, &scan.tails)),
+        classify(&xone_db::reconcile(
+            scan.generation,
+            &scan.manifest,
+            &scan.tails
+        )),
         Row::Fresh
     );
 }
@@ -145,8 +156,15 @@ fn d3_to_d7_the_manifest_and_the_generation() {
     // D3
     let (sc3, d3) = (Scratch::new("d3"), &d);
     xone_fault::copy_dir(&d3.path, &sc3.path().join("chain.mdbx"));
-    edit_mdbx(&sc3.path().join("chain.mdbx"), |tx| tx.del(T::Meta, MANIFEST_KEY).unwrap());
-    let d3 = Dead { path: sc3.path().join("chain.mdbx"), dir: d.dir.clone(), published: d.published, generation: 0 };
+    edit_mdbx(&sc3.path().join("chain.mdbx"), |tx| {
+        tx.del(T::Meta, MANIFEST_KEY).unwrap()
+    });
+    let d3 = Dead {
+        path: sc3.path().join("chain.mdbx"),
+        dir: d.dir.clone(),
+        published: d.published,
+        generation: 0,
+    };
     assert_eq!(refused(&p, &d3), (Refuse::ManifestMissing, true));
     // D4: every byte of the manifest, flipped one at a time
     for i in [0usize, 4, 6, 20, 100, 200, 256] {
@@ -154,8 +172,15 @@ fn d3_to_d7_the_manifest_and_the_generation() {
         xone_fault::copy_dir(&d.path, &sc.path().join("chain.mdbx"));
         let mut b = m.encode();
         b[i] ^= 1;
-        edit_mdbx(&sc.path().join("chain.mdbx"), |tx| tx.put(T::Meta, MANIFEST_KEY, &b).unwrap());
-        let dd = Dead { path: sc.path().join("chain.mdbx"), dir: d.dir.clone(), published: d.published, generation: 0 };
+        edit_mdbx(&sc.path().join("chain.mdbx"), |tx| {
+            tx.put(T::Meta, MANIFEST_KEY, &b).unwrap()
+        });
+        let dd = Dead {
+            path: sc.path().join("chain.mdbx"),
+            dir: d.dir.clone(),
+            published: d.published,
+            generation: 0,
+        };
         let (r, unchanged) = refused(&p, &dd);
         assert!(unchanged, "byte {i}");
         assert!(
@@ -169,28 +194,54 @@ fn d3_to_d7_the_manifest_and_the_generation() {
         xone_fault::copy_dir(&d.path, &sc.path().join("chain.mdbx"));
         let mut b = m.encode();
         b[4..6].copy_from_slice(&v.to_le_bytes());
-        edit_mdbx(&sc.path().join("chain.mdbx"), |tx| tx.put(T::Meta, MANIFEST_KEY, &b).unwrap());
-        let dd = Dead { path: sc.path().join("chain.mdbx"), dir: d.dir.clone(), published: d.published, generation: 0 };
+        edit_mdbx(&sc.path().join("chain.mdbx"), |tx| {
+            tx.put(T::Meta, MANIFEST_KEY, &b).unwrap()
+        });
+        let dd = Dead {
+            path: sc.path().join("chain.mdbx"),
+            dir: d.dir.clone(),
+            published: d.published,
+            generation: 0,
+        };
         assert_eq!(refused(&p, &dd), (Refuse::FormatVersion(v), true));
     }
     // D6: the generation row and the manifest disagree
     let sc = Scratch::new("d6");
     xone_fault::copy_dir(&d.path, &sc.path().join("chain.mdbx"));
     edit_mdbx(&sc.path().join("chain.mdbx"), |tx| {
-        tx.put(T::Meta, GEN_KEY, &(m.generation + 1).to_le_bytes()).unwrap();
+        tx.put(T::Meta, GEN_KEY, &(m.generation + 1).to_le_bytes())
+            .unwrap();
     });
-    let dd = Dead { path: sc.path().join("chain.mdbx"), dir: d.dir.clone(), published: d.published, generation: 0 };
+    let dd = Dead {
+        path: sc.path().join("chain.mdbx"),
+        dir: d.dir.clone(),
+        published: d.published,
+        generation: 0,
+    };
     assert_eq!(
         refused(&p, &dd),
-        (Refuse::GenerationMismatch { mdbx: m.generation + 1, manifest: m.generation }, true)
+        (
+            Refuse::GenerationMismatch {
+                mdbx: m.generation + 1,
+                manifest: m.generation
+            },
+            true
+        )
     );
     // D7: an entry that does not end at the head
     let sc = Scratch::new("d7");
     xone_fault::copy_dir(&d.path, &sc.path().join("chain.mdbx"));
     let mut bad = m.clone();
     bad.entries[1].last_block -= 1;
-    edit_mdbx(&sc.path().join("chain.mdbx"), |tx| tx.put(T::Meta, MANIFEST_KEY, &bad.encode()).unwrap());
-    let dd = Dead { path: sc.path().join("chain.mdbx"), dir: d.dir.clone(), published: d.published, generation: 0 };
+    edit_mdbx(&sc.path().join("chain.mdbx"), |tx| {
+        tx.put(T::Meta, MANIFEST_KEY, &bad.encode()).unwrap()
+    });
+    let dd = Dead {
+        path: sc.path().join("chain.mdbx"),
+        dir: d.dir.clone(),
+        published: d.published,
+        generation: 0,
+    };
     assert_eq!(refused(&p, &dd), (Refuse::ManifestInconsistent, true));
 }
 
@@ -235,7 +286,11 @@ fn d11_to_d14_segments_ahead_are_cut_and_far_ahead_are_quarantined() {
     assert_eq!(row, Row::Ready);
     assert!(matches!(res.unwrap().1, Resumed::Head { repaired: 0, .. }));
     // D12: a torn tail, and D13: complete extra frames, then D14: more than 128
-    for (n, frames, row) in [(0usize, 7usize, Row::D12), (3, 0, Row::D13), (129, 0, Row::D14)] {
+    for (n, frames, row) in [
+        (0usize, 7usize, Row::D12),
+        (3, 0, Row::D13),
+        (129, 0, Row::D14),
+    ] {
         let (_sc, d) = built(&p);
         let m = manifest_of(&d.path);
         for s in Segment::ALL {
@@ -263,7 +318,11 @@ fn d11_to_d14_segments_ahead_are_cut_and_far_ahead_are_quarantined() {
             .map(|n| img.bytes(&format!("quarantine/{n}")).unwrap().len())
             .collect::<Vec<_>>();
         if row == Row::D14 {
-            assert_eq!(quarantined.len(), 3, "the cut bytes are copied before the cut");
+            assert_eq!(
+                quarantined.len(),
+                3,
+                "the cut bytes are copied before the cut"
+            );
             assert!(quarantined.iter().all(|l| *l == 129 * (9 + 16)));
         } else {
             assert!(quarantined.is_empty());
@@ -277,7 +336,11 @@ fn a_flipped_byte_in_a_committed_frame_is_never_served() {
     let p = world();
     let (_sc, d) = built(&p);
     // a frame in the middle of the bodies file: start-up checks the tail, every read checks the CRC
-    let mut f = d.dir.open(&chunk_path(Segment::Bodies, 4)).unwrap().unwrap();
+    let mut f = d
+        .dir
+        .open(&chunk_path(Segment::Bodies, 4))
+        .unwrap()
+        .unwrap();
     let mut b = [0u8; 1];
     f.read_at(26, &mut b).unwrap();
     f.write_at(26, &[b[0] ^ 1]).unwrap();
@@ -296,7 +359,11 @@ fn a_segment_header_of_another_version_is_refused_untouched() {
     let p = world();
     for v in [0u16, 2] {
         let (_sc, d) = built(&p);
-        let mut f = d.dir.open(&chunk_path(Segment::Receipts, 4)).unwrap().unwrap();
+        let mut f = d
+            .dir
+            .open(&chunk_path(Segment::Receipts, 4))
+            .unwrap()
+            .unwrap();
         f.write_at(4, &v.to_le_bytes()).unwrap();
         f.sync_all().unwrap();
         assert_eq!(refused(&p, &d), (Refuse::FormatVersion(v), true));
@@ -306,18 +373,27 @@ fn a_segment_header_of_another_version_is_refused_untouched() {
 #[test]
 fn repair_is_idempotent_across_a_kill_at_rp1_rp2_rp3() {
     let p = world();
-    for (kp, n) in [(KillPoint::RP1, 3usize), (KillPoint::RP2, 3), (KillPoint::RP3, 129)] {
+    for (kp, n) in [
+        (KillPoint::RP1, 3usize),
+        (KillPoint::RP2, 3),
+        (KillPoint::RP3, 129),
+    ] {
         let (_sc, d) = built(&p);
         for s in Segment::ALL {
-            let extra: Vec<u8> = (0..n).flat_map(|k| frame(100 + k as u64, &[1; 9])).collect();
+            let extra: Vec<u8> = (0..n)
+                .flat_map(|k| frame(100 + k as u64, &[1; 9]))
+                .collect();
             append(&d.dir, s, &extra);
         }
         let mut crashes = 0;
         for (_, pick) in d.picks(4) {
             let (sc, img) = d.image(pick);
-            let mut store =
-                MdbxStore::open(&sc.path().join("chain.mdbx"), img.clone(), cfg(p.retention, p.bpf))
-                    .unwrap();
+            let mut store = MdbxStore::open(
+                &sc.path().join("chain.mdbx"),
+                img.clone(),
+                cfg(p.retention, p.bpf),
+            )
+            .unwrap();
             store.arm(kp, Fault::Kill, 0);
             let r = Chain::open(p.spec.clone(), store, p.exec.clone(), accept as Accept);
             assert!(
@@ -331,7 +407,10 @@ fn repair_is_idempotent_across_a_kill_at_rp1_rp2_rp3() {
             for pick2 in [Pick::Everything, Pick::Nothing, Pick::Random { seed: 1 }] {
                 let img2 = img.crash(pick2);
                 let sc2 = Scratch::new("rp");
-                xone_fault::copy_dir(&sc.path().join("chain.mdbx"), &sc2.path().join("chain.mdbx"));
+                xone_fault::copy_dir(
+                    &sc.path().join("chain.mdbx"),
+                    &sc2.path().join("chain.mdbx"),
+                );
                 let (_, res) = restart(&p, &sc2, img2);
                 let (chain, _) = res.unwrap_or_else(|e| panic!("{kp:?}: {e}"));
                 assert_eq!(chain.head(), head);
@@ -374,12 +453,20 @@ fn pruning_survives_a_kill_at_pr1_to_pr5() {
             assert_eq!(pruned, kp != KillPoint::PR1, "{kp:?}: the floor commit");
             assert_eq!(m.generation, before.generation + u64::from(pruned));
             // a pruned block is gone from the index; the others read back; no chunk below the floor
-            assert_eq!(store.canonical_block(2).unwrap().is_none(), pruned, "{kp:?} {pick:?}");
+            assert_eq!(
+                store.canonical_block(2).unwrap().is_none(),
+                pruned,
+                "{kp:?} {pick:?}"
+            );
             assert!(store.canonical_block(4).unwrap().is_some());
             assert!(store.canonical_block(10).unwrap().is_some());
             for s in Segment::ALL {
                 let chunks = store.segs().chunks(s).unwrap();
-                assert_eq!(chunks.contains(&0), !pruned, "{kp:?} {pick:?}: chunk 0 of {s:?}");
+                assert_eq!(
+                    chunks.contains(&0),
+                    !pruned,
+                    "{kp:?} {pick:?}: chunk 0 of {s:?}"
+                );
             }
             // nothing below the floor can be unwound to
             assert!(chain_of(&p, store).set_head(2).is_err());

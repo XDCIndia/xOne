@@ -24,10 +24,6 @@ xone-executor.workspace = true
 xone-primitives.workspace = true
 xone-state.workspace = true
 
-[features]
-# Kill points, fault arming and the in-memory disk of tests/fault. Never in a release artifact.
-fault-injection = ["xone-db/fault-injection"]
-
 [dev-dependencies]
 alloy-trie.workspace = true
 k256.workspace = true

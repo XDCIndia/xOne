@@ -131,6 +131,47 @@ pub enum KillPoint {
 }
 
 impl KillPoint {
+    /// The ID of `tests/fault/PLAN.md`.
+    pub fn name(self) -> &'static str {
+        match self {
+            KillPoint::K01 => "K01",
+            KillPoint::K02 => "K02",
+            KillPoint::K03 => "K03",
+            KillPoint::K04 => "K04",
+            KillPoint::K05 => "K05",
+            KillPoint::K06 => "K06",
+            KillPoint::K07 => "K07",
+            KillPoint::K08 => "K08",
+            KillPoint::K09 => "K09",
+            KillPoint::K10 => "K10",
+            KillPoint::K11 => "K11",
+            KillPoint::K12 => "K12",
+            KillPoint::K13 => "K13",
+            KillPoint::K14 => "K14",
+            KillPoint::K15 => "K15",
+            KillPoint::K16 => "K16",
+            KillPoint::K17 => "K17",
+            KillPoint::K18 => "K18",
+            KillPoint::K19 => "K19",
+            KillPoint::U1a => "U1a",
+            KillPoint::U1b => "U1b",
+            KillPoint::U3a => "U3a",
+            KillPoint::U3b => "U3b",
+            KillPoint::U4a => "U4a",
+            KillPoint::U4b => "U4b",
+            KillPoint::U5a => "U5a",
+            KillPoint::U5b => "U5b",
+            KillPoint::PR1 => "PR1",
+            KillPoint::PR2 => "PR2",
+            KillPoint::PR3 => "PR3",
+            KillPoint::PR4 => "PR4",
+            KillPoint::PR5 => "PR5",
+            KillPoint::RP1 => "RP1",
+            KillPoint::RP2 => "RP2",
+            KillPoint::RP3 => "RP3",
+        }
+    }
+
     /// The pruning points, reachable only on a store that prunes (`MdbxStore::prune_to`).
     pub const PRUNE: [KillPoint; 5] = [
         KillPoint::PR1,

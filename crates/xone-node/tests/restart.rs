@@ -91,11 +91,7 @@ fn head_and_blocks_come_back() {
 fn a_torn_tail_is_cut_and_damage_is_refused() {
     let dir = scratch("damage");
     drop(fill(&dir, 0));
-    let seg = |n: &str| {
-        dir.join("xone/static")
-            .join(n)
-            .join("0000000000.seg")
-    };
+    let seg = |n: &str| dir.join("xone/static").join(n).join("0000000000.seg");
     // bytes after the committed length (a torn append) are ignored and cut
     let mut v = std::fs::read(seg("headers")).unwrap();
     let good = v.len();

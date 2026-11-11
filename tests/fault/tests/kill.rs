@@ -19,7 +19,7 @@ use xone_db::{
     fault::{Errno, MemDir, Pick},
     Cause, Durability,
 };
-use xone_fault::Scratch;
+use xone_fault::{Arm, Scratch};
 use xone_sync::{
     chain::Resumed,
     mdbx::{MdbxStore, OpenError},
@@ -216,7 +216,11 @@ fn every_kill_point_every_operation_every_crash_image() {
                         assert!(r.is_ok(), "{}: {r:?}", s.name);
                         break; // the point is not reached again in this operation
                     }
-                    assert!(r.is_err(), "{} {kp:?}: a dead store reported success", s.name);
+                    assert!(
+                        r.is_err(),
+                        "{} {kp:?}: a dead store reported success",
+                        s.name
+                    );
                     assert!(store.log().contains(&kp));
                     hit.insert(kp);
                     kills += 1;
@@ -232,8 +236,8 @@ fn every_kill_point_every_operation_every_crash_image() {
                         *by_fault.entry(f).or_default() += 1;
                         let what = format!("{} {kp:?} {fault:?} {pick:?} skip {skip}", s.name);
                         let (row, res) = restart(&p, &isc, img.clone());
-                        let (chain, resumed) =
-                            res.unwrap_or_else(|e| panic!("{what}: restart refused: {e} ({row:?})"));
+                        let (chain, resumed) = res
+                            .unwrap_or_else(|e| panic!("{what}: restart refused: {e} ({row:?})"));
                         assert!(allowed(kp).contains(&row), "{what}: row {row:?}");
                         *rows.entry((family(kp), row)).or_default() += 1;
                         assert!(matches!(resumed, Resumed::Head { .. }), "{what}");
@@ -351,7 +355,10 @@ fn failed_fsync(s: &Scn, signed: &mut usize) -> usize {
             // no retry in process: a second write touches no file
             let syncs = dir.syncs();
             let chain = p.chain(store);
-            assert!(chain.set_head(1).is_err(), "{what}: a dead store took a write");
+            assert!(
+                chain.set_head(1).is_err(),
+                "{what}: a dead store took a write"
+            );
             assert_eq!(dir.syncs(), syncs, "{what}: fsync was retried");
             let store = chain.into_store();
             let published = store.head();
@@ -369,8 +376,7 @@ fn failed_fsync(s: &Scn, signed: &mut usize) -> usize {
                 let (isc, img) = dead.image(pick);
                 img.set_boot("boot-2");
                 let (row, res) = restart(&p, &isc, img);
-                let (chain, _) =
-                    res.unwrap_or_else(|e| panic!("{what} {pick:?}: {e} ({row:?})"));
+                let (chain, _) = res.unwrap_or_else(|e| panic!("{what} {pick:?}: {e} ({row:?})"));
                 assert_eq!(chain.head(), published, "{what} {pick:?}");
                 let store = assert_sound(chain, &p.t);
                 finish(s, &chain_of(&p, store), &p.t);
@@ -422,7 +428,10 @@ fn no_space(s: &Scn, signed: &mut usize) -> (usize, usize) {
             recovered += 1;
             assert!(store.head().0 <= before.0, "{what}: the head moved forward");
             // reads still work; the tail is cut to the committed length; no orphan chunk
-            assert!(store.canonical_block(store.head().0).unwrap().is_some(), "{what}");
+            assert!(
+                store.canonical_block(store.head().0).unwrap().is_some(),
+                "{what}"
+            );
             let m = store.manifest().unwrap().clone();
             for sg in xone_db::Segment::ALL {
                 let e = xone_db::segments::entry(&m, sg);
@@ -436,7 +445,11 @@ fn no_space(s: &Scn, signed: &mut usize) -> (usize, usize) {
             dir.clear_faults();
             let chain = p.chain(store);
             finish(s, &chain, &p.t);
-            assert_eq!(chain.with_store(|s| s.durability()), Durability::Durable, "{what}");
+            assert_eq!(
+                chain.with_store(|s| s.durability()),
+                Durability::Durable,
+                "{what}"
+            );
         }
     }
     (recovered, fail_stop)
@@ -471,7 +484,10 @@ fn eio(s: &Scn) -> usize {
         }
         cases += 1;
         assert!(
-            matches!(store.durability(), Durability::Degraded(Cause::Io | Cause::FsyncFailed)),
+            matches!(
+                store.durability(),
+                Durability::Degraded(Cause::Io | Cause::FsyncFailed)
+            ),
             "{} EIO at write {nth}: {:?}",
             s.name,
             store.durability()
@@ -486,7 +502,11 @@ fn eio(s: &Scn) -> usize {
         let (_, res) = restart(&p, &isc, img.clone());
         if let Ok((chain, _)) = res {
             img.clear_faults();
-            assert_eq!(chain.head(), dead.published, "read {nth} failed, yet the head moved");
+            assert_eq!(
+                chain.head(),
+                dead.published,
+                "read {nth} failed, yet the head moved"
+            );
         }
         cases += 1;
     }

@@ -416,15 +416,14 @@ impl Core {
         });
         // The store goes back to the checkpoint: the blocks above it are replayed below.
         if loaded.as_ref().is_some_and(|l| start < l.number) {
-            node_store
-                .unwind_to(start, Unwound::Drop)
-                .map_err(|e| {
-                    CoreError::Inconsistent(format!(
-                        "no state checkpoint within the last {RETENTION} blocks to replay from: {e}"
-                    ))
-                })?;
+            node_store.unwind_to(start, Unwound::Drop).map_err(|e| {
+                CoreError::Inconsistent(format!(
+                    "no state checkpoint within the last {RETENTION} blocks to replay from: {e}"
+                ))
+            })?;
         }
-        if node_store.head() != (start, anchor.hash()) || node_store.flat_root() != anchor.state_root
+        if node_store.head() != (start, anchor.hash())
+            || node_store.flat_root() != anchor.state_root
         {
             return Err(CoreError::Inconsistent(format!(
                 "the store at block {start} is not the checkpoint's state"

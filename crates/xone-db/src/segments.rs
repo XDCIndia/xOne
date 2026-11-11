@@ -59,6 +59,17 @@ pub fn crc32c(data: &[u8]) -> u32 {
     })
 }
 
+/// What an injection point does when it fires (see [`SegDir::probe`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Probe {
+    /// The process dies here.
+    Crash,
+    /// An I/O error: the store fails stop.
+    Io,
+    /// The MDBX commit is applied, then the call reports an error (outcome unknown).
+    IoCommitted,
+}
+
 pub trait SegFile {
     fn write_at(&mut self, off: u64, data: &[u8]) -> io::Result<()>;
     /// Fills `buf` exactly or fails with `UnexpectedEof`.
@@ -84,6 +95,11 @@ pub trait SegDir {
     fn sync(&self, dir: &str) -> io::Result<()>;
     /// Identifies this boot; the `FSYNC_FAILED` marker holds it (ADR-005 section 7, P2).
     fn boot_id(&self) -> String;
+    /// The store calls this at each named kill point of ADR-005. A real directory never fires;
+    /// the in-memory disk of `fault` (tests only) can.
+    fn probe(&self, _point: &'static str) -> Option<Probe> {
+        None
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

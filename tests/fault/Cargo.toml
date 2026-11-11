@@ -7,7 +7,7 @@ license.workspace = true
 publish.workspace = true
 description = "Test-only: the ADR-005 fault harness (tests/fault/PLAN.md) and the real-process kill harness over MdbxStore. Not shipped."
 
-# Enables `fault-injection` on xone-db and xone-sync: this crate is never a dependency of the release tree.
+# Enables `fault-injection` on xone-db (the in-memory disk): this crate is never a dependency of the release tree.
 [dependencies]
 alloy-primitives.workspace = true
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
@@ -18,7 +18,7 @@ xone-db = { workspace = true, features = ["fault-injection"] }
 xone-node.workspace = true
 xone-primitives.workspace = true
 xone-state.workspace = true
-xone-sync = { workspace = true, features = ["fault-injection"] }
+xone-sync.workspace = true
 alloy-rlp.workspace = true
 xone-net = { path = "../../crates/xone-net" }
 

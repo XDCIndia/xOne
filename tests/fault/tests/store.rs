@@ -65,7 +65,9 @@ fn same_operations_same_results_and_a_restart_gives_them_back() {
         let chain = p.chain(ds);
         let label = consistent(&chain, &p.t);
         // the durable bytes alone (power loss with every fsync honoured) are the whole chain
-        let (c2, r) = p.reopen(&scratch, chain.into_store(), Pick::Nothing).unwrap();
+        let (c2, r) = p
+            .reopen(&scratch, chain.into_store(), Pick::Nothing)
+            .unwrap();
         assert!(matches!(r, Resumed::Head { repaired: 0, .. }), "{r:?}");
         assert_eq!(consistent(&c2, &p.t), label);
         let store = c2.into_store();

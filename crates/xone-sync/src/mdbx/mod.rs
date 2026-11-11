@@ -13,8 +13,8 @@
 //! tables yet). Replace [`StateProvider`] with a table-backed one when the trie is persisted; the
 //! tables and the protocol here do not change.
 //!
-//! Kill points: [`KillPoint`] is reachable at every step with the `fault-injection` feature, which
-//! only tests enable. Without it `step` is empty.
+//! Kill points: [`KillPoint`] names every step; the store asks its segment directory whether one fires
+//! (`SegDir::probe`). Only the in-memory disk of the fault harness ever answers yes.
 
 mod codec;
 
@@ -72,18 +72,8 @@ pub enum OpenError {
 
 #[derive(Clone, Copy)]
 enum Dead {
-    #[cfg_attr(not(feature = "fault-injection"), allow(dead_code))]
     Crashed(KillPoint),
     Failed(Cause),
-}
-
-#[cfg(feature = "fault-injection")]
-#[derive(Default)]
-struct Fi {
-    armed: Option<(KillPoint, crate::testkit::Fault, usize)>,
-    log: Vec<KillPoint>,
-    committed_on_error: bool,
-    last: Option<crate::testkit::Fault>,
 }
 
 fn be(n: u64) -> [u8; 8] {
@@ -246,8 +236,8 @@ pub struct MdbxStore<D: SegDir> {
     degraded: Option<Cause>,
     reconciling: bool,
     dead: Option<Dead>,
-    #[cfg(feature = "fault-injection")]
-    fi: Fi,
+    /// A fired `Probe::IoCommitted`: the commit in flight is applied before the error is returned.
+    committed_on_error: bool,
 }
 
 impl<D: SegDir> MdbxStore<D> {
@@ -280,8 +270,7 @@ impl<D: SegDir> MdbxStore<D> {
             degraded: None,
             reconciling: true,
             dead: None,
-            #[cfg(feature = "fault-injection")]
-            fi: Fi::default(),
+            committed_on_error: false,
         };
         let rd = s.env.read()?;
         s.generation = rd
@@ -323,31 +312,17 @@ impl<D: SegDir> MdbxStore<D> {
         }
     }
 
-    #[cfg(not(feature = "fault-injection"))]
-    #[inline(always)]
-    fn step(&mut self, _p: KillPoint) -> Result<(), StoreError> {
-        Ok(())
-    }
-
-    /// One kill point. The armed fault fires here.
-    #[cfg(feature = "fault-injection")]
+    /// One kill point (ADR-005 sections 5, 7, 8 and 10). A real directory never fires; the in-memory
+    /// disk of the fault harness does.
     fn step(&mut self, point: KillPoint) -> Result<(), StoreError> {
-        use crate::testkit::Fault;
-        self.fi.log.push(point);
-        let Some(a) = self.fi.armed.as_mut().filter(|a| a.0 == point) else {
+        use xone_db::segments::Probe;
+        let Some(p) = self.segs.dir.probe(point.name()) else {
             return Ok(());
         };
-        if a.2 > 0 {
-            a.2 -= 1;
-            return Ok(());
-        }
-        let fault = a.1;
-        self.fi.armed = None;
-        self.fi.last = Some(fault);
-        self.fi.committed_on_error = fault == Fault::IoCommitted;
-        let (dead, e) = match fault {
-            Fault::Kill | Fault::Power => (Dead::Crashed(point), StoreError::Crashed(point)),
-            Fault::Io | Fault::IoCommitted => {
+        self.committed_on_error = p == Probe::IoCommitted;
+        let (dead, e) = match p {
+            Probe::Crash => (Dead::Crashed(point), StoreError::Crashed(point)),
+            Probe::Io | Probe::IoCommitted => {
                 (Dead::Failed(Cause::Io), StoreError::Degraded(Cause::Io))
             }
         };
@@ -464,7 +439,10 @@ impl<D: SegDir> MdbxStore<D> {
             .remove(JOURNAL)
             .map_err(|_| self.fail_stop(Cause::Io))?;
         self.step(points.0)?;
-        self.segs.dir.sync("journal").map_err(|_| self.sync_failed())?;
+        self.segs
+            .dir
+            .sync("journal")
+            .map_err(|_| self.sync_failed())?;
         self.step(points.1)
     }
 
@@ -714,7 +692,6 @@ impl<D: SegDir> MdbxStore<D> {
     }
 
     /// S1 to S7 for one block. `anchor`: the first commit of a new datadir.
-    #[cfg_attr(not(feature = "fault-injection"), allow(clippy::question_mark))]
     fn commit_inner(
         &mut self,
         rec: &Record,
@@ -803,8 +780,7 @@ impl<D: SegDir> MdbxStore<D> {
         self.step(K14)?;
         // S6 commit
         if let Err(e) = self.step(K15) {
-            #[cfg(feature = "fault-injection")]
-            if self.fi.committed_on_error && tx.commit().is_ok() {
+            if self.committed_on_error && tx.commit().is_ok() {
                 // the commit is applied, then the call reports an error: the outcome is unknown
                 let _ = self.publish_commit(rec, &manifest, committed, anchor.as_ref(), new_base);
             }
@@ -1483,23 +1459,5 @@ impl<D: SegDir> Store for MdbxStore<D> {
         self.load_state()?;
         self.reconciling = false;
         Ok(())
-    }
-}
-
-#[cfg(feature = "fault-injection")]
-impl<D: SegDir> MdbxStore<D> {
-    /// The next time `point` is reached (after `skip` earlier visits), `fault` happens.
-    pub fn arm(&mut self, point: KillPoint, fault: crate::testkit::Fault, skip: usize) {
-        self.fi.armed = Some((point, fault, skip));
-    }
-
-    /// Kill points passed so far, in order.
-    pub fn log(&self) -> &[KillPoint] {
-        &self.fi.log
-    }
-
-    /// The fault that killed this store, if one did.
-    pub fn last_fault(&self) -> Option<crate::testkit::Fault> {
-        self.fi.last
     }
 }
