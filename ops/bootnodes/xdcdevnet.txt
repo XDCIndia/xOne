@@ -1,0 +1,3 @@
+# xdcdevnet bootnodes, one enode URL per line. Source: XDCIndia/go-ethereum params/bootnodes.go (XDCDevnetBootnodes) at 6fc8e8c2.
+enode://fae09c24badef5488f2bde8c88c27317919e2eaa311bee5d3e087756c8080add923d94389cb5ac29e2abd85519535c25423136d39122459b594ea58e064d6918@154.38.175.218:30701
+enode://a183045c9eb8eebe2dc3ab4197630be625a03981646b668dcf74959a0c4341cb88f00b53bf0749d1e081033df20cfcb75b71054e2a03ecfdef83151f5048e1e0@154.38.175.218:30799
