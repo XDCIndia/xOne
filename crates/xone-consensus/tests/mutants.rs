@@ -1,3 +1,10 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::as_conversions,
+    clippy::disallowed_methods,
+    reason = "test code: vectors are trusted inputs and a panic is the failure signal"
+)]
 //! Mutation check of the corpus: disable one check at a time in the verifier source,
 //! run the corpus tests in a scratch target directory and require them to fail, then
 //! restore the file. Slow (one build per mutant), so it only runs on request:

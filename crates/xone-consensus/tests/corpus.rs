@@ -1,3 +1,10 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::as_conversions,
+    clippy::disallowed_methods,
+    reason = "test code: vectors are trusted inputs and a panic is the failure signal"
+)]
 //! The consensus corpus: every valid vector is accepted, every negative vector is
 //! rejected with exactly the typed error its mutation names, and no switch can
 //! disable a check. Vectors are written by `conformance/exporter blocks` (valid) and
