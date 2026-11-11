@@ -1,0 +1,248 @@
+//! `StateProvider`: opens the post-state of a block as a read-only [`StateView`].
+//!
+//! The flat tables hold the head. The post-state of an older retained block is the flat value,
+//! except where a later block's changeset holds a previous value: the lowest later changeset that
+//! touches a key has the value as it was right after the block being opened. No replay, no copy.
+//! A block on a side branch is a parent view plus the diff of the side blocks above it
+//! ([`StateView::child`]); nothing is written to the flat tables for it.
+//!
+//! ponytail: a read scans the changesets above the opened block (at most `retention`), and the
+//! side index and the changesets are unbounded or in memory. An index per key and a persisted side
+//! index come with the MDBX binding, together with the open-latency target.
+
+use crate::{
+    changeset::{ChangeSet, StateDiff},
+    flat::{FlatRead, FlatWrite},
+    Account,
+};
+use alloy_primitives::{Address, B256, U256};
+use std::collections::{BTreeMap, HashMap};
+use xone_primitives::WideBalanceError;
+
+/// A state that cannot be opened: unknown hash, or outside the retained window.
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+pub enum Missing {
+    #[error("no state for block hash {0}")]
+    Block(B256),
+    #[error("block number {0} is outside the retained window")]
+    Number(u64),
+}
+
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+pub enum CommitError {
+    #[error("parent {parent} is not the head {head}")]
+    NotExtending { head: B256, parent: B256 },
+    #[error("block {0} is already known")]
+    Known(B256),
+    #[error(transparent)]
+    Missing(#[from] Missing),
+    #[error(transparent)]
+    Balance(#[from] WideBalanceError),
+}
+
+/// Reads of one state. There is no mutating method: this is the only thing the executor's
+/// prewarm and parallel readers receive.
+pub trait StateRead {
+    fn account(&self, address: Address) -> Option<Account>;
+    /// Zero when absent.
+    fn storage(&self, address: Address, slot: B256) -> U256;
+}
+
+pub struct StateProvider<F> {
+    flat: F,
+    retention: u64,
+    /// Oldest openable block.
+    base: (u64, B256),
+    /// Blocks above `base`, each with the changeset that undoes it.
+    chain: BTreeMap<u64, (B256, ChangeSet)>,
+    by_hash: HashMap<B256, u64>,
+    /// Side blocks: hash to (parent hash, diff).
+    side: HashMap<B256, (B256, StateDiff)>,
+}
+
+impl<F: FlatWrite> StateProvider<F> {
+    /// `flat` is the post-state of block (`number`, `hash`). `retention` is the number of blocks
+    /// above the oldest openable one that keep a changeset.
+    pub fn new(flat: F, number: u64, hash: B256, retention: u64) -> Self {
+        Self {
+            flat,
+            retention,
+            base: (number, hash),
+            chain: BTreeMap::new(),
+            by_hash: HashMap::from([(hash, number)]),
+            side: HashMap::new(),
+        }
+    }
+
+    pub fn head(&self) -> (u64, B256) {
+        self.chain
+            .last_key_value()
+            .map_or(self.base, |(n, (h, _))| (*n, *h))
+    }
+
+    /// The head state, read-only. For roots (`crate::trie::flat_root`) and tests.
+    pub fn flat(&self) -> &F {
+        &self.flat
+    }
+
+    /// Writes the next canonical block and keeps its changeset (one commit).
+    pub fn commit_block(
+        &mut self,
+        hash: B256,
+        parent: B256,
+        diff: &StateDiff,
+    ) -> Result<(), CommitError> {
+        let (number, head) = self.head();
+        if parent != head {
+            return Err(CommitError::NotExtending { head, parent });
+        }
+        if self.at(hash).is_ok() {
+            return Err(CommitError::Known(hash));
+        }
+        let cs = diff.apply(&mut self.flat)?;
+        self.chain.insert(number + 1, (hash, cs));
+        self.by_hash.insert(hash, number + 1);
+        while u64::try_from(self.chain.len()).unwrap_or(u64::MAX) > self.retention {
+            if let Some((n, (h, _))) = self.chain.pop_first() {
+                self.by_hash.remove(&self.base.1);
+                self.base = (n, h);
+            }
+        }
+        Ok(())
+    }
+
+    /// Reverts every block above `number`. The head moves to `number`.
+    pub fn unwind_to(&mut self, number: u64) -> Result<(), Missing> {
+        if number < self.base.0 || number > self.head().0 {
+            return Err(Missing::Number(number));
+        }
+        while let Some((n, (hash, cs))) = self.chain.pop_last() {
+            if n <= number {
+                self.chain.insert(n, (hash, cs));
+                break;
+            }
+            cs.revert(&mut self.flat);
+            self.by_hash.remove(&hash);
+        }
+        Ok(())
+    }
+
+    /// Records a block that is not canonical, on top of a known parent (canonical or side).
+    pub fn insert_side(
+        &mut self,
+        hash: B256,
+        parent: B256,
+        diff: StateDiff,
+    ) -> Result<(), CommitError> {
+        if self.at(hash).is_ok() {
+            return Err(CommitError::Known(hash));
+        }
+        self.at(parent)?;
+        for a in diff.accounts.values().flatten() {
+            a.balance.check_legal()?;
+        }
+        self.side.insert(hash, (parent, diff));
+        Ok(())
+    }
+
+    /// The post-state of `hash`, canonical (inside the retained window) or side.
+    pub fn at(&self, hash: B256) -> Result<StateView<'_, F>, Missing> {
+        let mut overlays = Vec::new();
+        let mut cur = hash;
+        loop {
+            if let Some(&number) = self.by_hash.get(&cur) {
+                return Ok(StateView {
+                    provider: self,
+                    number,
+                    overlays,
+                });
+            }
+            let (parent, diff) = self.side.get(&cur).ok_or(Missing::Block(cur))?;
+            overlays.push(diff); // newest first
+            cur = *parent;
+        }
+    }
+}
+
+/// A read-only state. It borrows the provider, so the provider cannot commit or unwind while a
+/// view is alive, and it has no method that writes:
+///
+/// ```compile_fail,E0502
+/// use alloy_primitives::B256;
+/// use xone_state::{MemFlat, StateDiff, StateProvider};
+/// let mut p = StateProvider::new(MemFlat::default(), 0, B256::ZERO, 8);
+/// let view = p.at(B256::ZERO).unwrap();
+/// p.commit_block(B256::repeat_byte(1), B256::ZERO, &StateDiff::default()).unwrap();
+/// let _ = view.number();
+/// ```
+///
+/// ```compile_fail,E0599
+/// use alloy_primitives::{Address, B256};
+/// use xone_state::{MemFlat, StateProvider};
+/// let p = StateProvider::new(MemFlat::default(), 0, B256::ZERO, 8);
+/// let mut view = p.at(B256::ZERO).unwrap();
+/// view.set_account(Address::ZERO, None);
+/// ```
+pub struct StateView<'a, F> {
+    provider: &'a StateProvider<F>,
+    number: u64,
+    /// Side diffs above the canonical block `number`, newest first.
+    overlays: Vec<&'a StateDiff>,
+}
+
+impl<'a, F> StateView<'a, F> {
+    /// Number of the canonical block this view stands on (its side ancestors not counted).
+    pub fn number(&self) -> u64 {
+        self.number
+    }
+
+    /// The state after applying `diff` on top of this one. `self` is consumed, not changed.
+    pub fn child(mut self, diff: &'a StateDiff) -> Self {
+        self.overlays.insert(0, diff);
+        self
+    }
+}
+
+impl<F: FlatWrite> StateView<'_, F> {
+    /// The state root after `diff` on top of this view, computed from the flat tables without
+    /// writing ([`crate::trie::root_after`]). Only the head view has its tables at hand: a view with
+    /// side overlays or an older canonical block is [`Missing::Number`].
+    pub fn root_with(&self, diff: &StateDiff) -> Result<B256, Missing> {
+        if !self.overlays.is_empty() || self.number != self.provider.head().0 {
+            return Err(Missing::Number(self.number));
+        }
+        Ok(crate::trie::root_after(&self.provider.flat, diff))
+    }
+}
+
+impl<F: FlatRead> StateRead for StateView<'_, F> {
+    fn account(&self, address: Address) -> Option<Account> {
+        if let Some(a) = self.overlays.iter().find_map(|d| d.accounts.get(&address)) {
+            return a.clone();
+        }
+        let above = self.provider.chain.range(self.number + 1..);
+        for (_, (_, cs)) in above {
+            if let Some(old) = cs.accounts.get(&address) {
+                return old.clone();
+            }
+        }
+        self.provider.flat.account(address)
+    }
+
+    fn storage(&self, address: Address, slot: B256) -> U256 {
+        for d in &self.overlays {
+            if matches!(d.accounts.get(&address), Some(None)) {
+                return U256::ZERO;
+            }
+            if let Some(v) = d.storage.get(&(address, slot)) {
+                return *v;
+            }
+        }
+        for (_, (_, cs)) in self.provider.chain.range(self.number + 1..) {
+            if let Some(old) = cs.storage.get(&(address, slot)) {
+                return *old;
+            }
+        }
+        self.provider.flat.storage(address, slot)
+    }
+}

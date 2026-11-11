@@ -1,0 +1,17 @@
+{
+  "_doc": "name -> {ok, crates: {workspace-relative dir: [dependency crate names]}}. check-layering.sh --fixtures generates each as a tiny workspace and runs the check on it.",
+  "good-db-depends-on-consensus": {"ok": true, "crates": {"crates/xone-primitives": [], "crates/xone-chainspec": ["xone-primitives"], "crates/xone-consensus": ["xone-chainspec"], "crates/xone-db": ["xone-consensus"], "sim": ["xone-db"]}},
+  "wrong-direction-primitives-to-chainspec": {"ok": false, "crates": {"crates/xone-primitives": ["xone-chainspec"], "crates/xone-chainspec": []}},
+  "wrong-direction-consensus-to-db": {"ok": false, "crates": {"crates/xone-consensus": ["xone-db"], "crates/xone-db": []}},
+  "same-rank-state-to-evm": {"ok": false, "crates": {"crates/xone-state": ["xone-evm"], "crates/xone-evm": []}},
+  "crate-depends-on-sim": {"ok": false, "crates": {"crates/xone-evm": ["xone-sim"], "sim": []}},
+  "bin-depends-on-lab": {"ok": false, "crates": {"bin/xone": ["pq-lab"], "labs/pq": []}},
+  "good-signer-callers-are-consensus-and-node": {"ok": true, "crates": {"crates/xone-primitives": [], "crates/xone-signer": ["xone-primitives"], "crates/xone-consensus": ["xone-signer"], "crates/xone-node": ["xone-signer", "xone-consensus"]}},
+  "signer-depends-on-consensus": {"ok": false, "crates": {"crates/xone-signer": ["xone-consensus"], "crates/xone-consensus": []}},
+  "signer-called-by-db": {"ok": false, "crates": {"crates/xone-signer": [], "crates/xone-db": ["xone-signer"]}},
+  "signer-called-by-bin": {"ok": false, "crates": {"crates/xone-signer": [], "bin/xone": ["xone-signer"]}},
+  "good-builder-depends-on-executor-and-state": {"ok": true, "crates": {"crates/xone-primitives": [], "crates/xone-chainspec": ["xone-primitives"], "crates/xone-state": ["xone-primitives"], "crates/xone-evm": ["xone-chainspec"], "crates/xone-consensus": ["xone-state"], "crates/xone-executor": ["xone-evm", "xone-consensus"], "crates/xone-builder": ["xone-executor", "xone-state", "xone-evm"]}},
+  "wrong-direction-builder-to-node": {"ok": false, "crates": {"crates/xone-builder": ["xone-node"], "crates/xone-node": []}},
+  "wrong-direction-executor-to-builder": {"ok": false, "crates": {"crates/xone-executor": ["xone-builder"], "crates/xone-builder": []}},
+  "unknown-crate": {"ok": false, "crates": {"crates/xone-mystery": []}}
+}

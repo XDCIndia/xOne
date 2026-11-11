@@ -1,0 +1,99 @@
+[workspace]
+resolver = "2"
+members = ["crates/xone-primitives", "crates/xone-chainspec", "crates/xone-db", "crates/xone-state", "crates/xone-consensus", "crates/xone-signer", "crates/xone-node", "sim", "bin/xone", "spikes/wide-balance", "spikes/net", "labs/pq", "crates/xone-evm", "conformance/sweep", "conformance/harness", "conformance/negative-gen", "crates/xone-net", "crates/xone-executor", "crates/xone-sync", "crates/xone-builder"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.94"
+license = "GPL-3.0-or-later"
+publish = false
+
+[workspace.dependencies]
+alloy-primitives = { version = "1.7", features = ["serde", "rlp"] }
+alloy-rlp = { version = "0.3", features = ["derive"] }
+alloy-trie = { version = "0.9", features = ["ethereum"] }
+num-bigint = "0.4"
+proptest = "1"
+clap = { version = "4.6", features = ["derive"] }
+k256 = { version = "0.13", default-features = false, features = ["ecdsa"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+toml = "1"
+signal-hook = "0.3"
+xone-node = { path = "crates/xone-node" }
+aes = "0.8"
+ctr = "0.9"
+getrandom = "0.3"
+pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }
+scrypt = { version = "0.10", default-features = false }
+sha2 = "0.10"
+tracing = "0.1"
+zeroize = "1"
+xone-primitives = { path = "crates/xone-primitives" }
+xone-chainspec = { path = "crates/xone-chainspec" }
+xone-db = { path = "crates/xone-db" }
+xone-state = { path = "crates/xone-state" }
+xone-consensus = { path = "crates/xone-consensus" }
+xone-evm = { path = "crates/xone-evm" }
+xone-executor = { path = "crates/xone-executor" }
+xone-builder = { path = "crates/xone-builder" }
+xone-signer = { path = "crates/xone-signer" }
+xone-sync = { path = "crates/xone-sync" }
+
+# R3 rule 1 and 2 (plan #1). Crates opt in with `[lints] workspace = true`; the lint
+# set is per crate, see docs/assurance/README.md. disallowed-* lists live in each
+# opted-in crate's clippy.toml (ci/check-fixtures.sh keeps the copies identical).
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+unwrap_or_default = "deny"
+unused_result_ok = "deny"
+as_conversions = "deny"
+disallowed_methods = "deny"
+disallowed_types = "deny"
+
+# The keystore vector tests run scrypt N=2^18 (geth standard); unoptimized it takes ~35 s.
+[profile.dev.package.scrypt]
+opt-level = 3
+[profile.dev.package.pbkdf2]
+opt-level = 3
+[profile.dev.package.sha2]
+opt-level = 3
+[profile.dev.package.hmac]
+opt-level = 3
+
+# The conformance replays run thousands of blocks through revm and the trie in test builds.
+[profile.dev.package.revm-interpreter]
+opt-level = 2
+[profile.dev.package.revm-handler]
+opt-level = 2
+[profile.dev.package.revm-context]
+opt-level = 2
+[profile.dev.package.revm-context-interface]
+opt-level = 2
+[profile.dev.package.revm-database]
+opt-level = 2
+[profile.dev.package.revm-state]
+opt-level = 2
+[profile.dev.package.alloy-trie]
+opt-level = 2
+[profile.dev.package.alloy-primitives]
+opt-level = 2
+[profile.dev.package.ruint]
+opt-level = 2
+[profile.dev.package.k256]
+opt-level = 2
+[profile.dev.package.xone-evm]
+opt-level = 2
+[profile.dev.package.xone-state]
+opt-level = 2
+[profile.dev.package.xone-executor]
+opt-level = 2
+# The pool flood test pushes 100,000 transactions through the heaps and lists and prices each with a gas table.
+[profile.dev.package.xone-builder]
+opt-level = 2

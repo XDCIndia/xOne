@@ -1,0 +1,26 @@
+[package]
+name = "xone-consensus"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+alloy-primitives.workspace = true
+alloy-rlp.workspace = true
+alloy-trie.workspace = true
+k256.workspace = true
+thiserror.workspace = true
+xone-chainspec.workspace = true
+xone-db.workspace = true
+xone-primitives.workspace = true
+xone-state.workspace = true
+
+[dev-dependencies]
+serde.workspace = true
+serde_json.workspace = true
+xone-state.workspace = true

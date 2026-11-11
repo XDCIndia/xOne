@@ -1,0 +1,25 @@
+package legacypool
+
+import (
+	"time"
+
+	"github.com/ethereum/go-ethereum/common"
+)
+
+// OracleAge sets the heartbeat of a queued account to `d` ago (the real clock is not scriptable).
+func (pool *LegacyPool) OracleAge(addr common.Address, d time.Duration) {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+	if _, ok := pool.queue.beats[addr]; ok {
+		pool.queue.beats[addr] = time.Now().Add(-d)
+	}
+}
+
+// OracleEvict runs the body of the `evict.C` case of loop() (legacypool.go:200-205) once.
+func (pool *LegacyPool) OracleEvict() {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+	for _, hash := range pool.queue.evictList() {
+		pool.removeTx(hash, true, true)
+	}
+}

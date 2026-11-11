@@ -1,0 +1,16 @@
+[package]
+name = "pq-lab"
+description = "Post-quantum signature cost lab (XA-13). Research only: no shipping crate depends on this."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Lab inputs until reviewed (docs/pq/implementations.md). Exact pins: a lab number is
+# only meaningful for the version that produced it.
+[dependencies]
+k256.workspace = true
+ml-dsa = { version = "=0.1.2", default-features = false, features = ["alloc", "getrandom"] }
+fips204 = { version = "=0.5.0", default-features = false, features = ["default-rng", "ml-dsa-44", "ml-dsa-65", "ml-dsa-87"] }
+fips205 = { version = "=0.5.0", default-features = false, features = ["default-rng", "slh-dsa-shake-128s", "slh-dsa-shake-128f", "slh-dsa-shake-192f"] }

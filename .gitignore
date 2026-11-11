@@ -22,3 +22,11 @@ rustc-ice-*.txt
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+# Oracle checkout, populated by conformance/fetch-geth.sh
+conformance/geth-src
+__pycache__/
+
+# xone-replay: archive block cache, persisted-state checkpoints (XA-05)
+/conformance/harness/cache/
+/conformance/harness/state/

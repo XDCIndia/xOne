@@ -1,0 +1,3462 @@
+{
+ "networks": {
+  "apothem": {
+   "chainId": 51,
+   "rows": [
+    {
+     "number": 0,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 23240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 25352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": false,
+      "london": false,
+      "merge": false,
+      "petersburg": false,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": false,
+      "xdcxMinerDisable": false
+     }
+    },
+    {
+     "number": 1,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": false,
+      "london": false,
+      "merge": false,
+      "petersburg": false,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": false,
+      "xdcxMinerDisable": false
+     }
+    },
+    {
+     "number": 2,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": false,
+      "london": false,
+      "merge": false,
+      "petersburg": false,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": false,
+      "xdcxMinerDisable": false
+     }
+    },
+    {
+     "number": 3,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": false,
+      "london": false,
+      "merge": false,
+      "petersburg": false,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": false,
+      "xdcxMinerDisable": false
+     }
+    },
+    {
+     "number": 4,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": false,
+      "london": false,
+      "merge": false,
+      "petersburg": false,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": false,
+      "xdcxMinerDisable": false
+     }
+    },
+    {
+     "number": 5,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": false,
+      "london": false,
+      "merge": false,
+      "petersburg": false,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": false,
+      "xdcxMinerDisable": false
+     }
+    },
+    {
+     "number": 23779190,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": false,
+      "london": false,
+      "merge": false,
+      "petersburg": false,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": false,
+      "xdcxMinerDisable": false
+     }
+    },
+    {
+     "number": 23779191,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": true,
+      "london": false,
+      "merge": false,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": false,
+      "xdcxMinerDisable": false
+     }
+    },
+    {
+     "number": 23779192,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": true,
+      "london": false,
+      "merge": false,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": false,
+      "xdcxMinerDisable": false
+     }
+    },
+    {
+     "number": 61289999,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": true,
+      "london": false,
+      "merge": false,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": false,
+      "xdcxMinerDisable": false
+     }
+    },
+    {
+     "number": 61290000,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 61290001,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 71549999,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 71550000,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55244
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57356
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 71550001,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55244
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57356
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 71551799,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55244
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57356
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 71551800,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55244
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57356
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 71551801,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55244
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57356
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 83599999,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55244
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57356
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 83600000,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55244
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57356
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 83600001,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55244
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57356
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 84332999,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55244
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57356
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 84333000,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21064
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21152
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 53632
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 54028
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": true,
+      "preEip2028": false,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 84333001,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21064
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21152
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 53632
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 54028
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": true,
+      "preEip2028": false,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 84732999,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21064
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21152
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 53632
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 54028
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": true,
+      "preEip2028": false,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 84733000,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21064
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21152
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 53632
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 54028
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": true,
+      "preEip2028": false,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 84733001,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21064
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21152
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 53632
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 54028
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": true,
+      "preEip2028": false,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    }
+   ]
+  },
+  "devnet": {
+   "chainId": 5551,
+   "rows": [
+    {
+     "number": 0,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 1,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 24999,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 25000,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55244
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57356
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 25001,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55244
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57356
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 49999,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55244
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57356
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 50000,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55244
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57356
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": true,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 50001,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55244
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57356
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": true,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    }
+   ]
+  },
+  "devnet551": {
+   "chainId": 551,
+   "rows": [
+    {
+     "number": 0,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 1,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 24999,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 25000,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55244
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57356
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 25001,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55244
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57356
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 49999,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55244
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57356
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 50000,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21064
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21152
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 53632
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 54028
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": true,
+      "preEip2028": false,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 50001,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21064
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21152
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 53632
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 54028
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": true,
+      "preEip2028": false,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 1385099,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21064
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21152
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 53632
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 54028
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": true,
+      "preEip2028": false,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 1385100,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21064
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21152
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 53632
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 54028
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": true,
+      "preEip2028": false,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 1385101,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21064
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21152
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 53632
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 54028
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": true,
+      "preEip2028": false,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    }
+   ]
+  },
+  "devnet551-eip1559-at-0": {
+   "chainId": 551,
+   "rows": [
+    {
+     "number": 0,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55244
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57356
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 1,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55244
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57356
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 24999,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55244
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57356
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 25000,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55244
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57356
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 25001,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55244
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57356
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 49999,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55244
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57356
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 50000,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21064
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21152
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 53632
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 54028
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": true,
+      "preEip2028": false,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 50001,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21064
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21152
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 53632
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 54028
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": true,
+      "preEip2028": false,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 1385099,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21064
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21152
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 53632
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 54028
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": true,
+      "preEip2028": false,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 1385100,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21064
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21152
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 53632
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 54028
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": true,
+      "preEip2028": false,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 1385101,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21064
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21152
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 53632
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 54028
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": true,
+      "preEip2028": false,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    }
+   ]
+  },
+  "mainnet": {
+   "chainId": 50,
+   "rows": [
+    {
+     "number": 0,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 23240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 25352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": false,
+      "london": false,
+      "merge": false,
+      "petersburg": false,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": false,
+      "xdcxMinerDisable": false
+     }
+    },
+    {
+     "number": 1,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": false,
+      "london": false,
+      "merge": false,
+      "petersburg": false,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": false,
+      "xdcxMinerDisable": false
+     }
+    },
+    {
+     "number": 2,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": false,
+      "london": false,
+      "merge": false,
+      "petersburg": false,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": false,
+      "xdcxMinerDisable": false
+     }
+    },
+    {
+     "number": 3,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": false,
+      "london": false,
+      "merge": false,
+      "petersburg": false,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": false,
+      "xdcxMinerDisable": false
+     }
+    },
+    {
+     "number": 4,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": false,
+      "london": false,
+      "merge": false,
+      "petersburg": false,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": false,
+      "xdcxMinerDisable": false
+     }
+    },
+    {
+     "number": 5,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": false,
+      "london": false,
+      "merge": false,
+      "petersburg": false,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": false,
+      "xdcxMinerDisable": false
+     }
+    },
+    {
+     "number": 38383837,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": false,
+      "london": false,
+      "merge": false,
+      "petersburg": false,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": false,
+      "xdcxMinerDisable": false
+     }
+    },
+    {
+     "number": 38383838,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": true,
+      "london": false,
+      "merge": false,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": false,
+      "xdcxMinerDisable": false
+     }
+    },
+    {
+     "number": 38383839,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": true,
+      "london": false,
+      "merge": false,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": false,
+      "xdcxMinerDisable": false
+     }
+    },
+    {
+     "number": 76320999,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": true,
+      "london": false,
+      "merge": false,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": false,
+      "xdcxMinerDisable": false
+     }
+    },
+    {
+     "number": 76321000,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": false
+     }
+    },
+    {
+     "number": 76321001,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": false
+     }
+    },
+    {
+     "number": 80369999,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": false
+     }
+    },
+    {
+     "number": 80370000,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 80370001,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 98800199,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55240
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57352
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": false,
+      "eip2929": false,
+      "eip3860": false,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 98800200,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55244
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57356
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 98800201,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55244
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57356
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 98801999,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55244
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57356
+      }
+     ],
+     "flags": {
+      "cancun": false,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 98802000,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55244
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57356
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    },
+    {
+     "number": 98802001,
+     "executing": null,
+     "intrinsic": [
+      {
+       "case": "call-empty-",
+       "gas": 21000
+      },
+      {
+       "case": "call-4nz-01010101",
+       "gas": 21272
+      },
+      {
+       "case": "call-10z-7nz-0000000000000000000001010101010101",
+       "gas": 21516
+      },
+      {
+       "case": "create-empty-",
+       "gas": 53000
+      },
+      {
+       "case": "create-33z-31nz-00000000000000000000000000000000000000000000000000000000000000000001010101010101010101010101010101010101010101010101010101010101",
+       "gas": 55244
+      },
+      {
+       "case": "create-64nz-01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+       "gas": 57356
+      }
+     ],
+     "flags": {
+      "cancun": true,
+      "eip1559": true,
+      "eip2929": true,
+      "eip3860": true,
+      "istanbul": true,
+      "london": true,
+      "merge": true,
+      "petersburg": true,
+      "prague": false,
+      "preEip2028": true,
+      "shanghai": true,
+      "xdcxMinerDisable": true
+     }
+    }
+   ]
+  }
+ },
+ "pin": "6fc8e8c2088b7f18264f5663036669d04fa7becf"
+}

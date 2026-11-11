@@ -1,0 +1,13 @@
+[package]
+name = "xone-sim"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Test-only simulator of the V2 vote path. No other crate may depend on it."
+
+[dependencies]
+alloy-primitives.workspace = true
+xone-consensus.workspace = true
+xone-db = { workspace = true, features = ["fault-injection"] }

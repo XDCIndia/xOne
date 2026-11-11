@@ -1,0 +1,2675 @@
+[
+  {
+    "id": "balance_selfbalance.cancun",
+    "matrix_row": "BALANCE, SELFBALANCE",
+    "rule": "cancun",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0xc9f2c9cd04674edea40000000"
+      },
+      "0x00000000000000000000000000000000000000c1": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+        "nonce": 1,
+        "code": "0x734398241671b3dd484fe3213a4fb7511f30e7d7c03160005530316001554760025500"
+      },
+      "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x00000000000000000000000000000000000000a1",
+        "to": "0x00000000000000000000000000000000000000c1",
+        "value": "0x0",
+        "gas": 1000000,
+        "gas_price": "0x0",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000c1",
+      "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0"
+    ],
+    "slots": {
+      "0x00000000000000000000000000000000000000c1": [
+        "0x0",
+        "0x1",
+        "0x2"
+      ]
+    },
+    "expect": {
+      "state_root": "0xd519b9640463de1d49a7e96d911d2c5cad9c2c651706fd82ff75de264de5fd45",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 90019
+        }
+      ],
+      "accounts": {
+        "0x00000000000000000000000000000000000000c1": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0x35c1e5ed14fd6d5fff",
+          "true": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+          "wide": true,
+          "code_hash": "0x28e9741c2d03bf8d6c81cea81ccba9fa51a4cb038d2e926ccea6c8920949840e",
+          "storage_root": "0x92babc85eca7a40eb8d5d93f8bee5c49bf3fe27464d8e308f08099faeb3ad29d",
+          "storage": {
+            "0x0": "0x000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+            "0x1": "0x000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+            "0x2": "0x000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff"
+          },
+          "rlp": "0xf86501a101000000000000000000000000000000000000000000000035c1e5ed14fd6d5fffa092babc85eca7a40eb8d5d93f8bee5c49bf3fe27464d8e308f08099faeb3ad29da028e9741c2d03bf8d6c81cea81ccba9fa51a4cb038d2e926ccea6c8920949840e"
+        },
+        "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x35c1e5ed14fd6d5fff",
+          "true": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+          "wide": true,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86580a101000000000000000000000000000000000000000000000035c1e5ed14fd6d5fffa056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        }
+      }
+    }
+  },
+  {
+    "id": "balance_selfbalance.legacy",
+    "matrix_row": "BALANCE, SELFBALANCE",
+    "rule": "legacy",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0xc9f2c9cd04674edea40000000"
+      },
+      "0x00000000000000000000000000000000000000c1": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+        "nonce": 1,
+        "code": "0x734398241671b3dd484fe3213a4fb7511f30e7d7c03160005530316001554760025500"
+      },
+      "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x00000000000000000000000000000000000000a1",
+        "to": "0x00000000000000000000000000000000000000c1",
+        "value": "0x0",
+        "gas": 1000000,
+        "gas_price": "0x0",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000c1",
+      "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0"
+    ],
+    "slots": {
+      "0x00000000000000000000000000000000000000c1": [
+        "0x0",
+        "0x1",
+        "0x2"
+      ]
+    },
+    "expect": {
+      "state_root": "0xd519b9640463de1d49a7e96d911d2c5cad9c2c651706fd82ff75de264de5fd45",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 82419
+        }
+      ],
+      "accounts": {
+        "0x00000000000000000000000000000000000000c1": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0x35c1e5ed14fd6d5fff",
+          "true": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+          "wide": true,
+          "code_hash": "0x28e9741c2d03bf8d6c81cea81ccba9fa51a4cb038d2e926ccea6c8920949840e",
+          "storage_root": "0x92babc85eca7a40eb8d5d93f8bee5c49bf3fe27464d8e308f08099faeb3ad29d",
+          "storage": {
+            "0x0": "0x000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+            "0x1": "0x000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+            "0x2": "0x000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff"
+          },
+          "rlp": "0xf86501a101000000000000000000000000000000000000000000000035c1e5ed14fd6d5fffa092babc85eca7a40eb8d5d93f8bee5c49bf3fe27464d8e308f08099faeb3ad29da028e9741c2d03bf8d6c81cea81ccba9fa51a4cb038d2e926ccea6c8920949840e"
+        },
+        "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x35c1e5ed14fd6d5fff",
+          "true": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+          "wide": true,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86580a101000000000000000000000000000000000000000000000035c1e5ed14fd6d5fffa056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        }
+      }
+    }
+  },
+  {
+    "id": "block_reward.legacy",
+    "matrix_row": "block reward",
+    "rule": "legacy",
+    "accounts": {
+      "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff"
+      }
+    },
+    "ops": [
+      {
+        "op": "add",
+        "addr": "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0",
+        "amount": "0x10f0cf064dd59200000"
+      }
+    ],
+    "watch": [
+      "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0"
+    ],
+    "expect": {
+      "state_root": "0xb9a4f7b1b12f03354b5e0b6404ce413e126124621a51b27ccc4a81b56093df64",
+      "txs": [],
+      "accounts": {
+        "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x144ced651f2568d5fff",
+          "true": "0x1000000000000000000000000000000000000000000000144ced651f2568d5fff",
+          "wide": true,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86580a101000000000000000000000000000000000000000000000144ced651f2568d5fffa056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        }
+      }
+    }
+  },
+  {
+    "id": "buy_gas_wide_sender.cancun",
+    "matrix_row": "buyGas / affordability",
+    "rule": "cancun",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a2": {
+        "balance": "0x1"
+      },
+      "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0",
+        "to": "0x00000000000000000000000000000000000000a2",
+        "value": "0x0",
+        "gas": 21000,
+        "gas_price": "0x6f05b59d3b20000",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0",
+      "0x00000000000000000000000000000000000000a2",
+      "0x00000000000000000000000000000000000000c0"
+    ],
+    "expect": {
+      "state_root": "0x72cb3d4620b406b39f881e7790301e419aa696f82d91191123f3b34b2854573f",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 21000
+        }
+      ],
+      "accounts": {
+        "0x00000000000000000000000000000000000000a2": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x1",
+          "true": "0x1",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf8448001a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        },
+        "0x00000000000000000000000000000000000000c0": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x23934c5a09da1900000",
+          "true": "0x23934c5a09da1900000",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf84e808a023934c5a09da1900000a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        },
+        "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0xfffffffffffffffffffffffffffffffffffffffffffffdfc8d204c775bdd5fff",
+          "true": "0xfffffffffffffffffffffffffffffffffffffffffffffdfc8d204c775bdd5fff",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86401a0fffffffffffffffffffffffffffffffffffffffffffffdfc8d204c775bdd5fffa056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        }
+      }
+    }
+  },
+  {
+    "id": "buy_gas_wide_sender.legacy",
+    "matrix_row": "buyGas / affordability",
+    "rule": "legacy",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a2": {
+        "balance": "0x1"
+      },
+      "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0",
+        "to": "0x00000000000000000000000000000000000000a2",
+        "value": "0x0",
+        "gas": 21000,
+        "gas_price": "0x6f05b59d3b20000",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0",
+      "0x00000000000000000000000000000000000000a2",
+      "0x00000000000000000000000000000000000000c0"
+    ],
+    "expect": {
+      "state_root": "0x72cb3d4620b406b39f881e7790301e419aa696f82d91191123f3b34b2854573f",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 21000
+        }
+      ],
+      "accounts": {
+        "0x00000000000000000000000000000000000000a2": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x1",
+          "true": "0x1",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf8448001a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        },
+        "0x00000000000000000000000000000000000000c0": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x23934c5a09da1900000",
+          "true": "0x23934c5a09da1900000",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf84e808a023934c5a09da1900000a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        },
+        "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0xfffffffffffffffffffffffffffffffffffffffffffffdfc8d204c775bdd5fff",
+          "true": "0xfffffffffffffffffffffffffffffffffffffffffffffdfc8d204c775bdd5fff",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86401a0fffffffffffffffffffffffffffffffffffffffffffffdfc8d204c775bdd5fffa056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        }
+      }
+    }
+  },
+  {
+    "id": "call_value_wide_contract.cancun",
+    "matrix_row": "CALL value",
+    "rule": "cancun",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0xc9f2c9cd04674edea40000000"
+      },
+      "0x00000000000000000000000000000000000000a2": {
+        "balance": "0x1"
+      },
+      "0x00000000000000000000000000000000000000c2": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+        "nonce": 1,
+        "code": "0x600060006000600069010f0cf064dd592000007300000000000000000000000000000000000000a25af160005500"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x00000000000000000000000000000000000000a1",
+        "to": "0x00000000000000000000000000000000000000c2",
+        "value": "0x0",
+        "gas": 1000000,
+        "gas_price": "0x0",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000c2",
+      "0x00000000000000000000000000000000000000a2"
+    ],
+    "slots": {
+      "0x00000000000000000000000000000000000000c2": [
+        "0x0"
+      ]
+    },
+    "expect": {
+      "state_root": "0xcc13c320c7b18519a60b08eb2335dbe23a997cb1151f7b2887fca22215ed696b",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 52423
+        }
+      ],
+      "accounts": {
+        "0x00000000000000000000000000000000000000a2": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x10f0cf064dd59200001",
+          "true": "0x10f0cf064dd59200001",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf84e808a010f0cf064dd59200001a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        },
+        "0x00000000000000000000000000000000000000c2": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0xffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fff",
+          "true": "0xffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fff",
+          "wide": false,
+          "code_hash": "0x817f32ba9f89d2bd2426d4c76e38f9a4ab8c0a2bddb13174dce63278c2449e2e",
+          "storage_root": "0x821e2556a290c86405f8160a2d662042a431ba456b9db265c79bb837c04be5f0",
+          "storage": {
+            "0x0": "0x0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          "rlp": "0xf86401a0ffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fffa0821e2556a290c86405f8160a2d662042a431ba456b9db265c79bb837c04be5f0a0817f32ba9f89d2bd2426d4c76e38f9a4ab8c0a2bddb13174dce63278c2449e2e"
+        }
+      }
+    }
+  },
+  {
+    "id": "call_value_wide_contract.legacy",
+    "matrix_row": "CALL value",
+    "rule": "legacy",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0xc9f2c9cd04674edea40000000"
+      },
+      "0x00000000000000000000000000000000000000a2": {
+        "balance": "0x1"
+      },
+      "0x00000000000000000000000000000000000000c2": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+        "nonce": 1,
+        "code": "0x600060006000600069010f0cf064dd592000007300000000000000000000000000000000000000a25af160005500"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x00000000000000000000000000000000000000a1",
+        "to": "0x00000000000000000000000000000000000000c2",
+        "value": "0x0",
+        "gas": 1000000,
+        "gas_price": "0x0",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000c2",
+      "0x00000000000000000000000000000000000000a2"
+    ],
+    "slots": {
+      "0x00000000000000000000000000000000000000c2": [
+        "0x0"
+      ]
+    },
+    "expect": {
+      "state_root": "0xcc13c320c7b18519a60b08eb2335dbe23a997cb1151f7b2887fca22215ed696b",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 48423
+        }
+      ],
+      "accounts": {
+        "0x00000000000000000000000000000000000000a2": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x10f0cf064dd59200001",
+          "true": "0x10f0cf064dd59200001",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf84e808a010f0cf064dd59200001a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        },
+        "0x00000000000000000000000000000000000000c2": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0xffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fff",
+          "true": "0xffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fff",
+          "wide": false,
+          "code_hash": "0x817f32ba9f89d2bd2426d4c76e38f9a4ab8c0a2bddb13174dce63278c2449e2e",
+          "storage_root": "0x821e2556a290c86405f8160a2d662042a431ba456b9db265c79bb837c04be5f0",
+          "storage": {
+            "0x0": "0x0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          "rlp": "0xf86401a0ffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fffa0821e2556a290c86405f8160a2d662042a431ba456b9db265c79bb837c04be5f0a0817f32ba9f89d2bd2426d4c76e38f9a4ab8c0a2bddb13174dce63278c2449e2e"
+        }
+      }
+    }
+  },
+  {
+    "id": "can_transfer_top.cancun",
+    "matrix_row": "CanTransfer",
+    "rule": "cancun",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a2": {
+        "balance": "0x1"
+      },
+      "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0",
+        "to": "0x00000000000000000000000000000000000000a2",
+        "value": "0x10f0cf064dd59200000",
+        "gas": 100000,
+        "gas_price": "0x0",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0",
+      "0x00000000000000000000000000000000000000a2"
+    ],
+    "expect": {
+      "state_root": "0x15686c8f96d9c1d3421ebefd055ae5d97f70e7cbad5e398a0cd086e479d3dcd6",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 21000
+        }
+      ],
+      "accounts": {
+        "0x00000000000000000000000000000000000000a2": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x10f0cf064dd59200001",
+          "true": "0x10f0cf064dd59200001",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf84e808a010f0cf064dd59200001a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        },
+        "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0xffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fff",
+          "true": "0xffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fff",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86401a0ffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fffa056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        }
+      }
+    }
+  },
+  {
+    "id": "can_transfer_top.legacy",
+    "matrix_row": "CanTransfer",
+    "rule": "legacy",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a2": {
+        "balance": "0x1"
+      },
+      "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0",
+        "to": "0x00000000000000000000000000000000000000a2",
+        "value": "0x10f0cf064dd59200000",
+        "gas": 100000,
+        "gas_price": "0x0",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0",
+      "0x00000000000000000000000000000000000000a2"
+    ],
+    "expect": {
+      "state_root": "0x15686c8f96d9c1d3421ebefd055ae5d97f70e7cbad5e398a0cd086e479d3dcd6",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 21000
+        }
+      ],
+      "accounts": {
+        "0x00000000000000000000000000000000000000a2": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x10f0cf064dd59200001",
+          "true": "0x10f0cf064dd59200001",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf84e808a010f0cf064dd59200001a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        },
+        "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0xffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fff",
+          "true": "0xffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fff",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86401a0ffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fffa056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        }
+      }
+    }
+  },
+  {
+    "id": "coinbase_wide_fee.cancun",
+    "matrix_row": "block reward",
+    "rule": "cancun",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0xc9f2c9cd04674edea40000000"
+      },
+      "0x00000000000000000000000000000000000000a2": {
+        "balance": "0x1"
+      },
+      "0x00000000000000000000000000000000000000c0": {
+        "balance": "0x100000000000000000000000000000000000000000000000000000000000003e8"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x00000000000000000000000000000000000000a1",
+        "to": "0x00000000000000000000000000000000000000a2",
+        "value": "0x1",
+        "gas": 21000,
+        "gas_price": "0x3",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000a1",
+      "0x00000000000000000000000000000000000000a2",
+      "0x00000000000000000000000000000000000000c0"
+    ],
+    "expect": {
+      "state_root": "0xa52effc16fb1da14e3cabb744eef1a6b85ba95940d79210beff8a0305cea8216",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 21000
+        }
+      ],
+      "accounts": {
+        "0x00000000000000000000000000000000000000a1": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0xc9f2c9cd04674edea3fff09e7",
+          "true": "0xc9f2c9cd04674edea3fff09e7",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf851018d0c9f2c9cd04674edea3fff09e7a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        },
+        "0x00000000000000000000000000000000000000a2": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x2",
+          "true": "0x2",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf8448002a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        },
+        "0x00000000000000000000000000000000000000c0": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0xfa00",
+          "true": "0x1000000000000000000000000000000000000000000000000000000000000fa00",
+          "wide": true,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86580a101000000000000000000000000000000000000000000000000000000000000fa00a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        }
+      }
+    }
+  },
+  {
+    "id": "coinbase_wide_fee.legacy",
+    "matrix_row": "block reward",
+    "rule": "legacy",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0xc9f2c9cd04674edea40000000"
+      },
+      "0x00000000000000000000000000000000000000a2": {
+        "balance": "0x1"
+      },
+      "0x00000000000000000000000000000000000000c0": {
+        "balance": "0x100000000000000000000000000000000000000000000000000000000000003e8"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x00000000000000000000000000000000000000a1",
+        "to": "0x00000000000000000000000000000000000000a2",
+        "value": "0x1",
+        "gas": 21000,
+        "gas_price": "0x3",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000a1",
+      "0x00000000000000000000000000000000000000a2",
+      "0x00000000000000000000000000000000000000c0"
+    ],
+    "expect": {
+      "state_root": "0xa52effc16fb1da14e3cabb744eef1a6b85ba95940d79210beff8a0305cea8216",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 21000
+        }
+      ],
+      "accounts": {
+        "0x00000000000000000000000000000000000000a1": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0xc9f2c9cd04674edea3fff09e7",
+          "true": "0xc9f2c9cd04674edea3fff09e7",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf851018d0c9f2c9cd04674edea3fff09e7a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        },
+        "0x00000000000000000000000000000000000000a2": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x2",
+          "true": "0x2",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf8448002a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        },
+        "0x00000000000000000000000000000000000000c0": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0xfa00",
+          "true": "0x1000000000000000000000000000000000000000000000000000000000000fa00",
+          "wide": true,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86580a101000000000000000000000000000000000000000000000000000000000000fa00a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        }
+      }
+    }
+  },
+  {
+    "id": "create_endowment.cancun",
+    "matrix_row": "CREATE/CREATE2 endowment",
+    "rule": "cancun",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0xc9f2c9cd04674edea40000000"
+      },
+      "0x00000000000000000000000000000000000000c3": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+        "nonce": 1,
+        "code": "0x6005601b6000396005600069010f0cf064dd59200000f06000550060006000f3"
+      },
+      "0x00000000000000000000000000000000000000c4": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+        "nonce": 1,
+        "code": "0x6005601e6000396105a16005600069010f0cf064dd59200000f56000550060006000f3"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x00000000000000000000000000000000000000a1",
+        "to": "0x00000000000000000000000000000000000000c3",
+        "value": "0x0",
+        "gas": 1000000,
+        "gas_price": "0x0",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      },
+      {
+        "op": "tx",
+        "from": "0x00000000000000000000000000000000000000a1",
+        "to": "0x00000000000000000000000000000000000000c4",
+        "value": "0x0",
+        "gas": 1000000,
+        "gas_price": "0x0",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000c3",
+      "0x00000000000000000000000000000000000000c4",
+      "0x00000000000000000000000000000000000000a1"
+    ],
+    "slots": {
+      "0x00000000000000000000000000000000000000c3": [
+        "0x0"
+      ],
+      "0x00000000000000000000000000000000000000c4": [
+        "0x0"
+      ]
+    },
+    "expect": {
+      "state_root": "0x50ad1b5dcb1f9e90d8d9263d86c7245078c0de0a6d6668c8a23c4144bb83a6bf",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 75138
+        },
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 75147
+        }
+      ],
+      "accounts": {
+        "0x00000000000000000000000000000000000000a1": {
+          "exists": true,
+          "nonce": 2,
+          "low": "0xc9f2c9cd04674edea40000000",
+          "true": "0xc9f2c9cd04674edea40000000",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf851028d0c9f2c9cd04674edea40000000a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        },
+        "0x00000000000000000000000000000000000000c3": {
+          "exists": true,
+          "nonce": 2,
+          "low": "0xffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fff",
+          "true": "0xffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fff",
+          "wide": false,
+          "code_hash": "0x54223d01637d9610e2c7173d8adcf855b783176c16f329b8e2c322693d2b8222",
+          "storage_root": "0x73a86c0fced7c0caac67d4c828fbd0c25e40d66fc4a8b27ba2aee70897b2c284",
+          "storage": {
+            "0x0": "0x000000000000000000000000587d3c453c9132748158753b868181bd2ecbdaf3"
+          },
+          "rlp": "0xf86402a0ffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fffa073a86c0fced7c0caac67d4c828fbd0c25e40d66fc4a8b27ba2aee70897b2c284a054223d01637d9610e2c7173d8adcf855b783176c16f329b8e2c322693d2b8222"
+        },
+        "0x00000000000000000000000000000000000000c4": {
+          "exists": true,
+          "nonce": 2,
+          "low": "0xffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fff",
+          "true": "0xffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fff",
+          "wide": false,
+          "code_hash": "0x47304235dd803d53c61f8ddc29cbdf0846038aad018e8da8eb23d7019966ee3d",
+          "storage_root": "0xba99504c47d294e650755323b1607fc6cc4d750f7f3fa4a8f1935dc532fd9ef3",
+          "storage": {
+            "0x0": "0x00000000000000000000000006b1c1e826436b4dda9554abf691dbd8361a792f"
+          },
+          "rlp": "0xf86402a0ffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fffa0ba99504c47d294e650755323b1607fc6cc4d750f7f3fa4a8f1935dc532fd9ef3a047304235dd803d53c61f8ddc29cbdf0846038aad018e8da8eb23d7019966ee3d"
+        }
+      }
+    }
+  },
+  {
+    "id": "create_endowment.legacy",
+    "matrix_row": "CREATE/CREATE2 endowment",
+    "rule": "legacy",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0xc9f2c9cd04674edea40000000"
+      },
+      "0x00000000000000000000000000000000000000c3": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+        "nonce": 1,
+        "code": "0x6005601b6000396005600069010f0cf064dd59200000f06000550060006000f3"
+      },
+      "0x00000000000000000000000000000000000000c4": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+        "nonce": 1,
+        "code": "0x6005601e6000396105a16005600069010f0cf064dd59200000f56000550060006000f3"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x00000000000000000000000000000000000000a1",
+        "to": "0x00000000000000000000000000000000000000c3",
+        "value": "0x0",
+        "gas": 1000000,
+        "gas_price": "0x0",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      },
+      {
+        "op": "tx",
+        "from": "0x00000000000000000000000000000000000000a1",
+        "to": "0x00000000000000000000000000000000000000c4",
+        "value": "0x0",
+        "gas": 1000000,
+        "gas_price": "0x0",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000c3",
+      "0x00000000000000000000000000000000000000c4",
+      "0x00000000000000000000000000000000000000a1"
+    ],
+    "slots": {
+      "0x00000000000000000000000000000000000000c3": [
+        "0x0"
+      ],
+      "0x00000000000000000000000000000000000000c4": [
+        "0x0"
+      ]
+    },
+    "expect": {
+      "state_root": "0x50ad1b5dcb1f9e90d8d9263d86c7245078c0de0a6d6668c8a23c4144bb83a6bf",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 73036
+        },
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 73045
+        }
+      ],
+      "accounts": {
+        "0x00000000000000000000000000000000000000a1": {
+          "exists": true,
+          "nonce": 2,
+          "low": "0xc9f2c9cd04674edea40000000",
+          "true": "0xc9f2c9cd04674edea40000000",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf851028d0c9f2c9cd04674edea40000000a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        },
+        "0x00000000000000000000000000000000000000c3": {
+          "exists": true,
+          "nonce": 2,
+          "low": "0xffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fff",
+          "true": "0xffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fff",
+          "wide": false,
+          "code_hash": "0x54223d01637d9610e2c7173d8adcf855b783176c16f329b8e2c322693d2b8222",
+          "storage_root": "0x73a86c0fced7c0caac67d4c828fbd0c25e40d66fc4a8b27ba2aee70897b2c284",
+          "storage": {
+            "0x0": "0x000000000000000000000000587d3c453c9132748158753b868181bd2ecbdaf3"
+          },
+          "rlp": "0xf86402a0ffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fffa073a86c0fced7c0caac67d4c828fbd0c25e40d66fc4a8b27ba2aee70897b2c284a054223d01637d9610e2c7173d8adcf855b783176c16f329b8e2c322693d2b8222"
+        },
+        "0x00000000000000000000000000000000000000c4": {
+          "exists": true,
+          "nonce": 2,
+          "low": "0xffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fff",
+          "true": "0xffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fff",
+          "wide": false,
+          "code_hash": "0x47304235dd803d53c61f8ddc29cbdf0846038aad018e8da8eb23d7019966ee3d",
+          "storage_root": "0xba99504c47d294e650755323b1607fc6cc4d750f7f3fa4a8f1935dc532fd9ef3",
+          "storage": {
+            "0x0": "0x00000000000000000000000006b1c1e826436b4dda9554abf691dbd8361a792f"
+          },
+          "rlp": "0xf86402a0ffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fffa0ba99504c47d294e650755323b1607fc6cc4d750f7f3fa4a8f1935dc532fd9ef3a047304235dd803d53c61f8ddc29cbdf0846038aad018e8da8eb23d7019966ee3d"
+        }
+      }
+    }
+  },
+  {
+    "id": "create_tx_wide_eoa.cancun",
+    "matrix_row": "CREATE/CREATE2 endowment",
+    "rule": "cancun",
+    "accounts": {
+      "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0",
+        "value": "0x10f0cf064dd59200000",
+        "gas": 1000000,
+        "gas_price": "0x0",
+        "data": "0x60006000f3",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0"
+    ],
+    "expect": {
+      "state_root": "0xbcb91c394561acd2ba4fd43a2ead6a662101f8a3de3b20a24bb8820aaa5134a2",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 53220
+        }
+      ],
+      "accounts": {
+        "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0xffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fff",
+          "true": "0xffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fff",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86401a0ffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fffa056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        }
+      }
+    }
+  },
+  {
+    "id": "create_tx_wide_eoa.legacy",
+    "matrix_row": "CREATE/CREATE2 endowment",
+    "rule": "legacy",
+    "accounts": {
+      "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0",
+        "value": "0x10f0cf064dd59200000",
+        "gas": 1000000,
+        "gas_price": "0x0",
+        "data": "0x60006000f3",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0"
+    ],
+    "expect": {
+      "state_root": "0xbcb91c394561acd2ba4fd43a2ead6a662101f8a3de3b20a24bb8820aaa5134a2",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 53218
+        }
+      ],
+      "accounts": {
+        "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0xffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fff",
+          "true": "0xffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fff",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86401a0ffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fffa056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        }
+      }
+    }
+  },
+  {
+    "id": "credit_to_wide.legacy",
+    "matrix_row": "credit to wide",
+    "rule": "legacy",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff9c"
+      }
+    },
+    "ops": [
+      {
+        "op": "add",
+        "addr": "0x00000000000000000000000000000000000000a1",
+        "amount": "0x12c"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000a1"
+    ],
+    "expect": {
+      "state_root": "0x5032b125b55e38ac257a113c96eed51451febe8aa0c8fa85cb83463a41f21c1a",
+      "txs": [],
+      "accounts": {
+        "0x00000000000000000000000000000000000000a1": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0xc8",
+          "true": "0x100000000000000000000000000000000000000000000000000000000000000c8",
+          "wide": true,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86580a10100000000000000000000000000000000000000000000000000000000000000c8a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        }
+      }
+    }
+  },
+  {
+    "id": "debit_crossing_back.legacy",
+    "matrix_row": "debit crossing back below 2^256",
+    "rule": "legacy",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0x100000000000000000000000000000000000000000000000000000000000003e8"
+      },
+      "0x00000000000000000000000000000000000000a2": {
+        "balance": "0x100000000000000000000000000000000000000000000000000000000000003e8"
+      }
+    },
+    "ops": [
+      {
+        "op": "sub",
+        "addr": "0x00000000000000000000000000000000000000a1",
+        "amount": "0x5dc"
+      },
+      {
+        "op": "sub",
+        "addr": "0x00000000000000000000000000000000000000a2",
+        "amount": "0x64"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000a1",
+      "0x00000000000000000000000000000000000000a2"
+    ],
+    "expect": {
+      "state_root": "0x746736e229aee7d8d3f76b9addd320a93848ed45f70d3ca031b032e8aa40fb99",
+      "txs": [],
+      "accounts": {
+        "0x00000000000000000000000000000000000000a1": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0c",
+          "true": "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0c",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86480a0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0ca056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        },
+        "0x00000000000000000000000000000000000000a2": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x384",
+          "true": "0x10000000000000000000000000000000000000000000000000000000000000384",
+          "wide": true,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86580a1010000000000000000000000000000000000000000000000000000000000000384a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        }
+      }
+    }
+  },
+  {
+    "id": "fee_refund_crosses_up.cancun",
+    "matrix_row": "fee refund",
+    "rule": "cancun",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0x1000000000000000000000000000000000000000000000000000000000000c350"
+      },
+      "0x00000000000000000000000000000000000000a2": {
+        "balance": "0x1"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x00000000000000000000000000000000000000a1",
+        "to": "0x00000000000000000000000000000000000000a2",
+        "value": "0x0",
+        "gas": 100000,
+        "gas_price": "0x1",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000a1",
+      "0x00000000000000000000000000000000000000a2",
+      "0x00000000000000000000000000000000000000c0"
+    ],
+    "expect": {
+      "state_root": "0x0594fdbeff0ecc3c8ed773ba959623d8742360a08a6091a1a9f169e3031cf0c0",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 21000
+        }
+      ],
+      "accounts": {
+        "0x00000000000000000000000000000000000000a1": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0x7148",
+          "true": "0x10000000000000000000000000000000000000000000000000000000000007148",
+          "wide": true,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86501a1010000000000000000000000000000000000000000000000000000000000007148a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        },
+        "0x00000000000000000000000000000000000000a2": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x1",
+          "true": "0x1",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf8448001a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        },
+        "0x00000000000000000000000000000000000000c0": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x5208",
+          "true": "0x5208",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf84680825208a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        }
+      }
+    }
+  },
+  {
+    "id": "fee_refund_crosses_up.legacy",
+    "matrix_row": "fee refund",
+    "rule": "legacy",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0x1000000000000000000000000000000000000000000000000000000000000c350"
+      },
+      "0x00000000000000000000000000000000000000a2": {
+        "balance": "0x1"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x00000000000000000000000000000000000000a1",
+        "to": "0x00000000000000000000000000000000000000a2",
+        "value": "0x0",
+        "gas": 100000,
+        "gas_price": "0x1",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000a1",
+      "0x00000000000000000000000000000000000000a2",
+      "0x00000000000000000000000000000000000000c0"
+    ],
+    "expect": {
+      "state_root": "0x0594fdbeff0ecc3c8ed773ba959623d8742360a08a6091a1a9f169e3031cf0c0",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 21000
+        }
+      ],
+      "accounts": {
+        "0x00000000000000000000000000000000000000a1": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0x7148",
+          "true": "0x10000000000000000000000000000000000000000000000000000000000007148",
+          "wide": true,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86501a1010000000000000000000000000000000000000000000000000000000000007148a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        },
+        "0x00000000000000000000000000000000000000a2": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x1",
+          "true": "0x1",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf8448001a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        },
+        "0x00000000000000000000000000000000000000c0": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x5208",
+          "true": "0x5208",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf84680825208a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        }
+      }
+    }
+  },
+  {
+    "id": "journal_revert_all.legacy",
+    "matrix_row": "journal revert after a wide transition",
+    "rule": "legacy",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff9c"
+      }
+    },
+    "ops": [
+      {
+        "op": "snapshot",
+        "name": "s1"
+      },
+      {
+        "op": "add",
+        "addr": "0x00000000000000000000000000000000000000a1",
+        "amount": "0x12c"
+      },
+      {
+        "op": "snapshot",
+        "name": "s2"
+      },
+      {
+        "op": "set_balance",
+        "addr": "0x00000000000000000000000000000000000000a1",
+        "amount": "0x1"
+      },
+      {
+        "op": "revert",
+        "name": "s2"
+      },
+      {
+        "op": "sub",
+        "addr": "0x00000000000000000000000000000000000000a1",
+        "amount": "0xfa"
+      },
+      {
+        "op": "snapshot",
+        "name": "s3"
+      },
+      {
+        "op": "add",
+        "addr": "0x00000000000000000000000000000000000000a1",
+        "amount": "0x190"
+      },
+      {
+        "op": "revert",
+        "name": "s1"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000a1"
+    ],
+    "expect": {
+      "state_root": "0xe7ffab4e898a054a9907174efff7da44d80efea03832fbbc7b598ae72f9e8584",
+      "txs": [],
+      "accounts": {
+        "0x00000000000000000000000000000000000000a1": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff9c",
+          "true": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff9c",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86480a0ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff9ca056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        }
+      }
+    }
+  },
+  {
+    "id": "journal_revert_inner.legacy",
+    "matrix_row": "journal revert after a wide transition",
+    "rule": "legacy",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff9c"
+      }
+    },
+    "ops": [
+      {
+        "op": "snapshot",
+        "name": "s1"
+      },
+      {
+        "op": "add",
+        "addr": "0x00000000000000000000000000000000000000a1",
+        "amount": "0x12c"
+      },
+      {
+        "op": "snapshot",
+        "name": "s2"
+      },
+      {
+        "op": "set_balance",
+        "addr": "0x00000000000000000000000000000000000000a1",
+        "amount": "0x1"
+      },
+      {
+        "op": "revert",
+        "name": "s2"
+      },
+      {
+        "op": "sub",
+        "addr": "0x00000000000000000000000000000000000000a1",
+        "amount": "0xfa"
+      },
+      {
+        "op": "snapshot",
+        "name": "s3"
+      },
+      {
+        "op": "add",
+        "addr": "0x00000000000000000000000000000000000000a1",
+        "amount": "0x190"
+      },
+      {
+        "op": "revert",
+        "name": "s3"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000a1"
+    ],
+    "expect": {
+      "state_root": "0xef402a0a3c9a5b6f50019afd218bfba8ffe25bee694ce170969db59137416d64",
+      "txs": [],
+      "accounts": {
+        "0x00000000000000000000000000000000000000a1": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffce",
+          "true": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffce",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86480a0ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffcea056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        }
+      }
+    }
+  },
+  {
+    "id": "journal_revert_wide_source.legacy",
+    "matrix_row": "journal revert after a wide transition",
+    "rule": "legacy",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0x100000000000000000000000000000000000000000000000000000000000003e8"
+      }
+    },
+    "ops": [
+      {
+        "op": "snapshot",
+        "name": "s1"
+      },
+      {
+        "op": "sub",
+        "addr": "0x00000000000000000000000000000000000000a1",
+        "amount": "0x5dc"
+      },
+      {
+        "op": "revert",
+        "name": "s1"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000a1"
+    ],
+    "expect": {
+      "state_root": "0x25a50cc3257718fc43d21c3ba1bd8892607a664ba424e32822c7a983255d33b3",
+      "txs": [],
+      "accounts": {
+        "0x00000000000000000000000000000000000000a1": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x3e8",
+          "true": "0x100000000000000000000000000000000000000000000000000000000000003e8",
+          "wide": true,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86580a10100000000000000000000000000000000000000000000000000000000000003e8a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        }
+      }
+    }
+  },
+  {
+    "id": "nested_revert_depth2.cancun",
+    "matrix_row": "nested revert at depth \u003e= 2",
+    "rule": "cancun",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0xc9f2c9cd04674edea40000000"
+      },
+      "0x00000000000000000000000000000000000000d1": {
+        "balance": "0x3e8",
+        "nonce": 1,
+        "code": "0x600060006000600060097300000000000000000000000000000000000000d25af160005500"
+      },
+      "0x00000000000000000000000000000000000000d2": {
+        "balance": "0x3e8",
+        "nonce": 1,
+        "code": "0x600060006000600060077300000000000000000000000000000000000000d35af1600055600060006000600060967300000000000000000000000000000000000000d45af160015500"
+      },
+      "0x00000000000000000000000000000000000000d3": {
+        "balance": "0x1f4",
+        "nonce": 1,
+        "code": "0x600060006000600060c87300000000000000000000000000000000000000d45af15060006000fd"
+      },
+      "0x00000000000000000000000000000000000000d4": {
+        "balance": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff9c"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x00000000000000000000000000000000000000a1",
+        "to": "0x00000000000000000000000000000000000000d1",
+        "value": "0x3e8",
+        "gas": 2000000,
+        "gas_price": "0x0",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000d1",
+      "0x00000000000000000000000000000000000000d2",
+      "0x00000000000000000000000000000000000000d3",
+      "0x00000000000000000000000000000000000000d4"
+    ],
+    "slots": {
+      "0x00000000000000000000000000000000000000d1": [
+        "0x0"
+      ],
+      "0x00000000000000000000000000000000000000d2": [
+        "0x0",
+        "0x1"
+      ]
+    },
+    "expect": {
+      "state_root": "0x3a77f0b4758765001ef9cc08ac09e465b837d556b46487c9d4e4590730af9acf",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 104697
+        }
+      ],
+      "accounts": {
+        "0x00000000000000000000000000000000000000d1": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0x7c7",
+          "true": "0x7c7",
+          "wide": false,
+          "code_hash": "0x33a834096937e842134141a67a832b04196a2dc0111b7d300bbe783ff40155f1",
+          "storage_root": "0x821e2556a290c86405f8160a2d662042a431ba456b9db265c79bb837c04be5f0",
+          "storage": {
+            "0x0": "0x0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          "rlp": "0xf846018207c7a0821e2556a290c86405f8160a2d662042a431ba456b9db265c79bb837c04be5f0a033a834096937e842134141a67a832b04196a2dc0111b7d300bbe783ff40155f1"
+        },
+        "0x00000000000000000000000000000000000000d2": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0x35b",
+          "true": "0x35b",
+          "wide": false,
+          "code_hash": "0xbf15336e4ccaf1a8b2501057e32139077aaa3e2eb515d3ad94ea3bff6c8814ac",
+          "storage_root": "0xf38f9f63c760d088d7dd04f743619b6291f63beebd8bdf530628f90e9cfa52d7",
+          "storage": {
+            "0x0": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "0x1": "0x0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          "rlp": "0xf8460182035ba0f38f9f63c760d088d7dd04f743619b6291f63beebd8bdf530628f90e9cfa52d7a0bf15336e4ccaf1a8b2501057e32139077aaa3e2eb515d3ad94ea3bff6c8814ac"
+        },
+        "0x00000000000000000000000000000000000000d3": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0x1f4",
+          "true": "0x1f4",
+          "wide": false,
+          "code_hash": "0xd2b44bf907bc2ad88e260aec99d1a3c95b779e56d2d8c4e3b30d83742824806a",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf846018201f4a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0d2b44bf907bc2ad88e260aec99d1a3c95b779e56d2d8c4e3b30d83742824806a"
+        },
+        "0x00000000000000000000000000000000000000d4": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x32",
+          "true": "0x10000000000000000000000000000000000000000000000000000000000000032",
+          "wide": true,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86580a1010000000000000000000000000000000000000000000000000000000000000032a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        }
+      }
+    }
+  },
+  {
+    "id": "nested_revert_depth2.legacy",
+    "matrix_row": "nested revert at depth \u003e= 2",
+    "rule": "legacy",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0xc9f2c9cd04674edea40000000"
+      },
+      "0x00000000000000000000000000000000000000d1": {
+        "balance": "0x3e8",
+        "nonce": 1,
+        "code": "0x600060006000600060097300000000000000000000000000000000000000d25af160005500"
+      },
+      "0x00000000000000000000000000000000000000d2": {
+        "balance": "0x3e8",
+        "nonce": 1,
+        "code": "0x600060006000600060077300000000000000000000000000000000000000d35af1600055600060006000600060967300000000000000000000000000000000000000d45af160015500"
+      },
+      "0x00000000000000000000000000000000000000d3": {
+        "balance": "0x1f4",
+        "nonce": 1,
+        "code": "0x600060006000600060c87300000000000000000000000000000000000000d45af15060006000fd"
+      },
+      "0x00000000000000000000000000000000000000d4": {
+        "balance": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff9c"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x00000000000000000000000000000000000000a1",
+        "to": "0x00000000000000000000000000000000000000d1",
+        "value": "0x3e8",
+        "gas": 2000000,
+        "gas_price": "0x0",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000d1",
+      "0x00000000000000000000000000000000000000d2",
+      "0x00000000000000000000000000000000000000d3",
+      "0x00000000000000000000000000000000000000d4"
+    ],
+    "slots": {
+      "0x00000000000000000000000000000000000000d1": [
+        "0x0"
+      ],
+      "0x00000000000000000000000000000000000000d2": [
+        "0x0",
+        "0x1"
+      ]
+    },
+    "expect": {
+      "state_root": "0x3a77f0b4758765001ef9cc08ac09e465b837d556b46487c9d4e4590730af9acf",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 91497
+        }
+      ],
+      "accounts": {
+        "0x00000000000000000000000000000000000000d1": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0x7c7",
+          "true": "0x7c7",
+          "wide": false,
+          "code_hash": "0x33a834096937e842134141a67a832b04196a2dc0111b7d300bbe783ff40155f1",
+          "storage_root": "0x821e2556a290c86405f8160a2d662042a431ba456b9db265c79bb837c04be5f0",
+          "storage": {
+            "0x0": "0x0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          "rlp": "0xf846018207c7a0821e2556a290c86405f8160a2d662042a431ba456b9db265c79bb837c04be5f0a033a834096937e842134141a67a832b04196a2dc0111b7d300bbe783ff40155f1"
+        },
+        "0x00000000000000000000000000000000000000d2": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0x35b",
+          "true": "0x35b",
+          "wide": false,
+          "code_hash": "0xbf15336e4ccaf1a8b2501057e32139077aaa3e2eb515d3ad94ea3bff6c8814ac",
+          "storage_root": "0xf38f9f63c760d088d7dd04f743619b6291f63beebd8bdf530628f90e9cfa52d7",
+          "storage": {
+            "0x0": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "0x1": "0x0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          "rlp": "0xf8460182035ba0f38f9f63c760d088d7dd04f743619b6291f63beebd8bdf530628f90e9cfa52d7a0bf15336e4ccaf1a8b2501057e32139077aaa3e2eb515d3ad94ea3bff6c8814ac"
+        },
+        "0x00000000000000000000000000000000000000d3": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0x1f4",
+          "true": "0x1f4",
+          "wide": false,
+          "code_hash": "0xd2b44bf907bc2ad88e260aec99d1a3c95b779e56d2d8c4e3b30d83742824806a",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf846018201f4a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0d2b44bf907bc2ad88e260aec99d1a3c95b779e56d2d8c4e3b30d83742824806a"
+        },
+        "0x00000000000000000000000000000000000000d4": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x32",
+          "true": "0x10000000000000000000000000000000000000000000000000000000000000032",
+          "wide": true,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86580a1010000000000000000000000000000000000000000000000000000000000000032a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        }
+      }
+    }
+  },
+  {
+    "id": "oog_child_revert.cancun",
+    "matrix_row": "out-of-gas revert",
+    "rule": "cancun",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0xc9f2c9cd04674edea40000000"
+      },
+      "0x00000000000000000000000000000000000000e1": {
+        "balance": "0x1",
+        "nonce": 1,
+        "code": "0x5b600056"
+      },
+      "0x00000000000000000000000000000000000000e2": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+        "nonce": 1,
+        "code": "0x600060006000600069010f0cf064dd592000007300000000000000000000000000000000000000e161c350f160005500"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x00000000000000000000000000000000000000a1",
+        "to": "0x00000000000000000000000000000000000000e2",
+        "value": "0x0",
+        "gas": 1000000,
+        "gas_price": "0x0",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000e2",
+      "0x00000000000000000000000000000000000000e1"
+    ],
+    "slots": {
+      "0x00000000000000000000000000000000000000e2": [
+        "0x0"
+      ]
+    },
+    "expect": {
+      "state_root": "0xf27e3ad25e9793dd649b361696a0c2af962f92bce6703e8d32881474260e35a4",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 84824
+        }
+      ],
+      "accounts": {
+        "0x00000000000000000000000000000000000000e1": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0x1",
+          "true": "0x1",
+          "wide": false,
+          "code_hash": "0x6e2fbd89d498da8e2419f09dbc06a84ae3f5b9c73961a65c9272efecb85b5ee4",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf8440101a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a06e2fbd89d498da8e2419f09dbc06a84ae3f5b9c73961a65c9272efecb85b5ee4"
+        },
+        "0x00000000000000000000000000000000000000e2": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0x35c1e5ed14fd6d5fff",
+          "true": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+          "wide": true,
+          "code_hash": "0x573c31913a16c0ebb70fdee9efd207d3e2e9a3a42883ce0db69f2f3dc93a9619",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "storage": {
+            "0x0": "0x0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "rlp": "0xf86501a101000000000000000000000000000000000000000000000035c1e5ed14fd6d5fffa056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0573c31913a16c0ebb70fdee9efd207d3e2e9a3a42883ce0db69f2f3dc93a9619"
+        }
+      }
+    }
+  },
+  {
+    "id": "oog_child_revert.legacy",
+    "matrix_row": "out-of-gas revert",
+    "rule": "legacy",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0xc9f2c9cd04674edea40000000"
+      },
+      "0x00000000000000000000000000000000000000e1": {
+        "balance": "0x1",
+        "nonce": 1,
+        "code": "0x5b600056"
+      },
+      "0x00000000000000000000000000000000000000e2": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+        "nonce": 1,
+        "code": "0x600060006000600069010f0cf064dd592000007300000000000000000000000000000000000000e161c350f160005500"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x00000000000000000000000000000000000000a1",
+        "to": "0x00000000000000000000000000000000000000e2",
+        "value": "0x0",
+        "gas": 1000000,
+        "gas_price": "0x0",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000e2",
+      "0x00000000000000000000000000000000000000e1"
+    ],
+    "slots": {
+      "0x00000000000000000000000000000000000000e2": [
+        "0x0"
+      ]
+    },
+    "expect": {
+      "state_root": "0xf27e3ad25e9793dd649b361696a0c2af962f92bce6703e8d32881474260e35a4",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 81524
+        }
+      ],
+      "accounts": {
+        "0x00000000000000000000000000000000000000e1": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0x1",
+          "true": "0x1",
+          "wide": false,
+          "code_hash": "0x6e2fbd89d498da8e2419f09dbc06a84ae3f5b9c73961a65c9272efecb85b5ee4",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf8440101a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a06e2fbd89d498da8e2419f09dbc06a84ae3f5b9c73961a65c9272efecb85b5ee4"
+        },
+        "0x00000000000000000000000000000000000000e2": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0x35c1e5ed14fd6d5fff",
+          "true": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+          "wide": true,
+          "code_hash": "0x573c31913a16c0ebb70fdee9efd207d3e2e9a3a42883ce0db69f2f3dc93a9619",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "storage": {
+            "0x0": "0x0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "rlp": "0xf86501a101000000000000000000000000000000000000000000000035c1e5ed14fd6d5fffa056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0573c31913a16c0ebb70fdee9efd207d3e2e9a3a42883ce0db69f2f3dc93a9619"
+        }
+      }
+    }
+  },
+  {
+    "id": "oog_top_wide_sender.cancun",
+    "matrix_row": "out-of-gas revert",
+    "rule": "cancun",
+    "accounts": {
+      "0x00000000000000000000000000000000000000e1": {
+        "balance": "0x1",
+        "nonce": 1,
+        "code": "0x5b600056"
+      },
+      "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0",
+        "to": "0x00000000000000000000000000000000000000e1",
+        "value": "0x10f0cf064dd59200000",
+        "gas": 100000,
+        "gas_price": "0x0",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0",
+      "0x00000000000000000000000000000000000000e1"
+    ],
+    "expect": {
+      "state_root": "0xce6e011c51a585cc76e3c7cdbe38ff5f7e5945f7dd676796a831645757344327",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "out of gas",
+          "gas_used": 100000
+        }
+      ],
+      "accounts": {
+        "0x00000000000000000000000000000000000000e1": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0x1",
+          "true": "0x1",
+          "wide": false,
+          "code_hash": "0x6e2fbd89d498da8e2419f09dbc06a84ae3f5b9c73961a65c9272efecb85b5ee4",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf8440101a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a06e2fbd89d498da8e2419f09dbc06a84ae3f5b9c73961a65c9272efecb85b5ee4"
+        },
+        "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0x35c1e5ed14fd6d5fff",
+          "true": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+          "wide": true,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86501a101000000000000000000000000000000000000000000000035c1e5ed14fd6d5fffa056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        }
+      }
+    }
+  },
+  {
+    "id": "oog_top_wide_sender.legacy",
+    "matrix_row": "out-of-gas revert",
+    "rule": "legacy",
+    "accounts": {
+      "0x00000000000000000000000000000000000000e1": {
+        "balance": "0x1",
+        "nonce": 1,
+        "code": "0x5b600056"
+      },
+      "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0",
+        "to": "0x00000000000000000000000000000000000000e1",
+        "value": "0x10f0cf064dd59200000",
+        "gas": 100000,
+        "gas_price": "0x0",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0",
+      "0x00000000000000000000000000000000000000e1"
+    ],
+    "expect": {
+      "state_root": "0xce6e011c51a585cc76e3c7cdbe38ff5f7e5945f7dd676796a831645757344327",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "out of gas",
+          "gas_used": 100000
+        }
+      ],
+      "accounts": {
+        "0x00000000000000000000000000000000000000e1": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0x1",
+          "true": "0x1",
+          "wide": false,
+          "code_hash": "0x6e2fbd89d498da8e2419f09dbc06a84ae3f5b9c73961a65c9272efecb85b5ee4",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf8440101a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a06e2fbd89d498da8e2419f09dbc06a84ae3f5b9c73961a65c9272efecb85b5ee4"
+        },
+        "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0x35c1e5ed14fd6d5fff",
+          "true": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+          "wide": true,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86501a101000000000000000000000000000000000000000000000035c1e5ed14fd6d5fffa056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        }
+      }
+    }
+  },
+  {
+    "id": "precompile_value.cancun",
+    "matrix_row": "precompile calls",
+    "rule": "cancun",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0xc9f2c9cd04674edea40000000"
+      },
+      "0x00000000000000000000000000000000000000e3": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+        "nonce": 1,
+        "code": "0x600060006000600069010f0cf064dd592000007300000000000000000000000000000000000000045af160005500"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x00000000000000000000000000000000000000a1",
+        "to": "0x00000000000000000000000000000000000000e3",
+        "value": "0x0",
+        "gas": 1000000,
+        "gas_price": "0x0",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000e3",
+      "0x0000000000000000000000000000000000000004"
+    ],
+    "slots": {
+      "0x00000000000000000000000000000000000000e3": [
+        "0x0"
+      ]
+    },
+    "expect": {
+      "state_root": "0xc50d4ef29f5b84bbe4a221be60fe7873c7e4791634de273b4aed115fc8ff2e28",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 74938
+        }
+      ],
+      "accounts": {
+        "0x0000000000000000000000000000000000000004": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x10f0cf064dd59200000",
+          "true": "0x10f0cf064dd59200000",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf84e808a010f0cf064dd59200000a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        },
+        "0x00000000000000000000000000000000000000e3": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0xffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fff",
+          "true": "0xffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fff",
+          "wide": false,
+          "code_hash": "0x3332a8ae715768021d47de1183c95cfb1f0b2a67d4fbebcf2bf9dfe990b0384e",
+          "storage_root": "0x821e2556a290c86405f8160a2d662042a431ba456b9db265c79bb837c04be5f0",
+          "storage": {
+            "0x0": "0x0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          "rlp": "0xf86401a0ffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fffa0821e2556a290c86405f8160a2d662042a431ba456b9db265c79bb837c04be5f0a03332a8ae715768021d47de1183c95cfb1f0b2a67d4fbebcf2bf9dfe990b0384e"
+        }
+      }
+    }
+  },
+  {
+    "id": "precompile_value.legacy",
+    "matrix_row": "precompile calls",
+    "rule": "legacy",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0xc9f2c9cd04674edea40000000"
+      },
+      "0x00000000000000000000000000000000000000e3": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+        "nonce": 1,
+        "code": "0x600060006000600069010f0cf064dd592000007300000000000000000000000000000000000000045af160005500"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x00000000000000000000000000000000000000a1",
+        "to": "0x00000000000000000000000000000000000000e3",
+        "value": "0x0",
+        "gas": 1000000,
+        "gas_price": "0x0",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000e3",
+      "0x0000000000000000000000000000000000000004"
+    ],
+    "slots": {
+      "0x00000000000000000000000000000000000000e3": [
+        "0x0"
+      ]
+    },
+    "expect": {
+      "state_root": "0xc50d4ef29f5b84bbe4a221be60fe7873c7e4791634de273b4aed115fc8ff2e28",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 73438
+        }
+      ],
+      "accounts": {
+        "0x0000000000000000000000000000000000000004": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x10f0cf064dd59200000",
+          "true": "0x10f0cf064dd59200000",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf84e808a010f0cf064dd59200000a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        },
+        "0x00000000000000000000000000000000000000e3": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0xffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fff",
+          "true": "0xffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fff",
+          "wide": false,
+          "code_hash": "0x3332a8ae715768021d47de1183c95cfb1f0b2a67d4fbebcf2bf9dfe990b0384e",
+          "storage_root": "0x821e2556a290c86405f8160a2d662042a431ba456b9db265c79bb837c04be5f0",
+          "storage": {
+            "0x0": "0x0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          "rlp": "0xf86401a0ffffffffffffffffffffffffffffffffffffffffffffff26b4f58837a44d5fffa0821e2556a290c86405f8160a2d662042a431ba456b9db265c79bb837c04be5f0a03332a8ae715768021d47de1183c95cfb1f0b2a67d4fbebcf2bf9dfe990b0384e"
+        }
+      }
+    }
+  },
+  {
+    "id": "revert_after_wide_debit.cancun",
+    "matrix_row": "journal revert after a wide transition",
+    "rule": "cancun",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0xc9f2c9cd04674edea40000000"
+      },
+      "0x00000000000000000000000000000000000000a2": {
+        "balance": "0x1"
+      },
+      "0x00000000000000000000000000000000000000e4": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+        "nonce": 1,
+        "code": "0x600060006000600069010f0cf064dd592000007300000000000000000000000000000000000000a25af15060006000fd"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x00000000000000000000000000000000000000a1",
+        "to": "0x00000000000000000000000000000000000000e4",
+        "value": "0x0",
+        "gas": 1000000,
+        "gas_price": "0x0",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000e4",
+      "0x00000000000000000000000000000000000000a2"
+    ],
+    "expect": {
+      "state_root": "0x79bcd09f5c3ad71addc2ddfeeaea1a1d7fc540f2a53871885afe6cb6eca6dece",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "execution reverted",
+          "gas_used": 30328
+        }
+      ],
+      "accounts": {
+        "0x00000000000000000000000000000000000000a2": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x1",
+          "true": "0x1",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf8448001a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        },
+        "0x00000000000000000000000000000000000000e4": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0x35c1e5ed14fd6d5fff",
+          "true": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+          "wide": true,
+          "code_hash": "0xe9644f5f661c7830a7f5e307a3a81a83d7c1dd06fce4f24fcd3a2906be79d165",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86501a101000000000000000000000000000000000000000000000035c1e5ed14fd6d5fffa056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0e9644f5f661c7830a7f5e307a3a81a83d7c1dd06fce4f24fcd3a2906be79d165"
+        }
+      }
+    }
+  },
+  {
+    "id": "revert_after_wide_debit.legacy",
+    "matrix_row": "journal revert after a wide transition",
+    "rule": "legacy",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0xc9f2c9cd04674edea40000000"
+      },
+      "0x00000000000000000000000000000000000000a2": {
+        "balance": "0x1"
+      },
+      "0x00000000000000000000000000000000000000e4": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+        "nonce": 1,
+        "code": "0x600060006000600069010f0cf064dd592000007300000000000000000000000000000000000000a25af15060006000fd"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x00000000000000000000000000000000000000a1",
+        "to": "0x00000000000000000000000000000000000000e4",
+        "value": "0x0",
+        "gas": 1000000,
+        "gas_price": "0x0",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000e4",
+      "0x00000000000000000000000000000000000000a2"
+    ],
+    "expect": {
+      "state_root": "0x79bcd09f5c3ad71addc2ddfeeaea1a1d7fc540f2a53871885afe6cb6eca6dece",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "execution reverted",
+          "gas_used": 28428
+        }
+      ],
+      "accounts": {
+        "0x00000000000000000000000000000000000000a2": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x1",
+          "true": "0x1",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf8448001a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        },
+        "0x00000000000000000000000000000000000000e4": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0x35c1e5ed14fd6d5fff",
+          "true": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+          "wide": true,
+          "code_hash": "0xe9644f5f661c7830a7f5e307a3a81a83d7c1dd06fce4f24fcd3a2906be79d165",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86501a101000000000000000000000000000000000000000000000035c1e5ed14fd6d5fffa056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0e9644f5f661c7830a7f5e307a3a81a83d7c1dd06fce4f24fcd3a2906be79d165"
+        }
+      }
+    }
+  },
+  {
+    "id": "selfdestruct_to_self.cancun",
+    "matrix_row": "SELFDESTRUCT of a wide contract",
+    "rule": "cancun",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0xc9f2c9cd04674edea40000000"
+      },
+      "0x00000000000000000000000000000000000000c5": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+        "nonce": 1,
+        "code": "0x7300000000000000000000000000000000000000c5ff"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x00000000000000000000000000000000000000a1",
+        "to": "0x00000000000000000000000000000000000000c5",
+        "value": "0x0",
+        "gas": 1000000,
+        "gas_price": "0x0",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000c5"
+    ],
+    "expect": {
+      "state_root": "0x23f9269e1d05bd728033d2dbff14ff22afb6fe08750d6c85fae2659303e946da",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 26003
+        }
+      ],
+      "accounts": {
+        "0x00000000000000000000000000000000000000c5": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0x35c1e5ed14fd6d5fff",
+          "true": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+          "wide": true,
+          "code_hash": "0x9499b8f04918becb35e2a272b24829413cd02802edfcd2ffd823f0683f884a36",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86501a101000000000000000000000000000000000000000000000035c1e5ed14fd6d5fffa056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a09499b8f04918becb35e2a272b24829413cd02802edfcd2ffd823f0683f884a36"
+        }
+      }
+    }
+  },
+  {
+    "id": "selfdestruct_to_self.legacy",
+    "matrix_row": "SELFDESTRUCT of a wide contract",
+    "rule": "legacy",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0xc9f2c9cd04674edea40000000"
+      },
+      "0x00000000000000000000000000000000000000c5": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+        "nonce": 1,
+        "code": "0x7300000000000000000000000000000000000000c5ff"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x00000000000000000000000000000000000000a1",
+        "to": "0x00000000000000000000000000000000000000c5",
+        "value": "0x0",
+        "gas": 1000000,
+        "gas_price": "0x0",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000c5"
+    ],
+    "expect": {
+      "state_root": "0x06861d97152dc117dddfa0c8f755c5d1bd2fef31d4ffdc025ff707140cc1bcf4",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 13002
+        }
+      ],
+      "accounts": {
+        "0x00000000000000000000000000000000000000c5": {
+          "exists": false,
+          "nonce": 0,
+          "low": "",
+          "true": "",
+          "wide": false,
+          "code_hash": "",
+          "storage_root": "",
+          "rlp": ""
+        }
+      }
+    }
+  },
+  {
+    "id": "selfdestruct_to_wide.cancun",
+    "matrix_row": "SELFDESTRUCT of a wide contract",
+    "rule": "cancun",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0xc9f2c9cd04674edea40000000"
+      },
+      "0x00000000000000000000000000000000000000a3": {
+        "balance": "0x100000000000000000000000000000000000000000000000000000000000003e8"
+      },
+      "0x00000000000000000000000000000000000000c5": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+        "nonce": 1,
+        "code": "0x7300000000000000000000000000000000000000a3ff"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x00000000000000000000000000000000000000a1",
+        "to": "0x00000000000000000000000000000000000000c5",
+        "value": "0x0",
+        "gas": 1000000,
+        "gas_price": "0x0",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000c5",
+      "0x00000000000000000000000000000000000000a3"
+    ],
+    "expect": {
+      "state_root": "0xaef21077f22c796ae33f57be54123928b37e8e9006d307d7c2f51d60afafbb6c",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 28603
+        }
+      ],
+      "accounts": {
+        "0x00000000000000000000000000000000000000a3": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x35c1e5ed14fd6d63e7",
+          "true": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d63e7",
+          "wide": true,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86580a101000000000000000000000000000000000000000000000035c1e5ed14fd6d63e7a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        },
+        "0x00000000000000000000000000000000000000c5": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0x0",
+          "true": "0x10000000000000000000000000000000000000000000000000000000000000000",
+          "wide": true,
+          "code_hash": "0x27b490b8a1990019a32e2004f064b783342ca0108ef0f9c275b96caf7d99b2e6",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86501a1010000000000000000000000000000000000000000000000000000000000000000a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a027b490b8a1990019a32e2004f064b783342ca0108ef0f9c275b96caf7d99b2e6"
+        }
+      }
+    }
+  },
+  {
+    "id": "selfdestruct_to_wide.legacy",
+    "matrix_row": "SELFDESTRUCT of a wide contract",
+    "rule": "legacy",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0xc9f2c9cd04674edea40000000"
+      },
+      "0x00000000000000000000000000000000000000a3": {
+        "balance": "0x100000000000000000000000000000000000000000000000000000000000003e8"
+      },
+      "0x00000000000000000000000000000000000000c5": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+        "nonce": 1,
+        "code": "0x7300000000000000000000000000000000000000a3ff"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x00000000000000000000000000000000000000a1",
+        "to": "0x00000000000000000000000000000000000000c5",
+        "value": "0x0",
+        "gas": 1000000,
+        "gas_price": "0x0",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000c5",
+      "0x00000000000000000000000000000000000000a3"
+    ],
+    "expect": {
+      "state_root": "0xec81d165c21ca0595e10392895362c45ef8d810dfb9b9a82c3efba7350aa93b6",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 13002
+        }
+      ],
+      "accounts": {
+        "0x00000000000000000000000000000000000000a3": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x35c1e5ed14fd6d63e7",
+          "true": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d63e7",
+          "wide": true,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86580a101000000000000000000000000000000000000000000000035c1e5ed14fd6d63e7a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        },
+        "0x00000000000000000000000000000000000000c5": {
+          "exists": false,
+          "nonce": 0,
+          "low": "",
+          "true": "",
+          "wide": false,
+          "code_hash": "",
+          "storage_root": "",
+          "rlp": ""
+        }
+      }
+    }
+  },
+  {
+    "id": "selfdestruct_wide.cancun",
+    "matrix_row": "SELFDESTRUCT of a wide contract",
+    "rule": "cancun",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0xc9f2c9cd04674edea40000000"
+      },
+      "0x00000000000000000000000000000000000000a2": {
+        "balance": "0x5"
+      },
+      "0x00000000000000000000000000000000000000c5": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+        "nonce": 1,
+        "code": "0x7300000000000000000000000000000000000000a2ff"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x00000000000000000000000000000000000000a1",
+        "to": "0x00000000000000000000000000000000000000c5",
+        "value": "0x0",
+        "gas": 1000000,
+        "gas_price": "0x0",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000c5",
+      "0x00000000000000000000000000000000000000a2"
+    ],
+    "expect": {
+      "state_root": "0x925deadf15f8d85d974033b5d0dd1a8a0cf52363caa8f410a1e22e213ec4cce3",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 28603
+        }
+      ],
+      "accounts": {
+        "0x00000000000000000000000000000000000000a2": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x35c1e5ed14fd6d6004",
+          "true": "0x35c1e5ed14fd6d6004",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf84d808935c1e5ed14fd6d6004a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        },
+        "0x00000000000000000000000000000000000000c5": {
+          "exists": true,
+          "nonce": 1,
+          "low": "0x0",
+          "true": "0x10000000000000000000000000000000000000000000000000000000000000000",
+          "wide": true,
+          "code_hash": "0x3f5f04920f05fa4197038138b462bf0eeb83efb9f0943dd8c39c5a298590b0c3",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf86501a1010000000000000000000000000000000000000000000000000000000000000000a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a03f5f04920f05fa4197038138b462bf0eeb83efb9f0943dd8c39c5a298590b0c3"
+        }
+      }
+    }
+  },
+  {
+    "id": "selfdestruct_wide.legacy",
+    "matrix_row": "SELFDESTRUCT of a wide contract",
+    "rule": "legacy",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0xc9f2c9cd04674edea40000000"
+      },
+      "0x00000000000000000000000000000000000000a2": {
+        "balance": "0x5"
+      },
+      "0x00000000000000000000000000000000000000c5": {
+        "balance": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+        "nonce": 1,
+        "code": "0x7300000000000000000000000000000000000000a2ff"
+      }
+    },
+    "ops": [
+      {
+        "op": "tx",
+        "from": "0x00000000000000000000000000000000000000a1",
+        "to": "0x00000000000000000000000000000000000000c5",
+        "value": "0x0",
+        "gas": 1000000,
+        "gas_price": "0x0",
+        "coinbase": "0x00000000000000000000000000000000000000c0"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000c5",
+      "0x00000000000000000000000000000000000000a2"
+    ],
+    "expect": {
+      "state_root": "0xebd5462e1b336a994bd0eda4e7e67b57184da17314de8494ac130e672b1a5a89",
+      "txs": [
+        {
+          "consensus_err": "",
+          "vm_err": "",
+          "gas_used": 13002
+        }
+      ],
+      "accounts": {
+        "0x00000000000000000000000000000000000000a2": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x35c1e5ed14fd6d6004",
+          "true": "0x35c1e5ed14fd6d6004",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf84d808935c1e5ed14fd6d6004a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        },
+        "0x00000000000000000000000000000000000000c5": {
+          "exists": false,
+          "nonce": 0,
+          "low": "",
+          "true": "",
+          "wide": false,
+          "code_hash": "",
+          "storage_root": "",
+          "rlp": ""
+        }
+      }
+    }
+  },
+  {
+    "id": "set_balance_clears.legacy",
+    "matrix_row": "SetBalance clearing",
+    "rule": "legacy",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0x100000000000000000000000000000000000000000000000000000000000003e8"
+      }
+    },
+    "ops": [
+      {
+        "op": "set_balance",
+        "addr": "0x00000000000000000000000000000000000000a1",
+        "amount": "0x3039"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000a1"
+    ],
+    "expect": {
+      "state_root": "0x81dd40cf606faed0cbafa66cb5513aa5071602f438137203963081cfc7ee99e3",
+      "txs": [],
+      "accounts": {
+        "0x00000000000000000000000000000000000000a1": {
+          "exists": true,
+          "nonce": 0,
+          "low": "0x3039",
+          "true": "0x3039",
+          "wide": false,
+          "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "storage_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+          "rlp": "0xf84680823039a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        }
+      }
+    }
+  },
+  {
+    "id": "wide_low_zero_empty.legacy",
+    "matrix_row": "SetBalance clearing",
+    "rule": "legacy",
+    "accounts": {
+      "0x00000000000000000000000000000000000000a1": {
+        "balance": "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffb"
+      }
+    },
+    "ops": [
+      {
+        "op": "add",
+        "addr": "0x00000000000000000000000000000000000000a1",
+        "amount": "0x5"
+      }
+    ],
+    "watch": [
+      "0x00000000000000000000000000000000000000a1"
+    ],
+    "expect": {
+      "state_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+      "txs": [],
+      "accounts": {
+        "0x00000000000000000000000000000000000000a1": {
+          "exists": false,
+          "nonce": 0,
+          "low": "",
+          "true": "",
+          "wide": false,
+          "code_hash": "",
+          "storage_root": "",
+          "rlp": ""
+        }
+      }
+    }
+  }
+]

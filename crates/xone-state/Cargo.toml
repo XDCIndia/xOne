@@ -1,0 +1,23 @@
+[package]
+name = "xone-state"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+alloy-primitives.workspace = true
+alloy-rlp.workspace = true
+alloy-trie.workspace = true
+thiserror.workspace = true
+xone-primitives.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+xone-chainspec.workspace = true

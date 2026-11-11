@@ -1,0 +1,3510 @@
+{
+ "pin": "6fc8e8c2088b7f18264f5663036669d04fa7becf",
+ "scenarios": [
+  {
+   "name": "shape/stale-head-then-canonical-then-child/v2",
+   "mode": "v2",
+   "fork": 3,
+   "main": 5,
+   "alt": 5,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "a4"
+     ]
+    },
+    {
+     "block": "m4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "a4"
+     ]
+    },
+    {
+     "block": "m5",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "m4",
+      "m5"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "shape/canonical-head-then-sibling-then-child/v2",
+   "mode": "v2",
+   "fork": 3,
+   "main": 5,
+   "alt": 5,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "m4",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "m4"
+     ]
+    },
+    {
+     "block": "a4",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "m4"
+     ]
+    },
+    {
+     "block": "m5",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "m4",
+      "m5"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "shape/stale-head-then-canonical/v2",
+   "mode": "v2",
+   "fork": 3,
+   "main": 5,
+   "alt": 5,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "a4"
+     ]
+    },
+    {
+     "block": "m4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "a4"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "shape/child-of-sibling-adopts/v2",
+   "mode": "v2",
+   "fork": 3,
+   "main": 5,
+   "alt": 5,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "m4",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "m4"
+     ]
+    },
+    {
+     "block": "a4",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "m4"
+     ]
+    },
+    {
+     "block": "a5",
+     "err": "",
+     "head": "a5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "a4",
+      "a5"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "shape/stale-head-then-canonical-then-child/v1",
+   "mode": "v1",
+   "fork": 3,
+   "main": 5,
+   "alt": 5,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "a4"
+     ]
+    },
+    {
+     "block": "m4",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "m4"
+     ]
+    },
+    {
+     "block": "m5",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "m4",
+      "m5"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "shape/canonical-head-then-sibling-then-child/v1",
+   "mode": "v1",
+   "fork": 3,
+   "main": 5,
+   "alt": 5,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "m4",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "m4"
+     ]
+    },
+    {
+     "block": "a4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "a4"
+     ]
+    },
+    {
+     "block": "m5",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "m4",
+      "m5"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "shape/stale-head-then-canonical/v1",
+   "mode": "v1",
+   "fork": 3,
+   "main": 5,
+   "alt": 5,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "a4"
+     ]
+    },
+    {
+     "block": "m4",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "m4"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "shape/child-of-sibling-adopts/v1",
+   "mode": "v1",
+   "fork": 3,
+   "main": 5,
+   "alt": 5,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "m4",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "m4"
+     ]
+    },
+    {
+     "block": "a4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "a4"
+     ]
+    },
+    {
+     "block": "a5",
+     "err": "",
+     "head": "a5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "a4",
+      "a5"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/00/v1",
+   "mode": "v1",
+   "fork": 3,
+   "main": 5,
+   "alt": 5,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "a4"
+     ]
+    },
+    {
+     "block": "m4",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "m4"
+     ]
+    },
+    {
+     "block": "a5",
+     "err": "",
+     "head": "a5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "a4",
+      "a5"
+     ]
+    },
+    {
+     "block": "m5",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "m4",
+      "m5"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/01/v1",
+   "mode": "v1",
+   "fork": 2,
+   "main": 5,
+   "alt": 3,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "m3",
+     "err": "",
+     "head": "m3",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3"
+     ]
+    },
+    {
+     "block": "a3",
+     "err": "",
+     "head": "a3",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3"
+     ]
+    },
+    {
+     "block": "m4",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3",
+      "m4"
+     ]
+    },
+    {
+     "block": "m5",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3",
+      "m4",
+      "m5"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/02/v2",
+   "mode": "v2",
+   "fork": 2,
+   "main": 5,
+   "alt": 3,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a3",
+     "err": "",
+     "head": "a3",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3"
+     ]
+    },
+    {
+     "block": "m3",
+     "err": "",
+     "head": "a3",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3"
+     ]
+    },
+    {
+     "block": "m4",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3",
+      "m4"
+     ]
+    },
+    {
+     "block": "m5",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3",
+      "m4",
+      "m5"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/03/v1",
+   "mode": "v1",
+   "fork": 2,
+   "main": 3,
+   "alt": 4,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "m3",
+     "err": "",
+     "head": "m3",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3"
+     ]
+    },
+    {
+     "block": "a3",
+     "err": "",
+     "head": "a3",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3"
+     ]
+    },
+    {
+     "block": "a4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3",
+      "a4"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/04/v2",
+   "mode": "v2",
+   "fork": 4,
+   "main": 7,
+   "alt": 5,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a5",
+     "err": "",
+     "head": "a5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "a5"
+     ]
+    },
+    {
+     "block": "m5",
+     "err": "",
+     "head": "a5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "a5"
+     ]
+    },
+    {
+     "block": "m6",
+     "err": "",
+     "head": "m6",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5",
+      "m6"
+     ]
+    },
+    {
+     "block": "m7",
+     "err": "",
+     "head": "m7",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5",
+      "m6",
+      "m7"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/05/v1",
+   "mode": "v1",
+   "fork": 4,
+   "main": 7,
+   "alt": 7,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a5",
+     "err": "",
+     "head": "a5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "a5"
+     ]
+    },
+    {
+     "block": "m5",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5"
+     ]
+    },
+    {
+     "block": "a6",
+     "err": "",
+     "head": "a6",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "a5",
+      "a6"
+     ]
+    },
+    {
+     "block": "m6",
+     "err": "",
+     "head": "m6",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5",
+      "m6"
+     ]
+    },
+    {
+     "block": "a7",
+     "err": "",
+     "head": "a7",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "a5",
+      "a6",
+      "a7"
+     ]
+    },
+    {
+     "block": "m7",
+     "err": "",
+     "head": "m7",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5",
+      "m6",
+      "m7"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/06/v2",
+   "mode": "v2",
+   "fork": 2,
+   "main": 4,
+   "alt": 4,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "m3",
+     "err": "",
+     "head": "m3",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3"
+     ]
+    },
+    {
+     "block": "a3",
+     "err": "",
+     "head": "m3",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3"
+     ]
+    },
+    {
+     "block": "a4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3",
+      "a4"
+     ]
+    },
+    {
+     "block": "m4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3",
+      "a4"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/07/v1",
+   "mode": "v1",
+   "fork": 2,
+   "main": 4,
+   "alt": 3,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a3",
+     "err": "",
+     "head": "a3",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3"
+     ]
+    },
+    {
+     "block": "m3",
+     "err": "",
+     "head": "m3",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3"
+     ]
+    },
+    {
+     "block": "m4",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3",
+      "m4"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/08/v1",
+   "mode": "v1",
+   "fork": 3,
+   "main": 5,
+   "alt": 5,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "a4"
+     ]
+    },
+    {
+     "block": "m4",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "m4"
+     ]
+    },
+    {
+     "block": "m5",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "m4",
+      "m5"
+     ]
+    },
+    {
+     "block": "a5",
+     "err": "",
+     "head": "a5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "a4",
+      "a5"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/09/v2",
+   "mode": "v2",
+   "fork": 1,
+   "main": 4,
+   "alt": 3,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a2",
+     "err": "",
+     "head": "a2",
+     "canonical": [
+      "s1",
+      "a2"
+     ]
+    },
+    {
+     "block": "m2",
+     "err": "",
+     "head": "a2",
+     "canonical": [
+      "s1",
+      "a2"
+     ]
+    },
+    {
+     "block": "a3",
+     "err": "",
+     "head": "a3",
+     "canonical": [
+      "s1",
+      "a2",
+      "a3"
+     ]
+    },
+    {
+     "block": "m3",
+     "err": "",
+     "head": "a3",
+     "canonical": [
+      "s1",
+      "a2",
+      "a3"
+     ]
+    },
+    {
+     "block": "m4",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "m2",
+      "m3",
+      "m4"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/10/v2",
+   "mode": "v2",
+   "fork": 4,
+   "main": 6,
+   "alt": 7,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "m5",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5"
+     ]
+    },
+    {
+     "block": "a5",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5"
+     ]
+    },
+    {
+     "block": "m6",
+     "err": "",
+     "head": "m6",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5",
+      "m6"
+     ]
+    },
+    {
+     "block": "a6",
+     "err": "",
+     "head": "m6",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5",
+      "m6"
+     ]
+    },
+    {
+     "block": "a7",
+     "err": "",
+     "head": "a7",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "a5",
+      "a6",
+      "a7"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/11/v2",
+   "mode": "v2",
+   "fork": 4,
+   "main": 5,
+   "alt": 6,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "m5",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5"
+     ]
+    },
+    {
+     "block": "a5",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5"
+     ]
+    },
+    {
+     "block": "a6",
+     "err": "",
+     "head": "a6",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "a5",
+      "a6"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/12/v2",
+   "mode": "v2",
+   "fork": 1,
+   "main": 3,
+   "alt": 2,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a2",
+     "err": "",
+     "head": "a2",
+     "canonical": [
+      "s1",
+      "a2"
+     ]
+    },
+    {
+     "block": "m2",
+     "err": "",
+     "head": "a2",
+     "canonical": [
+      "s1",
+      "a2"
+     ]
+    },
+    {
+     "block": "m3",
+     "err": "",
+     "head": "m3",
+     "canonical": [
+      "s1",
+      "m2",
+      "m3"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/13/v2",
+   "mode": "v2",
+   "fork": 4,
+   "main": 5,
+   "alt": 6,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "m5",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5"
+     ]
+    },
+    {
+     "block": "a5",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5"
+     ]
+    },
+    {
+     "block": "a6",
+     "err": "",
+     "head": "a6",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "a5",
+      "a6"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/14/v1",
+   "mode": "v1",
+   "fork": 1,
+   "main": 2,
+   "alt": 4,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a2",
+     "err": "",
+     "head": "a2",
+     "canonical": [
+      "s1",
+      "a2"
+     ]
+    },
+    {
+     "block": "m2",
+     "err": "",
+     "head": "m2",
+     "canonical": [
+      "s1",
+      "m2"
+     ]
+    },
+    {
+     "block": "a3",
+     "err": "",
+     "head": "a3",
+     "canonical": [
+      "s1",
+      "a2",
+      "a3"
+     ]
+    },
+    {
+     "block": "a4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "a2",
+      "a3",
+      "a4"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/15/v1",
+   "mode": "v1",
+   "fork": 4,
+   "main": 7,
+   "alt": 6,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a5",
+     "err": "",
+     "head": "a5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "a5"
+     ]
+    },
+    {
+     "block": "m5",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5"
+     ]
+    },
+    {
+     "block": "a6",
+     "err": "",
+     "head": "a6",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "a5",
+      "a6"
+     ]
+    },
+    {
+     "block": "m6",
+     "err": "",
+     "head": "m6",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5",
+      "m6"
+     ]
+    },
+    {
+     "block": "m7",
+     "err": "",
+     "head": "m7",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5",
+      "m6",
+      "m7"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/16/v1",
+   "mode": "v1",
+   "fork": 4,
+   "main": 5,
+   "alt": 7,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a5",
+     "err": "",
+     "head": "a5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "a5"
+     ]
+    },
+    {
+     "block": "m5",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5"
+     ]
+    },
+    {
+     "block": "a6",
+     "err": "",
+     "head": "a6",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "a5",
+      "a6"
+     ]
+    },
+    {
+     "block": "a7",
+     "err": "",
+     "head": "a7",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "a5",
+      "a6",
+      "a7"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/17/v1",
+   "mode": "v1",
+   "fork": 3,
+   "main": 4,
+   "alt": 4,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "a4"
+     ]
+    },
+    {
+     "block": "m4",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "m4"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/18/v2",
+   "mode": "v2",
+   "fork": 2,
+   "main": 5,
+   "alt": 5,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a3",
+     "err": "",
+     "head": "a3",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3"
+     ]
+    },
+    {
+     "block": "a4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3",
+      "a4"
+     ]
+    },
+    {
+     "block": "m3",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3",
+      "a4"
+     ]
+    },
+    {
+     "block": "m4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3",
+      "a4"
+     ]
+    },
+    {
+     "block": "m5",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3",
+      "m4",
+      "m5"
+     ]
+    },
+    {
+     "block": "a5",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3",
+      "m4",
+      "m5"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/19/v1",
+   "mode": "v1",
+   "fork": 4,
+   "main": 5,
+   "alt": 5,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "m5",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5"
+     ]
+    },
+    {
+     "block": "a5",
+     "err": "",
+     "head": "a5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "a5"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/20/v1",
+   "mode": "v1",
+   "fork": 2,
+   "main": 4,
+   "alt": 5,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "m3",
+     "err": "",
+     "head": "m3",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3"
+     ]
+    },
+    {
+     "block": "a3",
+     "err": "",
+     "head": "a3",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3"
+     ]
+    },
+    {
+     "block": "m4",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3",
+      "m4"
+     ]
+    },
+    {
+     "block": "a4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3",
+      "a4"
+     ]
+    },
+    {
+     "block": "a5",
+     "err": "",
+     "head": "a5",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3",
+      "a4",
+      "a5"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/21/v2",
+   "mode": "v2",
+   "fork": 4,
+   "main": 7,
+   "alt": 7,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "m5",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5"
+     ]
+    },
+    {
+     "block": "m6",
+     "err": "",
+     "head": "m6",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5",
+      "m6"
+     ]
+    },
+    {
+     "block": "m7",
+     "err": "",
+     "head": "m7",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5",
+      "m6",
+      "m7"
+     ]
+    },
+    {
+     "block": "a5",
+     "err": "",
+     "head": "m7",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5",
+      "m6",
+      "m7"
+     ]
+    },
+    {
+     "block": "a6",
+     "err": "",
+     "head": "m7",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5",
+      "m6",
+      "m7"
+     ]
+    },
+    {
+     "block": "a7",
+     "err": "",
+     "head": "m7",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5",
+      "m6",
+      "m7"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/22/v2",
+   "mode": "v2",
+   "fork": 4,
+   "main": 6,
+   "alt": 7,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "m5",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5"
+     ]
+    },
+    {
+     "block": "m6",
+     "err": "",
+     "head": "m6",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5",
+      "m6"
+     ]
+    },
+    {
+     "block": "a5",
+     "err": "",
+     "head": "m6",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5",
+      "m6"
+     ]
+    },
+    {
+     "block": "a6",
+     "err": "",
+     "head": "m6",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5",
+      "m6"
+     ]
+    },
+    {
+     "block": "a7",
+     "err": "",
+     "head": "a7",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "a5",
+      "a6",
+      "a7"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/23/v1",
+   "mode": "v1",
+   "fork": 2,
+   "main": 3,
+   "alt": 3,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a3",
+     "err": "",
+     "head": "a3",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3"
+     ]
+    },
+    {
+     "block": "m3",
+     "err": "",
+     "head": "m3",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/24/v2",
+   "mode": "v2",
+   "fork": 4,
+   "main": 7,
+   "alt": 6,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a5",
+     "err": "",
+     "head": "a5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "a5"
+     ]
+    },
+    {
+     "block": "m5",
+     "err": "",
+     "head": "a5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "a5"
+     ]
+    },
+    {
+     "block": "a6",
+     "err": "",
+     "head": "a6",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "a5",
+      "a6"
+     ]
+    },
+    {
+     "block": "m6",
+     "err": "",
+     "head": "a6",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "a5",
+      "a6"
+     ]
+    },
+    {
+     "block": "m7",
+     "err": "",
+     "head": "m7",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5",
+      "m6",
+      "m7"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/25/v1",
+   "mode": "v1",
+   "fork": 2,
+   "main": 3,
+   "alt": 4,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a3",
+     "err": "",
+     "head": "a3",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3"
+     ]
+    },
+    {
+     "block": "m3",
+     "err": "",
+     "head": "m3",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3"
+     ]
+    },
+    {
+     "block": "a4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3",
+      "a4"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/26/v1",
+   "mode": "v1",
+   "fork": 4,
+   "main": 7,
+   "alt": 6,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a5",
+     "err": "",
+     "head": "a5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "a5"
+     ]
+    },
+    {
+     "block": "m5",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5"
+     ]
+    },
+    {
+     "block": "a6",
+     "err": "",
+     "head": "a6",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "a5",
+      "a6"
+     ]
+    },
+    {
+     "block": "m6",
+     "err": "",
+     "head": "m6",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5",
+      "m6"
+     ]
+    },
+    {
+     "block": "m7",
+     "err": "",
+     "head": "m7",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5",
+      "m6",
+      "m7"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/27/v1",
+   "mode": "v1",
+   "fork": 1,
+   "main": 4,
+   "alt": 4,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a2",
+     "err": "",
+     "head": "a2",
+     "canonical": [
+      "s1",
+      "a2"
+     ]
+    },
+    {
+     "block": "a3",
+     "err": "",
+     "head": "a3",
+     "canonical": [
+      "s1",
+      "a2",
+      "a3"
+     ]
+    },
+    {
+     "block": "m2",
+     "err": "",
+     "head": "m2",
+     "canonical": [
+      "s1",
+      "m2"
+     ]
+    },
+    {
+     "block": "m3",
+     "err": "",
+     "head": "m3",
+     "canonical": [
+      "s1",
+      "m2",
+      "m3"
+     ]
+    },
+    {
+     "block": "m4",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "m2",
+      "m3",
+      "m4"
+     ]
+    },
+    {
+     "block": "a4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "a2",
+      "a3",
+      "a4"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/28/v1",
+   "mode": "v1",
+   "fork": 1,
+   "main": 2,
+   "alt": 3,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a2",
+     "err": "",
+     "head": "a2",
+     "canonical": [
+      "s1",
+      "a2"
+     ]
+    },
+    {
+     "block": "a3",
+     "err": "",
+     "head": "a3",
+     "canonical": [
+      "s1",
+      "a2",
+      "a3"
+     ]
+    },
+    {
+     "block": "m2",
+     "err": "",
+     "head": "m2",
+     "canonical": [
+      "s1",
+      "m2"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/29/v1",
+   "mode": "v1",
+   "fork": 1,
+   "main": 4,
+   "alt": 3,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a2",
+     "err": "",
+     "head": "a2",
+     "canonical": [
+      "s1",
+      "a2"
+     ]
+    },
+    {
+     "block": "m2",
+     "err": "",
+     "head": "m2",
+     "canonical": [
+      "s1",
+      "m2"
+     ]
+    },
+    {
+     "block": "m3",
+     "err": "",
+     "head": "m3",
+     "canonical": [
+      "s1",
+      "m2",
+      "m3"
+     ]
+    },
+    {
+     "block": "a3",
+     "err": "",
+     "head": "a3",
+     "canonical": [
+      "s1",
+      "a2",
+      "a3"
+     ]
+    },
+    {
+     "block": "m4",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "m2",
+      "m3",
+      "m4"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/30/v1",
+   "mode": "v1",
+   "fork": 4,
+   "main": 5,
+   "alt": 6,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a5",
+     "err": "",
+     "head": "a5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "a5"
+     ]
+    },
+    {
+     "block": "a6",
+     "err": "",
+     "head": "a6",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "a5",
+      "a6"
+     ]
+    },
+    {
+     "block": "m5",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/31/v2",
+   "mode": "v2",
+   "fork": 1,
+   "main": 2,
+   "alt": 2,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a2",
+     "err": "",
+     "head": "a2",
+     "canonical": [
+      "s1",
+      "a2"
+     ]
+    },
+    {
+     "block": "m2",
+     "err": "",
+     "head": "a2",
+     "canonical": [
+      "s1",
+      "a2"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/32/v1",
+   "mode": "v1",
+   "fork": 1,
+   "main": 3,
+   "alt": 3,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "m2",
+     "err": "",
+     "head": "m2",
+     "canonical": [
+      "s1",
+      "m2"
+     ]
+    },
+    {
+     "block": "a2",
+     "err": "",
+     "head": "a2",
+     "canonical": [
+      "s1",
+      "a2"
+     ]
+    },
+    {
+     "block": "m3",
+     "err": "",
+     "head": "m3",
+     "canonical": [
+      "s1",
+      "m2",
+      "m3"
+     ]
+    },
+    {
+     "block": "a3",
+     "err": "",
+     "head": "a3",
+     "canonical": [
+      "s1",
+      "a2",
+      "a3"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/33/v1",
+   "mode": "v1",
+   "fork": 1,
+   "main": 2,
+   "alt": 4,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "m2",
+     "err": "",
+     "head": "m2",
+     "canonical": [
+      "s1",
+      "m2"
+     ]
+    },
+    {
+     "block": "a2",
+     "err": "",
+     "head": "a2",
+     "canonical": [
+      "s1",
+      "a2"
+     ]
+    },
+    {
+     "block": "a3",
+     "err": "",
+     "head": "a3",
+     "canonical": [
+      "s1",
+      "a2",
+      "a3"
+     ]
+    },
+    {
+     "block": "a4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "a2",
+      "a3",
+      "a4"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/34/v1",
+   "mode": "v1",
+   "fork": 3,
+   "main": 4,
+   "alt": 4,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "a4"
+     ]
+    },
+    {
+     "block": "m4",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "m4"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/35/v2",
+   "mode": "v2",
+   "fork": 2,
+   "main": 5,
+   "alt": 5,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "m3",
+     "err": "",
+     "head": "m3",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3"
+     ]
+    },
+    {
+     "block": "a3",
+     "err": "",
+     "head": "m3",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3"
+     ]
+    },
+    {
+     "block": "m4",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3",
+      "m4"
+     ]
+    },
+    {
+     "block": "m5",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3",
+      "m4",
+      "m5"
+     ]
+    },
+    {
+     "block": "a4",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3",
+      "m4",
+      "m5"
+     ]
+    },
+    {
+     "block": "a5",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3",
+      "m4",
+      "m5"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/36/v2",
+   "mode": "v2",
+   "fork": 2,
+   "main": 3,
+   "alt": 5,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "m3",
+     "err": "",
+     "head": "m3",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3"
+     ]
+    },
+    {
+     "block": "a3",
+     "err": "",
+     "head": "m3",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3"
+     ]
+    },
+    {
+     "block": "a4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3",
+      "a4"
+     ]
+    },
+    {
+     "block": "a5",
+     "err": "",
+     "head": "a5",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3",
+      "a4",
+      "a5"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/37/v1",
+   "mode": "v1",
+   "fork": 2,
+   "main": 5,
+   "alt": 4,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "m3",
+     "err": "",
+     "head": "m3",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3"
+     ]
+    },
+    {
+     "block": "m4",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3",
+      "m4"
+     ]
+    },
+    {
+     "block": "m5",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3",
+      "m4",
+      "m5"
+     ]
+    },
+    {
+     "block": "a3",
+     "err": "",
+     "head": "a3",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3"
+     ]
+    },
+    {
+     "block": "a4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3",
+      "a4"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/38/v1",
+   "mode": "v1",
+   "fork": 2,
+   "main": 4,
+   "alt": 5,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "m3",
+     "err": "",
+     "head": "m3",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3"
+     ]
+    },
+    {
+     "block": "m4",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3",
+      "m4"
+     ]
+    },
+    {
+     "block": "a3",
+     "err": "",
+     "head": "a3",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3"
+     ]
+    },
+    {
+     "block": "a4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3",
+      "a4"
+     ]
+    },
+    {
+     "block": "a5",
+     "err": "",
+     "head": "a5",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3",
+      "a4",
+      "a5"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/39/v2",
+   "mode": "v2",
+   "fork": 1,
+   "main": 3,
+   "alt": 4,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "m2",
+     "err": "",
+     "head": "m2",
+     "canonical": [
+      "s1",
+      "m2"
+     ]
+    },
+    {
+     "block": "m3",
+     "err": "",
+     "head": "m3",
+     "canonical": [
+      "s1",
+      "m2",
+      "m3"
+     ]
+    },
+    {
+     "block": "a2",
+     "err": "",
+     "head": "m3",
+     "canonical": [
+      "s1",
+      "m2",
+      "m3"
+     ]
+    },
+    {
+     "block": "a3",
+     "err": "",
+     "head": "m3",
+     "canonical": [
+      "s1",
+      "m2",
+      "m3"
+     ]
+    },
+    {
+     "block": "a4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "a2",
+      "a3",
+      "a4"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/40/v2",
+   "mode": "v2",
+   "fork": 2,
+   "main": 5,
+   "alt": 5,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a3",
+     "err": "",
+     "head": "a3",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3"
+     ]
+    },
+    {
+     "block": "a4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3",
+      "a4"
+     ]
+    },
+    {
+     "block": "a5",
+     "err": "",
+     "head": "a5",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3",
+      "a4",
+      "a5"
+     ]
+    },
+    {
+     "block": "m3",
+     "err": "",
+     "head": "a5",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3",
+      "a4",
+      "a5"
+     ]
+    },
+    {
+     "block": "m4",
+     "err": "",
+     "head": "a5",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3",
+      "a4",
+      "a5"
+     ]
+    },
+    {
+     "block": "m5",
+     "err": "",
+     "head": "a5",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3",
+      "a4",
+      "a5"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/41/v1",
+   "mode": "v1",
+   "fork": 2,
+   "main": 4,
+   "alt": 5,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "m3",
+     "err": "",
+     "head": "m3",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3"
+     ]
+    },
+    {
+     "block": "a3",
+     "err": "",
+     "head": "a3",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3"
+     ]
+    },
+    {
+     "block": "m4",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3",
+      "m4"
+     ]
+    },
+    {
+     "block": "a4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3",
+      "a4"
+     ]
+    },
+    {
+     "block": "a5",
+     "err": "",
+     "head": "a5",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3",
+      "a4",
+      "a5"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/42/v1",
+   "mode": "v1",
+   "fork": 1,
+   "main": 4,
+   "alt": 3,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a2",
+     "err": "",
+     "head": "a2",
+     "canonical": [
+      "s1",
+      "a2"
+     ]
+    },
+    {
+     "block": "a3",
+     "err": "",
+     "head": "a3",
+     "canonical": [
+      "s1",
+      "a2",
+      "a3"
+     ]
+    },
+    {
+     "block": "m2",
+     "err": "",
+     "head": "m2",
+     "canonical": [
+      "s1",
+      "m2"
+     ]
+    },
+    {
+     "block": "m3",
+     "err": "",
+     "head": "m3",
+     "canonical": [
+      "s1",
+      "m2",
+      "m3"
+     ]
+    },
+    {
+     "block": "m4",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "m2",
+      "m3",
+      "m4"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/43/v2",
+   "mode": "v2",
+   "fork": 1,
+   "main": 2,
+   "alt": 3,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a2",
+     "err": "",
+     "head": "a2",
+     "canonical": [
+      "s1",
+      "a2"
+     ]
+    },
+    {
+     "block": "m2",
+     "err": "",
+     "head": "a2",
+     "canonical": [
+      "s1",
+      "a2"
+     ]
+    },
+    {
+     "block": "a3",
+     "err": "",
+     "head": "a3",
+     "canonical": [
+      "s1",
+      "a2",
+      "a3"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/44/v1",
+   "mode": "v1",
+   "fork": 2,
+   "main": 4,
+   "alt": 3,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a3",
+     "err": "",
+     "head": "a3",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3"
+     ]
+    },
+    {
+     "block": "m3",
+     "err": "",
+     "head": "m3",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3"
+     ]
+    },
+    {
+     "block": "m4",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3",
+      "m4"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/45/v2",
+   "mode": "v2",
+   "fork": 4,
+   "main": 7,
+   "alt": 5,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "m5",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5"
+     ]
+    },
+    {
+     "block": "a5",
+     "err": "",
+     "head": "m5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5"
+     ]
+    },
+    {
+     "block": "m6",
+     "err": "",
+     "head": "m6",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5",
+      "m6"
+     ]
+    },
+    {
+     "block": "m7",
+     "err": "",
+     "head": "m7",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "m5",
+      "m6",
+      "m7"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/46/v1",
+   "mode": "v1",
+   "fork": 2,
+   "main": 4,
+   "alt": 5,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a3",
+     "err": "",
+     "head": "a3",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3"
+     ]
+    },
+    {
+     "block": "a4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3",
+      "a4"
+     ]
+    },
+    {
+     "block": "a5",
+     "err": "",
+     "head": "a5",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3",
+      "a4",
+      "a5"
+     ]
+    },
+    {
+     "block": "m3",
+     "err": "",
+     "head": "m3",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3"
+     ]
+    },
+    {
+     "block": "m4",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3",
+      "m4"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/47/v1",
+   "mode": "v1",
+   "fork": 2,
+   "main": 4,
+   "alt": 4,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "m3",
+     "err": "",
+     "head": "m3",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3"
+     ]
+    },
+    {
+     "block": "a3",
+     "err": "",
+     "head": "a3",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3"
+     ]
+    },
+    {
+     "block": "a4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "s2",
+      "a3",
+      "a4"
+     ]
+    },
+    {
+     "block": "m4",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3",
+      "m4"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/48/v2",
+   "mode": "v2",
+   "fork": 1,
+   "main": 4,
+   "alt": 4,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "m2",
+     "err": "",
+     "head": "m2",
+     "canonical": [
+      "s1",
+      "m2"
+     ]
+    },
+    {
+     "block": "m3",
+     "err": "",
+     "head": "m3",
+     "canonical": [
+      "s1",
+      "m2",
+      "m3"
+     ]
+    },
+    {
+     "block": "a2",
+     "err": "",
+     "head": "m3",
+     "canonical": [
+      "s1",
+      "m2",
+      "m3"
+     ]
+    },
+    {
+     "block": "m4",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "m2",
+      "m3",
+      "m4"
+     ]
+    },
+    {
+     "block": "a3",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "m2",
+      "m3",
+      "m4"
+     ]
+    },
+    {
+     "block": "a4",
+     "err": "",
+     "head": "m4",
+     "canonical": [
+      "s1",
+      "m2",
+      "m3",
+      "m4"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "gen/49/v2",
+   "mode": "v2",
+   "fork": 3,
+   "main": 4,
+   "alt": 5,
+   "setup": null,
+   "committed": "",
+   "events": [
+    {
+     "block": "a4",
+     "err": "",
+     "head": "a4",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "a4"
+     ]
+    },
+    {
+     "block": "a5",
+     "err": "",
+     "head": "a5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "a4",
+      "a5"
+     ]
+    },
+    {
+     "block": "m4",
+     "err": "",
+     "head": "a5",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "a4",
+      "a5"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "floor/fork1/v2",
+   "mode": "v2",
+   "fork": 1,
+   "main": 6,
+   "alt": 7,
+   "setup": [
+    "m2",
+    "m3",
+    "m4",
+    "m5",
+    "m6"
+   ],
+   "committed": "m3",
+   "events": [
+    {
+     "block": "a2",
+     "err": "",
+     "head": "m6",
+     "canonical": [
+      "s1",
+      "m2",
+      "m3",
+      "m4",
+      "m5",
+      "m6"
+     ]
+    },
+    {
+     "block": "a3",
+     "err": "",
+     "head": "m6",
+     "canonical": [
+      "s1",
+      "m2",
+      "m3",
+      "m4",
+      "m5",
+      "m6"
+     ]
+    },
+    {
+     "block": "a4",
+     "err": "",
+     "head": "m6",
+     "canonical": [
+      "s1",
+      "m2",
+      "m3",
+      "m4",
+      "m5",
+      "m6"
+     ]
+    },
+    {
+     "block": "a5",
+     "err": "",
+     "head": "m6",
+     "canonical": [
+      "s1",
+      "m2",
+      "m3",
+      "m4",
+      "m5",
+      "m6"
+     ]
+    },
+    {
+     "block": "a6",
+     "err": "",
+     "head": "m6",
+     "canonical": [
+      "s1",
+      "m2",
+      "m3",
+      "m4",
+      "m5",
+      "m6"
+     ]
+    },
+    {
+     "block": "a7",
+     "err": "stop reorg",
+     "head": "m6",
+     "canonical": [
+      "s1",
+      "m2",
+      "m3",
+      "m4",
+      "m5",
+      "m6"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "floor/fork2/v2",
+   "mode": "v2",
+   "fork": 2,
+   "main": 7,
+   "alt": 8,
+   "setup": [
+    "m3",
+    "m4",
+    "m5",
+    "m6",
+    "m7"
+   ],
+   "committed": "m4",
+   "events": [
+    {
+     "block": "a3",
+     "err": "",
+     "head": "m7",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3",
+      "m4",
+      "m5",
+      "m6",
+      "m7"
+     ]
+    },
+    {
+     "block": "a4",
+     "err": "",
+     "head": "m7",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3",
+      "m4",
+      "m5",
+      "m6",
+      "m7"
+     ]
+    },
+    {
+     "block": "a5",
+     "err": "",
+     "head": "m7",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3",
+      "m4",
+      "m5",
+      "m6",
+      "m7"
+     ]
+    },
+    {
+     "block": "a6",
+     "err": "",
+     "head": "m7",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3",
+      "m4",
+      "m5",
+      "m6",
+      "m7"
+     ]
+    },
+    {
+     "block": "a7",
+     "err": "",
+     "head": "m7",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3",
+      "m4",
+      "m5",
+      "m6",
+      "m7"
+     ]
+    },
+    {
+     "block": "a8",
+     "err": "stop reorg",
+     "head": "m7",
+     "canonical": [
+      "s1",
+      "s2",
+      "m3",
+      "m4",
+      "m5",
+      "m6",
+      "m7"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "floor/fork5/v2",
+   "mode": "v2",
+   "fork": 5,
+   "main": 7,
+   "alt": 8,
+   "setup": [
+    "m6",
+    "m7"
+   ],
+   "committed": "s4",
+   "events": [
+    {
+     "block": "a6",
+     "err": "",
+     "head": "m7",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "s5",
+      "m6",
+      "m7"
+     ]
+    },
+    {
+     "block": "a7",
+     "err": "",
+     "head": "m7",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "s5",
+      "m6",
+      "m7"
+     ]
+    },
+    {
+     "block": "a8",
+     "err": "",
+     "head": "a8",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "s5",
+      "a6",
+      "a7",
+      "a8"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "floor/fork6/v2",
+   "mode": "v2",
+   "fork": 6,
+   "main": 8,
+   "alt": 9,
+   "setup": [
+    "m7",
+    "m8"
+   ],
+   "committed": "s5",
+   "events": [
+    {
+     "block": "a7",
+     "err": "",
+     "head": "m8",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "s5",
+      "s6",
+      "m7",
+      "m8"
+     ]
+    },
+    {
+     "block": "a8",
+     "err": "",
+     "head": "m8",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "s5",
+      "s6",
+      "m7",
+      "m8"
+     ]
+    },
+    {
+     "block": "a9",
+     "err": "",
+     "head": "a9",
+     "canonical": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "s5",
+      "s6",
+      "a7",
+      "a8",
+      "a9"
+     ]
+    }
+   ]
+  }
+ ]
+}

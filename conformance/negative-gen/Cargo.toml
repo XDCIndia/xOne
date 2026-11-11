@@ -1,0 +1,26 @@
+[package]
+name = "xone-negative-gen"
+description = "Test-only: mutates the valid consensus vectors into the negative corpus"
+default-run = "xone-negative-gen"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+alloy-primitives.workspace = true
+alloy-rlp.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+xone-chainspec.workspace = true
+xone-consensus.workspace = true
+xone-primitives.workspace = true
+
+[[bin]]
+name = "xone-negative-gen"
+path = "src/main.rs"
+
+[[bin]]
+name = "xone-negative-gen-v1"
+path = "src/bin/v1.rs"

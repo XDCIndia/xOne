@@ -1,0 +1,146 @@
+[
+ {
+  "name": "A_credit_cross_up_0xb6c1",
+  "block": 30102909,
+  "tx": "0xee99665f4a6091d81b58ffc7cffb7c4c7f213e0e54787e5107aaf03508b16808",
+  "stateRoot": "0x2646a05dce83775bd6229431d07dcd15c25867f14f9fbdc97d11fa900657f32b",
+  "receiptsRoot": "0x91e8e52a690eb690a6a69e08b9113f0524bf67284c93f5a32303ad1c92ef2228",
+  "status": "0x1",
+  "gasUsed": 21000,
+  "mismatches": [],
+  "oracleTx": {
+   "consensus_err": "",
+   "vm_err": "",
+   "gas_used": 21000
+  },
+  "wide": {
+   "0xb6c1f9da410d0739efbe934b4c30dfbee2755233": {
+    "pre_true": "0xffffffffffffffffffffffffffffffffffffffffffed0e71e9d51276154bfa5c",
+    "post_true_canonical": "0x1ffffffffffffffffffffffffffffffffffffffe6c193d095a8886a593a0cfa5c",
+    "oracle_true": "0x1ffffffffffffffffffffffffffffffffffffffe6c193d095a8886a593a0cfa5c",
+    "oracle_low": "0xffffffffffffffffffffffffffffffffffffffe6c193d095a8886a593a0cfa5c",
+    "canonical_low": "0xffffffffffffffffffffffffffffffffffffffe6c193d095a8886a593a0cfa5c",
+    "leaf_rlp_equal": true
+   }
+  }
+ },
+ {
+  "name": "B_credit_cross_up_0x4398",
+  "block": 46466977,
+  "tx": "0x31e5798142eee60715e2cd611477f9ed225bfd1a2e81a25cfc533fbbe33e6839",
+  "stateRoot": "0x92232f9fd7f83073bdb3b2b3489ac88eafdbb9e02fd9c3fa79668dce9de6d507",
+  "receiptsRoot": "0x448360f9c3c2b3d19ba7f424a5b6c819e40edf4344d6047364b840656e5f367f",
+  "status": "0x1",
+  "gasUsed": 21004,
+  "mismatches": [],
+  "oracleTx": {
+   "consensus_err": "",
+   "vm_err": "",
+   "gas_used": 21004
+  },
+  "wide": {
+   "0x4398241671b3dd484fe3213a4fb7511f30e7d7c0": {
+    "pre_true": "0xffffffffffffffffffffffffffffffffffffffffffffffff8c1c3f4f1ecd5fff",
+    "post_true_canonical": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+    "oracle_true": "0x1000000000000000000000000000000000000000000000035c1e5ed14fd6d5fff",
+    "oracle_low": "0x35c1e5ed14fd6d5fff",
+    "canonical_low": "0x35c1e5ed14fd6d5fff",
+    "leaf_rlp_equal": true
+   }
+  }
+ },
+ {
+  "name": "C_propose_debit_cross_down_0xa650",
+  "block": 57200399,
+  "tx": "0xc8f988395cb9510af828ac7784501235503e78b315149456480d750b11c31ffa",
+  "stateRoot": "0x3bb76acd9f92d0e380819bdc2f0cce20d7567bae05ee2cc37d1165a5c6809b66",
+  "receiptsRoot": "0x49d292f1e27924f7c5c0de41b169de0cae5fcb3c893f41363780dd54369b207a",
+  "status": "0x1",
+  "gasUsed": 197773,
+  "mismatches": [],
+  "trace_error": "tracing failed: insufficient funds for gas * price + value: address 0xa65010026b83368Ca05DF6E8B467985D6de3eAC5 have 850139385444201194569443 want 10000000037500000000000000",
+  "arith": {
+   "pre_true": "0x100000000000000000000000000000000000000000000b40625fcec4f0cfb6ce3",
+   "post_true": "0xfffffffffffffffffffffffffffffffffffffffffff86e7110eff892743729e3",
+   "value": "0x84595161401484a000000",
+   "fee": 2472162500000000,
+   "block_fees": 76514975000000000,
+   "equal": false,
+   "equal_with_block_fees": true,
+   "pre_low": "0xb40625fcec4f0cfb6ce3",
+   "low_lt_value": true
+  }
+ },
+ {
+  "name": "D_propose_debit_cross_down_0x38b2",
+  "block": 1755834,
+  "tx": "0x1ecf61d89f40d313e353ddb41797731582dea2495c7e6ee42544d6fe75f37c48",
+  "stateRoot": "0x33e594739a8288234917fbaf672fe7e876d29c447c6dbff890272c52d5762bf3",
+  "receiptsRoot": "0x2c96c5ac997751ad1c05c2ae2eb4b8a6cd167359f8b56ae32d641c3af149ad38",
+  "status": "0x1",
+  "gasUsed": 191173,
+  "mismatches": [],
+  "trace_error": "tracing failed: insufficient funds for gas * price + value: address 0x38B20A2594939531373EFcd2E6aa54D03Fc534Be have 999999999789999023997499 want 10000000000000005000000000",
+  "arith": {
+   "pre_true": "0x100000000000000000000000000000000000000000000d3c21bce0deef76c423b",
+   "post_true": "0xfffffffffffffffffffffffffffffffffffffffffff88e2d05ba0ca690ef9667",
+   "value": "0x84595161401484a000000",
+   "fee": 477932500,
+   "block_fees": 477932500,
+   "equal": true,
+   "equal_with_block_fees": false,
+   "pre_low": "0xd3c21bce0deef76c423b",
+   "low_lt_value": true
+  }
+ },
+ {
+  "name": "E_safe_internal_credit_0xb6c1",
+  "block": 41438509,
+  "tx": "0x8421f26a522090e35cbc2be7f70f738d1a4a67a8d08ea9dc89f8d265f3020596",
+  "stateRoot": "0x29d66e8f0170877b5315be232aac1133f5a5cf7c253d254f63d0031fe5d52812",
+  "receiptsRoot": "0x9cc7a10a10d17f39cddc73e09a3061891400609b9d50df3b631e8686ba2e5965",
+  "status": "0x1",
+  "gasUsed": 69477,
+  "mismatches": [],
+  "oracleTx": {
+   "consensus_err": "",
+   "vm_err": "",
+   "gas_used": 69477
+  },
+  "wide": {
+   "0xb6c1f9da410d0739efbe934b4c30dfbee2755233": {
+    "pre_true": "0x2efb09d4c4695f7edc115424b87863b23abd23aaa1f970ff1523ca2fba8fc2500",
+    "post_true_canonical": "0x2efb09d4c4695f7edc115424b87863b23abd23aaa1f970ff1524e6674e0dca500",
+    "oracle_true": "0x2efb09d4c4695f7edc115424b87863b23abd23aaa1f970ff1524e6674e0dca500",
+    "oracle_low": "0xefb09d4c4695f7edc115424b87863b23abd23aaa1f970ff1524e6674e0dca500",
+    "canonical_low": "0xefb09d4c4695f7edc115424b87863b23abd23aaa1f970ff1524e6674e0dca500",
+    "leaf_rlp_equal": true
+   }
+  }
+ },
+ {
+  "name": "F_router_swap_from_wide_0xb6c1",
+  "block": 35331522,
+  "tx": "0x07db7ca2b8649dabe1a9f412dc2fc3394febf75680eb014b84e527b8bf4312d4",
+  "stateRoot": "0x1d631d1b0bf9fda8035782e407eb59b5599be6d6612083677bbe904977098e23",
+  "receiptsRoot": "0xf71e1e33ff1afb9bd75a691df6512c14827d11147cc96257d1f7f79520edbeac",
+  "status": "0x1",
+  "gasUsed": 114483,
+  "mismatches": [],
+  "oracleTx": {
+   "consensus_err": "",
+   "vm_err": "",
+   "gas_used": 114483
+  },
+  "wide": {
+   "0xb6c1f9da410d0739efbe934b4c30dfbee2755233": {
+    "pre_true": "0x2efb09d4c4695f7edc115424b87863b23abd23aaa1f973f000000000000000000",
+    "post_true_canonical": "0x2efb09d4c4695f7edc115424b87863b23abd23aaa1f972778a91e55471aa0f080",
+    "oracle_true": "0x2efb09d4c4695f7edc115424b87863b23abd23aaa1f972778a91e55471aa0f080",
+    "oracle_low": "0xefb09d4c4695f7edc115424b87863b23abd23aaa1f972778a91e55471aa0f080",
+    "canonical_low": "0xefb09d4c4695f7edc115424b87863b23abd23aaa1f972778a91e55471aa0f080",
+    "leaf_rlp_equal": true
+   }
+  }
+ }
+]

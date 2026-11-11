@@ -1,0 +1,26 @@
+{
+  "name": "scrypt-light",
+  "password": "throwaway-password-0",
+  "address": "2e8505eadbfb0bfe5d24e50033f99b7cd8e14177",
+  "keystore": {
+    "address": "2e8505eadbfb0bfe5d24e50033f99b7cd8e14177",
+    "crypto": {
+      "cipher": "aes-128-ctr",
+      "ciphertext": "63b3693745f53c6c35cd35df471e84d2695a19347a056c021b052e86b85beb07",
+      "cipherparams": {
+        "iv": "8676fdb4a2c5ec1c071869b7f2ff9770"
+      },
+      "kdf": "scrypt",
+      "kdfparams": {
+        "dklen": 32,
+        "n": 4096,
+        "p": 6,
+        "r": 8,
+        "salt": "b548371715cfb068c9c1c500662b1d5bbb4a493993ce98b5e8ac6510de676b0f"
+      },
+      "mac": "44fa04ae8cc0ac3851254cd2b2fdfd52bc93a4276104317582d1592560e3641d"
+    },
+    "id": "924f4f0e-f831-4a95-8ac9-47b1201d104e",
+    "version": 3
+  }
+}

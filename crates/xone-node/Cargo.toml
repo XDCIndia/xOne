@@ -1,0 +1,18 @@
+[package]
+name = "xone-node"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# ADR-007 primitives plus config, datadir marker and the bounded lifecycle (XB-19).
+# toml: the config file format. signal-hook: SIGTERM/SIGINT without unsafe code in
+# this crate; it is small, has no async runtime, and tokio is not in the tree yet.
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+signal-hook.workspace = true
+xone-chainspec.workspace = true
