@@ -7,14 +7,21 @@
 //! * [`epoch_switch`]: switch detection by round, and the `Validators`/`Penalties` a switch carries;
 //! * [`gap_snapshot`]: `SnapshotV2` from the 0x88 state at the gap block, the standby pool;
 //! * [`masternodes`]: the per-round masternode list and the leader;
-//! * [`commit`]: the 3-chain commit rule.
+//! * [`commit`]: the 3-chain commit rule;
+//! * [`bft`], [`pool`], [`timer`], [`syncinfo`], [`forensics`]: the vote path, the timeout path and the
+//!   round timer as a step machine with typed effects (`spec/consensus/v2-bft-vote-path.md`).
 
+pub mod bft;
 pub mod cert;
 pub mod commit;
 pub mod epoch_switch;
+pub mod forensics;
 pub mod gap_snapshot;
 pub mod masternodes;
+pub mod pool;
 pub mod safety;
+pub mod syncinfo;
+pub mod timer;
 
 use alloy_primitives::{Address, B256};
 
@@ -52,6 +59,12 @@ pub enum Error {
     NoLeader(u64),
     #[error("too many masternodes: {0}")]
     TooMany(usize),
+    #[error("block info does not match the header")]
+    BlockInfoMismatch,
+    #[error("gap number {got}, the epoch of the block has {expected}")]
+    GapMismatch { expected: u64, got: u64 },
+    #[error("{n} signatures, a peer certificate holds at most {cap}")]
+    TooManySignatures { n: usize, cap: usize },
     #[error("penalties: {0}")]
     Penalty(#[from] crate::chain::Error),
 }

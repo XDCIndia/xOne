@@ -4316,8 +4316,10 @@ name = "xone-sim"
 version = "0.1.0"
 dependencies = [
  "alloy-primitives",
+ "xone-chainspec",
  "xone-consensus",
  "xone-db",
+ "xone-primitives",
 ]
 
 [[package]]

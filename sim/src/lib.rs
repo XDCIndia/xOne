@@ -11,6 +11,8 @@
 
 #![forbid(unsafe_code)]
 
+pub mod net;
+
 use alloy_primitives::{keccak256, Address, B256};
 use xone_consensus::v2::safety::{decide, BlockRef, Fence, Intent, Kind, Refusal, SafetyRecord};
 use xone_db::safety::{Fault, MemStore, SafetyStore};
@@ -19,7 +21,7 @@ use xone_db::{Cause, Durability};
 const STEPS: u32 = 100;
 const QUIET: u32 = 3;
 
-struct Rng(u64);
+pub(crate) struct Rng(pub(crate) u64);
 
 impl Rng {
     fn next(&mut self) -> u64 {
@@ -29,10 +31,10 @@ impl Rng {
         z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
         z ^ (z >> 31)
     }
-    fn below(&mut self, n: u64) -> u64 {
+    pub(crate) fn below(&mut self, n: u64) -> u64 {
         self.next() % n
     }
-    fn pct(&mut self, p: u64) -> bool {
+    pub(crate) fn pct(&mut self, p: u64) -> bool {
         self.below(100) < p
     }
 }

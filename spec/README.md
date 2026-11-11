@@ -59,6 +59,9 @@ A rule with no source line is not a rule. A value that a page states must come f
 | [wide-balance](evm/wide-balance.md) | balances above 2^256 - 1 |
 | [rewards-v1](consensus/rewards-v1.md) | V1 and V2 checkpoint window, count, flat payout, 90/10 split, parent-state holders |
 | [rewards-v2-tiered-proportional](consensus/rewards-v2-tiered-proportional.md) | Reward 2.0 tiers, the float tier reward, fixed and proportional payout |
+| [v2-bft-vote-path](consensus/v2-bft-vote-path.md) | V2 proposals, the voting rule with the lock QC, the vote pool, QC formation, the sibling vote |
+| [v2-timeouts-and-syncinfo](consensus/v2-timeouts-and-syncinfo.md) | the round timer and its exponential schedule, timeouts and TC, SyncInfo origination and handling, seeding, minePeriod |
+| [v2-forensics](consensus/v2-forensics.md) | two conflicting QCs make one proof with the id of `generateForensicsId` |
 | [penalties-and-comeback](consensus/penalties-and-comeback.md) | V1 and V2 penalties, comeback windows, the switch-plus-one case |
 | [header-verification-v1](consensus/header-verification-v1.md) | the order and content of the V1 header checks, seal and double validation |
 | [header-verification-v2](consensus/header-verification-v2.md) | the order and content of the V2 header checks and the quorum certificate |
