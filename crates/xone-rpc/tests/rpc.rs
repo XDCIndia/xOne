@@ -106,8 +106,18 @@ impl StateRead for S {
     }
 }
 impl StateApi for St {
-    fn state(&self, _: B256) -> Result<Box<dyn StateRead + '_>, Missing> {
-        Ok(Box::new(S))
+    fn state(&self, h: B256, f: &mut dyn FnMut(&dyn StateRead)) -> Result<(), Missing> {
+        // block 7 leaves the retained window while it is read
+        if h == header(7).hash() {
+            return Err(Missing::UnsupportedHistory {
+                class: Class::State,
+                block: 7,
+                floor: 8,
+                pivot: 0,
+            });
+        }
+        f(&S);
+        Ok(())
     }
     fn code(&self, _: B256) -> Option<Bytes> {
         None
@@ -826,4 +836,49 @@ async fn ipc_serves_a_json_stream() {
     assert_eq!(v["result"], "51");
     h.abort();
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A range whose span is the whole u64 space must be refused, not wrap past the block budget.
+#[test]
+fn get_logs_rejects_a_range_that_overflows_the_budget() {
+    let r = rpc();
+    let e = ask(
+        &r,
+        req(
+            1,
+            "eth_getLogs",
+            json!([{"fromBlock": "0x0", "toBlock": "0xffffffffffffffff"}]),
+        ),
+    );
+    assert_eq!(e["error"]["code"], -32602, "{e}");
+    assert!(e["error"]["message"]
+        .as_str()
+        .expect("msg")
+        .starts_with("exceed maximum block range"));
+}
+
+/// A state that leaves the retained window during the read is a typed error, never a zero value.
+#[test]
+fn lost_state_is_a_typed_error_not_zero() {
+    let r = rpc();
+    for (m, p) in [
+        ("eth_getBalance", json!([format!("{ACCT:#x}"), "0x7"])),
+        (
+            "eth_getTransactionCount",
+            json!([format!("{ACCT:#x}"), "0x7"]),
+        ),
+        ("eth_getCode", json!([format!("{ACCT:#x}"), "0x7"])),
+        (
+            "eth_getStorageAt",
+            json!([format!("{ACCT:#x}"), "0x0", "0x7"]),
+        ),
+    ] {
+        let e = ask(&r, req(1, m, p));
+        assert!(
+            e["error"]["message"]
+                .as_str()
+                .is_some_and(|m| m.starts_with("unsupported history")),
+            "{m}: {e}"
+        );
+    }
 }

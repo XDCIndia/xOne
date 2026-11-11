@@ -215,6 +215,7 @@ pub struct Core {
     pub genesis: B256,
     ckpt_every: u64,
     pub head: watch::Sender<(u64, B256)>,
+    _lock: std::fs::File,
 }
 
 pub fn now() -> u64 {
@@ -288,6 +289,20 @@ impl Core {
     ) -> Result<Self, CoreError> {
         let (flat0, codes0, g) = genesis_state(genesis, &spec)?;
         std::fs::create_dir_all(dir).map_err(|e| FileError(format!("{}: {e}", dir.display())))?;
+        // One owner per datadir, before any recovery can truncate a file another process is
+        // appending to. The lock lives as long as the Core.
+        let lock = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(dir.join("LOCK"))
+            .map_err(|e| FileError(format!("{}/LOCK: {e}", dir.display())))?;
+        lock.try_lock().map_err(|e| {
+            FileError(format!(
+                "{}: the datadir is in use by another process ({e})",
+                dir.display()
+            ))
+        })?;
         let loaded = store::load(dir)?;
         if let Some(l) = &loaded {
             if l.blocks.first().map(|b| b.header.parent_hash) != Some(g.hash()) {
@@ -426,6 +441,7 @@ impl Core {
             genesis: g.hash(),
             ckpt_every,
             head,
+            _lock: lock,
         };
         if let Some(l) = loaded {
             for b in l.blocks.into_iter().skip(start as usize) {
@@ -466,32 +482,42 @@ impl Core {
         if out != Outcome::Extended {
             return Ok(out);
         }
-        let p = self
-            .hist
-            .pending()
-            .take()
-            .filter(|p| p.hash == hash)
-            .ok_or_else(|| CoreError::Inconsistent(format!("no execution record for {hash}")))?;
-        let (mut snap, mut gap, mut err) = (p.snap, None, None);
-        let want_gap = self.hist.read().is_gap_block(number);
-        self.chain
-            .reader()
-            .with_state(hash, &mut |s| {
-                if let Some(sn) = snap.as_mut() {
-                    err = reseed(&self.spec, sn, &Dyn(s), number).err();
-                }
-                if want_gap && err.is_none() {
-                    match gap_snapshot::build(&Dyn(s), number) {
-                        Ok(g) => gap = Some(g),
-                        Err(e) => err = Some(e.to_string()),
+        // The block is committed. If its history context cannot be built, rewind the chain to the
+        // parent so the store head and the history tip stay the same block.
+        let derived = (|| -> Result<_, CoreError> {
+            let mut p = self
+                .hist
+                .pending()
+                .take()
+                .filter(|p| p.hash == hash)
+                .ok_or_else(|| {
+                    CoreError::Inconsistent(format!("no execution record for {hash}"))
+                })?;
+            let (mut snap, mut gap, mut err) = (p.snap.take(), None, None);
+            let want_gap = self.hist.read().is_gap_block(number);
+            self.chain
+                .reader()
+                .with_state(hash, &mut |s| {
+                    if let Some(sn) = snap.as_mut() {
+                        err = reseed(&self.spec, sn, &Dyn(s), number).err();
                     }
-                }
-            })
-            .map_err(|e| CoreError::Inconsistent(e.to_string()))?;
-        if let Some(e) = err {
-            return Err(CoreError::Inconsistent(format!("block {number}: {e}")));
-        }
-        let miner = miner_of(&self.spec, &header)?;
+                    if want_gap && err.is_none() {
+                        match gap_snapshot::build(&Dyn(s), number) {
+                            Ok(g) => gap = Some(g),
+                            Err(e) => err = Some(e.to_string()),
+                        }
+                    }
+                })
+                .map_err(|e| CoreError::Inconsistent(e.to_string()))?;
+            if let Some(e) = err {
+                return Err(CoreError::Inconsistent(format!("block {number}: {e}")));
+            }
+            let miner = miner_of(&self.spec, &header)?;
+            Ok((p, snap, gap, miner))
+        })();
+        let (p, snap, gap, miner) = derived.inspect_err(|_| {
+            let _ = self.chain.set_head(number - 1);
+        })?;
         self.hist.write().push(
             Stored {
                 hash,

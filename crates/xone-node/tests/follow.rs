@@ -192,8 +192,62 @@ fn discovery_pings_the_boot_node() {
     let mut buf = [0u8; 2048];
     let (n, _) = boot.recv_from(&mut buf).unwrap();
     let (packet, from, _) = decode(&buf[..n]).unwrap();
-    assert!(matches!(packet, Packet::Ping { .. }));
+    // geth-XDC p2p/discover/v4_udp.go:269: expiration is Unix seconds now + 20
+    let Packet::Ping { expiration, .. } = packet else {
+        panic!("not a Ping")
+    };
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    assert!(
+        (now..=now + 30).contains(&expiration),
+        "expiration {expiration} vs now {now}"
+    );
     assert_eq!(from, built.net.id);
+    built.node.stop().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A peer that advertises a head it cannot serve, and answers every poll with only our own head, is
+/// not proof that we are caught up: `eth_syncing` stays an object.
+#[test]
+fn an_echo_only_peer_does_not_confirm_caught_up() {
+    let blocks = Arc::new(vectors(20));
+    let dir = scratch("echo");
+    let port = free_port();
+    let mut cfg = Config::default();
+    cfg.set("apothem", "true").unwrap();
+    cfg.datadir = dir.clone();
+    cfg.p2p.port = 0;
+    cfg.p2p.no_discover = true;
+    cfg.http.enabled = true;
+    cfg.http.port = port;
+    cfg.http.api = vec!["eth".into()];
+    cfg.ipc.disabled = true;
+    let (marker, net, genesis) = datadir::prepare_chain(&cfg).unwrap();
+    let mut built = services::build(&cfg, &marker, net, &genesis, STAMP).unwrap();
+    built.node.start().unwrap();
+
+    let rt = Runtime::new().unwrap();
+    let mut pc = PeersConfig::new("fake", 51, built.core.genesis);
+    pc.head = blocks[20].header.hash();
+    pc.td = U256::from(1_000_000u64);
+    let key = secp256k1::SecretKey::from_slice(&[7u8; 32]).unwrap();
+    let (fake, rx) = Peers::new(pc, key);
+    // it holds only the genesis block: every header poll is answered with our own head alone
+    serve(&rt, Arc::new(blocks[..1].to_vec()), fake.clone(), rx);
+    let (a, b) = tokio::io::duplex(1 << 20);
+    let ours = built.net.peers.clone();
+    let our_id = built.net.id;
+    let (r1, r2) =
+        rt.block_on(async { tokio::join!(ours.attach(a, None), fake.attach(b, Some(our_id))) });
+    r1.unwrap();
+    r2.unwrap();
+
+    // several one-second polls
+    std::thread::sleep(Duration::from_secs(4));
+    assert_ne!(call(port, "eth_syncing", json!([])), json!(false));
     built.node.stop().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 }

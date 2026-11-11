@@ -7,7 +7,7 @@ use std::{
     net::{IpAddr, SocketAddr},
     path::Path,
     sync::{Arc, Mutex, PoisonError},
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use alloy_primitives::{B256, B512};
@@ -16,7 +16,7 @@ use tokio::{
     net::{TcpListener, UdpSocket},
     runtime::{Handle, Runtime},
     task::JoinHandle,
-    time::{interval, sleep, Instant},
+    time::{interval, sleep},
 };
 use xone_net::{
     discv4::Discv4,
@@ -224,13 +224,19 @@ async fn discovery(
     max: usize,
 ) {
     let mut sock = sock;
-    let start = Instant::now();
-    let now = |s: &Instant| u64::try_from(s.elapsed().as_millis()).unwrap_or(u64::MAX);
+    // Unix milliseconds: discv4 expirations are absolute Unix seconds (geth-XDC
+    // p2p/discover/v4_udp.go:269 `time.Now().Add(expiration).Unix()`), not uptime.
+    let now = || {
+        let ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |d| d.as_millis());
+        u64::try_from(ms).unwrap_or(u64::MAX)
+    };
     // a fresh socket reports no readiness until the reactor has seen it, and `try_send_to` would drop
     // the first datagrams
     let _ = sock.writable().await;
     for (addr, id) in &boots {
-        d.ping(now(&start), *addr, *id, &mut sock);
+        d.ping(now(), *addr, *id, &mut sock);
     }
     let mut tick = interval(Duration::from_secs(5));
     let mut tried: HashMap<PeerId, u64> = HashMap::new();
@@ -240,11 +246,11 @@ async fn discovery(
             r = sock.recv_from(&mut buf) => {
                 if let Ok((n, from)) = r {
                     // an invalid or unsolicited packet is dropped, as the protocol says
-                    let _ = d.handle(now(&start), from, &buf[..n], &mut sock);
+                    let _ = d.handle(now(), from, &buf[..n], &mut sock);
                 }
             }
             _ = tick.tick() => {
-                let t = now(&start);
+                let t = now();
                 d.expire(t);
                 if d.table().is_empty() {
                     // nobody has answered yet: bond with the boot nodes again

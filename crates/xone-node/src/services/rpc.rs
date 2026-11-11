@@ -15,7 +15,7 @@ use std::{
     },
 };
 
-use alloy_primitives::{Address, Bytes, B256, U256};
+use alloy_primitives::{Address, Bytes, B256};
 use tokio::{net::TcpListener, runtime::Handle, task::JoinHandle};
 use xone_consensus::{
     v1::{
@@ -39,13 +39,7 @@ use xone_sync::{
     chain::ChainRead,
 };
 
-use super::{
-    chain::Progress,
-    core::{Core, NodeChain},
-    net::NetHandle,
-    pool::PoolShared,
-    to_wire,
-};
+use super::{chain::Progress, core::Core, net::NetHandle, pool::PoolShared, to_wire};
 use crate::{
     config::{Config, Limits as NodeLimits},
     enode::Enode,
@@ -113,32 +107,6 @@ impl ChainApi for RpcChain {
     }
 }
 
-/// The state of one block, read through the chain's lock call by call: the state of a block does not
-/// change while it is inside the retained window, and a read below it answers nothing.
-struct At<'a> {
-    chain: &'a NodeChain,
-    hash: B256,
-}
-
-impl StateRead for At<'_> {
-    fn account(&self, address: Address) -> Option<xone_state::Account> {
-        let mut out = None;
-        let _ = self
-            .chain
-            .reader()
-            .with_state(self.hash, &mut |s| out = s.account(address));
-        out
-    }
-    fn storage(&self, address: Address, slot: B256) -> U256 {
-        let mut out = U256::ZERO;
-        let _ = self
-            .chain
-            .reader()
-            .with_state(self.hash, &mut |s| out = s.storage(address, slot));
-        out
-    }
-}
-
 struct RpcState {
     core: Arc<Core>,
 }
@@ -148,14 +116,10 @@ fn unsupported(what: &str) -> RpcError {
 }
 
 impl StateApi for RpcState {
-    fn state(&self, block: B256) -> Result<Box<dyn StateRead + '_>, Missing> {
-        if self
-            .core
-            .chain
-            .reader()
-            .with_state(block, &mut |_| {})
-            .is_err()
-        {
+    fn state(&self, block: B256, f: &mut dyn FnMut(&dyn StateRead)) -> Result<(), Missing> {
+        // the chain holds its read lock for the whole of `f`: the state cannot leave the retained
+        // window while it is read
+        if self.core.chain.reader().with_state(block, f).is_err() {
             let (head, _) = self.core.head();
             let number = self
                 .core
@@ -170,10 +134,7 @@ impl StateApi for RpcState {
                 pivot: 0,
             });
         }
-        Ok(Box::new(At {
-            chain: &self.core.chain,
-            hash: block,
-        }))
+        Ok(())
     }
     fn code(&self, code_hash: B256) -> Option<Bytes> {
         self.core.hist.read().codes.get(&code_hash).cloned()

@@ -134,3 +134,14 @@ fn another_chain_is_refused() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A second opener of a datadir that a live Core holds is refused before it touches a file.
+#[test]
+fn a_second_opener_of_a_live_datadir_is_refused() {
+    let dir = scratch("lock");
+    let first = open(&dir, Network::Apothem, 0).unwrap();
+    let e = open(&dir, Network::Apothem, 0).err().expect("second open");
+    assert!(e.to_string().contains("in use"), "{e}");
+    drop(first);
+    open(&dir, Network::Apothem, 0).unwrap();
+}

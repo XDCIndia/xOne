@@ -162,17 +162,20 @@ fn candidate_status(c: &Ctx, p: &Params) -> R {
         return Ok(m);
     };
     c.be.chain.history(Class::State, cp)?;
-    let st = c.be.state.state(h)?;
-    let st = Dyn(&*st);
-    let list = vc::candidates(&st);
+    let (list, cap) = c.be.state.query(h, |st| {
+        let st = Dyn(st);
+        let list = vc::candidates(&st);
+        let cap = list.contains(&who).then(|| vc::candidate_cap(&st, who));
+        (list, cap)
+    })?;
     if list.is_empty() {
         m["success"] = json!(false);
         return Ok(m);
     }
-    let is_candidate = list.contains(&who);
-    if is_candidate {
+    let is_candidate = cap.is_some();
+    if let Some(cap) = cap {
         m["status"] = json!("PROPOSED");
-        m["capacity"] = bigint(vc::candidate_cap(&st, who));
+        m["capacity"] = bigint(cap);
     }
     let mn = c.be.consensus.masternodes(h)?;
     if mn.is_empty() {
@@ -196,12 +199,13 @@ fn candidates(c: &Ctx, p: &Params) -> R {
             .hash_by_number(cp)
             .ok_or_else(|| RpcError::server("header not found"))?;
     c.be.chain.history(Class::State, cp)?;
-    let st = c.be.state.state(h)?;
-    let st = Dyn(&*st);
-    let mut rows: Vec<(U256, Address, Option<Address>)> = vc::candidates(&st)
-        .into_iter()
-        .map(|a| (vc::candidate_cap(&st, a), a, vc::candidate_owner(&st, a)))
-        .collect();
+    let mut rows: Vec<(U256, Address, Option<Address>)> = c.be.state.query(h, |st| {
+        let st = Dyn(st);
+        vc::candidates(&st)
+            .into_iter()
+            .map(|a| (vc::candidate_cap(&st, a), a, vc::candidate_owner(&st, a)))
+            .collect()
+    })?;
     // `sort.Slice` by capacity descending; Go's sort is not stable, ties follow its pdqsort.
     rows.sort_by(|a, b| b.0.cmp(&a.0));
     m["candidates"] = Value::Array(
