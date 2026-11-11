@@ -1,0 +1,21 @@
+# Workload spec. See docs/perf.md section 5. Block ranges are archive ranges on Apothem; status candidate means the exact window is confirmed against the archive before generation.
+id: hot-account-conflict
+description: "Many transactions touching the same few accounts (conflict, ordering and nonce cost)."
+network: apothem
+chain_id: 51
+fork_table_pin: 6fc8e8c2088b7f18264f5663036669d04fa7becf   # crates/xone-chainspec/generated/forks.json
+input_hash: ""            # sha256 over the ordered inputs; empty until generated, never edit by hand
+input_hash_algo: sha256
+generator: {name: "", version: "", sha: ""}   # filled when the generator exists
+node_mode: {role: follower, validator_key: none, mining: false, peers: "", sync_mode: "", prune_mode: ""}
+durability: {mdbx_sync_mode: "per ADR-005", other_flags: ""}   # copy exact flags into the run record
+state: {cache: "", restart_before_run: true}   # warm or cold, declared per run
+repeats: 3
+tolerance_pct: {p50: 10, p99: 20}   # proposed; owner confirms
+metrics: [p50, p95, p99, p99.9, max, throughput, errors, queue_depth, cpu, rss, cgroup_memory, page_cache, io_amplification, network_bytes]
+primary_result: "conflict retries, per-account nonce rejects, tx/s"
+load: {model: open_loop, levels: {below: 0.5, near: 0.9, above: 1.2}, knee_tps: null, soak_h: 1}
+block_ranges:
+  - {name: synthetic-on-prague-state, from: 84333000, to: 84334000, status: candidate, select: "state base only; transactions are generated", nominal: false}
+generated_inputs: "generated transactions: hot_accounts N (default 4), fraction of txs touching them (default 0.8), seed recorded"
+extra_metrics: [conflict_retries]
