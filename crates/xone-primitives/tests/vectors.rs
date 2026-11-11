@@ -6,8 +6,9 @@ use alloy_primitives::{Address, Bytes, B256, U64};
 use alloy_rlp::{encode, Decodable, Encodable, Header as RlpHeader};
 use serde_json::Value;
 use xone_primitives::{
-    BlockInfo, BlockNonce, ExtraFieldsV2, ExtraV2Error, Header, QuorumCert, SealError, SyncInfo,
-    Timeout, TimeoutCert, Vote,
+    AlgorithmId, BlockInfo, BlockNonce, CryptoError, Domain, ExtraFieldsV2, ExtraV2Error, Header,
+    QuorumCert, SealError, Secp256k1Verifier, Signature, SyncInfo, Timeout, TimeoutCert, Verifier,
+    Vote, EXTRA_SEAL,
 };
 
 struct Vector {
@@ -186,6 +187,56 @@ fn seal_hashes_and_signers_match_geth() {
         seals >= 1000 && v2_sigs >= 1000 && signers >= 1000,
         "{seals} {v2_sigs} {signers}"
     );
+}
+
+/// The versioned interface returns what the existing `v1_signer` and `v2_signer`
+/// return, and what geth-XDC recovered (the vector's `signer`), for every vector,
+/// under every domain that could apply to a header.
+#[test]
+fn crypto_interface_matches_seal_path_and_geth() {
+    let (mut checked, mut failures) = (0, vec![]);
+    for v in all() {
+        let h = &v.header;
+        let (digest, sig, domains, old) = if v.is_v2() {
+            (
+                h.v2_sig_hash(),
+                h.validator.clone(),
+                [Domain::SealV2, Domain::VoteV2],
+                h.v2_signer(),
+            )
+        } else {
+            let n = h.extra_data.len().saturating_sub(EXTRA_SEAL);
+            (
+                h.seal_hash(),
+                h.extra_data.slice(n..),
+                [Domain::SealV1, Domain::ValidatorV1],
+                h.v1_signer(),
+            )
+        };
+        let want: Option<Address> = get!(v.xone, "signer");
+        let sig = Signature {
+            algorithm: AlgorithmId::Secp256k1Keccak,
+            bytes: sig,
+        };
+        for d in domains {
+            let new = Secp256k1Verifier.recover(d, &digest, &sig);
+            let same = match (&new, &old, want) {
+                (Ok(n), Ok(o), Some(w)) => n == o && *n == w,
+                (Err(CryptoError::Recover(n)), Err(o), None) => n == o,
+                _ => false,
+            };
+            if same {
+                checked += 1;
+            } else {
+                failures.push(format!(
+                    "{} {d:?}: new {new:?} old {old:?} geth {want:?}",
+                    v.name()
+                ));
+            }
+        }
+    }
+    expect_none(failures, "crypto interface vs seal path");
+    assert!(checked >= 2 * 2400, "{checked}");
 }
 
 #[test]

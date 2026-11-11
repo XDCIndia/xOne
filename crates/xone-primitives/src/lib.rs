@@ -4,10 +4,14 @@
 
 #![forbid(unsafe_code)]
 
+mod crypto;
 mod header;
 mod seal;
 mod v2;
 
+pub use crypto::{
+    AlgorithmId, CryptoError, Domain, Secp256k1Verifier, Signature, Signer, Verifier, API_VERSION,
+};
 pub use header::{BlockNonce, Header};
 pub use seal::{ecrecover, SealError, EXTRA_SEAL};
 pub use v2::{
