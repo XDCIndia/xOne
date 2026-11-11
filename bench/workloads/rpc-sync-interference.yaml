@@ -1,0 +1,21 @@
+# Workload spec. See docs/perf.md section 5. Block ranges are archive ranges on Apothem; status candidate means the exact window is confirmed against the archive before generation.
+id: rpc-sync-interference
+description: "RPC read load and serving peers while importing: effect on import latency."
+network: apothem
+chain_id: 51
+fork_table_pin: 6fc8e8c2088b7f18264f5663036669d04fa7becf   # crates/xone-chainspec/generated/forks.json
+input_hash: ""            # sha256 over the ordered inputs; empty until generated, never edit by hand
+input_hash_algo: sha256
+generator: {name: "", version: "", sha: ""}   # filled when the generator exists
+node_mode: {role: follower, validator_key: none, mining: false, peers: "", sync_mode: "", prune_mode: ""}
+durability: {mdbx_sync_mode: "per ADR-005", other_flags: ""}   # copy exact flags into the run record
+state: {cache: "", restart_before_run: true}   # warm or cold, declared per run
+repeats: 3
+tolerance_pct: {p50: 10, p99: 20}   # proposed; owner confirms
+metrics: [p50, p95, p99, p99.9, max, throughput, errors, queue_depth, cpu, rss, cgroup_memory, page_cache, io_amplification, network_bytes]
+primary_result: "import p99 with versus without interference; RPC p99 by method"
+load: {model: open_loop, levels: {below: 0.5, near: 0.9, above: 1.2}, knee_tps: null, soak_h: 1, rpc_mix: "eth_getBalance, eth_getStorageAt, eth_call, eth_getLogs (bounded), eth_getBlockByNumber"}
+block_ranges:
+  - {name: import-window, from: 84333000, to: 84343000, status: candidate, nominal: false}
+generated_inputs: "RPC request set with fixed seed; peer-serving load from a second reader node"
+extra_metrics: [rpc_p99_by_method, import_p99_with_and_without_interference]
