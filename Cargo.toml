@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/xone-primitives", "crates/xone-chainspec", "crates/xone-db", "crates/xone-consensus", "sim", "bin/xone", "spikes/wide-balance"]
+members = ["crates/xone-primitives", "crates/xone-chainspec", "crates/xone-db", "crates/xone-consensus", "sim", "bin/xone", "spikes/wide-balance", "labs/pq"]
 
 [workspace.package]
 version = "0.1.0"
