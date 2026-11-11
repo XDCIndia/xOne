@@ -46,7 +46,23 @@ The first start (or `xone --datadir D init genesis.json`) writes `D/xone-chain.j
 the chain id and the genesis hash. A later start for a different chain exits 1 and leaves
 the datadir alone. Move the datadir aside by hand to change chains.
 
+## Observability (XB-21)
+
+Code: `xone_node::observe::{ethstats, heartbeat, metrics, logs}`; pages: `spec/ops/`.
+
+* `--ethstats name:secret@host[:port]` (secret from `ETHSTATS_SECRET` in the env file, no default).
+  TLS by default: no scheme means `wss://host/api`. `ws://` is refused unless the caller sets
+  `allow_plaintext`, which is for private devnets only.
+* `--metrics --metrics.addr A --metrics.port P` serves `/metrics`, `/livez`, `/readyz` (503 while
+  syncing, with a stale head, degraded or stopping). Scrape only over localhost or a private network.
+* Heartbeat: `HeartbeatCfg { url, allow_plaintext, interval, authorization }`. The URL and the
+  authorization value come from the env file; neither is printed.
+* Logs: `--verbosity` and per-module levels; budgets 32 KiB/s global; file sink rotates at
+  64 MiB x 8. Under systemd with stdout, set `LogRateLimitBurst`/`LogRateLimitIntervalSec` in the
+  unit: xone cannot enforce the journald limit.
+
 ## Not covered yet
+
 
 * The node starts no p2p, sync or RPC service yet (XB-19 is the CLI, config and lifecycle).
   `systemctl start` therefore runs a node that only holds the datadir and waits for SIGTERM.

@@ -12,6 +12,7 @@ pub mod datadir;
 mod disk;
 pub mod enode;
 pub mod lifecycle;
+pub mod observe;
 mod peer;
 mod queue;
 
