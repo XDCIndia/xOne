@@ -209,6 +209,8 @@ struct Worker {
     stop: Arc<AtomicBool>,
     dir: PathBuf,
     last_head: B256,
+    /// The number of the last head `on_head` saw; `None` until the first one after the start.
+    last_signed_head: Option<u64>,
     /// The parent a block was attempted on (V1), or the round and parent (V2).
     attempted: Option<(u64, B256)>,
     fed: HashSet<B256>,
@@ -250,6 +252,29 @@ fn say(m: impl std::fmt::Display) {
 /// keeps its head (`core/blockchain.go:2413-2424`).
 pub fn behind_head(tip: &Header, round: u64) -> bool {
     tip.extra_fields_v2().is_ok_and(|f| f.round >= round)
+}
+
+/// The sign blocks below head `number` that a tick skipped: geth signs on every chain-head event of an imported
+/// block (`miner/xdpos_worker.go:231-246`, `maybeBroadcastImportedSignTx` `:1119`), but a sign block imported with
+/// its child within one tick is never the head the producer sees (xOneTS Gate D defect 15, blocks 5280 and 6810).
+/// Every sign block after the last head seen, inside geth's freshness window (`isSigningTxStale`,
+/// `:1192-1209`), oldest first. The first head after a start (`last` is `None`) owes none: a restart does not
+/// sign again what it signed before.
+pub fn skipped_sign_blocks(
+    spec: &ChainSpec,
+    h: &HistInner,
+    last: Option<u64>,
+    number: u64,
+) -> Vec<(u64, B256)> {
+    let Some(last) = last else { return vec![] };
+    let from = last
+        .saturating_add(1)
+        .max(number.saturating_sub(timing::SIGN_FRESHNESS))
+        .max(1);
+    (from..number)
+        .filter(|&n| signtx::is_sign_block(spec, n))
+        .filter_map(|n| Some((n, h.hash_at(n)?)))
+        .collect()
 }
 
 /// After a sibling's unwind: the pool reads the new head, then the transactions of every block taken off, oldest
@@ -397,6 +422,7 @@ impl Worker {
 
     /// A new head: the sign transaction of a block that is not ours, and the proposal for the BFT machine.
     fn on_head(&mut self, number: u64, hash: B256) {
+        let last = self.last_signed_head.replace(number);
         if number == 0 {
             return;
         }
@@ -411,6 +437,17 @@ impl Worker {
         // the pool admits the special transactions of the head's candidates, not only ours
         let set = self.candidates(&self.core.hist.read());
         self.pool.set_authority(Authority::candidates(set));
+        let skipped = skipped_sign_blocks(&self.spec, &self.core.hist.read(), last, number);
+        if !skipped.is_empty() {
+            say(format!(
+                "head {number}: also signing {:?}, sign block(s) imported since head {}",
+                skipped.iter().map(|(n, _)| n).collect::<Vec<_>>(),
+                last.unwrap_or_default()
+            ));
+        }
+        for (n, h) in skipped {
+            self.sign_tx_for(n, h);
+        }
         self.sign_tx_for(number, hash);
         let _ = header;
     }
@@ -1331,6 +1368,7 @@ impl ProducerService {
                 stop: stop.clone(),
                 dir,
                 last_head: B256::ZERO,
+                last_signed_head: None,
                 attempted: None,
                 fed: HashSet::new(),
                 signed_for: HashSet::new(),
