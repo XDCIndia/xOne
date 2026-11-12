@@ -1,11 +1,14 @@
 //! The `chain` service: a minimal live-follow driver over `xone-net` that the XB-14 pipeline replaces.
 //!
 //! It keeps no schedule of its own. The best peer by TD rank is asked for the headers that follow our
-//! head (`GetBlockHeaders` from our head hash, so that the first answer must be our head: a peer that
-//! does not know it is on another chain and is put aside), then for the bodies of those headers; the
+//! head (`GetBlockHeaders` from our head hash, so that the first answer must be that block: a peer
+//! that answers from another block is put aside), then for the bodies of those headers; the
 //! blocks go through `Core::import` in order. An empty continuation from the best peer is the
 //! caught-up proof (hash equality: the peer's chain holds our head and nothing above it). `NewBlock`
-//! that extends the head is imported at once. Receipts are not requested: the node executes every
+//! that extends the head is imported at once, also while a request is in flight (geth-XDC
+//! `eth/handler_eth.go:205-296`); the answer to that request then skips what is already ours. A
+//! peer that has not yet got our head, or not yet imported the head it announced, is "not yet", not
+//! wrong: it is set aside for [`NOT_YET`] only. Receipts are not requested: the node executes every
 //! block and compares the roots with the header, so a peer's receipts add nothing to verify.
 //!
 //! ponytail: one request at a time, one peer at a time, no scheduling, no fork handling above what
@@ -49,6 +52,11 @@ use crate::lifecycle::{Service, ServiceError};
 const BATCH: u64 = 128;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 const BAN: Duration = Duration::from_secs(60);
+/// A peer that is behind us or still importing the block it announced (geth-XDC broadcasts
+/// `NewBlock` before its own import) answers an empty poll. geth-XDC never counts an empty answer at
+/// the tip against a peer (`eth/sync_xdc.go:305-311`); here it only moves the next poll to another
+/// peer for two block intervals.
+const NOT_YET: Duration = Duration::from_secs(4);
 
 /// What the RPC and the logs read of the follower.
 #[derive(Default)]
@@ -67,7 +75,8 @@ struct Peer {
 }
 
 enum Stage {
-    Headers,
+    /// Asked from this hash: the answer must start with it.
+    Headers(B256),
     Bodies(Vec<Header>),
     /// Headers from our committed block, asked of a peer that does not know our head.
     Fork,
@@ -141,8 +150,16 @@ fn to_body(b: BlockBody) -> (Body, usize) {
 
 impl Follower {
     fn ban(&mut self, p: PeerId, why: &str) {
-        eprintln!("chain: setting peer {} aside for 60 s: {why}", short(&p));
-        self.banned.insert(p, Instant::now() + BAN);
+        self.set_aside(p, why, BAN);
+    }
+
+    fn set_aside(&mut self, p: PeerId, why: &str, d: Duration) {
+        eprintln!(
+            "chain: setting peer {} aside for {} s: {why}",
+            short(&p),
+            d.as_secs()
+        );
+        self.banned.insert(p, Instant::now() + d);
         if self.inflight.as_ref().is_some_and(|i| i.peer == p) {
             self.inflight = None;
         }
@@ -170,7 +187,7 @@ impl Follower {
         }
         let Some(peer) = self.best() else { return };
         let (_, head) = self.core.head();
-        self.ask(peer, Origin::Hash(head), Stage::Headers);
+        self.ask(peer, Origin::Hash(head), Stage::Headers(head));
     }
 
     /// The lowest block a branch switch may start above: the committed block (V2), or `BATCH` below the head
@@ -287,6 +304,10 @@ impl Follower {
         let r = tokio::task::spawn_blocking(move || {
             let mut n = 0;
             for (h, b) in blocks {
+                // already canonical: a `NewBlock` delivered it while this answer travelled
+                if core.hist.read().number_of(h.hash()) == Some(h.number) {
+                    continue;
+                }
                 match core.import(h, b, now()) {
                     Ok(Outcome::Extended) => n += 1,
                     Ok(o) => return (n, Some(format!("not adopted: {o:?}"))),
@@ -313,43 +334,43 @@ impl Follower {
         }
     }
 
-    async fn on_headers(&mut self, peer: PeerId, headers: Vec<Header>) {
+    async fn on_headers(&mut self, peer: PeerId, origin: B256, headers: Vec<Header>) {
         self.inflight = None;
         let (number, head) = self.core.head();
-        if headers.first().map(Header::hash) != Some(head) {
-            let held = headers
-                .first()
-                .is_some_and(|h| self.core.hist.read().number_of(h.hash()).is_some());
-            if held {
-                // our head moved while the request was out (a NewBlock came first): the answer is stale
-                self.kick();
-                return;
+        match headers.first().map(Header::hash) {
+            None => {
+                // not yet there, or our head is a block of ours that the network left (sealed, then the
+                // round timed out and the next leader built on the block below it): ask from the committed
+                // block for its branch; an answer that is all ours is the "not yet" case and costs nothing
+                let floor = self.fork_floor(number);
+                if origin == head && floor < number {
+                    return self.ask(peer, Origin::Number(floor), Stage::Fork);
+                }
+                return self.set_aside(peer, "does not know our head yet", NOT_YET);
             }
-            // our head may be a block of ours that the network left (sealed, then the round timed out and
-            // the next leader built on the block below it): ask from the committed block for its branch
-            let floor = self.fork_floor(number);
-            if headers.is_empty() && floor < number {
-                self.ask(peer, Origin::Number(floor), Stage::Fork);
-                return;
-            }
-            self.ban(peer, "does not know our head");
-            return;
+            Some(h) if h != origin => return self.ban(peer, "answered from another block"),
+            _ => {}
         }
-        let rest = &headers[1..];
+        let all = &headers[1..];
+        // a `NewBlock` may have moved the head while the request travelled
+        let rest = &all[all.iter().take_while(|h| h.number <= number).count()..];
         if rest.is_empty() {
+            if !all.is_empty() || origin != head {
+                return;
+            }
             // an empty continuation proves "caught up" only from a peer that advertises our head or a block
             // we already hold (its last announcement is older than a block another peer gave us first: geth
-            // announces each block once, `eth/handler_eth.go`); a peer that claims a head we do not have and
-            // serves nothing above ours is set aside
+            // announces each block once, `eth/handler_eth.go`)
             let holds = |h: B256| h == head || self.core.hist.read().number_of(h).is_some();
             if self.known.get(&peer).is_none_or(|p| !holds(p.head)) {
-                // it holds our head as a side block and is on another branch: ask for it from below (a V1 fork
-                // of two sealers at one height; set aside if it shows no longer branch)
+                // it announced a head we do not have and serves nothing above ours: not imported yet, or
+                // our head is a side block of its chain (a V1 fork of two sealers at one height); its
+                // chain from below tells which
                 let floor = self.fork_floor(number);
                 if floor < number {
                     self.ask(peer, Origin::Number(floor), Stage::Fork);
                 } else {
-                    self.ban(peer, "advertises a head it does not serve");
+                    self.set_aside(peer, "advertises a head it does not serve yet", NOT_YET);
                 }
                 return;
             }
@@ -446,7 +467,7 @@ impl Follower {
         if h.number <= number {
             return;
         }
-        if h.parent_hash == head && h.number == number + 1 && self.inflight.is_none() {
+        if h.parent_hash == head && h.number == number + 1 {
             let body = Body {
                 transactions: nb.block.transactions.iter().map(from_wire).collect(),
                 uncles: nb.block.uncles,
@@ -557,7 +578,10 @@ impl Follower {
             Event::Message { peer, msg } => match msg {
                 Message::BlockHeaders { id, headers } if self.matches(&peer, id) => {
                     match self.inflight.as_ref().map(|i| &i.stage) {
-                        Some(Stage::Headers) => self.on_headers(peer, headers).await,
+                        Some(Stage::Headers(origin)) => {
+                            let origin = *origin;
+                            self.on_headers(peer, origin, headers).await;
+                        }
                         Some(Stage::Fork) => self.on_fork_headers(peer, headers),
                         _ => {}
                     }
