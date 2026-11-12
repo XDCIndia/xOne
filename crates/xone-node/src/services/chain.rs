@@ -29,7 +29,7 @@ use tokio::{
 };
 use xone_consensus::verify::Body;
 use xone_net::{
-    eth::{BlockBody, GetHeaders, Message, Origin},
+    eth::{BftMessage, BlockBody, GetHeaders, Message, Origin},
     peers::{Event, Peers},
     rlpx::PeerId,
 };
@@ -87,7 +87,12 @@ struct Follower {
     banned: HashMap<PeerId, Instant>,
     next_id: u64,
     inflight: Option<Inflight>,
+    /// Votes, timeouts and SyncInfos for the producer's BFT machine (`--mine` only).
+    bft: Option<Bft>,
 }
+
+/// Where the follower hands the BFT messages of its peers: the producer verifies them, then relays them.
+pub type Bft = std::sync::mpsc::Sender<(PeerId, BftMessage)>;
 
 fn to_body(b: BlockBody) -> (Body, usize) {
     let n = b.transactions.len();
@@ -199,9 +204,12 @@ impl Follower {
         }
         let rest = &headers[1..];
         if rest.is_empty() {
-            // an empty continuation proves "caught up" only from a peer that advertises our head;
-            // a peer that claims more and serves nothing is set aside
-            if self.known.get(&peer).is_none_or(|p| p.head != head) {
+            // an empty continuation proves "caught up" only from a peer that advertises our head or a block
+            // we already hold (its last announcement is older than a block another peer gave us first: geth
+            // announces each block once, `eth/handler_eth.go`); a peer that claims a head we do not have and
+            // serves nothing above ours is set aside
+            let holds = |h: B256| h == head || self.core.hist.read().number_of(h).is_some();
+            if self.known.get(&peer).is_none_or(|p| !holds(p.head)) {
                 self.ban(peer, "advertises a head it does not serve");
                 return;
             }
@@ -429,6 +437,13 @@ impl Follower {
                     self.kick();
                 }
                 Message::Transactions(raws) => self.pool.add_wire(&raws),
+                // geth `Bfter.Vote`/`Timeout`/`SyncInfo` (`eth/bft/handler.go:187-229`): a validator verifies
+                // and handles every BFT message of its peers. A node without `--mine` has no machine.
+                Message::Bft(m) => {
+                    if let Some(tx) = &self.bft {
+                        let _ = tx.send((peer, m));
+                    }
+                }
                 m @ (Message::GetBlockHeaders { .. } | Message::GetBlockBodies { .. }) => {
                     self.serve(&peer, &m);
                 }
@@ -473,6 +488,7 @@ pub struct ChainService {
     pool: Arc<PoolShared>,
     pub progress: Arc<Progress>,
     events: Option<Receiver<Event>>,
+    bft: Option<Bft>,
     stop: watch::Sender<bool>,
     task: Option<JoinHandle<()>>,
 }
@@ -484,6 +500,7 @@ impl ChainService {
         net: NetHandle,
         pool: Arc<PoolShared>,
         events: Receiver<Event>,
+        bft: Option<Bft>,
     ) -> Self {
         let progress = Arc::new(Progress::default());
         let (n, _) = core.head();
@@ -496,6 +513,7 @@ impl ChainService {
             pool,
             progress,
             events: Some(events),
+            bft,
             stop: watch::channel(false).0,
             task: None,
         }
@@ -521,6 +539,7 @@ impl Service for ChainService {
             banned: HashMap::new(),
             next_id: 0,
             inflight: None,
+            bft: self.bft.take(),
         };
         self.task = Some(self.rt.spawn(f.run(events, self.stop.subscribe())));
         let (n, h) = self.core.head();

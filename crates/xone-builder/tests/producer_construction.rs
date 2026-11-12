@@ -38,6 +38,7 @@ fn roots(h: &Header, txs: &[alloy_primitives::Bytes]) -> Roots {
         receipt_root: h.receipt_root,
         bloom: h.bloom,
         gas_used: h.gas_used,
+        bal_hash: h.block_access_list_hash,
     }
 }
 

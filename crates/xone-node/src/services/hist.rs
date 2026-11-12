@@ -128,6 +128,14 @@ pub struct HistInner {
     pub td: U256,
 }
 
+/// geth `XDPoS.IsEpochSwitch` (`consensus/XDPoS/xdpos_api.go:228-235`) at or below the V2 switch block, which
+/// the V2 reward walks with (`eth/hooks/engine_v2_hooks.go:688-718`): a multiple of the epoch, **the genesis
+/// block included** (`0 % Epoch == 0`). On a chain whose V2 switch is at its first checkpoint the walk of the
+/// first V2 reward ends there: the window is `1..=switch - 1` and its masternodes are the genesis list.
+fn v1_epoch_switch(number: u64, switch_block: u64, epoch: u64) -> bool {
+    number <= switch_block && number.is_multiple_of(epoch)
+}
+
 impl BlockReader for HistInner {
     fn header(&self, hash: B256, number: u64) -> Option<HeaderView> {
         let (parent_hash, miner) = match self.at(number) {
@@ -143,13 +151,9 @@ impl BlockReader for HistInner {
             hash,
             parent_hash,
             miner,
-            // geth `XDPoS.IsEpochSwitch` (`consensus/XDPoS/xdpos_api.go:228-235`), which the V2 reward
-            // walks with: up to the V2 switch block an epoch switch is a multiple of the epoch.
             epoch_switch: self.switches.iter().any(|w| w.hash == hash)
                 || self.v2_cfg().is_some_and(|v| {
-                    number != 0
-                        && number <= v.switch_block
-                        && number.is_multiple_of(self.spec.xdpos.epoch)
+                    v1_epoch_switch(number, v.switch_block, self.spec.xdpos.epoch)
                 }),
         })
     }
@@ -672,5 +676,20 @@ mod tests {
             g.candidates
         );
         assert!(gap_of_row(5, &[0; 21]).is_none());
+    }
+
+    /// The first V2 reward of a chain that switches at its first checkpoint (epoch 30, switch 30) walks down
+    /// to the genesis block; geth counts it as an epoch switch, and a reader that did not left the reward
+    /// with no window (`no second epoch switch below block 60`, the gate D devnet).
+    #[test]
+    fn genesis_is_a_v1_epoch_switch() {
+        assert!(v1_epoch_switch(0, 30, 30));
+        assert!(v1_epoch_switch(30, 30, 30));
+        assert!(!v1_epoch_switch(15, 30, 30));
+        assert!(
+            !v1_epoch_switch(60, 30, 30),
+            "above the switch the V2 rule decides"
+        );
+        assert!(v1_epoch_switch(900, 2700, 900));
     }
 }
