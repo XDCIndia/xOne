@@ -6,7 +6,7 @@
 
 use std::io::Write;
 
-use alloy_primitives::{keccak256, B256, KECCAK256_EMPTY};
+use alloy_primitives::{keccak256, Address, B256, KECCAK256_EMPTY};
 use alloy_rlp::Encodable;
 use xone_chainspec::ChainSpec;
 use xone_state::{trie::flat_root, FlatWrite, MemFlat, Missing};
@@ -38,6 +38,12 @@ pub enum ExportError {
     State { at: u64, source: Missing },
     #[error("the state of block {at} gives root {got}, its header says {want}")]
     StateRoot { at: u64, want: B256, got: B256 },
+    /// The snapshot file is keyed by address; this datadir was filled by snap/1 and has not seen
+    /// that address.
+    #[error(
+        "no address is known for the key {0}: this datadir cannot write an address-keyed snapshot"
+    )]
+    Preimage(B256),
     #[error("the code {0} is referred to by the state and is not in the side data")]
     MissingCode(B256),
     #[error("the gap pool of block {0} is needed by the plan and is not in the side data")]
@@ -114,10 +120,10 @@ pub fn export<S: Store, W: Write>(
         .map_err(|source| ExportError::State { at, source })?;
     let mut flat = MemFlat::default();
     for (a, x) in &rows_at.accounts {
-        flat.set_account(*a, Some(x.clone()));
+        flat.set_hashed_account(*a, Some(x.clone()));
     }
     for (a, k, v) in &rows_at.storage {
-        flat.set_slot(*a, *k, *v);
+        flat.set_hashed_slot(*a, *k, *v);
     }
     let got = flat_root(&flat);
     if got != pivot.state_root {
@@ -127,10 +133,29 @@ pub fn export<S: Store, W: Write>(
             got,
         });
     }
-    let mut accounts = rows_at.accounts;
-    accounts.sort_by_key(|(a, _)| keccak256(a));
-    let mut slots = rows_at.storage;
-    slots.sort_by_key(|(a, k, _)| (keccak256(a), keccak256(k)));
+    // the file names addresses and slots: every key needs its preimage
+    let pre = |h: B256, len: usize| {
+        store
+            .preimage(h)
+            .filter(|p| p.len() == len)
+            .map(|p| p.to_vec())
+            .ok_or(ExportError::Preimage(h))
+    };
+    let mut accounts = Vec::new();
+    for (h, x) in rows_at.accounts {
+        accounts.push((h, Address::from_slice(&pre(h, 20)?), x));
+    }
+    accounts.sort_by_key(|(h, _, _)| *h);
+    let mut slots = Vec::new();
+    for (ha, hs, v) in rows_at.storage {
+        let a = accounts
+            .binary_search_by_key(&ha, |(h, _, _)| *h)
+            .map_err(|_| ExportError::Preimage(ha))?;
+        slots.push((ha, hs, accounts[a].1, B256::from_slice(&pre(hs, 32)?), v));
+    }
+    slots.sort_by_key(|(ha, hs, ..)| (*ha, *hs));
+    let accounts: Vec<(Address, xone_state::Account)> =
+        accounts.into_iter().map(|(_, a, x)| (a, x)).collect();
     let mut codes = Vec::new();
     for h in accounts
         .iter()
@@ -196,7 +221,7 @@ pub fn export<S: Store, W: Write>(
     let n_slots = rows(
         &mut w,
         Kind::Storage,
-        slots.iter().map(|(a, k, v)| SlotRow {
+        slots.iter().map(|(_, _, a, k, v)| SlotRow {
             address: *a,
             slot: *k,
             value: *v,

@@ -132,12 +132,16 @@ impl SnapServer {
                 else {
                     return None;
                 };
-                let reply = match self.cache.last() {
-                    Some((_, s)) => s.preimages(&req),
-                    None => Preimages {
-                        id: req.id,
-                        preimages: vec![],
-                    },
+                // from the node's preimage table: whatever execution and installs have seen
+                let reply = Preimages {
+                    id: req.id,
+                    preimages: self.core.chain.with_store(|st| {
+                        req.hashes
+                            .iter()
+                            .take(preimage::MAX_PREIMAGES)
+                            .filter_map(|h| st.preimage(*h))
+                            .collect()
+                    }),
                 };
                 let m = preimage::Message::Answer(reply);
                 (m.code(), m.encode())

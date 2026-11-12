@@ -14,11 +14,11 @@ is installed.
 
 ## Peers
 
-State comes only from a peer that shares **snap/1 and xpre/1** (an xOne node). snap/1 carries hashed
-keys and no preimages, and the xOne state is keyed by address (ADR-005 `PlainAccountState`), so a
-geth-only peer set cannot fill the datadir: after 120 s without such a peer the start fails with
-`SnapSyncError::NoXpre` ("no peer serves xpre/1 ... refusing (not falling back to full sync)"). Headers,
-bodies and receipts come from the same peer; every peer, geth included, may be a witness for the pin.
+State comes from a peer that shares **snap/1**: a geth-XDC node or an xOne node. snap/1 carries hashed keys
+and no preimages, and the xOne state is keyed by hash too (ADR-005 amendment 2026-11-12: `HashedAccounts`,
+`HashedStorages`), so the download fills the datadir as it is. After 120 s without a snap/1 peer the start
+fails with `SnapSyncError::NoSnap` (never a fallback to full sync). Headers, bodies and receipts come from the
+same peer; every peer may be a witness for the pin.
 
 ## The pivot
 
@@ -50,12 +50,14 @@ bodies and receipts come from the same peer; every peer, geth included, may be a
 | headers from the lowest window floor to the head | eth `GetBlockHeaders`, 192 a request | consecutive, each links to its parent, the last is the peer's head |
 | bodies and receipts of `plan_at(P)`'s record window | eth `GetBlockBodies`, `GetReceipts`, 128 a request | `BodyVerifier::verify_body` and `verify_receipts` against the header |
 | sign transactions of the window | derived from those bodies and receipts | `signed_hash` of each transaction, sender recovered, receipt status (as the executor records them) |
-| candidate pool of each gap block of `plan_at(P)` | snap/1 at the gap block's state root: the 0x88 account by a one-key range proof, its storage ranges with proofs (`account_at`) | the storage root rebuilt from the slots equals the proven account's; the pool is `gap_snapshot::build` on that state |
+| candidate pool of each gap block of `plan_at(P)` | in this order: (a) an xOne peer (snap/1 and xpre/1) at the gap block's state root: the 0x88 account by a one-key range proof, its storage ranges with proofs (`account_at`); (b) `--snap.gap-rpc <url>`: `eth_getProof(0x88, slots, G)` for exactly the slots `gap_snapshot::build` reads (candidates length and entries, then each cap; geth `engine_v2/engine.go:1349-1360`); (c) neither: `SnapSyncError::GapSource`, which names both. Never an empty pool. | (a) the storage root rebuilt from the slots equals the proven account's; (b) the account proof against the state root of the header of `G` (already linked) and each slot proof against the proven storage root (`xone_snap::rpcproof`), so the RPC is untrusted; the pool is `gap_snapshot::build` on that state |
 | the state at `P` | snap/1: accounts, storage, codes, heal | every range proven (`verify_range`), codes by hash, the root of the whole download equals `P`'s state root |
-| preimages of every account and slot hash | xpre/1 | `keccak(preimage)` equals the requested hash; addresses are 20 bytes, slots 32; the state root rebuilt from the plain rows equals `P`'s state root |
+| the rows, by hashed key | the download above | the state root rebuilt from the hashed rows equals `P`'s state root. No preimage is fetched. |
 
 The gap pools are why the window of a serving node is 4,096 blocks (ADR-005 amendment 2026-11-12): the
 deepest gap block a plan names is `3E + G - 1` = 3,149 below `P`, `P` is 64 below the server's head.
+
+A geth-XDC peer serves snap/1 only for its recent snapshot layers, so the state at the pivot (64 blocks below its head) comes from it but the 0x88 state of the gap blocks does not: the V2 tiered reward at an epoch switch reads the standby pool of the epoch two switches back (`eth/hooks/engine_v2_hooks.go:878-941`, `GetStandbynodes`, `engine_v2/engine.go:3128-3147`), whose gap block is below the pivot. That is why step (a) to (c) above exists.
 
 Request sizes stay inside the server's ADR-007 budgets: one request in flight, 512 KiB asked per range
 (`client::Config::default`, under geth's 2 MiB soft limit), and a server that answers over its Q15 bounds
@@ -71,6 +73,5 @@ onwards through `Chain::insert`: every block verified and executed against the i
 
 | item | what removes it |
 | --- | --- |
-| snap sync from geth-only peers | a hashed-key execution path: the flat state, changesets and checkpoints keyed by `keccak(address)` and `keccak(slot)` (`HashedAccounts`/`HashedStorages`), with preimages only where an address must be shown (RPC). Then xpre/1 is not needed. |
 | a moving pivot | the client re-pivots on `Unavailable` (`StateStore::set_root`, heal); the node's driver instead fails and the restart loop starts again from an empty datadir. |
 | resume of an interrupted download | a persisted `StateStore`; today a stop or crash before the install leaves the datadir empty. |

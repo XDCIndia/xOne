@@ -15,7 +15,7 @@ use serde::Deserialize;
 use std::collections::BTreeSet;
 use xone_chainspec::Network;
 use xone_state::{
-    trie::{flat_root, storage_root},
+    trie::{flat_root, storage_root_hashed},
     Account, FlatRead, FlatWrite, MemFlat, StateDiff, StateProvider,
 };
 
@@ -154,7 +154,7 @@ fn fifty_mutations_root_equals_geth_at_every_step() {
         );
         if !s.storage_root.is_empty() {
             assert_eq!(
-                storage_root(flat.slots(addr(&s.addr))),
+                storage_root_hashed(flat.hashed_slots(keccak256(addr(&s.addr)))),
                 b256(&s.storage_root),
                 "storage root, step {}",
                 s.n

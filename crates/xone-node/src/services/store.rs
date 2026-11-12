@@ -124,8 +124,16 @@ pub fn records(store: &NodeStore, l: &Loaded, n: u64) -> Result<(Body, Vec<Bytes
 pub struct Ckpt {
     pub number: u64,
     pub hash: B256,
+    /// Rows keyed by address and slot: the form of checkpoints written before the hashed-key store,
+    /// and of the replay harness. Read, no longer written by the node.
     pub accounts: Vec<(Address, u64, Bytes, B256)>,
     pub storage: Vec<(Address, B256, U256)>,
+    /// Rows keyed by `keccak(address)` and `keccak(slot)` (ADR-005 amendment 2026-11-12): the node's
+    /// checkpoints, which a snap-synced datadir can write without any preimage.
+    #[serde(default)]
+    pub haccounts: Vec<(B256, u64, Bytes, B256)>,
+    #[serde(default)]
+    pub hstorage: Vec<(B256, B256, U256)>,
     pub codes: BTreeMap<B256, Bytes>,
     pub signers: Vec<Address>,
     pub recents: BTreeMap<u64, Address>,
@@ -157,24 +165,40 @@ impl Ckpt {
         for (a, k, v) in &self.storage {
             f.set_slot(*a, *k, *v);
         }
+        for (h, nonce, bal, code_hash) in &self.haccounts {
+            f.set_hashed_account(
+                *h,
+                Some(Account {
+                    nonce: *nonce,
+                    balance: WideBalance::from_be_bytes(bal),
+                    code_hash: *code_hash,
+                    ..Default::default()
+                }),
+            );
+        }
+        for (h, k, v) in &self.hstorage {
+            f.set_hashed_slot(*h, *k, *v);
+        }
         f
     }
 
     /// The tables of `flat`, with the parts the caller owns left empty.
     pub fn of_flat(number: u64, hash: B256, flat: &MemFlat) -> Self {
-        let accounts: Vec<_> = flat.accounts().collect();
+        let accounts: Vec<_> = flat.hashed_accounts().collect();
         Self {
             number,
             hash,
-            storage: accounts
+            accounts: vec![],
+            storage: vec![],
+            hstorage: accounts
                 .iter()
-                .flat_map(|(a, _)| flat.slots(*a).map(|(k, v)| (*a, k, v)))
+                .flat_map(|(h, _)| flat.hashed_slots(*h).map(|(k, v)| (*h, k, v)))
                 .collect(),
-            accounts: accounts
+            haccounts: accounts
                 .into_iter()
-                .map(|(a, x)| {
+                .map(|(h, x)| {
                     (
-                        a,
+                        h,
                         x.nonce,
                         Bytes::from(x.balance.to_be_bytes()),
                         x.code_hash,

@@ -13,7 +13,7 @@ content is one generation, and the node starts it as a minimal node. There is on
 | manifest, `verify_anchor` against `--pins` | anchor built by `build_anchor` from served headers, `verify_anchor` against `--snap.pins` or two peers |
 | header chunks, linked down from the checkpoint | the header window of `plan_at(P)`, linked |
 | bodies and receipts, `BodyVerifier` | the same, from eth requests |
-| account and slot rows, state root rebuilt | snap/1 ranges with proofs plus xpre/1 preimages, state root rebuilt from the plain rows |
+| account and slot rows, state root rebuilt (the file names addresses; the install hashes them and keeps them as preimages) | snap/1 ranges with proofs, hashed rows as they come, state root rebuilt from them |
 | side chunk: codes, gap pools, sign transactions (from the exporting node's history) | codes from snap/1 by hash; gap pools from proven 0x88 state at each gap block; sign transactions from the window's bodies and receipts |
 | V1 signer snapshot | not needed: snap sync starts on V2 only |
 

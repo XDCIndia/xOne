@@ -868,15 +868,22 @@ fn one_account_and_its_storage_are_fetched_with_proofs() {
 }
 
 #[test]
-fn preimages_of_plain_rows_are_served() {
+fn preimages_of_hashed_rows_are_served() {
     use xone_snap::preimage::GetPreimages;
     let (flat, codes) = flat_state(50);
-    let accounts: Vec<_> = flat.accounts().collect();
+    let accounts: Vec<_> = flat.hashed_accounts().collect();
     let storage: Vec<_> = accounts
         .iter()
-        .flat_map(|(a, _)| flat.slots(*a).map(move |(s, v)| (*a, s, v)))
+        .flat_map(|(h, _)| flat.hashed_slots(*h).map(move |(s, v)| (*h, s, v)))
         .collect();
-    let snap = Snapshot::from_rows(&accounts, &storage, codes.clone());
+    let mut pre = std::collections::HashMap::new();
+    for (a, _) in flat.accounts() {
+        pre.insert(keccak256(a), Bytes::from(a.to_vec()));
+        for (s, _) in flat.slots(a) {
+            pre.insert(keccak256(s), Bytes::from(s.to_vec()));
+        }
+    }
+    let snap = Snapshot::from_rows(&accounts, &storage, codes.clone()).with_preimages(pre);
     assert_eq!(snap.root(), Snapshot::from_flat(&flat, codes).root());
     let srv = Server::new(snap, Limits::default());
     let a = addr(10);

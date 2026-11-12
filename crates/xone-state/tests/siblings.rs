@@ -92,15 +92,18 @@ fn blocks() -> Vec<Block> {
     v
 }
 
-fn keys(f: &MemFlat, d: &StateDiff) -> (Vec<Address>, Vec<(Address, B256)>) {
-    let mut accts: Vec<_> = f
-        .accounts()
-        .map(|(a, _)| a)
-        .chain(d.accounts.keys().copied())
-        .collect();
+/// Every account and slot the blocks' parent subsets and the diff `d` name (the flat tables are
+/// keyed by hash and cannot be listed by address).
+fn keys(bs: &[&Block], d: &StateDiff) -> (Vec<Address>, Vec<(Address, B256)>) {
+    let mut accts: Vec<_> = d.accounts.keys().copied().collect();
     let mut slots: Vec<_> = d.storage.keys().copied().collect();
-    for (a, _) in f.accounts().collect::<Vec<_>>() {
-        slots.extend(f.slots(a).map(|(s, _)| (a, s)));
+    for b in bs {
+        for (a, p) in &b.accounts {
+            accts.push(addr(a));
+            for s in p.pre.iter().flat_map(|r| r.storage.keys()) {
+                slots.push((addr(a), b256(s)));
+            }
+        }
     }
     accts.sort();
     accts.dedup();
@@ -113,7 +116,7 @@ fn keys(f: &MemFlat, d: &StateDiff) -> (Vec<Address>, Vec<(Address, B256)>) {
 fn canonical_diff_then_reopening_the_parent_gives_the_untouched_parent_values_not_a_root_check() {
     for b in blocks() {
         let (pre, diff) = parts(&b);
-        let (accts, slots) = keys(&pre, &diff);
+        let (accts, slots) = keys(&[&b], &diff);
         let (hash, parent) = (b256(&b.hash), b256(&b.parent_hash));
         let mut p = StateProvider::new(pre.clone(), b.number - 1, parent, 4);
         let reads = |r: &dyn StateRead| {
@@ -160,12 +163,10 @@ fn views_of_two_blocks_over_one_merged_parent_subset_are_independent_not_a_root_
         let ((pre_a, da), (pre_b, db)) = (parts(pair.0), parts(pair.1));
         // merged parent subset: the first block's values win where both touch a key
         let mut merged = pre_b.clone();
-        for (a, acc) in pre_a.accounts() {
-            merged.set_account(a, Some(acc));
-        }
-        for (a, _) in pre_a.accounts().collect::<Vec<_>>() {
-            for (s, v) in pre_a.slots(a) {
-                merged.set_slot(a, s, v);
+        for (ha, acc) in pre_a.hashed_accounts() {
+            merged.set_hashed_account(ha, Some(acc));
+            for (hs, v) in pre_a.hashed_slots(ha) {
+                merged.set_hashed_slot(ha, hs, v);
             }
         }
         let parent = b256(&pair.0.parent_hash);
@@ -198,7 +199,7 @@ fn views_of_two_blocks_over_one_merged_parent_subset_are_independent_not_a_root_
                 assert_eq!(v.storage(k.0, k.1), vp.storage(k.0, k.1));
             }
         }
-        let (accts, slots) = keys(&merged, &StateDiff::default());
+        let (accts, slots) = keys(&[pair.0, pair.1], &StateDiff::default());
         for a in accts {
             assert_eq!(vp.account(a), merged.account(a));
         }

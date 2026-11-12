@@ -20,7 +20,7 @@ use serde_json::{json, Value};
 use std::{collections::BTreeMap, fs, path::Path};
 use xone_chainspec::Network;
 use xone_primitives::WideBalance;
-use xone_state::{trie::flat_root, Account, FlatRead, FlatWrite, MemFlat};
+use xone_state::{trie::flat_root, Account, FlatWrite, MemFlat};
 use xone_sweep::fetch::Rpc;
 
 /// The accounts that are, or ever were, above 2^256 on Apothem (`spikes/wide-balance/REPORT.md`):
@@ -501,7 +501,7 @@ pub fn start(
         }
     };
     let opaque: BTreeMap<Address, B256> = d.opaque.iter().copied().collect();
-    let mut flat = MemFlat::default();
+    let mut flat = MemFlat::recording();
     for (a, nonce, bal, root, code_hash) in &d.accounts {
         flat.set_account(
             *a,

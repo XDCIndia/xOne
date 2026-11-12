@@ -71,7 +71,7 @@ fn h(tag: &str, i: usize) -> B256 {
 /// 2^256 (2^256 + i; 2^264 - 1 for every 1,000th), every 10th has storage (account 0 has 3,000
 /// slots, the others 1 to 20), every 7th has code.
 pub fn flat_state(n: usize) -> (MemFlat, BTreeMap<B256, Bytes>) {
-    let (mut flat, mut codes) = (MemFlat::default(), BTreeMap::new());
+    let (mut flat, mut codes) = (MemFlat::recording(), BTreeMap::new());
     for i in 0..n {
         let balance = if i > 0 && i % 1000 == 0 {
             WideBalance::from_be_bytes(&[&[0u8][..], &[0xff; 33][..]].concat()) // 2^264 - 1

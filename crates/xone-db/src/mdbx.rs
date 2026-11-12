@@ -30,21 +30,22 @@ pub enum T {
     HeaderNumbers,
     /// `segment u8 || block u64 BE` to frame start offset u64 LE: headers, bodies and receipts.
     SegIdx,
-    /// address to account RLP.
+    /// Schema 1 only (address to account RLP): read and emptied by the migration, never written.
     PlainAccounts,
-    /// `address || slot` to 32 bytes.
+    /// Schema 1 only (`address || slot` to 32 bytes): see [`T::PlainAccounts`].
     PlainStorage,
     /// code hash to code.
     Bytecodes,
-    /// keccak(address) to account RLP (what snap serves and heals from).
+    /// keccak(address) to account RLP: the canonical account state (what snap serves and heals from).
     HashedAccounts,
-    /// `keccak(address) || keccak(slot)` to 32 bytes.
+    /// `keccak(address) || keccak(slot)` to 32 bytes: the canonical storage state.
     HashedStorages,
-    /// hash to the address (20 bytes) or slot (32 bytes) it came from.
+    /// hash to the address (20 bytes) or slot (32 bytes) it came from. Optional: filled by execution
+    /// and installs, used only to show an address; no read of state needs it.
     Preimages,
-    /// `block || address` to `0` (absent) or `1 || account RLP`: the whole prior record.
+    /// `block || keccak(address)` to `0` (absent) or `1 || account RLP`: the whole prior record.
     AccountChangeSets,
-    /// `block || address || slot` to the prior 32 bytes.
+    /// `block || keccak(address) || keccak(slot)` to the prior 32 bytes.
     StorageChangeSets,
     /// block to the new values the block wrote (kept for a reorg that re-adopts it).
     BlockDiffs,

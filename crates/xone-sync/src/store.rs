@@ -223,12 +223,36 @@ pub enum StoreError {
     },
 }
 
-/// The plain state of one block: what a snapshot carries as its account and storage tables.
-/// Order is not specified; zero slots are absent.
+/// The state of one block by hashed key (`keccak(address)`, `keccak(address) || keccak(slot)`), the
+/// way the store keeps it and snap/1 carries it (ADR-005 amendment 2026-11-12). Order is not
+/// specified; zero slots are absent.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct StateRows {
-    pub accounts: Vec<(Address, Account)>,
-    pub storage: Vec<(Address, B256, U256)>,
+    pub accounts: Vec<(B256, Account)>,
+    pub storage: Vec<(B256, B256, U256)>,
+}
+
+impl StateRows {
+    /// Rows from plain keys (a snapshot file, a test): each key is hashed here. The preimages are
+    /// returned with the rows so that the store can keep them.
+    pub fn from_plain(
+        accounts: impl IntoIterator<Item = (Address, Account)>,
+        storage: impl IntoIterator<Item = (Address, B256, U256)>,
+    ) -> (Self, Vec<(B256, Bytes)>) {
+        let mut pre = Vec::new();
+        let mut rows = Self::default();
+        for (a, x) in accounts {
+            let h = alloy_primitives::keccak256(a);
+            pre.push((h, Bytes::copy_from_slice(a.as_slice())));
+            rows.accounts.push((h, x));
+        }
+        for (a, k, v) in storage {
+            let hs = alloy_primitives::keccak256(k);
+            pre.push((hs, Bytes::copy_from_slice(k.as_slice())));
+            rows.storage.push((alloy_primitives::keccak256(a), hs, v));
+        }
+        (rows, pre)
+    }
 }
 
 /// A verified snapshot, to be the whole content of an empty datadir ([`Store::install_snapshot`]).
@@ -244,6 +268,9 @@ pub struct Install {
     /// diffs and executor rows are empty.
     pub records: Vec<Record>,
     pub state: StateRows,
+    /// The preimages of keys in `state` that the installer holds (a snapshot file carries them, a
+    /// snap/1 download does not). Optional: each is kept only if it hashes to its key.
+    pub preimages: Vec<(B256, Bytes)>,
     /// Blocks above the pivot whose state stays openable (the store's `retention`).
     pub retention: u64,
 }
@@ -307,6 +334,9 @@ pub trait Store {
     // ---- bootstrap (XB-18)
     /// The plain state after the canonical block `hash`, inside the retained state window.
     fn state_rows(&self, hash: B256) -> Result<StateRows, Missing>;
+    /// The address (20 bytes) or slot (32 bytes) behind `hash`, if this node has seen it: the
+    /// preimage table is filled by execution and by installs, never required.
+    fn preimage(&self, hash: B256) -> Option<Bytes>;
     /// Makes an empty datadir the anchored datadir of `s`: one generation holds the state, the
     /// canonical index, the headers, the records, the anchor manifest and the segment manifest
     /// whose `first_block` is the first retained block of each segment (ADR-005 sections 6.3, 12).

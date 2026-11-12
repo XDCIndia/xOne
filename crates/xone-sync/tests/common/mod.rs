@@ -449,6 +449,9 @@ impl xone_sync::store::Store for Mutant {
     fn state_rows(&self, h: B256) -> Result<xone_sync::store::StateRows, xone_state::Missing> {
         self.inner.state_rows(h)
     }
+    fn preimage(&self, h: B256) -> Option<alloy_primitives::Bytes> {
+        self.inner.preimage(h)
+    }
     fn install_snapshot(
         &mut self,
         s: xone_sync::store::Install,

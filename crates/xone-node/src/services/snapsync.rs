@@ -4,10 +4,10 @@
 //!
 //! In order, each step verified before the next:
 //!
-//! 1. Peers: the node's own net service on its own runtime. State comes from peers that share
-//!    snap/1 and xpre/1 (xOne nodes); none after the wait is [`SnapSyncError::NoXpre`], never a
-//!    fall back to full sync.
-//! 2. Pivot: the head of the best xpre/1 peer minus 64 (geth `fsMinFullBlocks`,
+//! 1. Peers: the node's own net service on its own runtime. State comes from a peer that shares
+//!    snap/1 (geth-XDC included: the store is keyed by hash like snap/1, no preimages are needed);
+//!    none after the wait is [`SnapSyncError::NoSnap`], never a fall back to full sync.
+//! 2. Pivot: the head of the best snap/1 peer minus 64 (geth `fsMinFullBlocks`,
 //!    `eth/downloader/downloader.go`), lowered to the first block whose anchor proof verifies
 //!    (`verify_anchor`: the epoch-switch header's masternodes certify the pivot by the 3-chain).
 //!    The switch header is pinned by the operator's pins file, or by two peers that serve the same
@@ -17,8 +17,7 @@
 //! 4. The candidate pool of every gap block of the plan, from the 0x88 account and storage at that
 //!    block's state root, each range proven (`xone_snap::client::account_at`).
 //! 5. The pivot state (`xone_snap::client::sync`: ranges with proofs, codes by hash, heal, root),
-//!    then every preimage over xpre/1, each checked by its hash, and the state root rebuilt from the
-//!    plain rows.
+//!    then the state root rebuilt from the hashed rows.
 //! 6. `snapshot::install`: the state checkpoint, then `Store::install_snapshot` in one commit.
 //!
 //! ponytail: one source peer at a time, the downloaded state in memory, a stop or a crash before the
@@ -26,11 +25,12 @@
 //! `StateStore` when a network's state outgrows memory.
 
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, HashMap},
     path::Path,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+use super::gaprpc;
 use alloy_primitives::{keccak256, Address, Bytes, B256, U256};
 use alloy_rlp::Decodable;
 use tokio::{runtime::Handle, sync::mpsc::Receiver, time::timeout};
@@ -49,7 +49,7 @@ use xone_primitives::Header;
 use xone_snap::{
     client::{self, Fault, PeerError, PeerSource, StateStore, SyncError},
     codec::Message as Snap,
-    preimage::{self, GetPreimages, MAX_PREIMAGES},
+    preimage::{self, GetPreimages},
 };
 use xone_state::{
     system_contracts::validator_0x88, trie::flat_root, Account, FlatWrite, MemFlat, StateRead,
@@ -93,8 +93,8 @@ pub enum SnapSyncError {
     Stopped,
     #[error("no peer after {0:?}")]
     NoPeers(Duration),
-    #[error("no peer serves xpre/1 (preimages; only xOne nodes do) with snap/1 after {0:?}: snap sync needs one, refusing (not falling back to full sync)")]
-    NoXpre(Duration),
+    #[error("no peer serves snap/1 after {0:?}: snap sync needs one, refusing (not falling back to full sync)")]
+    NoSnap(Duration),
     #[error("peer {peer}: {why}")]
     Peer { peer: String, why: String },
     #[error("no pivot within {PIVOT_SEARCH} blocks below {from} has a verified anchor: {last}")]
@@ -127,11 +127,13 @@ pub enum SnapSyncError {
     V1(u64),
     #[error("gap block {number}: {why}")]
     Gap { number: u64, why: String },
+    #[error("gap block {number}: no source for its 0x88 state. Geth serves snap/1 only for recent state, so a geth-only peer set cannot supply it. Either connect an xOne peer (snap/1 serves it from its 4,096-block window) or pass --snap.gap-rpc <url> of any archive RPC that serves eth_getProof (every proof is verified against the header; the RPC is not trusted)")]
+    GapSource { number: u64 },
     #[error("state: {0}")]
     State(#[from] SyncError),
-    #[error("no peer served the preimage of {0}")]
-    Preimage(B256),
-    #[error("state root {got} rebuilt from the plain rows, the pivot header says {want}")]
+    #[error("the account with key {0} holds more than 2^256 and no xOne peer (xpre/1) told its address; the executor needs the address of such an account, so this sync cannot continue")]
+    WideAddress(B256),
+    #[error("state root {got} rebuilt from the hashed rows, the pivot header says {want}")]
     Root { got: B256, want: B256 },
     #[error("{0}")]
     Io(String),
@@ -161,7 +163,6 @@ struct Counts {
     storage_ranges: u64,
     byte_codes: u64,
     trie_nodes: u64,
-    preimage_requests: u64,
     snap_bytes: u64,
 }
 
@@ -172,7 +173,7 @@ struct Drv<'a> {
     known: BTreeMap<PeerId, Peer>,
     next_id: u64,
     stop: &'a Shutdown,
-    /// Faults per peer: the source is the xpre/1 peer with the fewest.
+    /// Faults per peer: the source is the snap/1 peer with the fewest.
     faults: HashMap<PeerId, u32>,
     n: Counts,
 }
@@ -255,16 +256,12 @@ impl Drv<'_> {
         self.known.get(p).is_some_and(|x| x.subs.contains(&s))
     }
 
-    /// Waits until a peer shares snap/1 and xpre/1 (and, for the pin, until `others` more peers are
-    /// connected or the wait is over).
+    /// Waits until a peer shares snap/1 (and, for the pin, until `others` more peers are connected
+    /// or the wait is over).
     fn wait_peers(&mut self, others: usize) -> R<()> {
         let until = Instant::now() + PEER_WAIT;
-        let ready = |d: &Self| {
-            d.known
-                .keys()
-                .any(|p| d.has(p, Sub::Snap) && d.has(p, Sub::Xpre))
-                && d.known.len() > others
-        };
+        let ready =
+            |d: &Self| d.known.keys().any(|p| d.has(p, Sub::Snap)) && d.known.len() > others;
         while !ready(self) {
             if self.next(until)?.is_none() {
                 break;
@@ -274,22 +271,27 @@ impl Drv<'_> {
             return Err(SnapSyncError::NoPeers(PEER_WAIT));
         }
         if self.source().is_none() {
-            return Err(SnapSyncError::NoXpre(PEER_WAIT));
+            return Err(SnapSyncError::NoSnap(PEER_WAIT));
         }
         Ok(())
     }
 
-    /// The xOne peer that serves state: snap/1 and xpre/1, fewest faults.
+    /// The peer that serves state: snap/1, fewest faults.
     fn source(&self) -> Option<PeerId> {
+        self.pick(false)
+    }
+
+    /// `xone`: only peers that also offer xpre/1 (xOne nodes, which keep older state in their window).
+    fn pick(&self, xone: bool) -> Option<PeerId> {
         self.known
             .keys()
-            .filter(|p| self.has(p, Sub::Snap) && self.has(p, Sub::Xpre))
+            .filter(|p| self.has(p, Sub::Snap) && (!xone || self.has(p, Sub::Xpre)))
             .min_by_key(|p| (self.faults.get(*p).copied().unwrap_or(0), **p))
             .copied()
     }
 
     fn src(&self) -> R<PeerId> {
-        self.source().ok_or(SnapSyncError::NoXpre(Duration::ZERO))
+        self.source().ok_or(SnapSyncError::NoSnap(Duration::ZERO))
     }
 
     fn fault(&mut self, p: &PeerId) {
@@ -397,13 +399,13 @@ impl Drv<'_> {
     }
 }
 
-/// The snap/1 source of `xone_snap::client`: the current xpre/1 peer; a fault moves to the next.
-struct Src<'a, 'b>(&'a mut Drv<'b>);
+/// The snap/1 source of `xone_snap::client`: the current snap/1 peer; a fault moves to the next.
+struct Src<'a, 'b>(&'a mut Drv<'b>, bool);
 
 impl PeerSource for Src<'_, '_> {
     fn exchange(&mut self, req: Snap) -> Result<Snap, PeerError> {
         let d = &mut *self.0;
-        let peer = d.source().ok_or(PeerError::Disconnected)?;
+        let peer = d.pick(self.1).ok_or(PeerError::Disconnected)?;
         let c = &mut d.n;
         match req {
             Snap::GetAccountRange(_) => c.account_ranges += 1,
@@ -417,7 +419,7 @@ impl PeerSource for Src<'_, '_> {
     }
 
     fn report(&mut self, fault: &Fault) {
-        if let Some(p) = self.0.source() {
+        if let Some(p) = self.0.pick(self.1) {
             eprintln!("snap: peer {}: {fault}", short(&p));
             self.0.fault(&p);
         }
@@ -455,9 +457,48 @@ fn receipts_of(raw: &Raw) -> Result<Vec<Bytes>, alloy_rlp::Error> {
     }
     let mut out = Vec::new();
     while !b.is_empty() {
-        out.push(from_wire(&Raw::decode(&mut b)?));
+        out.push(receipt_of(&Raw::decode(&mut b)?)?);
     }
     Ok(out)
+}
+
+/// One receipt of the wire list as its consensus encoding. Two shapes arrive: xOne serves the
+/// consensus form (a typed receipt inside an RLP string, a legacy one as the list `[status, cumulative
+/// gas, bloom, logs]`), and geth-XDC serves eth/69's, with no bloom: the list `[type, status or
+/// post-state, cumulative gas, logs]` (`eth/protocols/eth/receipt.go:31-36`, answered even on the
+/// XDPOS2 wire, `handlers.go:337-345`). The bloom is derived from the logs, as the body check does.
+fn receipt_of(r: &Raw) -> Result<Bytes, alloy_rlp::Error> {
+    let mut b = &r.0[..];
+    let h = alloy_rlp::Header::decode(&mut b)?;
+    if !h.list {
+        return Ok(from_wire(r));
+    }
+    // the third item is a 256-byte bloom in the consensus form and the gas used in eth/69's
+    let mut probe = b;
+    let (_, _, third) = (
+        alloy_rlp::Header::decode_bytes(&mut probe, false)?,
+        alloy_rlp::Header::decode_bytes(&mut probe, false)?,
+        alloy_rlp::Header::decode_bytes(&mut probe, false)?,
+    );
+    if third.len() == 256 {
+        return Ok(from_wire(r));
+    }
+    let tx_type = u8::decode(&mut b)?;
+    let post_state_or_status = Bytes::decode(&mut b)?;
+    let cumulative_gas_used = u64::decode(&mut b)?;
+    let logs = Vec::<alloy_primitives::Log>::decode(&mut b)?;
+    if !b.is_empty() {
+        return Err(alloy_rlp::Error::UnexpectedLength);
+    }
+    Ok(Bytes::from(
+        Receipt {
+            tx_type,
+            post_state_or_status,
+            cumulative_gas_used,
+            logs,
+        }
+        .encode_consensus(),
+    ))
 }
 
 /// The sign transactions of a block, as the executor records them (`xone_executor`:
@@ -547,9 +588,7 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
         .map_err(|e| SnapSyncError::Pins(format!("{}: {e}", p.display())))?,
         None => vec![],
     };
-    eprintln!(
-        "snap: --syncmode snap on an empty datadir: state download at a pivot (snap/1, xpre/1)"
-    );
+    eprintln!("snap: --syncmode snap on an empty datadir: state download at a pivot (snap/1)");
     d.wait_peers(if pins.is_empty() { 1 } else { 0 })?;
 
     // ---- the head and the pivot
@@ -757,16 +796,8 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
             .get(&g)
             .map(|h| h.state_root)
             .ok_or_else(|| gerr("header not downloaded".into()))?;
-        let (account, slots) = client::account_at(&mut Src(d), &scfg, root, k88)?
-            .ok_or_else(|| gerr("no 0x88 account in the proven state".into()))?;
-        let n = slots.len();
-        let pool =
-            gap_snapshot::build(&One { account, slots }, g).map_err(|e| gerr(e.to_string()))?;
-        eprintln!(
-            "snap: gap block {g} root {root}: 0x88 account and {n} slots proven, {} candidates",
-            pool.candidates.len()
-        );
-        side.gaps.insert(g, pool.candidates);
+        let pool = gap_pool(d, cfg, &scfg, root, g, k88)?;
+        side.gaps.insert(g, pool);
     }
 
     // ---- the pivot state
@@ -777,7 +808,7 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
         anchor.state_root,
         short(&d.src()?)
     );
-    client::sync(&mut st, &mut Src(d), &scfg)?;
+    client::sync(&mut st, &mut Src(d, false), &scfg)?;
     let slots: usize = st.storage.values().map(BTreeMap::len).sum();
     let c = &d.n;
     eprintln!(
@@ -795,22 +826,11 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
         c.trie_nodes, anchor.state_root
     );
 
-    // ---- preimages
-    let mut want: BTreeSet<B256> = st.accounts.keys().copied().collect();
-    for s in st.storage.values() {
-        want.extend(s.keys());
-    }
-    let pre = preimages(d, &want)?;
-    let addr = |h: &B256| -> R<Address> {
-        pre.get(h)
-            .filter(|p| p.len() == 20)
-            .map(|p| Address::from_slice(p))
-            .ok_or(SnapSyncError::Preimage(*h))
-    };
+    // ---- the rows, by hashed key as snap/1 gives them
     let mut rows = StateRows::default();
     for (h, a) in &st.accounts {
         rows.accounts.push((
-            addr(h)?,
+            *h,
             Account {
                 nonce: a.nonce,
                 balance: a.balance.clone(),
@@ -820,22 +840,30 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
         ));
     }
     for (h, slots) in &st.storage {
-        let a = addr(h)?;
         for (k, v) in slots {
-            let s = pre
-                .get(k)
-                .filter(|p| p.len() == 32)
-                .map(|p| B256::from_slice(p))
-                .ok_or(SnapSyncError::Preimage(*k))?;
-            rows.storage.push((a, s, *v));
+            rows.storage.push((*h, *k, *v));
         }
     }
-    let mut flat = MemFlat::default();
-    for (a, x) in &rows.accounts {
-        flat.set_account(*a, Some(x.clone()));
+    // An account above 2^256 is tracked by address by the executor. snap/1 gives only its hash, so
+    // its preimage (a handful of accounts at most) is asked of an xOne peer over xpre/1, checked by
+    // its hash; no other account needs one.
+    let wide: Vec<B256> = rows
+        .accounts
+        .iter()
+        .filter(|(_, x)| x.balance.is_wide())
+        .map(|(h, _)| *h)
+        .collect();
+    let mut wide_pre = Vec::new();
+    for h in wide {
+        let p = wide_preimage(d, h).ok_or(SnapSyncError::WideAddress(h))?;
+        wide_pre.push((h, p));
     }
-    for (a, k, v) in &rows.storage {
-        flat.set_slot(*a, *k, *v);
+    let mut flat = MemFlat::default();
+    for (h, x) in &rows.accounts {
+        flat.set_hashed_account(*h, Some(x.clone()));
+    }
+    for (h, k, v) in &rows.storage {
+        flat.set_hashed_slot(*h, *k, *v);
     }
     let got = flat_root(&flat);
     if got != anchor.state_root {
@@ -845,9 +873,9 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
         });
     }
     eprintln!(
-        "snap: {} preimages over xpre/1 in {} requests, each checked by its hash; state root {got} rebuilt from the plain rows",
-        pre.len(),
-        d.n.preimage_requests
+        "snap: state root {got} rebuilt from {} hashed accounts and {} hashed slots; no preimages needed",
+        rows.accounts.len(),
+        rows.storage.len()
     );
 
     // ---- install
@@ -861,6 +889,7 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
         headers: win,
         records,
         state: rows,
+        preimages: wide_pre,
         retention: RETENTION,
     };
     crate::snapshot::install(&dir, &mut store, pivot, anchor.hash, &side, install)
@@ -872,12 +901,83 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
     std::fs::write(dir.join("snap-pivot.txt"), record)
         .map_err(|e| SnapSyncError::Io(e.to_string()))?;
     eprintln!(
-        "snap: installed pivot {pivot} as an anchored datadir in {} s total ({} MB over snap/1 and xpre/1); executing from {}",
+        "snap: installed pivot {pivot} as an anchored datadir in {} s total ({} MB over snap/1); executing from {}",
         t0.elapsed().as_secs(),
         d.n.snap_bytes / 1_000_000,
         pivot + 1
     );
     Ok(())
+}
+
+/// The address behind `hash` from an xOne peer (xpre/1), kept only if it hashes to `hash`.
+fn wide_preimage(d: &mut Drv<'_>, hash: B256) -> Option<Bytes> {
+    for _ in 0..3 {
+        let peer = d.pick(true)?;
+        d.next_id += 1;
+        let id = d.next_id;
+        let req = preimage::Message::Get(GetPreimages {
+            id,
+            hashes: vec![hash],
+        });
+        let Ok((code, body)) = d.sub(peer, Sub::Xpre, req.code(), req.encode(), id) else {
+            d.fault(&peer);
+            continue;
+        };
+        if let Ok(preimage::Message::Answer(a)) = preimage::Message::decode(code, &body) {
+            if let Some(p) = a
+                .preimages
+                .into_iter()
+                .find(|p| p.len() == 20 && keccak256(p) == hash)
+            {
+                return Some(p);
+            }
+        }
+        d.fault(&peer);
+    }
+    None
+}
+
+/// The pool of gap block `g` from its 0x88 state, in this order: an xOne peer over snap/1 (its window
+/// keeps the state), else the archive RPC of `--snap.gap-rpc` with every proof verified against the
+/// header's state root, else a typed error that names both. Never an empty pool.
+fn gap_pool(
+    d: &mut Drv<'_>,
+    cfg: &Config,
+    scfg: &client::Config,
+    root: B256,
+    g: u64,
+    k88: B256,
+) -> R<Vec<Address>> {
+    let gerr = |why: String| SnapSyncError::Gap { number: g, why };
+    if d.pick(true).is_some() {
+        match client::account_at(&mut Src(d, true), scfg, root, k88) {
+            Ok(Some((account, slots))) => {
+                let n = slots.len();
+                let pool = gap_snapshot::build(&One { account, slots }, g)
+                    .map_err(|e| gerr(e.to_string()))?;
+                eprintln!(
+                    "snap: gap block {g} root {root}: 0x88 account and {n} slots proven over snap/1 from an xOne peer, {} candidates",
+                    pool.candidates.len()
+                );
+                return Ok(pool.candidates);
+            }
+            Ok(None) => {
+                eprintln!("snap: gap block {g}: the xOne peer has no 0x88 account at {root}")
+            }
+            Err(e) => eprintln!("snap: gap block {g}: the xOne peer did not serve it: {e}"),
+        }
+    }
+    let Some(url) = &cfg.sync.snap_gap_rpc else {
+        return Err(SnapSyncError::GapSource { number: g });
+    };
+    let mut rpc = gaprpc::Rpc::new(url, g).map_err(|e| gerr(format!("--snap.gap-rpc: {e}")))?;
+    let pool = gaprpc::pool(&mut rpc, root, g).map_err(|e| gerr(format!("--snap.gap-rpc: {e}")))?;
+    eprintln!(
+        "snap: gap block {g} root {root}: 0x88 pool of {} candidates, {} eth_getProof requests, every proof verified against the header's state root",
+        pool.len(),
+        rpc.requests
+    );
+    Ok(pool)
 }
 
 /// Two peers serve the same header for the switch number: the pin of the anchor (geth's trust in
@@ -917,58 +1017,10 @@ fn witness(d: &mut Drv<'_>, number: u64, hash: B256) -> R<(Vec<(u64, B256)>, Str
     ))
 }
 
-/// Every preimage of `want` over xpre/1, each kept only if it hashes to a requested key.
-fn preimages(d: &mut Drv<'_>, want: &BTreeSet<B256>) -> R<HashMap<B256, Bytes>> {
-    let mut got: HashMap<B256, Bytes> = HashMap::with_capacity(want.len());
-    let all: Vec<B256> = want.iter().copied().collect();
-    for chunk in all.chunks(MAX_PREIMAGES) {
-        let mut tries = 0;
-        loop {
-            let missing: Vec<B256> = chunk
-                .iter()
-                .filter(|h| !got.contains_key(*h))
-                .copied()
-                .collect();
-            if missing.is_empty() {
-                break;
-            }
-            tries += 1;
-            if tries > 8 {
-                return Err(SnapSyncError::Preimage(missing[0]));
-            }
-            let peer = d.src()?;
-            d.next_id += 1;
-            let id = d.next_id;
-            d.n.preimage_requests += 1;
-            let req = preimage::Message::Get(GetPreimages {
-                id,
-                hashes: missing.clone(),
-            });
-            let Ok((code, body)) = d.sub(peer, Sub::Xpre, req.code(), req.encode(), id) else {
-                d.fault(&peer);
-                continue;
-            };
-            let Ok(preimage::Message::Answer(a)) = preimage::Message::decode(code, &body) else {
-                d.fault(&peer);
-                continue;
-            };
-            let asked: BTreeSet<&B256> = missing.iter().collect();
-            for p in a.preimages {
-                let h = keccak256(&p);
-                if asked.contains(&h) {
-                    got.insert(h, p);
-                } else {
-                    d.fault(&peer);
-                }
-            }
-        }
-    }
-    Ok(got)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloy_rlp::Encodable;
 
     /// What `chain.rs` serves for `GetReceipts` is what the snap client reads back: a legacy
     /// receipt as its list, a typed one inside an RLP string.
@@ -995,5 +1047,38 @@ mod tests {
             alloy_rlp::decode_exact(alloy_rlp::encode(&wire)).unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(receipts_of(&raw).unwrap_or_else(|e| panic!("{e}")), enc);
         assert!(receipts_of(&Raw(vec![0x80].into())).is_err());
+    }
+
+    /// geth-XDC answers GetReceipts with eth/69's receipt (no bloom); the consensus encoding that
+    /// the receipts root is computed over comes out the same as xOne's own form.
+    #[test]
+    fn an_eth69_receipt_becomes_the_consensus_receipt() {
+        let log = alloy_primitives::Log::new_unchecked(
+            alloy_primitives::Address::repeat_byte(7),
+            vec![B256::repeat_byte(1)],
+            Bytes::from_static(b"d"),
+        );
+        for (tx_type, status) in [(0u8, vec![1u8]), (2, vec![]), (0, vec![0x11; 32])] {
+            let want = Receipt {
+                tx_type,
+                post_state_or_status: Bytes::from(status.clone()),
+                cumulative_gas_used: 63_000,
+                logs: vec![log.clone()],
+            };
+            let mut inner = Vec::new();
+            tx_type.encode(&mut inner);
+            Bytes::from(status).encode(&mut inner);
+            63_000u64.encode(&mut inner);
+            vec![log.clone()].encode(&mut inner);
+            let mut item = Vec::new();
+            alloy_rlp::Header {
+                list: true,
+                payload_length: inner.len(),
+            }
+            .encode(&mut item);
+            item.extend_from_slice(&inner);
+            let got = receipt_of(&Raw(item.into())).unwrap();
+            assert_eq!(got.to_vec(), want.encode_consensus());
+        }
     }
 }

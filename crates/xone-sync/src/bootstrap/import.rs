@@ -279,6 +279,7 @@ pub fn verify<R: Read + Seek, St: Staging>(
             headers: content.headers,
             records: content.records,
             state: content.state,
+            preimages: content.preimages,
             retention: cfg.retention,
         },
         side: content.side,
@@ -291,6 +292,7 @@ struct Content {
     headers: Vec<Header>,
     records: Vec<Record>,
     state: StateRows,
+    preimages: Vec<(B256, Bytes)>,
     side: Side,
     stats: Stats,
 }
@@ -529,9 +531,11 @@ fn assemble(
         return Err(content("sign transactions outside the window", 0));
     }
     let side = Side::of_row(side, codes);
+    let (n_accounts, n_slots) = (len64(accounts.len()), len64(slots.len()));
+    let (state, preimages) = StateRows::from_plain(accounts, slots);
     let stats = Stats {
-        accounts: len64(accounts.len()),
-        slots: len64(slots.len()),
+        accounts: n_accounts,
+        slots: n_slots,
         codes: len64(side.codes.len()),
         headers: len64(headers.len()),
         bodies: len64(records.len()),
@@ -540,10 +544,8 @@ fn assemble(
     Ok(Content {
         headers,
         records,
-        state: StateRows {
-            accounts,
-            storage: slots,
-        },
+        state,
+        preimages,
         side,
         stats,
     })

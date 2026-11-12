@@ -262,7 +262,9 @@ pub fn install(
     let mut ck = Ckpt {
         number,
         hash,
-        accounts: flat
+        accounts: vec![],
+        storage: vec![],
+        haccounts: flat
             .accounts
             .iter()
             .map(|(a, x)| {
@@ -274,7 +276,7 @@ pub fn install(
                 )
             })
             .collect(),
-        storage: flat.storage.clone(),
+        hstorage: flat.storage.clone(),
         codes: side.codes.clone(),
         signers: side.signers.clone(),
         recents: side.recents.clone(),

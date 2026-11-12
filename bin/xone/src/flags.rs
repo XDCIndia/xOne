@@ -71,7 +71,7 @@ pub const FLAGS: &[Flag] = &[
         Some("full|snap|fast"),
         "full",
         "snap",
-        "Blockchain sync mode. full executes from genesis. snap, on an empty datadir, downloads the state at a pivot over snap/1 with every range proven, the preimages over xpre/1 (xOne peers only), installs it as an anchored datadir and executes from pivot+1 (spec/snap/pivot.md); on a datadir that holds a chain it continues that chain. fast is an alias of snap, as in geth-XDC.",
+        "Blockchain sync mode. full executes from genesis. snap, on an empty datadir, downloads the state at a pivot over snap/1 with every range proven, from any snap/1 peer (geth-XDC included; the store is keyed by hash, no preimages are needed), installs it as an anchored datadir and executes from pivot+1 (spec/snap/pivot.md); on a datadir that holds a chain it continues that chain. fast is an alias of snap, as in geth-XDC.",
         "flags.go:299 ; geth,xone",
     ),
     f(
@@ -81,6 +81,14 @@ pub const FLAGS: &[Flag] = &[
         "pins.txt",
         "Pins file for --syncmode snap (`<number> <0x hash>` per line): the pivot's epoch-switch header (or the pivot) must be in it. Unset: two peers must serve the same switch header. Recommended beyond test networks.",
         "not in geth-XDC at the pin; XB-17",
+    ),
+    f(
+        "snap.gap-rpc",
+        P,
+        "unset",
+        "http://127.0.0.1:8545",
+        "For --syncmode snap from geth-XDC peers: any archive RPC that serves eth_getProof. The 0x88 state of the gap blocks below the pivot is read from it (geth serves snap/1 only for recent state); every account and slot proof is verified against the header's state root, so the RPC is not trusted. Unset and no xOne peer: the start fails with a typed error naming both.",
+        "xone; spec/snap/pivot.md",
     ),
     f(
         "gcmode",

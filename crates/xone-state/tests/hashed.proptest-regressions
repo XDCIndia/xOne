@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc ab31fda3eb764ebea7ae1ae126727d125eb8caa81ca4c07fbbe7acbb4707906e # shrinks to diffs = [StateDiff { accounts: {}, storage: {(0x0000000000000000000000000000000000000000, 0x0101010101010101010101010101010101010101010101010101010101010101): 1} }, StateDiff { accounts: {0x0000000000000000000000000000000000000000: Some(Account { nonce: 1, balance: WideBalance(0), storage_root: 0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421, code_hash: 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470 })}, storage: {} }]

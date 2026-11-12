@@ -17,7 +17,7 @@ use xone_evm::{
     special::{apply_empty_tx, apply_sign_tx, tip_signing_wipe, Receipt},
 };
 use xone_primitives::{Header, WideBalance};
-use xone_state::{trie, Account, FlatRead, FlatWrite, MemFlat, StateDiff};
+use xone_state::{trie, Account, FlatWrite, MemFlat, StateDiff};
 
 fn vec_path(p: &str) -> String {
     format!(
@@ -238,7 +238,7 @@ fn check_tip_signing(skip_rule: bool) -> Result<(), String> {
         v["transactions"], 0,
         "the block carries no transaction: the whole change is the rule"
     );
-    let mut flat = MemFlat::default();
+    let mut flat = MemFlat::recording();
     // Accounts whose address the archive does not know (`incompletes`): only their hashed key.
     let mut anonymous: Vec<(B256, Vec<u8>)> = vec![];
     for x in v["accounts"].as_array().unwrap() {

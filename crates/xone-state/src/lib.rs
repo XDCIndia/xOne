@@ -16,6 +16,6 @@ pub mod system_contracts;
 pub mod trie;
 
 pub use account::{Account, SlimError};
-pub use changeset::{ChangeSet, StateDiff};
+pub use changeset::{ChangeSet, HashedDiff, StateDiff};
 pub use flat::{FlatRead, FlatWrite, MemFlat};
 pub use provider::{CommitError, Missing, StateProvider, StateRead, StateView};

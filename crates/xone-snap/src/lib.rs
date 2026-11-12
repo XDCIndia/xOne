@@ -13,5 +13,6 @@ pub mod codec;
 pub mod mpt;
 pub mod preimage;
 pub mod proof;
+pub mod rpcproof;
 pub mod server;
 pub mod testkit;

@@ -92,6 +92,10 @@ pub struct SyncCfg {
     /// form) that pins the pivot's epoch-switch header; without it two peers must serve the same
     /// header (`spec/snap/pivot.md`).
     pub snap_pins: Option<PathBuf>,
+    /// `--snap.gap-rpc`: URL of any archive RPC that serves `eth_getProof`. A snap sync from geth-XDC
+    /// peers reads the 0x88 state of the gap blocks below the pivot from it; every proof is verified
+    /// against the header, so the RPC is not trusted (`spec/snap/pivot.md`).
+    pub snap_gap_rpc: Option<String>,
     /// full; archive is refused (`gc_mode`).
     pub gcmode: String,
     pub from_block: Option<u64>,
@@ -234,6 +238,7 @@ defaults!(Config {
 defaults!(SyncCfg {
     mode: "full".into(),
     snap_pins: None,
+    snap_gap_rpc: None,
     gcmode: "full".into(),
     from_block: None,
     minimal: false,
@@ -417,6 +422,7 @@ impl Config {
             "gcmode" => self.sync.gcmode = gc_mode(key, v)?,
             "syncfromblock" => self.sync.from_block = Some(num(key, v)?),
             "snap.pins" => self.sync.snap_pins = Some(v.into()),
+            "snap.gap-rpc" => self.sync.snap_gap_rpc = Some(v.to_owned()),
             "minimal" => self.sync.minimal = flag(key, v)?,
             "cache" => self.sync.cache_mb = num(key, v)?,
             "history.transactions" | "txlookuplimit" => self.sync.tx_history = num(key, v)?,

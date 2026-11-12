@@ -6,7 +6,7 @@
 //! No I/O and no clock: `now_ms` is an argument. A node that has no snapshot has no [`Snapshot`],
 //! so it has no [`Server`] and must not advertise snap/1 (there is no stub that answers empty).
 
-use alloy_primitives::{keccak256, Address, Bytes, B256, B512, KECCAK256_EMPTY, U256};
+use alloy_primitives::{Bytes, B256, B512, KECCAK256_EMPTY, U256};
 use alloy_trie::{HashBuilder, Nibbles, EMPTY_ROOT_HASH};
 use std::collections::{BTreeMap, HashMap};
 use xone_state::{flat::FlatRead, provider::StateProvider, Account, FlatWrite};
@@ -90,39 +90,32 @@ impl Snapshot {
         }
     }
 
-    /// From plain rows (`xone_sync::store::StateRows`): keys are hashed here and their preimages
-    /// kept for xpre/1.
+    /// From hashed rows (`xone_sync::store::StateRows`), the way the store keeps them.
     pub fn from_rows(
-        accounts: &[(Address, Account)],
-        storage: &[(Address, B256, U256)],
+        accounts: &[(B256, Account)],
+        storage: &[(B256, B256, U256)],
         codes: BTreeMap<B256, Bytes>,
     ) -> Self {
-        let mut pre = HashMap::new();
-        let mut accts = BTreeMap::new();
-        for (a, acc) in accounts {
-            let h = keccak256(a);
-            pre.insert(h, Bytes::copy_from_slice(a.as_slice()));
-            accts.insert(h, acc.clone());
-        }
+        let accts = accounts.iter().cloned().collect();
         let mut slots: BTreeMap<B256, BTreeMap<B256, U256>> = BTreeMap::new();
         for (a, k, v) in storage {
-            let h = keccak256(k);
-            pre.entry(h)
-                .or_insert_with(|| Bytes::copy_from_slice(k.as_slice()));
-            slots.entry(keccak256(a)).or_default().insert(h, *v);
+            slots.entry(*a).or_default().insert(*k, *v);
         }
-        let mut s = Self::from_hashed(accts, &slots, codes);
-        s.preimages = pre;
-        s
+        Self::from_hashed(accts, &slots, codes)
     }
 
-    /// From address-keyed flat tables: addresses and slots are hashed here.
+    /// With the preimages the server answers xpre/1 from (a test; the node answers from its store).
+    pub fn with_preimages(mut self, pre: HashMap<B256, Bytes>) -> Self {
+        self.preimages = pre;
+        self
+    }
+
+    /// From flat tables.
     pub fn from_flat(flat: &impl FlatRead, codes: BTreeMap<B256, Bytes>) -> Self {
         let mut accounts = BTreeMap::new();
         let mut storage: BTreeMap<B256, BTreeMap<B256, U256>> = BTreeMap::new();
-        for (a, acc) in flat.accounts() {
-            let h = keccak256(a);
-            storage.insert(h, flat.slots(a).map(|(s, v)| (keccak256(s), v)).collect());
+        for (h, acc) in flat.hashed_accounts() {
+            storage.insert(h, flat.hashed_slots(h).collect());
             accounts.insert(h, acc);
         }
         Self::from_hashed(accounts, &storage, codes)
