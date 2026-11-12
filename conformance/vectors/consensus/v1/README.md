@@ -10,6 +10,7 @@ Apothem (chain 51) V1 data from a geth-XDC archive and from the pinned geth-XDC.
 | `snapvotes.jsonl` | 24 | synthetic chains of 99 headers with votes, epoch 50 (so the votes reset at block 50); the pinned geth's snapshot at 8 heights each (192 snapshots, 64 of them at or after block 50 with votes in flight) | `oracle/v1 snapvotes` |
 | `gosort.jsonl` | 1,206 | inputs with many equal keys and the order the pinned geth's frozen sort leaves them in | `oracle/v1 gosort` |
 | `negative.jsonl` | 66 | pairs (`accept`, `reject`) for 12 rules, made from the lines above | `xone-negative-gen-v1` |
+| `mainnet_penalised.jsonl` | 10 | mainnet (chain 50) checkpoints with `Penalties` and the four before each (469,800 .. 475,200, 762,300, 3,880,800, 3,881,700): header RLP re-hashed against the RPC, penalties of the earlier checkpoints. Read by `v1_mainnet_penalised.rs`; not an Apothem vector | `gen_mainnet_penalised.py` (public RPC, `pycryptodome`) |
 
 ## Archive and pin
 

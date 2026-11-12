@@ -139,6 +139,27 @@ pub fn checkpoint_penalties(
     Ok(out)
 }
 
+/// The list a V1 checkpoint must carry: the snapshot's `signers` minus [`checkpoint_penalties`]
+/// (geth `checkSignersOnCheckpoint`, `consensus/XDPoS/xdpos.go:1014-1062`; canonical
+/// `engine_v1/engine.go:300-345`). A penalised masternode stays in the snapshot but leaves the
+/// header: mainnet checkpoint 469,800 lists 17 of the 18 signers and carries the 18th in `Penalties`.
+/// Unlike [`checkpoint_masternodes`] an empty result is not an error here: it is compared with
+/// the header, as geth's `compareSignersLists` does.
+pub fn checkpoint_signers(
+    signers: &[Address],
+    number: u64,
+    epoch: u64,
+    current: &[Address],
+    previous: &BTreeMap<u64, Vec<Address>>,
+) -> Result<Vec<Address>, HeaderError> {
+    let removed = checkpoint_penalties(number, epoch, current, previous)?;
+    Ok(signers
+        .iter()
+        .filter(|s| !removed.contains(s))
+        .copied()
+        .collect())
+}
+
 /// A checkpoint header's list against the one derived by [`checkpoint_masternodes`]. A different
 /// set (dropped or extra address) is geth's `errInvalidCheckpointSigners`. The same set in another
 /// order is [`HeaderError::CheckpointOrder`]: geth compares as a multiset (`xdpos.go:1125`), so the

@@ -13,7 +13,7 @@ An accepting node checks a V1 header (number at or below the V2 switch block) in
 7. Between vanity and seal there is a signer list only on a checkpoint block (`ExtraSigners`), unless the block is at or above the switch block; on a checkpoint its length is a multiple of 20 (`InvalidCheckpointSigners`).
 8. The mix digest is zero (`InvalidMixDigest`); the uncle hash is the hash of the empty list (`InvalidUncleHash`).
 9. Parent: the supplied parent has number `n - 1` and the header's parent hash (`UnknownAncestor`). `parent.time + period <= time` (`InvalidTimestamp`).
-10. Checkpoint signer list (not on chain 51): the addresses in `extraData` equal, as a multiset, the signers the caller expects for this checkpoint (`InvalidCheckpointSigners`).
+10. Checkpoint signer list (not on chain 51): the addresses in `extraData` equal, as a multiset, the signers the caller expects for this checkpoint (`InvalidCheckpointSigners`). The caller's set is the snapshot's signers minus the penalties of this header and of the four checkpoints before it (`v1::checkpoint::checkpoint_signers`): a penalised masternode is in the snapshot and not in the list (mainnet 469,800).
 11. Seal: the signer is recovered from the last 65 bytes of `extraData` over the seal hash.
     - Difficulty: `len(masternodes at parent) - Hop(len, index of the parent's creator, index of the signer)`, compared with the header unless that value is 0, which is where geth's `YourTurn` fails and the comparison is skipped (`InvalidDifficulty`).
     - The signer is in the snapshot signers at the parent or in the masternodes of the block (`Unauthorized`).
