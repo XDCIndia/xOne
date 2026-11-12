@@ -41,7 +41,7 @@ use xone_builder::{
 };
 use xone_chainspec::ChainSpec;
 use xone_consensus::{
-    unit::SafetyUnit,
+    unit::{SafetyUnit, Sealer},
     v1::{
         checkpoint::addresses,
         penalty::{penalties_v1, penalty_era, scan_blocks, PenaltyEra},
@@ -52,6 +52,7 @@ use xone_consensus::{
         bft::{drive::drive, Bft, Chain, Config as BftConfig, EpochFacts, Event, HeaderFacts},
         cert::Secp,
         epoch_switch, gap_snapshot,
+        safety::Kind,
     },
     verify::{Body, Context},
 };
@@ -684,7 +685,12 @@ impl Worker {
         };
         let (parent, ctx, switch) = match found {
             Ok(f) => f,
-            Err(why) => return self.stuck(round, &why),
+            Err(why) => {
+                if self.sibling(round, &qc) {
+                    return;
+                }
+                return self.stuck(round, &why);
+            }
         };
         if let Err(why) = self.synced() {
             return self.stuck(round, why);
@@ -741,6 +747,56 @@ impl Worker {
             return Err("not synced: a peer announced a block above our head");
         }
         Ok(())
+    }
+
+    /// The leader's sibling (geth `FindParentBlockToAssign`, `engine_v2/engine.go:3294-3319`): when the head
+    /// has no QC and the highest QC is for its parent, a leader builds on the QC block, beside the head. geth
+    /// keeps its head and inserts the new block on the side (`keepsV2Head`, `core/blockchain.go:2419-2442`); this
+    /// node executes on its head only, so it takes the uncertified head off (`Core::unwind_to`, never below the
+    /// committed block) and builds on the QC block on the next tick; the dropped block comes back by the branch
+    /// rule if the network extends it. Only when this node leads `round`, is synced, has not proposed the round,
+    /// and the mine period after the QC block has passed. True when it unwound.
+    fn sibling(&mut self, round: u64, qc: &xone_primitives::BlockInfo) -> bool {
+        if self.synced().is_err() || self.unit.signed_up_to(Kind::Propose) >= round {
+            return false;
+        }
+        let (leads, depth_one, qc_time) = {
+            let h = self.core.hist.read();
+            let tip = h.tip();
+            let Some(p) = h.by_hash(qc.hash) else {
+                return false;
+            };
+            let leads = HistChain(&h).epoch_of_round(round).is_ok_and(|e| {
+                let n = e.masternodes.len() as u64;
+                n > 0
+                    && usize::try_from(round % self.spec.xdpos.epoch % n)
+                        .ok()
+                        .and_then(|i| e.masternodes.get(i))
+                        == Some(&self.me)
+            });
+            (leads, tip.header.parent_hash == p.hash, p.header.timestamp)
+        };
+        if !leads
+            || !depth_one
+            || !timing::v2_period_elapsed(qc_time, self.mine_period.max(1), now())
+        {
+            return false;
+        }
+        match self.core.unwind_to(qc.number) {
+            Ok(dropped) => {
+                say(format!(
+                    "round {round}: the head has no QC; {} block(s) taken off to build on the QC block {} (the leader's sibling)",
+                    dropped.len(),
+                    qc.number
+                ));
+                self.last_head = B256::ZERO;
+                true
+            }
+            Err(e) => {
+                say(format!("round {round}: no sibling: {e}"));
+                false
+            }
+        }
     }
 
     /// Why this tick did not reach the turn check, said once per round when the round is older than a mine

@@ -217,7 +217,10 @@ impl Follower {
             Ok(at) => at,
             // the peer has not imported our newest block yet (it just left us, or another peer gave it to
             // us first): propagation lag, not an offence; geth does not drop a peer for a head it lacks
-            Err("no branch: every header is ours") => return,
+            // a sibling of our head at its height is not a longer branch (geth keeps its head for it too)
+            Err("no branch: every header is ours" | "the branch does not end above our head") => {
+                return
+            }
             Err(why) => return self.ban(peer, why),
         };
         let branch = headers[at..].to_vec();

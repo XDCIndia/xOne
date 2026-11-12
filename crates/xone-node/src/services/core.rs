@@ -709,20 +709,7 @@ impl Core {
                 "the branch does not start on our block {fork}"
             )));
         }
-        if let Some(c) = self.chain.committed().filter(|c| fork < c.number) {
-            return Err(bad(format!(
-                "the branch starts below the committed block {}",
-                c.number
-            )));
-        }
-        // nothing is unwound unless the history can follow the store back to the fork
-        self.hist.read().can_pop_to(fork).map_err(bad)?;
-        self.chain
-            .set_head(fork)
-            .map_err(|e| bad(format!("set head {fork}: {e}")))?;
-        let dropped = self.hist.write().pop_to(fork).map_err(bad)?;
-        *self.hist.pending() = None;
-        self.head.send_replace((fork, first.parent_hash));
+        let dropped = self.unwind_to(fork)?;
         let mut added = 0;
         for (h, b) in blocks {
             match self.import(h, b, now) {
@@ -744,6 +731,28 @@ impl Core {
             }
         }
         Ok((dropped.len(), added))
+    }
+
+    /// Takes the blocks above `number` off the store (`Chain::set_head`) and the history, never below the
+    /// committed block, and only when the history can follow (`HistInner::can_pop_to`). Returns them.
+    pub fn unwind_to(&self, number: u64) -> Result<Vec<Stored>, CoreError> {
+        let bad = |m: String| CoreError::Inconsistent(m);
+        if let Some(c) = self.chain.committed().filter(|c| number < c.number) {
+            return Err(bad(format!(
+                "block {number} is below the committed block {}",
+                c.number
+            )));
+        }
+        // nothing is unwound unless the history can follow the store back
+        self.hist.read().can_pop_to(number).map_err(bad)?;
+        self.chain
+            .set_head(number)
+            .map_err(|e| bad(format!("set head {number}: {e}")))?;
+        let dropped = self.hist.write().pop_to(number).map_err(bad)?;
+        *self.hist.pending() = None;
+        let hash = self.hist.read().tip().hash;
+        self.head.send_replace((number, hash));
+        Ok(dropped)
     }
 
     /// Writes a state checkpoint of the head. A snapshot with votes in flight is not saved: the
