@@ -225,6 +225,8 @@ struct Worker {
     /// The round the machine is in and when it entered it; the last round `stuck` spoke of.
     round_start: (u64, Instant),
     stuck_said: u64,
+    /// The last round a stale-round sibling was refused for (said once per round).
+    stale_said: u64,
     last_skip: Option<std::mem::Discriminant<schedule::Skip>>,
     /// The last round a timeout was said for (geth resends one every timeout period).
     timeout_said: u64,
@@ -241,6 +243,25 @@ struct Worker {
 
 fn say(m: impl std::fmt::Display) {
     eprintln!("producer: {m}");
+}
+
+/// A head of round `round` or above proves a QC or TC of that round or above: a quorum has left `round` and
+/// votes only in its own (`engine_v2/vote.go:414-421`), so a sibling of `round` can never be certified and geth
+/// keeps its head (`core/blockchain.go:2413-2424`).
+pub fn behind_head(tip: &Header, round: u64) -> bool {
+    tip.extra_fields_v2().is_ok_and(|f| f.round >= round)
+}
+
+/// After a sibling's unwind: the pool reads the new head, then the transactions of every block taken off, oldest
+/// block first, go back (geth `core/txpool/legacypool/legacypool.go` `reset`, the `reinject` set). The pool's own
+/// rules drop what the new state refuses (a nonce the chain holds again). Returns how many it took.
+pub fn reinject(pool: &PoolShared, dropped: &[Stored]) -> usize {
+    pool.reset();
+    let raws: Vec<&[u8]> = dropped
+        .iter()
+        .flat_map(|s| s.body.transactions.iter().map(|t| &t[..]))
+        .collect();
+    pool.add_raws(&raws).iter().filter(|r| r.is_ok()).count()
 }
 
 /// Writes `bytes` to `path` and syncs it, through a temporary file and a rename.
@@ -766,12 +787,14 @@ impl Worker {
     /// node executes on its head only, so it takes the uncertified head off (`Core::unwind_to`, never below the
     /// committed block) and builds on the QC block on the next tick; the dropped block comes back by the branch
     /// rule if the network extends it. Only when this node leads `round`, is synced, has not proposed the round,
-    /// and the mine period after the QC block has passed. True when it unwound.
+    /// and the mine period after the QC block has passed, and only when the head's round is below `round`
+    /// ([`behind_head`]). The dropped blocks' transactions go back to the pool ([`reinject`]). True when it
+    /// unwound.
     fn sibling(&mut self, round: u64, qc: &xone_primitives::BlockInfo) -> bool {
         if self.synced().is_err() || self.unit.signed_up_to(Kind::Propose) >= round {
             return false;
         }
-        let (leads, depth_one, qc_time) = {
+        let (leads, depth_one, qc_time, stale) = {
             let h = self.core.hist.read();
             let tip = h.tip();
             let Some(p) = h.by_hash(qc.hash) else {
@@ -785,7 +808,12 @@ impl Worker {
                         .and_then(|i| e.masternodes.get(i))
                         == Some(&self.me)
             });
-            (leads, tip.header.parent_hash == p.hash, p.header.timestamp)
+            (
+                leads,
+                tip.header.parent_hash == p.hash,
+                p.header.timestamp,
+                behind_head(&tip.header, round),
+            )
         };
         if !leads
             || !depth_one
@@ -793,10 +821,20 @@ impl Worker {
         {
             return false;
         }
+        if stale {
+            if self.stale_said != round {
+                self.stale_said = round;
+                say(format!(
+                    "round {round}: no sibling: the head's round is not below ours, a quorum has left this round"
+                ));
+            }
+            return false;
+        }
         match self.core.unwind_to(qc.number) {
             Ok(dropped) => {
+                let back = reinject(&self.pool, &dropped);
                 say(format!(
-                    "round {round}: the head has no QC; {} block(s) taken off to build on the QC block {} (the leader's sibling)",
+                    "round {round}: the head has no QC; {} block(s) taken off to build on the QC block {} (the leader's sibling); {back} transaction(s) back in the pool",
                     dropped.len(),
                     qc.number
                 ));
@@ -1304,6 +1342,7 @@ impl ProducerService {
                 dur,
                 round_start: (0, Instant::now()),
                 stuck_said: 0,
+                stale_said: 0,
                 last_skip: None,
                 timeout_said: 0,
                 progress,
