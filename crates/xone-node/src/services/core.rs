@@ -245,6 +245,8 @@ pub struct Core {
     pub hist: std::sync::Arc<History>,
     pub dir: PathBuf,
     pub genesis: B256,
+    /// Reads committed bodies and receipts of old blocks with no store or import lock ([`Core::records`]).
+    reader: super::hist::Src,
     ckpt_every: u64,
     pub head: watch::Sender<(u64, B256)>,
     /// Started from an imported snapshot: prunes below the retention floor, serves nothing below it.
@@ -550,6 +552,7 @@ impl Core {
             spec: spec.clone(),
             hist: hist.clone(),
         };
+        let reader = node_store.reader();
         let chain = Chain::new(spec.clone(), node_store, exec, check);
         let (head, _) = watch::channel((start, hist.read().tip().hash));
         let core = Self {
@@ -558,6 +561,7 @@ impl Core {
             hist,
             dir: dir.to_owned(),
             genesis: g.hash(),
+            reader,
             ckpt_every,
             head,
             minimal,
@@ -818,17 +822,45 @@ impl Core {
     /// Body and receipts of canonical block `n` (`hash`): from the history inside its memory window,
     /// else from the store (`MEMORY_WINDOW`). `None` for a block the node does not hold.
     pub fn records(&self, n: u64, hash: B256) -> Option<(Body, Vec<Bytes>)> {
+        Some((self.body(n, hash)?, self.receipts(n, hash)?))
+    }
+
+    /// The body of canonical block `n` (`hash`), see [`Self::records`].
+    pub fn body(&self, n: u64, hash: B256) -> Option<Body> {
+        self.part(n, hash, |s| s.body.clone(), |r| r.body(n, hash))
+    }
+
+    /// The receipts of canonical block `n` (`hash`), see [`Self::records`].
+    pub fn receipts(&self, n: u64, hash: B256) -> Option<Vec<Bytes>> {
+        self.part(n, hash, |s| s.receipts.clone(), |r| r.receipts(n, hash))
+    }
+
+    /// `mem` of block `n` inside the memory window, else `disk` of the store. Below the window the
+    /// read is the segment file and one MDBX read transaction, with no store lock and no import lock,
+    /// so a slow request for old blocks never waits for an import (XB-36). A block the store does not
+    /// hold (below a minimal node's retention floor) is `None` at once.
+    fn part<T>(
+        &self,
+        n: u64,
+        hash: B256,
+        mem: impl FnOnce(&super::hist::Stored) -> T,
+        disk: impl FnOnce(&super::hist::Src) -> Result<Option<T>, xone_sync::store::StoreError>,
+    ) -> Option<T> {
         {
             let h = self.hist.read();
             match h.at(n) {
                 Some(s) if s.hash != hash => return None,
-                Some(s) if h.in_memory(n) => return Some((s.body.clone(), s.receipts.clone())),
+                Some(s) if h.in_memory(n) => return Some(mem(s)),
                 None if n > h.tip_number() => return None,
                 _ => {}
             }
         }
-        let (header, body, receipts) = self.chain.with_store(|s| s.canonical_block(n)).ok()??;
-        (header.hash() == hash).then_some((body, receipts))
+        disk(&self.reader).ok()?
+    }
+
+    /// The number of canonical block `hash`, for a request that names blocks by hash.
+    pub fn number_of(&self, hash: B256) -> Option<u64> {
+        self.hist.read().number_of(hash)
     }
 
     fn check_start(&self) -> Result<(), CoreError> {
