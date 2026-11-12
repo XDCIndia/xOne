@@ -12,6 +12,26 @@ use std::{
 };
 use xone_state::StateRead;
 
+/// Reorgs deeper than this many blocks are not reinjected (geth `legacypool.go:1747`).
+pub const MAX_REORG_DEPTH: u64 = 64;
+
+/// The block delta of a head change, from the common ancestor (geth `reset`, `legacypool.go:1773-1810`).
+pub struct Branch {
+    /// Blocks between the old head and the new head, `|old - new|` as geth counts it.
+    pub depth: u64,
+    pub discarded: Vec<Arc<super::PoolTx>>,
+    pub included: BTreeSet<B256>,
+}
+
+/// What [`Pool::reset_reorg`] did with the discarded transactions.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Reorged {
+    /// One admission result per discarded transaction that the new branch does not include.
+    Reinjected(Vec<Result<(), Error>>),
+    /// The reorg is deeper than [`MAX_REORG_DEPTH`]: the pool followed the head and nothing was reinjected.
+    TooDeep { depth: u64 },
+}
+
 impl Pool {
     /// geth `Add(txs, sync)` for remote transactions: basic checks, then each transaction under the
     /// pool lock, then one reorg run for the accounts that may have become promotable
@@ -221,8 +241,7 @@ impl Pool {
         0
     }
 
-    /// `reset` plus `runReorg` for a new head, `legacypool.go:1543-1733`, `:1736-1830` (no reorg reinjection: that is
-    /// XB-27, #63). `state` is the state of the new head.
+    /// `reset` plus `runReorg` for a new head, `legacypool.go:1543-1733`, `:1736-1830` (reinjection: [`Pool::reset_reorg`]). `state` is the state of the new head.
     pub fn reset<S: StateRead>(
         &mut self,
         state: &S,
@@ -254,6 +273,35 @@ impl Pool {
         self.flush_events(promoted);
         self.changes_since_reorg = 0;
         Ok(())
+    }
+
+    /// [`Pool::reset`] for a head that is not a child of the old head. `branch.discarded` are the transactions of
+    /// the blocks the old branch lost, `branch.included` the hashes of those of the new branch (geth `reset`,
+    /// `legacypool.go:1736-1816`: `TxDifference(discarded, included)`); those not included come back through
+    /// normal admission on the new head state (`:1868-1871`, `addTxsLocked`), so nonce, balance, fee and
+    /// bounds are checked again and a repeated call refuses them as already known. Deeper than
+    /// [`MAX_REORG_DEPTH`] blocks (`:1747`, `depth > 64`) the pool is reset without reinjection.
+    pub fn reset_reorg<S: StateRead>(
+        &mut self,
+        state: &S,
+        now: u64,
+        number: u64,
+        gas_limit: u64,
+        branch: &Branch,
+    ) -> Result<Reorged, Error> {
+        self.reset(state, now, number, gas_limit)?;
+        if branch.depth > MAX_REORG_DEPTH {
+            return Ok(Reorged::TooDeep {
+                depth: branch.depth,
+            });
+        }
+        let lost: Vec<_> = branch
+            .discarded
+            .iter()
+            .filter(|t| !branch.included.contains(&t.hash))
+            .cloned()
+            .collect();
+        Ok(Reorged::Reinjected(self.add_batch(state, now, &lost)))
     }
 
     /// `demoteUnexecutables`, `legacypool.go:2043-2109` (the full walk).
