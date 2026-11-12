@@ -455,9 +455,48 @@ fn receipts_of(raw: &Raw) -> Result<Vec<Bytes>, alloy_rlp::Error> {
     }
     let mut out = Vec::new();
     while !b.is_empty() {
-        out.push(from_wire(&Raw::decode(&mut b)?));
+        out.push(receipt_of(&Raw::decode(&mut b)?)?);
     }
     Ok(out)
+}
+
+/// One receipt of the wire list as its consensus encoding. Two shapes arrive: xOne serves the
+/// consensus form (a typed receipt inside an RLP string, a legacy one as the list `[status, cumulative
+/// gas, bloom, logs]`), and geth-XDC serves eth/69's, with no bloom: the list `[type, status or
+/// post-state, cumulative gas, logs]` (`eth/protocols/eth/receipt.go:31-36`, answered even on the
+/// XDPOS2 wire, `handlers.go:337-345`). The bloom is derived from the logs, as the body check does.
+fn receipt_of(r: &Raw) -> Result<Bytes, alloy_rlp::Error> {
+    let mut b = &r.0[..];
+    let h = alloy_rlp::Header::decode(&mut b)?;
+    if !h.list {
+        return Ok(from_wire(r));
+    }
+    // the third item is a 256-byte bloom in the consensus form and the gas used in eth/69's
+    let mut probe = b;
+    let (_, _, third) = (
+        alloy_rlp::Header::decode_bytes(&mut probe, false)?,
+        alloy_rlp::Header::decode_bytes(&mut probe, false)?,
+        alloy_rlp::Header::decode_bytes(&mut probe, false)?,
+    );
+    if third.len() == 256 {
+        return Ok(from_wire(r));
+    }
+    let tx_type = u8::decode(&mut b)?;
+    let post_state_or_status = Bytes::decode(&mut b)?;
+    let cumulative_gas_used = u64::decode(&mut b)?;
+    let logs = Vec::<alloy_primitives::Log>::decode(&mut b)?;
+    if !b.is_empty() {
+        return Err(alloy_rlp::Error::UnexpectedLength);
+    }
+    Ok(Bytes::from(
+        Receipt {
+            tx_type,
+            post_state_or_status,
+            cumulative_gas_used,
+            logs,
+        }
+        .encode_consensus(),
+    ))
 }
 
 /// The sign transactions of a block, as the executor records them (`xone_executor`:
@@ -937,6 +976,7 @@ fn witness(d: &mut Drv<'_>, number: u64, hash: B256) -> R<(Vec<(u64, B256)>, Str
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloy_rlp::Encodable;
 
     /// What `chain.rs` serves for `GetReceipts` is what the snap client reads back: a legacy
     /// receipt as its list, a typed one inside an RLP string.
@@ -963,5 +1003,38 @@ mod tests {
             alloy_rlp::decode_exact(alloy_rlp::encode(&wire)).unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(receipts_of(&raw).unwrap_or_else(|e| panic!("{e}")), enc);
         assert!(receipts_of(&Raw(vec![0x80].into())).is_err());
+    }
+
+    /// geth-XDC answers GetReceipts with eth/69's receipt (no bloom); the consensus encoding that
+    /// the receipts root is computed over comes out the same as xOne's own form.
+    #[test]
+    fn an_eth69_receipt_becomes_the_consensus_receipt() {
+        let log = alloy_primitives::Log::new_unchecked(
+            alloy_primitives::Address::repeat_byte(7),
+            vec![B256::repeat_byte(1)],
+            Bytes::from_static(b"d"),
+        );
+        for (tx_type, status) in [(0u8, vec![1u8]), (2, vec![]), (0, vec![0x11; 32])] {
+            let want = Receipt {
+                tx_type,
+                post_state_or_status: Bytes::from(status.clone()),
+                cumulative_gas_used: 63_000,
+                logs: vec![log.clone()],
+            };
+            let mut inner = Vec::new();
+            tx_type.encode(&mut inner);
+            Bytes::from(status).encode(&mut inner);
+            63_000u64.encode(&mut inner);
+            vec![log.clone()].encode(&mut inner);
+            let mut item = Vec::new();
+            alloy_rlp::Header {
+                list: true,
+                payload_length: inner.len(),
+            }
+            .encode(&mut item);
+            item.extend_from_slice(&inner);
+            let got = receipt_of(&Raw(item.into())).unwrap();
+            assert_eq!(got.to_vec(), want.encode_consensus());
+        }
     }
 }
