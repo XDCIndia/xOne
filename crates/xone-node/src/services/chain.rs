@@ -28,7 +28,7 @@ use tokio::{
     runtime::Handle,
     sync::{
         mpsc::{self, Receiver},
-        watch,
+        watch, Semaphore,
     },
     task::JoinHandle,
     time::{interval, timeout, Instant},
@@ -61,6 +61,64 @@ const BAN: Duration = Duration::from_secs(60);
 /// the tip against a peer (`eth/sync_xdc.go:305-311`); here it only moves the next poll to another
 /// peer for two block intervals.
 const NOT_YET: Duration = Duration::from_secs(4);
+
+/// Body and receipts answers read from the store at once: a 128-block batch of 20,000-tx blocks is a
+/// long read, so a few run side by side and the rest wait their turn.
+const SERVING: usize = 4;
+/// geth `maxBodiesServe` and `maxReceiptsServe` (`eth/protocols/eth/handler.go:50,56`).
+const MAX_SERVE: usize = 1024;
+/// geth `softResponseLimit` (`eth/protocols/eth/handler.go:37`): the answer stops once it holds this
+/// many bytes, so one request never fills the 10 MiB message limit of the transport.
+const SOFT_LIMIT: usize = 2 * 1024 * 1024;
+
+/// geth `ServiceGetBlockBodiesQuery` (`eth/protocols/eth/handlers.go:260-277`): the bodies in the order
+/// asked, up to [`MAX_SERVE`] and until [`SOFT_LIMIT`] bytes are held (the block that crosses it is
+/// included), and the answer stops at the first hash that `get` does not hold. A peer that holds none
+/// of the range, such as an anchored node below its retention floor, answers an empty list at once: the
+/// client reads "not here" and asks another peer, as it does geth. Skipping a missing block instead
+/// would shift every later body against its hash.
+fn bodies_answer(hashes: &[B256], mut get: impl FnMut(B256) -> Option<Body>) -> Vec<BlockBody> {
+    let (mut out, mut bytes) = (vec![], 0);
+    for h in hashes.iter().take(MAX_SERVE) {
+        if bytes >= SOFT_LIMIT {
+            break;
+        }
+        let Some(b) = get(*h) else {
+            break;
+        };
+        let wire = BlockBody {
+            transactions: b.transactions.iter().map(to_wire).collect(),
+            uncles: b.uncles,
+            withdrawals: b
+                .withdrawals
+                .map(|w| w.into_iter().map(xone_net::eth::Raw).collect()),
+        };
+        bytes += alloy_rlp::Encodable::length(&wire);
+        out.push(wire);
+    }
+    out
+}
+
+/// geth `ServiceGetReceiptsQueryXDPOS2` (`eth/protocols/eth/handlers.go:350-373`), the same rules as
+/// [`bodies_answer`] for the receipts of each block.
+fn receipts_answer(
+    hashes: &[B256],
+    mut get: impl FnMut(B256) -> Option<Vec<alloy_primitives::Bytes>>,
+) -> Vec<Raw> {
+    let (mut out, mut bytes) = (vec![], 0);
+    for h in hashes.iter().take(MAX_SERVE) {
+        if bytes >= SOFT_LIMIT {
+            break;
+        }
+        let Some(r) = get(*h) else {
+            break;
+        };
+        let wire = receipts_wire(&r);
+        bytes += wire.0.len();
+        out.push(wire);
+    }
+    out
+}
 
 /// What the RPC and the logs read of the follower.
 #[derive(Default)]
@@ -122,6 +180,87 @@ struct Inflight {
     id: u64,
     stage: Stage,
     deadline: Instant,
+}
+
+/// Serves the data requests of peers (headers, bodies, receipts), apart from the follower: an import that
+/// the follower awaits (seconds, for a block of 20,000 transactions) never delays an answer, and an
+/// answer never delays an import.
+struct Server {
+    core: Arc<Core>,
+    peers: Peers,
+    /// Body and receipts answers in work at once ([`SERVING`]).
+    serving: Arc<Semaphore>,
+}
+
+impl Server {
+    /// Answers a header, body or receipts request of a peer. Headers come from the history at once.
+    /// Bodies and receipts of old blocks are read from the segment files, which for 20,000-tx blocks is
+    /// long: that read runs on a blocking thread of its own, and nothing of the follower is awaited, so
+    /// a request waits neither for an import in progress nor for the import lock ([`Core::records`],
+    /// XB-36).
+    fn serve(&self, peer: &PeerId, msg: &Message) {
+        let reply = match msg {
+            Message::GetBlockHeaders { id, query } => {
+                let h = self.core.hist.read();
+                let amount = query.amount.min(192);
+                let start = match query.origin {
+                    Origin::Number(n) => Some(n),
+                    Origin::Hash(x) => h.number_of(x),
+                };
+                let mut out = vec![];
+                let mut at = start;
+                while let (Some(n), true) = (at, u64::try_from(out.len()).is_ok_and(|l| l < amount))
+                {
+                    let Some(s) = h.header_at(n) else {
+                        break;
+                    };
+                    out.push(s.into_owned());
+                    let step = query.skip.saturating_add(1);
+                    at = if query.reverse {
+                        n.checked_sub(step)
+                    } else {
+                        n.checked_add(step)
+                    };
+                }
+                Message::BlockHeaders {
+                    id: *id,
+                    headers: out,
+                }
+            }
+            Message::GetBlockBodies { id, hashes } => {
+                let (id, hashes) = (*id, hashes.clone());
+                return self.serve_blocking(*peer, move |core| Message::BlockBodies {
+                    id,
+                    bodies: bodies_answer(&hashes, |h| core.body(core.number_of(h)?, h)),
+                });
+            }
+            Message::GetReceipts { id, hashes, .. } => {
+                let (id, hashes) = (*id, hashes.clone());
+                return self.serve_blocking(*peer, move |core| Message::Receipts {
+                    id,
+                    last_incomplete: false,
+                    per_block: receipts_answer(&hashes, |h| core.receipts(core.number_of(h)?, h)),
+                });
+            }
+            _ => return,
+        };
+        // a full queue of the peer drops the answer; it asks again
+        let _ = self.peers.send(peer, reply);
+    }
+
+    /// Builds the answer on a blocking thread, at most [`SERVING`] at a time, and sends it.
+    fn serve_blocking(&self, peer: PeerId, make: impl FnOnce(&Core) -> Message + Send + 'static) {
+        let (core, peers, gate) = (self.core.clone(), self.peers.clone(), self.serving.clone());
+        tokio::spawn(async move {
+            let Ok(_slot) = gate.acquire_owned().await else {
+                return;
+            };
+            if let Ok(reply) = tokio::task::spawn_blocking(move || make(&core)).await {
+                // a full queue of the peer drops the answer; it asks again
+                let _ = peers.send(&peer, reply);
+            }
+        });
+    }
 }
 
 struct Follower {
@@ -498,81 +637,6 @@ impl Follower {
         self.kick();
     }
 
-    /// Answers a header or body request of a peer from the history.
-    fn serve(&self, peer: &PeerId, msg: &Message) {
-        let h = self.core.hist.read();
-        let reply = match msg {
-            Message::GetBlockHeaders { id, query } => {
-                let amount = query.amount.min(192);
-                let start = match query.origin {
-                    Origin::Number(n) => Some(n),
-                    Origin::Hash(x) => h.number_of(x),
-                };
-                let mut out = vec![];
-                let mut at = start;
-                while let (Some(n), true) = (at, u64::try_from(out.len()).is_ok_and(|l| l < amount))
-                {
-                    let Some(s) = h.header_at(n) else {
-                        break;
-                    };
-                    out.push(s.into_owned());
-                    let step = query.skip.saturating_add(1);
-                    at = if query.reverse {
-                        n.checked_sub(step)
-                    } else {
-                        n.checked_add(step)
-                    };
-                }
-                Message::BlockHeaders {
-                    id: *id,
-                    headers: out,
-                }
-            }
-            Message::GetBlockBodies { id, hashes } => {
-                let found: Vec<_> = hashes
-                    .iter()
-                    .take(128)
-                    .filter_map(|x| Some((h.number_of(*x)?, *x)))
-                    .collect();
-                drop(h);
-                Message::BlockBodies {
-                    id: *id,
-                    bodies: found
-                        .into_iter()
-                        .filter_map(|(n, x)| self.core.records(n, x))
-                        .map(|(b, _)| BlockBody {
-                            transactions: b.transactions.iter().map(to_wire).collect(),
-                            uncles: b.uncles,
-                            withdrawals: b
-                                .withdrawals
-                                .map(|w| w.into_iter().map(xone_net::eth::Raw).collect()),
-                        })
-                        .collect(),
-                }
-            }
-            Message::GetReceipts { id, hashes, .. } => {
-                let found: Vec<_> = hashes
-                    .iter()
-                    .take(128)
-                    .filter_map(|x| Some((h.number_of(*x)?, *x)))
-                    .collect();
-                drop(h);
-                Message::Receipts {
-                    id: *id,
-                    last_incomplete: false,
-                    per_block: found
-                        .into_iter()
-                        .filter_map(|(n, x)| self.core.records(n, x))
-                        .map(|(_, r)| receipts_wire(&r))
-                        .collect(),
-                }
-            }
-            _ => return,
-        };
-        // a full queue of the peer drops the answer; it asks again
-        let _ = self.peers.send(peer, reply);
-    }
-
     async fn on_event(&mut self, ev: Event) {
         match ev {
             Event::Connected {
@@ -640,11 +704,6 @@ impl Follower {
                     if let Some(tx) = &self.bft {
                         let _ = tx.send((peer, m));
                     }
-                }
-                m @ (Message::GetBlockHeaders { .. }
-                | Message::GetBlockBodies { .. }
-                | Message::GetReceipts { .. }) => {
-                    self.serve(&peer, &m);
                 }
                 Message::Sub { sub, code, body } if Sub::is_request(code) => {
                     // a full queue drops the request; the peer times out and asks again
@@ -729,7 +788,7 @@ impl Service for ChainService {
     }
 
     fn start(&mut self) -> Result<(), ServiceError> {
-        let events = self
+        let mut events = self
             .events
             .take()
             .ok_or_else(|| ServiceError("chain service restarted".into()))?;
@@ -748,7 +807,32 @@ impl Service for ChainService {
             inflight: None,
             bft: self.bft.take(),
         };
-        self.task = Some(self.rt.spawn(f.run(events, self.stop.subscribe())));
+        // Data requests are answered by a task of their own; the follower gets the rest.
+        let server = Server {
+            core: self.core.clone(),
+            peers: self.net.peers.clone(),
+            serving: Arc::new(Semaphore::new(SERVING)),
+        };
+        let (fwd, rest) = mpsc::channel(1024);
+        self.rt.spawn(async move {
+            while let Some(ev) = events.recv().await {
+                match ev {
+                    Event::Message {
+                        peer,
+                        msg:
+                            m @ (Message::GetBlockHeaders { .. }
+                            | Message::GetBlockBodies { .. }
+                            | Message::GetReceipts { .. }),
+                    } => server.serve(&peer, &m),
+                    ev => {
+                        if fwd.send(ev).await.is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+        self.task = Some(self.rt.spawn(f.run(rest, self.stop.subscribe())));
         let (n, h) = self.core.head();
         eprintln!("chain: following from block {n} {h}");
         Ok(())
@@ -789,6 +873,49 @@ mod tests {
             out.push(h);
         }
         out
+    }
+
+    /// `n` hashes and a store that holds the first `held` of them, each with `txs` transactions of 1 KiB.
+    fn range(n: u8, held: u8, txs: usize) -> (Vec<B256>, impl FnMut(B256) -> Option<Body>) {
+        let hashes: Vec<_> = (0..n).map(B256::repeat_byte).collect();
+        let have: Vec<_> = hashes[..usize::from(held)].to_vec();
+        let get = move |h: B256| {
+            have.contains(&h).then(|| Body {
+                transactions: vec![vec![7u8; 1024].into(); txs],
+                ..Body::default()
+            })
+        };
+        (hashes, get)
+    }
+
+    /// geth `ServiceGetBlockBodiesQuery` (`eth/protocols/eth/handlers.go:260-277`): a peer that holds
+    /// none of the range answers an empty list, one that holds the first blocks answers those and stops
+    /// at the first gap, and the answer is cut at the soft limit and at 1024 blocks.
+    #[test]
+    fn a_peer_that_does_not_hold_the_range_answers_an_empty_list() {
+        let (hashes, none) = range(128, 0, 1);
+        assert!(bodies_answer(&hashes, none).is_empty());
+        assert!(receipts_answer(&hashes, |_| None).is_empty());
+        // about 1 MiB of receipts per block: the second crosses 2 MiB and is the last
+        let big = |_| Some(vec![alloy_primitives::Bytes::from(vec![1u8; 1 << 20])]);
+        assert_eq!(receipts_answer(&hashes, big).len(), 2);
+        // holds 3 of 128, then a gap: the 3, never a later one against an earlier hash
+        let (hashes, three) = range(128, 3, 1);
+        assert_eq!(bodies_answer(&hashes, three).len(), 3);
+        // 100 blocks of just over 1 MiB: the second crosses 2 MiB, it is the last (geth: `bytes >= softResponseLimit` is
+        // checked before the next lookup)
+        let (hashes, big) = range(100, 100, 1024);
+        let out = bodies_answer(&hashes, big);
+        assert_eq!(out.len(), 2);
+        // 2000 hashes: at most 1024 are looked up
+        let hashes: Vec<_> = (0..2000u32)
+            .map(|i| B256::left_padding_from(&i.to_be_bytes()))
+            .collect();
+        assert_eq!(
+            bodies_answer(&hashes, |_| Some(Body::default())).len(),
+            MAX_SERVE
+        );
+        assert_eq!(receipts_answer(&hashes, |_| Some(vec![])).len(), MAX_SERVE);
     }
 
     /// The restart case of the gate D rehearsal: we hold 100..=103, the last of them our own block that the

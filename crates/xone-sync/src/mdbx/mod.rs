@@ -1227,6 +1227,45 @@ impl<D: SegDir> StoreReader<D> {
         Ok(Some(h))
     }
 
+    /// The frame of segment `s` of canonical block `n`, which must be `hash`: `Ok(None)` for a block
+    /// that is not in the canonical index, has another hash, or whose rows the store does not hold
+    /// (below the retention floor of a minimal node the index rows are deleted). One MDBX read
+    /// transaction and the segment file, no store lock and no import lock, so a request for old blocks
+    /// never waits for an import (geth-XDC `GetBodyRLP` reads the database with no chain lock,
+    /// `core/blockchain_reader.go:130-146`).
+    fn frame_of(&self, s: Segment, n: u64, hash: B256) -> Result<Option<Vec<u8>>, StoreError> {
+        let db = |e: MdbxError| StoreError::Damaged(e.to_string());
+        let rd = self.env.read().map_err(db)?;
+        if rd.get(T::CanonicalHeaders, &be(n)).map_err(db)?.as_deref() != Some(hash.as_slice()) {
+            return Ok(None);
+        }
+        let Some(start) = rd
+            .get(T::SegIdx, &seg_key(s, n))
+            .map_err(db)?
+            .and_then(|b| le_u64(&b))
+        else {
+            return Ok(None);
+        };
+        self.segs
+            .read(s, n, start)
+            .map(Some)
+            .map_err(|e| StoreError::Damaged(e.to_string()))
+    }
+
+    /// The body of canonical block `hash` (number `n`), see [`Self::frame_of`].
+    pub fn body(&self, n: u64, hash: B256) -> Result<Option<Body>, StoreError> {
+        self.frame_of(Segment::Bodies, n, hash)?
+            .map(|f| dec_body(&f).ok_or_else(|| bad_row("body", n)))
+            .transpose()
+    }
+
+    /// The receipts of canonical block `hash` (number `n`), see [`Self::frame_of`].
+    pub fn receipts(&self, n: u64, hash: B256) -> Result<Option<Vec<Bytes>>, StoreError> {
+        self.frame_of(Segment::Receipts, n, hash)?
+            .map(|f| dec_receipts(&f).ok_or_else(|| bad_row("receipts", n)))
+            .transpose()
+    }
+
     /// Block number and index of transaction `hash` in the canonical chain.
     pub fn tx(&self, hash: B256) -> Result<Option<(u64, u32)>, StoreError> {
         self.get(T::TxLookup, hash.as_slice())?

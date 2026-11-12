@@ -275,6 +275,79 @@ Still open: `eth_syncing` on `8a8fa1a` stays an object. The caught-up proof need
 advertise our head, and GP5 peers' stale announcements rarely do. `6ea75ea` accepts an advertised head
 that we already hold; keep that when the branches meet.
 
+## Serving old bodies and receipts (XB-36)
+
+The xOneTS follower (TB-09) imported net2040 from genesis and set the local Rust follower (build
+`1676b87`) and the fleet node `462cba59` (build `24e39236`) aside for 60 s each: both timed out on
+`GetBlockBodies` for blocks 897 to 1024, the first dense blocks (448,860 transactions in the 128 blocks; the
+issue reports up to 20,000 in one).
+
+### Causes
+
+1. **No bound on the answer.** The arm answered every hash it was given (up to 128) with no byte limit. 128 of
+   these blocks are far more than the 10 MiB message cap of the transport (`spec/net/eth-versions.md` rule 7);
+   geth stops at 2 MiB (`eth/protocols/eth/handler.go:37`, `handlers.go:260-277`). The answer was never
+   delivered.
+2. **The store lock.** An old block was read through `Chain::with_store`, which takes the store's read lock;
+   a commit takes the write lock, and a read waited for it, one lock per block (`chain/mod.rs:147`).
+3. **The follower loop.** The request was answered inside the loop that also awaits every import, so an
+   import of dense blocks (seconds) delayed every header, body and receipts answer behind it. Header requests
+   to a node that was importing took about 5 s.
+4. **Skipping instead of stopping.** A hash the node did not hold was skipped, so the later bodies moved
+   against their hashes. geth stops at the first one it does not hold, which gives the empty list when it holds
+   none (`handlers.go:268-272`; the issue names `eth/handler.go`, the rule is in `eth/protocols/eth/`).
+
+### Change
+
+* `StoreReader::{body, receipts}` (`xone-sync` `mdbx/mod.rs`): one MDBX read transaction and the segment file,
+  CRC-checked, no store lock and no import lock. A block that is not canonical, has another hash, or has lost
+  its index rows (below a minimal node's retention floor) is `None` at once. `Core::{body, receipts, records}`
+  read the memory window of the history and then this reader.
+* `bodies_answer` and `receipts_answer` (`services/chain.rs`): the order asked, at most 1024, stop once 2 MiB
+  are held, stop at the first block not held. Spec: `spec/net/eth-versions.md` rule 10.
+* A `Server` task answers `GetBlockHeaders`, `GetBlockBodies` and `GetReceipts` apart from the follower loop;
+  bodies and receipts are read on blocking threads, four at a time.
+
+### Tests
+
+* `crates/xone-node/tests/follow.rs` `old_bodies_are_served_within_the_deadline_without_the_import_lock`: a
+  fake peer feeds 400 blocks; our node is asked for the bodies and receipts of blocks 1 to 128 (below the
+  memory window) while it imports, then while a writer holds the import lock and the store for 4 s, then for
+  128 hashes it does not hold and for a known-unknown-known list. On `3268a8e` the second answer took 4.02 s
+  (the lock) and the test fails; now it takes 11 ms (bodies) and 9 ms (receipts) with the lock held, 28 ms and
+  21 ms while importing (Apothem vector blocks, small).
+* `services::chain::tests::a_peer_that_does_not_hold_the_range_answers_an_empty_list`: empty list, stop at
+  the first gap, 2 MiB cut, 1024 cap, bodies and receipts.
+
+### Live measurement
+
+Throwaway client: `follow.rs` `live_old_bodies` (`--ignored`), a fresh identity and no datadir. It finds the
+node id from the Pong of a discv4 Ping, dials, asks for the headers 897..1024 and then bodies and receipts of the
+128 blocks, each request naming the hashes still missing. 2026-11-12, host load average 30 to 37 on 20 cores.
+
+Before: the live node (`xone-rs-net2040-h95`, 127.0.0.1:30303, build `1676b87`, not stopped or touched, read
+through p2p only). Headers 62 ms; the first `GetBlockBodies` for the 128 blocks got **no answer in 120 s**
+(run 1) and none in 25 s (run 2).
+
+After: `fix/xb-36-old-bodies` (release build) on a scratch datadir that synced net2040 from the public bootnode
+to block 31,966 and was importing at the time; the client asked it for blocks 897..1024 (all in store, none in
+the memory window):
+
+| client build | what | requests | slowest answer | whole range | deadline |
+| --- | --- | --- | --- | --- | --- |
+| release | bodies, round 1 / 2 | 16 / 16 | 100 ms / 169 ms | 1.00 s / 1.21 s | 10 s |
+| release | receipts, round 1 / 2 | 27 / 27 | 52 ms / 57 ms | 0.87 s / 0.94 s | 10 s |
+| debug | bodies, 3 rounds | 16 each | 2.84, 2.69, 3.11 s | 28.4, 29.3, 28.1 s | 10 s |
+| debug | receipts, 3 rounds | 27 each | 0.44, 0.40, 0.43 s | 8.0, 7.0, 8.0 s | 10 s |
+
+The debug rows are the client's own RLP checks in an unoptimised build (the same node answered in 0.1 s to a
+release client), kept to show that even so no answer reached the deadline. Header requests to the importing
+scratch node took 91 ms, against 4.8 s before the `Server` task.
+
+A 128-hash request is answered with the first blocks up to 2 MiB (here 8 to 16 blocks for bodies), so a client
+asks again for the rest, as it does geth. The live node itself has not been updated: it runs `1676b87` until
+the owner replaces it.
+
 ## What is not covered
 
 * The history still holds every header and the transaction index in memory (about 7 GB at 762,000
