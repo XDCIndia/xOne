@@ -20,6 +20,8 @@ const MAX_FILE: u64 = 64 * 1024;
 /// (geth standard is 256 MiB). geth has no cap.
 const MAX_SCRYPT_BYTES: u64 = 1 << 30;
 const MAX_PBKDF2_C: u64 = 1 << 24;
+/// geth writes 32-byte salts; the field is bounded before any derivation.
+const MAX_SALT: usize = 64;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum KeystoreError {
@@ -31,6 +33,10 @@ pub enum KeystoreError {
     UnsupportedKdf(String),
     #[error("unsupported cipher {0:?}")]
     UnsupportedCipher(String),
+    /// The file, or the KDF cost it asks for, is above this node's policy. Re-encrypt it offline with
+    /// geth's standard or light parameters; the policy is never relaxed for one file.
+    #[error("keystore above the resource policy: {0}")]
+    ResourcePolicy(&'static str),
     #[error("{}: mode {mode:o} is wider than 0600", .path.display())]
     Permissions { path: PathBuf, mode: u32 },
     #[error("{}: i/o error: {kind}", .path.display())]
@@ -177,7 +183,16 @@ fn hex_field(s: &str, what: &'static str) -> Result<Vec<u8>, KeystoreError> {
     hex::decode(s).map_err(|_| KeystoreError::Malformed(what))
 }
 
+/// A fixed-length byte string compared without an early exit on the first difference.
+fn ct_eq(a: &[u8], b: &[u8]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).fold(0u8, |d, (x, y)| d | (x ^ y)) == 0
+}
+
 fn decrypt_inner(json: &[u8], password: &Password) -> Result<LocalSigner, KeystoreError> {
+    // `load` bounds the file; this is the same bound for callers that hand over bytes.
+    if u64::try_from(json.len()).map_or(true, |n| n > MAX_FILE) {
+        return Err(KeystoreError::ResourcePolicy("file too large"));
+    }
     let ks: KeystoreJson =
         serde_json::from_slice(json).map_err(|_| KeystoreError::Malformed("not keystore json"))?;
     if ks.version != 3 {
@@ -189,6 +204,22 @@ fn decrypt_inner(json: &[u8], password: &Password) -> Result<LocalSigner, Keysto
     }
     let kp = &c.kdfparams;
     let salt = hex_field(kp.salt.as_deref().unwrap_or(""), "kdf salt")?;
+    // every field is shaped before the KDF runs, so a hostile file costs no derivation
+    let ct = hex_field(&c.ciphertext, "ciphertext")?;
+    let iv = hex_field(&c.cipherparams.iv, "iv")?;
+    let mac = hex_field(&c.mac, "mac")?;
+    if salt.is_empty() || salt.len() > MAX_SALT {
+        return Err(KeystoreError::Malformed("kdf salt length"));
+    }
+    if ct.len() != 32 {
+        return Err(KeystoreError::Malformed("key is not 32 bytes"));
+    }
+    if iv.len() != 16 {
+        return Err(KeystoreError::Malformed("iv length"));
+    }
+    if mac.len() != 32 {
+        return Err(KeystoreError::Malformed("mac length"));
+    }
     let dklen = kp.dklen.ok_or(KeystoreError::Malformed("dklen missing"))?;
     if !(32..=128).contains(&dklen) {
         return Err(KeystoreError::Malformed("dklen out of range"));
@@ -200,14 +231,11 @@ fn decrypt_inner(json: &[u8], password: &Password) -> Result<LocalSigner, Keysto
         "scrypt" => {
             let (n, r, p) = (need(kp.n)?, need(kp.r)?, need(kp.p)?);
             let bytes = n.checked_mul(r).and_then(|x| x.checked_mul(128));
-            if !n.is_power_of_two()
-                || n < 2
-                || r == 0
-                || p == 0
-                || p > 64
-                || bytes.is_none_or(|b| b > MAX_SCRYPT_BYTES)
-            {
+            if !n.is_power_of_two() || n < 2 || r == 0 || p == 0 {
                 return Err(KeystoreError::Malformed("scrypt parameters out of range"));
+            }
+            if p > 64 || bytes.is_none_or(|b| b > MAX_SCRYPT_BYTES) {
+                return Err(KeystoreError::ResourcePolicy("scrypt cost"));
             }
             let conv = |v: u64| {
                 u32::try_from(v).map_err(|_| KeystoreError::Malformed("scrypt parameters"))
@@ -229,8 +257,11 @@ fn decrypt_inner(json: &[u8], password: &Password) -> Result<LocalSigner, Keysto
                 ));
             }
             let iters = need(kp.c)?;
-            if iters == 0 || iters > MAX_PBKDF2_C {
+            if iters == 0 {
                 return Err(KeystoreError::Malformed("pbkdf2 c out of range"));
+            }
+            if iters > MAX_PBKDF2_C {
+                return Err(KeystoreError::ResourcePolicy("pbkdf2 c"));
             }
             let iters = u32::try_from(iters).map_err(|_| KeystoreError::Malformed("pbkdf2 c"))?;
             pbkdf2::pbkdf2_hmac::<Sha256>(password.as_bytes(), &salt, iters, &mut dk);
@@ -241,11 +272,8 @@ fn decrypt_inner(json: &[u8], password: &Password) -> Result<LocalSigner, Keysto
             ))
         }
     }
-    let ct = hex_field(&c.ciphertext, "ciphertext")?;
-    let iv = hex_field(&c.cipherparams.iv, "iv")?;
-    let mac = hex_field(&c.mac, "mac")?;
     // MAC = keccak256(dk[16..32] || ciphertext), checked before any decryption.
-    if keccak256([&dk[16..32], &ct[..]].concat()).as_slice() != mac.as_slice() {
+    if !ct_eq(keccak256([&dk[16..32], &ct[..]].concat()).as_slice(), &mac) {
         return Err(KeystoreError::WrongPassword);
     }
     let mut plain = Zeroizing::new(ct);
