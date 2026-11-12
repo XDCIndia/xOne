@@ -230,6 +230,8 @@ struct Worker {
     /// The chain service's progress, and whether it proved us caught up once since the start.
     progress: Arc<Progress>,
     caught_up: bool,
+    /// The block of `pending.rlp` found at the start, until `finish_pending` decides.
+    pending: Option<(Header, Vec<Bytes>)>,
     /// Peer votes received per round (the last 16 rounds), for the `stuck` line.
     votes_in: BTreeMap<u64, u32>,
 }
@@ -279,27 +281,12 @@ impl Worker {
 
     fn recover(&mut self) {
         // a block that was about to be signed when the process stopped
-        let p = self.dir.join("pending.rlp");
-        if let Ok(raw) = std::fs::read(&p) {
+        // is kept until the node is synced (`finish_pending`)
+        if let Ok(raw) = std::fs::read(self.dir.join("pending.rlp")) {
             let mut b: &[u8] = &raw;
             if let (Ok(h), Ok(txs)) = (Header::decode(&mut b), Vec::<Bytes>::decode(&mut b)) {
-                let (n, head) = self.core.head();
-                if h.parent_hash == head && h.number == n + 1 {
-                    say(format!(
-                        "finishing the block {} that was being signed",
-                        h.number
-                    ));
-                    let body = Body {
-                        transactions: txs,
-                        uncles: vec![],
-                        withdrawals: h.withdrawals_hash.map(|_| vec![]),
-                    };
-                    if let Err(e) = self.seal_and_send(h, body, false) {
-                        say(format!("the pending block is dropped: {e}"));
-                    }
-                }
+                self.pending = Some((h, txs));
             }
-            let _ = std::fs::remove_file(&p);
         }
         // the highest QC and TC the machine asked to keep
         if let Ok(raw) = std::fs::read(self.dir.join("syncinfo.rlp")) {
@@ -323,8 +310,44 @@ impl Worker {
         say("stopped");
     }
 
+    /// The block that was being signed when the process stopped, once the node is synced: sent if its parent
+    /// is still the head (the same bytes, signed again: the unit returns the same signature for the same
+    /// intent), dropped if the chain went on without it. Sent at once, before the peers were back, it landed
+    /// beside a chain the network had already extended (gate D rehearsal, kill -9 in the seal window after an
+    /// 80 s restart).
+    fn finish_pending(&mut self) {
+        if self.pending.is_none() || self.synced().is_err() {
+            return;
+        }
+        let Some((h, txs)) = self.pending.take() else {
+            return;
+        };
+        let (n, head) = self.core.head();
+        if h.parent_hash == head && h.number == n + 1 {
+            say(format!(
+                "finishing the block {} that was being signed",
+                h.number
+            ));
+            let body = Body {
+                transactions: txs,
+                uncles: vec![],
+                withdrawals: h.withdrawals_hash.map(|_| vec![]),
+            };
+            if let Err(e) = self.seal_and_send(h, body, false) {
+                say(format!("the pending block is dropped: {e}"));
+            }
+        } else {
+            say(format!(
+                "the pending block {} is dropped: the chain is at {n} without it",
+                h.number
+            ));
+        }
+        let _ = std::fs::remove_file(self.dir.join("pending.rlp"));
+    }
+
     fn tick(&mut self) {
         self.inbound();
+        self.finish_pending();
         let (n, head) = self.core.head();
         if head != self.last_head {
             self.last_head = head;
@@ -347,27 +370,35 @@ impl Worker {
             let t = h.tip();
             (t.miner, t.header.clone())
         };
-        self.sign_tx_for(number, hash);
         if number > self.switch_block() && self.fed.insert(hash) && miner != self.me {
             self.bft_event(Event::Proposal(hash));
         }
+        // the pool admits the special transactions of the head's candidates, not only ours
+        let set = self.candidates(&self.core.hist.read());
+        self.pool.set_authority(Authority::candidates(set));
+        self.sign_tx_for(number, hash);
         let _ = header;
     }
 
     // ---- sign transactions ----
 
-    fn is_candidate(&self, h: &HistInner) -> bool {
+    /// The candidates of the head's epoch: who may send a special transaction (to 0x89 or 0x90) at gas price 0.
+    /// geth's pool admits one from a signer of the head (`hasKnownSpecialCalldata`, `legacypool.go:924-939`,
+    /// with the signer set the backend keeps for the head, `eth/backend.go:474-485`): V2 the epoch's masternodes and
+    /// its candidate pool (standby and penalised included), V1 the masternodes of the snapshot. Before, the pool
+    /// admitted only this node's own, so a geth validator's sign transaction never entered an xone block.
+    fn candidates(&self, h: &HistInner) -> Vec<Address> {
         let n = h.tip_number();
         if n >= self.switch_block() {
-            h.switch_of(n).is_some_and(|w| {
-                h.switch_masternodes(w).contains(&self.me)
-                    || h.pool(w.number)
-                        .is_ok_and(|p| p.candidates.contains(&self.me))
+            h.switch_of(n).map_or(vec![], |w| {
+                let mut v = h.switch_masternodes(w);
+                if let Ok(p) = h.pool(w.number) {
+                    v.extend(p.candidates);
+                }
+                v
             })
         } else {
-            h.snaps
-                .get(&n)
-                .is_some_and(|s| s.get_signers().contains(&self.me))
+            h.snaps.get(&n).map_or(vec![], |s| s.get_signers())
         }
     }
 
@@ -377,7 +408,7 @@ impl Worker {
         if !self.signed_for.insert(hash) || self.stopped() {
             return;
         }
-        let candidate = self.is_candidate(&self.core.hist.read());
+        let candidate = self.candidates(&self.core.hist.read()).contains(&self.me);
         let state_nonce = {
             let (_, head) = self.core.head();
             let mut out = None;
@@ -399,7 +430,15 @@ impl Worker {
             &mut self.unit,
         ) {
             Ok(Some(raw)) => match self.pool.add_raws(&[&raw]).remove(0) {
-                Ok(h) => say(format!("sign transaction {h} for block {number}")),
+                Ok(h) => {
+                    // and to the peers, as geth's pool announces a local transaction (`eth/handler.go`
+                    // `txBroadcastLoop`): before, it reached another validator's block only through ours
+                    let msg = Message::Transactions(vec![to_wire(&raw)]);
+                    for p in self.peers.peer_ids() {
+                        let _ = self.peers.send(&p, msg.clone());
+                    }
+                    say(format!("sign transaction {h} for block {number}"))
+                }
                 Err(e) => say(format!(
                     "sign transaction for block {number} not added: {e}"
                 )),
@@ -1146,6 +1185,7 @@ impl ProducerService {
                 timeout_said: 0,
                 progress,
                 caught_up: false,
+                pending: None,
                 votes_in: BTreeMap::new(),
             }),
             stop,
