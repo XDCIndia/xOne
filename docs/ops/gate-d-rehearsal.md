@@ -158,6 +158,15 @@ blocks). After xone's restarts g1 did not redial it, so g1 received xone's block
   follower adopted the same branch (`adopted the branch of peer 5d340cd3: 1 block(s) of ours dropped, 2 imported`).
   xone was the leader of round 803 and did not build the sibling (it built on the head only); fix 11 (`d60fe5e`)
   makes it do so.
+- Two rules of that path, found by the xOneTS Gate D fault case A1 (TB-12, issue #128) and mirrored in
+  `producer.rs` (`behind_head`, `reinject`; tests `crates/xone-node/tests/sibling.rs`):
+  1. **No sibling when the head's round is at or above ours.** The head's round proves a QC or TC of a round at or
+     above ours; a quorum has left our round and votes only in its own (`engine_v2/vote.go:414-421`), so our sibling
+     can never be certified. geth keeps its head (`core/blockchain.go:2413-2424`). Said once per round.
+  2. **The taken-off block's transactions go back to the pool.** After `Core::unwind_to` the pool resets to the QC
+     block, then every transaction of every dropped block is added again, oldest block first, as geth's pool reset
+     re-injects the reorg diff (`core/txpool/legacypool/legacypool.go` `reset`, the `reinject` set). The pool's own
+     rules drop what the new state refuses. The count is in the sibling log line.
 
 ## Restarts on this devnet cost turns
 
