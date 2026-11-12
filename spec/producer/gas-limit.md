@@ -28,4 +28,4 @@ The base fee in the header is the fixed tier of the block's own number (`xone_ev
 
 ## Not covered
 
-`--miner.gaslimit` is not a flag: the ceiling is 420M.
+`--miner.gaslimit` is not a flag: the ceiling on a chain with the row is geth's default `GasCeil`, 60,000,000 (`miner/miner.go:70`; `gaslimit::GETH_DEFAULT_GAS_CEIL`). It was 420M, which put a V2 block below the row out of the 1/1024 bound of a geth-built parent (`engine_v2/verifyHeader.go:117-123`; gate D rehearsal, block 34).

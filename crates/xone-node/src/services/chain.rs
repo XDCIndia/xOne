@@ -32,7 +32,7 @@ use tokio::{
 };
 use xone_consensus::verify::Body;
 use xone_net::{
-    eth::{BlockBody, GetHeaders, Message, Origin},
+    eth::{BftMessage, BlockBody, GetHeaders, Message, Origin},
     peers::{Event, Peers},
     rlpx::PeerId,
 };
@@ -78,6 +78,39 @@ enum Stage {
     /// Asked from this hash: the answer must start with it.
     Headers(B256),
     Bodies(Vec<Header>),
+    /// Headers from our committed block, asked of a peer that does not know our head.
+    Fork,
+    /// The bodies of a peer's branch that leaves our chain above the committed block.
+    Branch(Vec<Header>),
+}
+
+/// Where the peer's `headers` (consecutive, from a block we hold) leave our chain: the index of the first one
+/// that is not ours. `ours(n)` is our canonical hash at `n`. `Err` when they do not link, do not start on our
+/// chain, or do not end above our head (`head`): only a longer branch replaces ours (geth `keepsV2Head`,
+/// `core/blockchain.go:2419-2442`).
+fn branch_start(
+    headers: &[Header],
+    ours: impl Fn(u64) -> Option<B256>,
+    head: u64,
+) -> Result<usize, &'static str> {
+    let first = headers.first().ok_or("no headers")?;
+    if ours(first.number) != Some(first.hash()) {
+        return Err("the headers do not start on our chain");
+    }
+    let linked = headers
+        .windows(2)
+        .all(|w| w[1].parent_hash == w[0].hash() && w[1].number == w[0].number + 1);
+    if !linked {
+        return Err("headers do not link");
+    }
+    let at = headers
+        .iter()
+        .position(|h| ours(h.number) != Some(h.hash()))
+        .ok_or("no branch: every header is ours")?;
+    if headers.last().map_or(0, |h| h.number) <= head {
+        return Err("the branch does not end above our head");
+    }
+    Ok(at)
 }
 
 struct Inflight {
@@ -96,7 +129,12 @@ struct Follower {
     banned: HashMap<PeerId, Instant>,
     next_id: u64,
     inflight: Option<Inflight>,
+    /// Votes, timeouts and SyncInfos for the producer's BFT machine (`--mine` only).
+    bft: Option<Bft>,
 }
+
+/// Where the follower hands the BFT messages of its peers: the producer verifies them, then relays them.
+pub type Bft = std::sync::mpsc::Sender<(PeerId, BftMessage)>;
 
 fn to_body(b: BlockBody) -> (Body, usize) {
     let n = b.transactions.len();
@@ -148,12 +186,26 @@ impl Follower {
             return;
         }
         let Some(peer) = self.best() else { return };
-        let (id, wire) = self.rid(&peer);
         let (_, head) = self.core.head();
+        self.ask(peer, Origin::Hash(head), Stage::Headers(head));
+    }
+
+    /// The lowest block a branch switch may start above: the committed block (V2), or `BATCH` below the head
+    /// where nothing is committed (V1 has no finality; geth takes the newer branch there as well).
+    fn fork_floor(&self, head: u64) -> u64 {
+        self.core
+            .chain
+            .committed()
+            .map_or(head.saturating_sub(BATCH), |c| c.number)
+    }
+
+    /// `BATCH + 1` headers from `origin`.
+    fn ask(&mut self, peer: PeerId, origin: Origin, stage: Stage) {
+        let (id, wire) = self.rid(&peer);
         let msg = Message::GetBlockHeaders {
             id: wire,
             query: GetHeaders {
-                origin: Origin::Hash(head),
+                origin,
                 amount: BATCH + 1,
                 skip: 0,
                 reverse: false,
@@ -163,9 +215,80 @@ impl Follower {
             self.inflight = Some(Inflight {
                 peer,
                 id,
-                stage: Stage::Headers(head),
+                stage,
                 deadline: Instant::now() + REQUEST_TIMEOUT,
             });
+        }
+    }
+
+    /// The answer to `Stage::Fork`: the peer's chain from our committed block. A branch that leaves ours above
+    /// it and ends above our head is fetched and adopted (`Core::adopt`).
+    fn on_fork_headers(&mut self, peer: PeerId, headers: Vec<Header>) {
+        self.inflight = None;
+        let (number, _) = self.core.head();
+        let at = {
+            let h = self.core.hist.read();
+            branch_start(&headers, |n| h.hash_at(n), number)
+        };
+        let at = match at {
+            Ok(at) => at,
+            // the peer has not imported our newest block yet (it just left us, or another peer gave it to
+            // us first): propagation lag, not an offence; geth does not drop a peer for a head it lacks
+            // a sibling of our head at its height is not a longer branch (geth keeps its head for it too)
+            Err("no branch: every header is ours" | "the branch does not end above our head") => {
+                return
+            }
+            Err(why) => return self.ban(peer, why),
+        };
+        let branch = headers[at..].to_vec();
+        let (id, wire) = self.rid(&peer);
+        let msg = Message::GetBlockBodies {
+            id: wire,
+            hashes: branch.iter().map(Header::hash).collect(),
+        };
+        if self.peers.send(&peer, msg).is_ok() {
+            self.inflight = Some(Inflight {
+                peer,
+                id,
+                stage: Stage::Branch(branch),
+                deadline: Instant::now() + REQUEST_TIMEOUT,
+            });
+        }
+    }
+
+    /// The bodies of a branch: adopted in one step, or the peer is set aside.
+    async fn on_branch_bodies(
+        &mut self,
+        peer: PeerId,
+        mut headers: Vec<Header>,
+        bodies: Vec<BlockBody>,
+    ) {
+        headers.truncate(bodies.len());
+        let blocks: Vec<_> = headers
+            .into_iter()
+            .zip(bodies)
+            .map(|(h, b)| (h, to_body(b).0))
+            .collect();
+        let core = self.core.clone();
+        let r = tokio::task::spawn_blocking(move || core.adopt(blocks, now()))
+            .await
+            .map_err(|e| e.to_string())
+            .and_then(|r| r.map_err(|e| e.to_string()));
+        match r {
+            Ok((dropped, added)) => {
+                let (n, h) = {
+                    let g = self.core.hist.read();
+                    (g.tip_number(), (g.tip().hash, g.td))
+                };
+                self.peers.set_head(h.0, h.1);
+                self.progress.confirmed.store(false, Ordering::Relaxed);
+                eprintln!(
+                    "chain: adopted the branch of peer {}: {dropped} block(s) of ours dropped, {added} imported, head {n}",
+                    short(&peer)
+                );
+                self.kick();
+            }
+            Err(e) => self.ban(peer, &format!("branch not adopted: {e}")),
         }
     }
 
@@ -215,7 +338,16 @@ impl Follower {
         self.inflight = None;
         let (number, head) = self.core.head();
         match headers.first().map(Header::hash) {
-            None => return self.set_aside(peer, "does not know our head yet", NOT_YET),
+            None => {
+                // not yet there, or our head is a block of ours that the network left (sealed, then the
+                // round timed out and the next leader built on the block below it): ask from the committed
+                // block for its branch; an answer that is all ours is the "not yet" case and costs nothing
+                let floor = self.fork_floor(number);
+                if origin == head && floor < number {
+                    return self.ask(peer, Origin::Number(floor), Stage::Fork);
+                }
+                return self.set_aside(peer, "does not know our head yet", NOT_YET);
+            }
             Some(h) if h != origin => return self.ban(peer, "answered from another block"),
             _ => {}
         }
@@ -226,10 +358,20 @@ impl Follower {
             if !all.is_empty() || origin != head {
                 return;
             }
-            // an empty continuation proves "caught up" only from a peer that advertises our head;
-            // a peer that claims more and serves nothing yet is asked again later
-            if self.known.get(&peer).is_none_or(|p| p.head != head) {
-                self.set_aside(peer, "advertises a head it does not serve yet", NOT_YET);
+            // an empty continuation proves "caught up" only from a peer that advertises our head or a block
+            // we already hold (its last announcement is older than a block another peer gave us first: geth
+            // announces each block once, `eth/handler_eth.go`)
+            let holds = |h: B256| h == head || self.core.hist.read().number_of(h).is_some();
+            if self.known.get(&peer).is_none_or(|p| !holds(p.head)) {
+                // it announced a head we do not have and serves nothing above ours: not imported yet, or
+                // our head is a side block of its chain (a V1 fork of two sealers at one height); its
+                // chain from below tells which
+                let floor = self.fork_floor(number);
+                if floor < number {
+                    self.ask(peer, Origin::Number(floor), Stage::Fork);
+                } else {
+                    self.set_aside(peer, "advertises a head it does not serve yet", NOT_YET);
+                }
                 return;
             }
             self.progress.confirmed.store(true, Ordering::Relaxed);
@@ -262,12 +404,16 @@ impl Follower {
     }
 
     async fn on_bodies(&mut self, peer: PeerId, bodies: Vec<BlockBody>) {
-        let Some(Inflight {
-            stage: Stage::Bodies(headers),
-            ..
-        }) = self.inflight.take()
-        else {
-            return;
+        let headers = match self.inflight.take() {
+            Some(Inflight {
+                stage: Stage::Bodies(h),
+                ..
+            }) => h,
+            Some(Inflight {
+                stage: Stage::Branch(h),
+                ..
+            }) => return self.on_branch_bodies(peer, h, bodies).await,
+            _ => return,
         };
         if bodies.is_empty() {
             self.ban(peer, "no bodies");
@@ -431,9 +577,13 @@ impl Follower {
             }
             Event::Message { peer, msg } => match msg {
                 Message::BlockHeaders { id, headers } if self.matches(&peer, id) => {
-                    if let Some(Stage::Headers(origin)) = self.inflight.as_ref().map(|i| &i.stage) {
-                        let origin = *origin;
-                        self.on_headers(peer, origin, headers).await;
+                    match self.inflight.as_ref().map(|i| &i.stage) {
+                        Some(Stage::Headers(origin)) => {
+                            let origin = *origin;
+                            self.on_headers(peer, origin, headers).await;
+                        }
+                        Some(Stage::Fork) => self.on_fork_headers(peer, headers),
+                        _ => {}
                     }
                 }
                 Message::BlockBodies { id, bodies } if self.matches(&peer, id) => {
@@ -454,6 +604,13 @@ impl Follower {
                     self.kick();
                 }
                 Message::Transactions(raws) => self.pool.add_wire(&raws),
+                // geth `Bfter.Vote`/`Timeout`/`SyncInfo` (`eth/bft/handler.go:187-229`): a validator verifies
+                // and handles every BFT message of its peers. A node without `--mine` has no machine.
+                Message::Bft(m) => {
+                    if let Some(tx) = &self.bft {
+                        let _ = tx.send((peer, m));
+                    }
+                }
                 m @ (Message::GetBlockHeaders { .. } | Message::GetBlockBodies { .. }) => {
                     self.serve(&peer, &m);
                 }
@@ -498,6 +655,7 @@ pub struct ChainService {
     pool: Arc<PoolShared>,
     pub progress: Arc<Progress>,
     events: Option<Receiver<Event>>,
+    bft: Option<Bft>,
     stop: watch::Sender<bool>,
     task: Option<JoinHandle<()>>,
 }
@@ -509,6 +667,7 @@ impl ChainService {
         net: NetHandle,
         pool: Arc<PoolShared>,
         events: Receiver<Event>,
+        bft: Option<Bft>,
     ) -> Self {
         let progress = Arc::new(Progress::default());
         let (n, _) = core.head();
@@ -521,6 +680,7 @@ impl ChainService {
             pool,
             progress,
             events: Some(events),
+            bft,
             stop: watch::channel(false).0,
             task: None,
         }
@@ -546,6 +706,7 @@ impl Service for ChainService {
             banned: HashMap::new(),
             next_id: 0,
             inflight: None,
+            bft: self.bft.take(),
         };
         self.task = Some(self.rt.spawn(f.run(events, self.stop.subscribe())));
         let (n, h) = self.core.head();
@@ -566,5 +727,54 @@ impl Service for ChainService {
             Ok(None) => {}
             Err(e) => eprintln!("chain: no checkpoint written: {e}"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `n` headers from block `from`, each the child of the one before; `salt` makes a different branch.
+    fn chain(from: u64, n: u64, parent: B256, salt: u8) -> Vec<Header> {
+        let mut out: Vec<Header> = Vec::new();
+        let mut p = parent;
+        for i in from..from + n {
+            let h = Header {
+                number: i,
+                parent_hash: p,
+                extra_data: vec![salt].into(),
+                ..Header::default()
+            };
+            p = h.hash();
+            out.push(h);
+        }
+        out
+    }
+
+    /// The restart case of the gate D rehearsal: we hold 100..=103, the last of them our own block that the
+    /// network left; the peer serves 100..=102 then its own 103', 104', 105'. The branch starts at 103' and
+    /// is adopted; a branch that does not end above our head, a gap, or a foreign start are refused.
+    #[test]
+    fn a_longer_branch_is_found_above_our_committed_block() {
+        let base = chain(100, 3, B256::repeat_byte(7), 0);
+        let mut ours = base.clone();
+        ours.extend(chain(103, 1, base[2].hash(), 1));
+        let lookup = |n: u64| ours.iter().find(|h| h.number == n).map(Header::hash);
+        let mut theirs = base.clone();
+        theirs.extend(chain(103, 3, base[2].hash(), 2));
+        assert_eq!(branch_start(&theirs, lookup, 103), Ok(3));
+        // as long as ours: no switch
+        assert!(branch_start(&theirs[..4], lookup, 103).is_err());
+        // a header missing in the middle
+        let mut gap = theirs.clone();
+        gap.remove(4);
+        assert_eq!(branch_start(&gap, lookup, 103), Err("headers do not link"));
+        // not from our chain
+        let foreign = chain(100, 6, B256::repeat_byte(9), 3);
+        assert!(branch_start(&foreign, lookup, 103).is_err());
+        // our own chain extended: the "branch" starts above our head and drops nothing
+        let mut ext = ours.clone();
+        ext.extend(chain(104, 1, ours[3].hash(), 1));
+        assert_eq!(branch_start(&ext, lookup, 103), Ok(4));
     }
 }

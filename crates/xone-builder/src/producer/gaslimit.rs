@@ -15,6 +15,12 @@ use xone_chainspec::{ChainSpec, ForkBlock};
 
 /// geth `params.XDCBlockGasLimit`, `params/protocol_params.go:37`.
 pub const XDC_BLOCK_GAS_LIMIT: u64 = 420_000_000;
+/// geth's default static ceiling of a miner, `miner.DefaultConfig.GasCeil` (`miner/miner.go:70`, the
+/// `--miner.gaslimit` flag): what a geth validator of a chain with the `DynamicGasLimitBlock` row builds with unless
+/// its operator set another. Below the row the child's limit IS the ceiling (`xdcGasLimit`), and the V2 header
+/// check bounds the step to `parent / 1024` (`engine_v2/verifyHeader.go:117-123`), so a producer that used 420M there
+/// on a chain of default geth validators (60M) sealed a block that every node, its own import included, refused.
+pub const GETH_DEFAULT_GAS_CEIL: u64 = 60_000_000;
 /// geth `params.GasLimitBoundDivisor`, `params/protocol_params.go:26`.
 const BOUND_DIVISOR: u64 = 1024;
 /// geth `params.MinGasLimit`, `params/protocol_params.go:27`.
@@ -52,4 +58,23 @@ pub fn gas_limit(spec: &ChainSpec, parent: u64, number: u64, ceil: u64) -> u64 {
 /// The header base fee of block `number`: the fixed tier of that number, none before `Eip1559Block`.
 pub fn base_fee(spec: &ChainSpec, number: u64) -> Option<u64> {
     xone_evm::basefee::base_fee_for_block(spec, number)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A V2 block below the `DynamicGasLimitBlock` row whose parent was built by a default geth validator: the
+    /// child must stay inside the 1/1024 bound of the V2 header check (gate D devnet, block 34).
+    #[test]
+    fn below_the_row_a_default_ceiling_stays_in_bound() {
+        let mut spec = xone_chainspec::Network::Apothem.spec();
+        spec.dynamic_gas_limit = ForkBlock::At(40);
+        let parent = GETH_DEFAULT_GAS_CEIL;
+        let child = gas_limit(&spec, parent, 34, GETH_DEFAULT_GAS_CEIL);
+        assert!(child.abs_diff(parent) < parent / BOUND_DIVISOR, "{child}");
+        // the old ceiling: out of bound, the block is refused
+        let old = gas_limit(&spec, parent, 34, XDC_BLOCK_GAS_LIMIT);
+        assert!(old.abs_diff(parent) >= parent / BOUND_DIVISOR);
+    }
 }

@@ -128,6 +128,14 @@ pub struct HistInner {
     pub td: U256,
 }
 
+/// geth `XDPoS.IsEpochSwitch` (`consensus/XDPoS/xdpos_api.go:228-235`) at or below the V2 switch block, which
+/// the V2 reward walks with (`eth/hooks/engine_v2_hooks.go:688-718`): a multiple of the epoch, **the genesis
+/// block included** (`0 % Epoch == 0`). On a chain whose V2 switch is at its first checkpoint the walk of the
+/// first V2 reward ends there: the window is `1..=switch - 1` and its masternodes are the genesis list.
+fn v1_epoch_switch(number: u64, switch_block: u64, epoch: u64) -> bool {
+    number <= switch_block && number.is_multiple_of(epoch)
+}
+
 impl BlockReader for HistInner {
     fn header(&self, hash: B256, number: u64) -> Option<HeaderView> {
         let (parent_hash, miner) = match self.at(number) {
@@ -143,13 +151,9 @@ impl BlockReader for HistInner {
             hash,
             parent_hash,
             miner,
-            // geth `XDPoS.IsEpochSwitch` (`consensus/XDPoS/xdpos_api.go:228-235`), which the V2 reward
-            // walks with: up to the V2 switch block an epoch switch is a multiple of the epoch.
             epoch_switch: self.switches.iter().any(|w| w.hash == hash)
                 || self.v2_cfg().is_some_and(|v| {
-                    number != 0
-                        && number <= v.switch_block
-                        && number.is_multiple_of(self.spec.xdpos.epoch)
+                    v1_epoch_switch(number, v.switch_block, self.spec.xdpos.epoch)
                 }),
         })
     }
@@ -546,6 +550,50 @@ impl HistInner {
         switch
     }
 
+    /// Takes the blocks above `number` off the tip, with what they added (epoch switches, snapshots, gap
+    /// pools, difficulty), for a branch switch (`Core::adopt`). Returns them, lowest first.
+    ///
+    /// ponytail: refused while any account holds a balance above 2^256: the history keeps those balances
+    /// at the tip only, not their values before each block. Keep an undo per block when a chain with them
+    /// needs a branch switch.
+    pub fn pop_to(&mut self, number: u64) -> Result<Vec<Stored>, String> {
+        self.can_pop_to(number)?;
+        let mut out = Vec::new();
+        while self.tip_number() > number {
+            let Some(s) = self.blocks.pop_back() else {
+                break;
+            };
+            self.td = self.td.saturating_sub(s.header.difficulty);
+            out.push(s);
+        }
+        self.switches.retain(|w| w.number <= number);
+        self.snaps.retain(|n, _| *n <= number);
+        self.gaps.retain(|n, _| *n <= number);
+        out.reverse();
+        Ok(out)
+    }
+
+    /// Whether [`HistInner::pop_to`] can go back to `number` and the history then verify its child: inside the
+    /// window, no balance above 2^256 held, and for a V1 child the V1 snapshot of `number` in memory (a start
+    /// from a state checkpoint holds the checkpoint's snapshot only).
+    pub fn can_pop_to(&self, number: u64) -> Result<(), String> {
+        if number < self.base || number > self.tip_number() {
+            return Err(format!(
+                "block {number} is outside the history ({}..={})",
+                self.base,
+                self.tip_number()
+            ));
+        }
+        if !self.wide.is_empty() {
+            return Err("accounts above 2^256 are held at the tip only".into());
+        }
+        let v1_child = self.v2_cfg().is_none_or(|v| number < v.switch_block);
+        if v1_child && !self.snaps.contains_key(&number) {
+            return Err(format!("no V1 snapshot of block {number} in memory"));
+        }
+        Ok(())
+    }
+
     /// Drops what has left the windows: blocks below `window`, snapshots below [`MEMORY_WINDOW`],
     /// gap pools below `window` (they are in `ConsensusSnapshot`).
     pub fn trim(&mut self) {
@@ -672,5 +720,20 @@ mod tests {
             g.candidates
         );
         assert!(gap_of_row(5, &[0; 21]).is_none());
+    }
+
+    /// The first V2 reward of a chain that switches at its first checkpoint (epoch 30, switch 30) walks down
+    /// to the genesis block; geth counts it as an epoch switch, and a reader that did not left the reward
+    /// with no window (`no second epoch switch below block 60`, the gate D devnet).
+    #[test]
+    fn genesis_is_a_v1_epoch_switch() {
+        assert!(v1_epoch_switch(0, 30, 30));
+        assert!(v1_epoch_switch(30, 30, 30));
+        assert!(!v1_epoch_switch(15, 30, 30));
+        assert!(
+            !v1_epoch_switch(60, 30, 30),
+            "above the switch the V2 rule decides"
+        );
+        assert!(v1_epoch_switch(900, 2700, 900));
     }
 }

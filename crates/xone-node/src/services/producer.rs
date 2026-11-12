@@ -19,10 +19,11 @@
 //! (a stop is honoured between transactions, between phases and while waiting for a slot).
 
 use std::{
-    collections::{BTreeMap, HashSet, VecDeque},
+    collections::{BTreeMap, HashMap, HashSet, VecDeque},
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
+        mpsc::Receiver,
         Arc,
     },
     thread::{self, JoinHandle},
@@ -40,7 +41,7 @@ use xone_builder::{
 };
 use xone_chainspec::ChainSpec;
 use xone_consensus::{
-    unit::SafetyUnit,
+    unit::{SafetyUnit, Sealer},
     v1::{
         checkpoint::addresses,
         penalty::{penalties_v1, penalty_era, scan_blocks, PenaltyEra},
@@ -51,18 +52,23 @@ use xone_consensus::{
         bft::{drive::drive, Bft, Chain, Config as BftConfig, EpochFacts, Event, HeaderFacts},
         cert::Secp,
         epoch_switch, gap_snapshot,
+        safety::Kind,
     },
     verify::{Body, Context},
 };
 use xone_db::Durability;
 use xone_executor::{execute_unsealed, BlockOutcome, ExecError};
 use xone_net::eth::{BftMessage, Block, Message, NewBlock};
-use xone_net::peers::Peers;
+use xone_net::{peers::Peers, rlpx::PeerId};
 use xone_primitives::{Header, SyncInfo};
 use xone_signer::LocalSigner;
-use xone_sync::chain::{insert::Outcome, ChainRead};
+use xone_sync::{
+    chain::{insert::Outcome, ChainRead},
+    store::Store,
+};
 
 use super::{
+    chain::Progress,
     core::{now, Core, Dyn},
     hist::{HistInner, Stored},
     pool::PoolShared,
@@ -74,9 +80,10 @@ use crate::{
     Config,
 };
 
-/// The miner's static gas ceiling, read on a chain that has a `DynamicGasLimitBlock` row (geth `GasCeil`
-/// is an operator flag; here it is the 420M plateau of the XDC networks).
-const GAS_CEIL: u64 = gaslimit::XDC_BLOCK_GAS_LIMIT;
+/// The miner's static gas ceiling, read on a chain that has a `DynamicGasLimitBlock` row: geth's default
+/// `GasCeil` (`miner/miner.go:70`), the value the geth validators of such a chain build with.
+/// ponytail: no `--miner.gaslimit` flag; add it when an operator runs another ceiling.
+const GAS_CEIL: u64 = gaslimit::GETH_DEFAULT_GAS_CEIL;
 const TICK: Duration = Duration::from_millis(50);
 
 /// Why `--mine` is refused.
@@ -209,6 +216,27 @@ struct Worker {
     timer: Option<(u64, Instant)>,
     mine_period: u64,
     dead: bool,
+    /// The votes, timeouts and SyncInfos of the peers (from the chain service), and a small number per peer
+    /// for the machine's `ScorePeer`.
+    bft_in: Receiver<(PeerId, BftMessage)>,
+    tags: HashMap<PeerId, u64>,
+    /// The last store durability that was logged.
+    dur: Durability,
+    /// The round the machine is in and when it entered it; the last round `stuck` spoke of.
+    round_start: (u64, Instant),
+    stuck_said: u64,
+    last_skip: Option<std::mem::Discriminant<schedule::Skip>>,
+    /// The last round a timeout was said for (geth resends one every timeout period).
+    timeout_said: u64,
+    /// The chain service's progress, and whether it proved us caught up once since the start.
+    progress: Arc<Progress>,
+    caught_up: bool,
+    /// The block of `pending.rlp` found at the start, until `finish_pending` decides.
+    pending: Option<(Header, Vec<Bytes>)>,
+    /// How long the last seal took (record write, sync and signature).
+    seal_ms: u128,
+    /// Peer votes received per round (the last 16 rounds), for the `stuck` line.
+    votes_in: BTreeMap<u64, u32>,
 }
 
 fn say(m: impl std::fmt::Display) {
@@ -256,27 +284,12 @@ impl Worker {
 
     fn recover(&mut self) {
         // a block that was about to be signed when the process stopped
-        let p = self.dir.join("pending.rlp");
-        if let Ok(raw) = std::fs::read(&p) {
+        // is kept until the node is synced (`finish_pending`)
+        if let Ok(raw) = std::fs::read(self.dir.join("pending.rlp")) {
             let mut b: &[u8] = &raw;
             if let (Ok(h), Ok(txs)) = (Header::decode(&mut b), Vec::<Bytes>::decode(&mut b)) {
-                let (n, head) = self.core.head();
-                if h.parent_hash == head && h.number == n + 1 {
-                    say(format!(
-                        "finishing the block {} that was being signed",
-                        h.number
-                    ));
-                    let body = Body {
-                        transactions: txs,
-                        uncles: vec![],
-                        withdrawals: None,
-                    };
-                    if let Err(e) = self.seal_and_send(h, body, false) {
-                        say(format!("the pending block is dropped: {e}"));
-                    }
-                }
+                self.pending = Some((h, txs));
             }
-            let _ = std::fs::remove_file(&p);
         }
         // the highest QC and TC the machine asked to keep
         if let Ok(raw) = std::fs::read(self.dir.join("syncinfo.rlp")) {
@@ -300,7 +313,44 @@ impl Worker {
         say("stopped");
     }
 
+    /// The block that was being signed when the process stopped, once the node is synced: sent if its parent
+    /// is still the head (the same bytes, signed again: the unit returns the same signature for the same
+    /// intent), dropped if the chain went on without it. Sent at once, before the peers were back, it landed
+    /// beside a chain the network had already extended (gate D rehearsal, kill -9 in the seal window after an
+    /// 80 s restart).
+    fn finish_pending(&mut self) {
+        if self.pending.is_none() || self.synced().is_err() {
+            return;
+        }
+        let Some((h, txs)) = self.pending.take() else {
+            return;
+        };
+        let (n, head) = self.core.head();
+        if h.parent_hash == head && h.number == n + 1 {
+            say(format!(
+                "finishing the block {} that was being signed",
+                h.number
+            ));
+            let body = Body {
+                transactions: txs,
+                uncles: vec![],
+                withdrawals: h.withdrawals_hash.map(|_| vec![]),
+            };
+            if let Err(e) = self.seal_and_send(h, body, false) {
+                say(format!("the pending block is dropped: {e}"));
+            }
+        } else {
+            say(format!(
+                "the pending block {} is dropped: the chain is at {n} without it",
+                h.number
+            ));
+        }
+        let _ = std::fs::remove_file(self.dir.join("pending.rlp"));
+    }
+
     fn tick(&mut self) {
+        self.inbound();
+        self.finish_pending();
         let (n, head) = self.core.head();
         if head != self.last_head {
             self.last_head = head;
@@ -323,27 +373,35 @@ impl Worker {
             let t = h.tip();
             (t.miner, t.header.clone())
         };
-        self.sign_tx_for(number, hash);
         if number > self.switch_block() && self.fed.insert(hash) && miner != self.me {
             self.bft_event(Event::Proposal(hash));
         }
+        // the pool admits the special transactions of the head's candidates, not only ours
+        let set = self.candidates(&self.core.hist.read());
+        self.pool.set_authority(Authority::candidates(set));
+        self.sign_tx_for(number, hash);
         let _ = header;
     }
 
     // ---- sign transactions ----
 
-    fn is_candidate(&self, h: &HistInner) -> bool {
+    /// The candidates of the head's epoch: who may send a special transaction (to 0x89 or 0x90) at gas price 0.
+    /// geth's pool admits one from a signer of the head (`hasKnownSpecialCalldata`, `legacypool.go:924-939`,
+    /// with the signer set the backend keeps for the head, `eth/backend.go:474-485`): V2 the epoch's masternodes and
+    /// its candidate pool (standby and penalised included), V1 the masternodes of the snapshot. Before, the pool
+    /// admitted only this node's own, so a geth validator's sign transaction never entered an xone block.
+    fn candidates(&self, h: &HistInner) -> Vec<Address> {
         let n = h.tip_number();
         if n >= self.switch_block() {
-            h.switch_of(n).is_some_and(|w| {
-                h.switch_masternodes(w).contains(&self.me)
-                    || h.pool(w.number)
-                        .is_ok_and(|p| p.candidates.contains(&self.me))
+            h.switch_of(n).map_or(vec![], |w| {
+                let mut v = h.switch_masternodes(w);
+                if let Ok(p) = h.pool(w.number) {
+                    v.extend(p.candidates);
+                }
+                v
             })
         } else {
-            h.snaps
-                .get(&n)
-                .is_some_and(|s| s.get_signers().contains(&self.me))
+            h.snaps.get(&n).map_or(vec![], |s| s.get_signers())
         }
     }
 
@@ -353,7 +411,7 @@ impl Worker {
         if !self.signed_for.insert(hash) || self.stopped() {
             return;
         }
-        let candidate = self.is_candidate(&self.core.hist.read());
+        let candidate = self.candidates(&self.core.hist.read()).contains(&self.me);
         let state_nonce = {
             let (_, head) = self.core.head();
             let mut out = None;
@@ -375,7 +433,15 @@ impl Worker {
             &mut self.unit,
         ) {
             Ok(Some(raw)) => match self.pool.add_raws(&[&raw]).remove(0) {
-                Ok(h) => say(format!("sign transaction {h} for block {number}")),
+                Ok(h) => {
+                    // and to the peers, as geth's pool announces a local transaction (`eth/handler.go`
+                    // `txBroadcastLoop`): before, it reached another validator's block only through ours
+                    let msg = Message::Transactions(vec![to_wire(&raw)]);
+                    for p in self.peers.peer_ids() {
+                        let _ = self.peers.send(&p, msg.clone());
+                    }
+                    say(format!("sign transaction {h} for block {number}"))
+                }
                 Err(e) => say(format!(
                     "sign transaction for block {number} not added: {e}"
                 )),
@@ -388,6 +454,9 @@ impl Worker {
     // ---- V1 ----
 
     fn v1_tick(&mut self, n: u64) {
+        if self.synced().is_err() {
+            return;
+        }
         let (head, parent_creator, ctx, snap_signers, parent) = {
             let h = self.core.hist.read();
             let tip = h.tip();
@@ -576,39 +645,78 @@ impl Worker {
             }
         }
         let round = self.bft.round();
-        let qc_hash = self.bft.highest_qc().proposed_block_info.hash;
+        if self.round_start.0 != round {
+            self.round_start = (round, Instant::now());
+        }
+        let qc = self.bft.highest_qc().proposed_block_info.clone();
+        let qc_hash = qc.hash;
         if self.attempted == Some((round, qc_hash)) {
             return;
         }
-        let (parent, ctx, switch) = {
+        let found = {
             let h = self.core.hist.read();
-            let Some(p) = h.by_hash(qc_hash) else { return };
-            if p.hash != h.tip().hash {
-                return; // ponytail: a block on the head only
+            let tip = h.tip();
+            match h.by_hash(qc_hash) {
+                None => Err(format!("the block of the highest QC (number {}, round {}) is not here", qc.number, qc.round)),
+                // ponytail: a block on the head only
+                Some(p) if p.hash != tip.hash => Err(format!(
+                    "the highest QC is for block {} round {}, not the head {} (no QC for the head yet)",
+                    qc.number, qc.round, tip.header.number
+                )),
+                Some(p) => {
+                    let parent = p.header.clone();
+                    match self.v2_header(&parent, round, None, now()) {
+                        Err(e) => Err(format!("prepare: {e}")),
+                        Ok(skel) => match h.context(&skel, &parent, None) {
+                            Ok(Context::V2(c)) => {
+                                let v2 = self.spec.xdpos.v2.as_ref();
+                                let is_switch = v2.is_some_and(|v| {
+                                    epoch_switch::of_header(v, self.spec.xdpos.epoch, &skel)
+                                        .is_ok_and(|(s, _)| s)
+                                });
+                                Ok((parent, c, is_switch))
+                            }
+                            Ok(Context::V1(_)) => Err("a V1 context above the switch".into()),
+                            Err(e) => Err(format!("context: {e}")),
+                        },
+                    }
+                }
             }
-            let parent = p.header.clone();
-            let skel = match self.v2_header(&parent, round, None, now()) {
-                Ok(s) => s,
-                Err(_) => return,
-            };
-            let Ok(Context::V2(c)) = h.context(&skel, &parent, None) else {
-                return;
-            };
-            let v2 = self.spec.xdpos.v2.as_ref();
-            let is_switch = v2.is_some_and(|v| {
-                epoch_switch::of_header(v, self.spec.xdpos.epoch, &skel).is_ok_and(|(s, _)| s)
-            });
-            (parent, c, is_switch)
         };
+        let (parent, ctx, switch) = match found {
+            Ok(f) => f,
+            Err(why) => {
+                if self.sibling(round, &qc) {
+                    return;
+                }
+                return self.stuck(round, &why);
+            }
+        };
+        if let Err(why) = self.synced() {
+            return self.stuck(round, why);
+        }
         let now_s = now();
         let mp = self.mine_period.max(1);
         if !timing::v2_period_elapsed(parent.timestamp, mp, now_s) {
-            return;
+            return self.stuck(
+                round,
+                &format!(
+                    "mine period {mp} s after parent time {} not over at {now_s}",
+                    parent.timestamp
+                ),
+            );
         }
         match schedule::v2_turn(&self.unit, round, self.spec.xdpos.epoch, &ctx.masternodes) {
-            Ok(()) => {}
-            Err(_) => {
+            Ok(()) => self.last_skip = None,
+            Err(skip) => {
                 self.attempted = Some((round, qc_hash));
+                // said once per streak of one kind (a penalised node is out of the list for a whole epoch)
+                let kind = std::mem::discriminant(&skip);
+                if !matches!(skip, schedule::Skip::NotLeader { .. }) && self.last_skip != Some(kind)
+                {
+                    say(format!("round {round} not proposed: {skip:?}"));
+                }
+                self.last_skip = Some(kind);
                 return;
             }
         }
@@ -620,6 +728,93 @@ impl Worker {
             now_s,
         ) {
             say(format!("block {} (round {round}) not produced: {e}", n + 1));
+        }
+    }
+
+    /// geth's worker does not mint before the node is synced (`miner/xdpos_worker.go:383-387`). Here: a peer is
+    /// connected, the chain service has seen a peer serve nothing above our head at least once since the start
+    /// (its caught-up proof), and no peer announced a block above our head. A block sealed without that reaches
+    /// no one, or lands beside a chain the network has already extended.
+    fn synced(&mut self) -> Result<(), &'static str> {
+        if self.peers.peer_ids().is_empty() {
+            return Err("not synced: no peers");
+        }
+        self.caught_up |= self.progress.confirmed.load(Ordering::Relaxed);
+        if !self.caught_up {
+            return Err("not synced: no peer has confirmed our head since the start");
+        }
+        if self.progress.highest.load(Ordering::Relaxed) > self.core.head().0 {
+            return Err("not synced: a peer announced a block above our head");
+        }
+        Ok(())
+    }
+
+    /// The leader's sibling (geth `FindParentBlockToAssign`, `engine_v2/engine.go:3294-3319`): when the head
+    /// has no QC and the highest QC is for its parent, a leader builds on the QC block, beside the head. geth
+    /// keeps its head and inserts the new block on the side (`keepsV2Head`, `core/blockchain.go:2419-2442`); this
+    /// node executes on its head only, so it takes the uncertified head off (`Core::unwind_to`, never below the
+    /// committed block) and builds on the QC block on the next tick; the dropped block comes back by the branch
+    /// rule if the network extends it. Only when this node leads `round`, is synced, has not proposed the round,
+    /// and the mine period after the QC block has passed. True when it unwound.
+    fn sibling(&mut self, round: u64, qc: &xone_primitives::BlockInfo) -> bool {
+        if self.synced().is_err() || self.unit.signed_up_to(Kind::Propose) >= round {
+            return false;
+        }
+        let (leads, depth_one, qc_time) = {
+            let h = self.core.hist.read();
+            let tip = h.tip();
+            let Some(p) = h.by_hash(qc.hash) else {
+                return false;
+            };
+            let leads = HistChain(&h).epoch_of_round(round).is_ok_and(|e| {
+                let n = e.masternodes.len() as u64;
+                n > 0
+                    && usize::try_from(round % self.spec.xdpos.epoch % n)
+                        .ok()
+                        .and_then(|i| e.masternodes.get(i))
+                        == Some(&self.me)
+            });
+            (leads, tip.header.parent_hash == p.hash, p.header.timestamp)
+        };
+        if !leads
+            || !depth_one
+            || !timing::v2_period_elapsed(qc_time, self.mine_period.max(1), now())
+        {
+            return false;
+        }
+        match self.core.unwind_to(qc.number) {
+            Ok(dropped) => {
+                say(format!(
+                    "round {round}: the head has no QC; {} block(s) taken off to build on the QC block {} (the leader's sibling)",
+                    dropped.len(),
+                    qc.number
+                ));
+                self.last_head = B256::ZERO;
+                true
+            }
+            Err(e) => {
+                say(format!("round {round}: no sibling: {e}"));
+                false
+            }
+        }
+    }
+
+    /// Why this tick did not reach the turn check, said once per round when the round is older than a mine
+    /// period and two seconds (before that, waiting for the QC of the head or the period is normal).
+    fn stuck(&mut self, round: u64, why: &str) {
+        let late = self.round_start.1.elapsed() > Duration::from_secs(self.mine_period.max(1) + 2);
+        if late && self.stuck_said != round {
+            self.stuck_said = round;
+            let votes = self
+                .votes_in
+                .get(&round.saturating_sub(1))
+                .copied()
+                .unwrap_or(0);
+            say(format!(
+                "round {round}, head {}: {why}; {votes} peer votes received for round {}",
+                self.core.head().0,
+                round.saturating_sub(1)
+            ));
         }
     }
 
@@ -702,7 +897,8 @@ impl Worker {
                     .filter_map(|t| raws.get(&t.hash).cloned())
                     .collect(),
                 uncles: vec![],
-                withdrawals: None,
+                // geth's worker gives an Amsterdam block an empty withdrawals list (`xdpos_worker.go:699-702`)
+                withdrawals: self.spec.amsterdam.is_active(number).then(Vec::new),
             };
             let r = {
                 let hist = self.core.hist.read();
@@ -787,7 +983,17 @@ impl Worker {
     }
 
     /// The seal: the unit decides, writes its record, then signs (`seal_v1::seal`, `seal_v2::seal`).
+    /// [`Worker::seal_now`], timed: the time is the safety record's write and sync plus the signature, and
+    /// goes into the "sealed and sent" line, so a stalled disk shows as a number.
     fn seal(&mut self, h: Header) -> Result<Header, String> {
+        let t = Instant::now();
+        let r = self.seal_now(h);
+        self.seal_ms = t.elapsed().as_millis();
+        r
+    }
+
+    fn seal_now(&mut self, h: Header) -> Result<Header, String> {
+        self.durability();
         let spec = &self.spec;
         let number = h.number;
         if number > self.switch_block() {
@@ -816,6 +1022,7 @@ impl Worker {
     fn import_and_send(&mut self, h: Header, body: Body) -> Result<(), String> {
         let hash = h.hash();
         let number = h.number;
+        let t = Instant::now();
         let out = self
             .core
             .import(h.clone(), body.clone(), now())
@@ -841,31 +1048,90 @@ impl Worker {
         for p in self.peers.peer_ids() {
             let _ = self.peers.send(&p, msg.clone());
         }
-        say(format!("block {number} {hash} sealed and sent"));
+        say(format!(
+            "block {number} {hash} sealed and sent (seal {} ms, import {} ms)",
+            self.seal_ms,
+            t.elapsed().as_millis()
+        ));
         self.sign_tx_for(number, hash);
         Ok(())
     }
 
     // ---- the BFT machine ----
 
-    fn bft_event(&mut self, ev: Event) {
+    /// The durability of the block store (`BlockWriter::durability`, ADR-010 section 9), handed to the unit
+    /// and the machine before every signature: only `Durable` signs. A producer's store commits each block
+    /// to the device (no group commit, `services::build`), so anything else is a fault and is logged.
+    fn durability(&mut self) -> Durability {
+        let d = self.core.chain.with_store(|s| s.durability());
+        if d != self.dur {
+            say(format!("store durability {d:?}"));
+            self.dur = d;
+        }
+        self.unit.set_durability(d);
+        d
+    }
+
+    /// The BFT messages of the peers, in arrival order: verified and handled by the machine, then relayed
+    /// to the other peers when the machine found nothing wrong with them (geth `Bfter.Vote`, `Timeout`,
+    /// `SyncInfo`: verify, `tryForward`, handle; `eth/bft/handler.go:187-229`).
+    fn inbound(&mut self) {
+        while let Ok((from, msg)) = self.bft_in.try_recv() {
+            if self.stopped() || !self.bft.initialized() {
+                continue; // before the V2 switch, or not seeded yet: geth's engine is not ready either
+            }
+            let next = u64::try_from(self.tags.len()).unwrap_or(u64::MAX);
+            let tag = *self.tags.entry(from).or_insert(next);
+            let ev = match &msg {
+                BftMessage::Vote(v) => {
+                    let r = v.proposed_block_info.round;
+                    *self.votes_in.entry(r).or_default() += 1;
+                    while self.votes_in.len() > 16 {
+                        self.votes_in.pop_first();
+                    }
+                    Event::Vote(v.clone(), Some(tag))
+                }
+                BftMessage::Timeout(t) => Event::Timeout(t.clone(), Some(tag)),
+                BftMessage::SyncInfo(s) => Event::SyncInfo(s.clone(), Some(tag)),
+            };
+            if self.bft_event(ev) {
+                self.peers.relay_bft(&msg, &from);
+            }
+        }
+    }
+
+    /// One event and everything it causes. False when the machine scored a peer for it.
+    fn bft_event(&mut self, ev: Event) -> bool {
+        let mut clean = true;
         let mut q = VecDeque::from([ev]);
         while let Some(ev) = q.pop_front() {
             if self.stopped() {
-                return;
+                return clean;
             }
+            let dur = self.durability();
             let fx = {
                 let h = self.core.hist.read();
-                self.bft.step(&HistChain(&h), Durability::Durable, ev)
+                self.bft.step(&HistChain(&h), dur, ev)
             };
-            let d = match drive(&self.bft, &mut self.unit, fx) {
+            let t = Instant::now();
+            let driven = drive(&self.bft, &mut self.unit, fx);
+            if t.elapsed() > Duration::from_millis(500) {
+                say(format!(
+                    "slow safety write: a BFT step took {} ms to persist and sign",
+                    t.elapsed().as_millis()
+                ));
+            }
+            let d = match driven {
                 Ok(d) => d,
                 Err(e) => {
                     say(format!("stopping: {e}"));
                     self.dead = true;
-                    return;
+                    return clean;
                 }
             };
+            if !d.scores.is_empty() {
+                clean = false;
+            }
             for l in &d.commits {
                 say(format!("committed block {} round {}", l.number, l.round));
             }
@@ -890,6 +1156,49 @@ impl Worker {
                 q.push_back(Event::Vote(v, None));
             }
             for t in d.timeouts {
+                if self.timeout_said != t.round {
+                    self.timeout_said = t.round;
+                    let votes = self.votes_in.get(&t.round).copied().unwrap_or(0);
+                    let head = self.core.head().0;
+                    // why the votes made no QC: what the machine holds for the round against the head's epoch
+                    let why = {
+                        let h = self.core.hist.read();
+                        let c = HistChain(&h);
+                        let held: Vec<String> = self
+                            .bft
+                            .votes_at(t.round)
+                            .map(|(a, v)| {
+                                format!(
+                                    "{}:{}@{}/gap{}",
+                                    &a.to_string()[..6],
+                                    v.proposed_block_info.number,
+                                    &v.proposed_block_info.hash.to_string()[..8],
+                                    v.gap_number
+                                )
+                            })
+                            .collect();
+                        let epoch = c.epoch(&h.tip().hash).map_or_else(
+                            |e| format!("epoch of the head: {e}"),
+                            |e| {
+                                format!(
+                                    "head {} epoch gap {} with {} masternodes, candidates {}",
+                                    &h.tip().hash.to_string()[..8],
+                                    e.gap,
+                                    e.masternodes.len(),
+                                    c.candidates(e.gap).map_or(0, |x| x.len())
+                                )
+                            },
+                        );
+                        format!("held [{}]; {epoch}", held.join(" "))
+                    };
+                    say(format!("timeout round {} detail: {why}", t.round));
+                    say(format!(
+                        "timeout for round {} sent (head {head}, {votes} peer votes received for round {}, highest QC round {})",
+                        t.round,
+                        t.round,
+                        self.bft.highest_qc().proposed_block_info.round
+                    ));
+                }
                 self.peers.broadcast_bft(&BftMessage::Timeout(t.clone()));
                 q.push_back(Event::Timeout(t, None));
             }
@@ -897,6 +1206,7 @@ impl Worker {
                 self.peers.broadcast_bft(&BftMessage::SyncInfo(s));
             }
         }
+        clean
     }
 }
 
@@ -926,6 +1236,8 @@ impl ProducerService {
         core: Arc<Core>,
         pool: Arc<PoolShared>,
         peers: Peers,
+        bft_in: Receiver<(PeerId, BftMessage)>,
+        progress: Arc<Progress>,
     ) -> Result<Self, String> {
         let signer = xone_signer::local_keystore::load(&plan.keystore, &plan.password, None)
             .map_err(|e| format!("keystore: {e}"))?;
@@ -953,8 +1265,9 @@ impl ProducerService {
         // the producer's own sign transactions are admitted: this node is a candidate
         pool.set_authority(Authority::candidates([me]));
         let stop = Arc::new(AtomicBool::new(false));
+        let dur = core.chain.with_store(|s| s.durability());
         say(format!(
-            "validator {me}, safety record at round {}",
+            "validator {me}, safety record at round {}, store durability {dur:?}",
             unit.record().signed[2].round
         ));
         Ok(Self {
@@ -975,6 +1288,18 @@ impl ProducerService {
                 timer: None,
                 mine_period: 2,
                 dead: false,
+                bft_in,
+                tags: HashMap::new(),
+                dur,
+                round_start: (0, Instant::now()),
+                stuck_said: 0,
+                last_skip: None,
+                timeout_said: 0,
+                progress,
+                caught_up: false,
+                pending: None,
+                seal_ms: 0,
+                votes_in: BTreeMap::new(),
             }),
             stop,
             thread: None,
