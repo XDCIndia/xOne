@@ -546,7 +546,9 @@ impl SegFile for OsFile {
     }
 }
 
-/// A datadir on disk. Holds the exclusive lock of `datadir/LOCK` while it lives (ADR-005 N5, P1).
+/// A datadir on disk. Holds the exclusive lock of `datadir/LOCK` while it lives (ADR-005 N5, P1); a
+/// clone shares the lock (a reader of the same datadir).
+#[derive(Clone)]
 pub struct OsDir {
     root: PathBuf,
     _lock: Arc<File>,

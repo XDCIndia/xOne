@@ -516,7 +516,7 @@ impl Worker {
         let current = if era == PenaltyEra::Creators {
             let mut counts: BTreeMap<Address, u64> = BTreeMap::new();
             for i in scan_blocks(era, number, epoch, tip2019) {
-                if let Some(s) = usize::try_from(i).ok().and_then(|i| h.blocks.get(i)) {
+                if let Some(s) = h.at(i) {
                     *counts.entry(s.miner).or_default() += 1;
                 }
             }
@@ -530,10 +530,7 @@ impl Worker {
         for i in 1..=v1_limit() {
             if number > epoch * i {
                 let key = number - epoch * i;
-                let pens = usize::try_from(key)
-                    .ok()
-                    .and_then(|k| h.blocks.get(k))
-                    .map_or(vec![], |s| addresses(&s.header.penalties));
+                let pens = h.header_at(key).map_or(vec![], |s| addresses(&s.penalties));
                 earlier.insert(key, pens);
             }
         }
@@ -803,12 +800,7 @@ impl Worker {
             let hist = self.core.hist.read();
             let cp = number - number % epoch;
             (cp != number && cp != 0)
-                .then(|| {
-                    usize::try_from(cp)
-                        .ok()
-                        .and_then(|c| hist.blocks.get(c))
-                        .map(|s| s.header.clone())
-                })
+                .then(|| hist.header_at(cp).map(std::borrow::Cow::into_owned))
                 .flatten()
         };
         let s = seal_v1::seal(h, &mut self.unit, epoch, checkpoint.as_ref(), tip_randomize)

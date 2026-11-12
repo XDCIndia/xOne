@@ -3,15 +3,24 @@
 //! deployed code, V1 snapshots, V2 gap pools and epoch switches. It is the logic of the replay
 //! harness's `chain.rs` plus the V2 context, kept by the node itself and never read from a peer.
 //!
-//! Bodies and receipts are held for the last [`MEMORY_WINDOW`] blocks; older ones are in the store only.
+//! Memory is bounded by a window, not by the chain: headers, seals and sign transactions of the last
+//! [`window_of`] blocks (eight epochs, above the deepest consensus read), bodies and receipts of the
+//! last [`MEMORY_WINDOW`]. Below the window a header, a canonical hash or a number is read from the
+//! store ([`Src`], without the store's lock), a transaction location from `TxLookup`, an epoch switch
+//! from `ConsensusEpoch` (all of them are also in memory, 56 bytes an epoch) and a gap pool from
+//! `ConsensusSnapshot`. Sign transactions are kept for the window only: a read below it is `None`,
+//! which the consensus code turns into its typed `Missing` error, never into an empty list.
 //!
-//! ponytail: memory only, one canonical chain, the parent of a block must be the tip. A block on a
-//! side branch is refused by the executor (`InsertError::Exec`), so no reorg ever reaches the
-//! store. The MDBX store and a branch-aware reader replace it.
+//! ponytail: one canonical chain, the parent of a block must be the tip. A block on a side branch is
+//! refused by the executor (`InsertError::Exec`), so no reorg ever reaches the store. A
+//! branch-aware reader replaces it.
 
-use std::collections::{BTreeMap, HashMap};
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, VecDeque},
+};
 
-use alloy_primitives::{keccak256, Address, Bytes, B256, U256};
+use alloy_primitives::{Address, Bytes, B256, U256};
 use xone_chainspec::{ChainSpec, ForkBlock};
 use xone_consensus::{
     chain::{BlockReader, HeaderView, PenaltyHistory, SignTx},
@@ -26,14 +35,57 @@ use xone_consensus::{
     },
     verify::{Body, Context, HeaderError, V1Context, V2Context},
 };
+use xone_db::{mdbx::T, segments::OsDir};
 use xone_executor::Env;
 use xone_primitives::{Header, WideBalance};
 use xone_state::{system_contracts::validator_0x88 as v88, StateRead};
+use xone_sync::mdbx::StoreReader;
+
+/// The store read below the window.
+pub type Src = StoreReader<OsDir>;
 
 /// Blocks at the tip whose bodies and receipts the history keeps in memory, as geth's `TriesInMemory`
 /// (`core/state/statedb.go:47`): on a chain of 10,000-transaction blocks each one costs megabytes.
 /// Older bodies and receipts are read from the store (`Core::records`).
 pub const MEMORY_WINDOW: u64 = 128;
+
+/// Epochs of headers and sign transactions kept in memory. The deepest consensus read is five epoch
+/// switches back (the V2 penalty of `TIPUpgradePenalty` with Apothem's `limitPenaltyEpoch` 5) or five
+/// epochs of blocks (the V1 penalty, `LIMIT_PENALTY_EPOCH + 1`); an epoch holds at most `epoch`
+/// blocks (`xone_sync::bootstrap::retention`). `tests::window_covers_every_rule` checks it against
+/// the derived retention of every network.
+pub const EPOCHS_IN_MEMORY: u64 = 8;
+
+/// Blocks whose headers and sign transactions the history keeps in memory.
+pub fn window_of(spec: &ChainSpec) -> u64 {
+    (EPOCHS_IN_MEMORY * spec.xdpos.epoch).max(MEMORY_WINDOW)
+}
+
+/// `ConsensusEpoch` row of a V2 epoch switch: hash, round u64 BE, epoch u64 BE.
+pub fn switch_row(w: &Switch) -> Vec<u8> {
+    [&w.hash[..], &w.round.to_be_bytes(), &w.epoch.to_be_bytes()].concat()
+}
+
+pub fn switch_of_row(number: u64, b: &[u8]) -> Option<Switch> {
+    Some(Switch {
+        number,
+        hash: B256::from_slice(b.get(..32)?),
+        round: u64::from_be_bytes(b.get(32..40)?.try_into().ok()?),
+        epoch: u64::from_be_bytes(b.get(40..48)?.try_into().ok()?),
+    })
+}
+
+/// `ConsensusSnapshot` row of a V2 gap pool: the candidates, 20 bytes each.
+pub fn gap_row(g: &SnapshotV2) -> Vec<u8> {
+    g.candidates.iter().flat_map(|a| a.0 .0).collect()
+}
+
+fn gap_of_row(number: u64, b: &[u8]) -> Option<SnapshotV2> {
+    b.len().is_multiple_of(20).then(|| SnapshotV2 {
+        number,
+        candidates: b.chunks(20).map(Address::from_slice).collect(),
+    })
+}
 
 pub struct Stored {
     pub hash: B256,
@@ -56,32 +108,41 @@ pub struct Switch {
 
 pub struct HistInner {
     pub spec: ChainSpec,
-    /// The canonical blocks from number `base`, consecutive. `base` is 0 on a node that followed
-    /// from genesis; a minimal node starts at its first retained header and drops from the front
-    /// as the retention floor moves ([`HistInner::prune`]).
+    /// The canonical blocks from number `base` to the tip, consecutive, at most `window` of them.
     pub base: u64,
-    pub blocks: Vec<Stored>,
+    pub blocks: VecDeque<Stored>,
+    /// [`window_of`] the spec; a test may set a smaller one.
+    pub window: u64,
+    /// The store, for what is below the window. `None` in a history that is not over a store.
+    pub src: Option<Src>,
     pub codes: BTreeMap<B256, Bytes>,
     /// Accounts above 2^256 in the state of the tip, kept in step with every committed diff.
     pub wide: BTreeMap<Address, WideBalance>,
-    /// V1 snapshots after each block, from the block the node started its memory at.
+    /// V1 snapshots after each of the last [`MEMORY_WINDOW`] blocks.
     pub snaps: BTreeMap<u64, Snapshot>,
-    /// V2 candidate pools by gap block number.
+    /// V2 candidate pools by gap block number, inside the window; every one is in `ConsensusSnapshot`.
     pub gaps: BTreeMap<u64, SnapshotV2>,
+    /// Every V2 epoch switch of the chain (`ConsensusEpoch`).
     pub switches: Vec<Switch>,
-    pub tx_index: HashMap<B256, (u64, u32)>,
     /// Total difficulty of the tip: the rank that peers see in our Status.
     pub td: U256,
 }
 
 impl BlockReader for HistInner {
     fn header(&self, hash: B256, number: u64) -> Option<HeaderView> {
-        let s = self.at(number)?;
-        (s.hash == hash).then_some(HeaderView {
+        let (parent_hash, miner) = match self.at(number) {
+            Some(s) => (s.hash == hash).then_some((s.header.parent_hash, s.miner))?,
+            None => {
+                let h = self.header_at(number)?;
+                (h.hash() == hash).then_some(())?;
+                (h.parent_hash, super::core::miner_of(&self.spec, &h).ok()?)
+            }
+        };
+        Some(HeaderView {
             number,
             hash,
-            parent_hash: s.header.parent_hash,
-            miner: s.miner,
+            parent_hash,
+            miner,
             // geth `XDPoS.IsEpochSwitch` (`consensus/XDPoS/xdpos_api.go:228-235`), which the V2 reward
             // walks with: up to the V2 switch block an epoch switch is a multiple of the epoch.
             epoch_switch: self.switches.iter().any(|w| w.hash == hash)
@@ -100,7 +161,7 @@ impl BlockReader for HistInner {
 
 impl PenaltyHistory for HistInner {
     fn penalties(&self, hash: B256, back: usize) -> Option<Vec<Address>> {
-        let number = self.by_hash(hash)?.header.number;
+        let number = self.number_of(hash)?;
         let at = self.switches.iter().rposition(|w| w.number <= number)?;
         let w = &self.switches[at.checked_sub(back)?];
         Some(self.switch_penalties(w.number))
@@ -109,7 +170,7 @@ impl PenaltyHistory for HistInner {
 
 impl Env for HistInner {
     fn hash_of(&self, number: u64) -> Option<B256> {
-        Some(self.at(number)?.hash)
+        self.hash_at(number)
     }
     fn masternodes_at(&self, checkpoint: u64) -> Option<Vec<Address>> {
         self.list_at(checkpoint)
@@ -123,11 +184,9 @@ impl Env for HistInner {
     /// The standby candidates of the epoch that switch block `switch` opens: its gap pool less the
     /// switch's masternodes and penalties (the replay harness's `Chain::standby_pool`).
     fn standby_pool(&self, switch: u64) -> Option<Vec<Address>> {
-        let h = &self.at(switch)?.header;
+        let h = self.header_at(switch)?;
         let x = &self.spec.xdpos;
-        let pool = self
-            .gaps
-            .get(&gap_snapshot::gap_number(switch, x.epoch, x.gap).ok()?)?;
+        let pool = self.gap(gap_snapshot::gap_number(switch, x.epoch, x.gap).ok()?)?;
         Some(gap_snapshot::standby(
             &pool.candidates,
             &self.list_at(switch)?,
@@ -136,7 +195,7 @@ impl Env for HistInner {
     }
     /// The base fee burnt by block `number`: base fee times gas used.
     fn burn(&self, number: u64) -> Option<alloy_primitives::U256> {
-        let h = &self.at(number)?.header;
+        let h = self.header_at(number)?;
         Some(
             h.base_fee
                 .map_or(U256::ZERO, |f| f * U256::from(h.gas_used)),
@@ -183,7 +242,7 @@ pub fn reseed(
 
 impl HistInner {
     pub fn tip(&self) -> &Stored {
-        // the genesis block is always there
+        // the window always holds the tip
         &self.blocks[self.blocks.len() - 1]
     }
 
@@ -191,10 +250,72 @@ impl HistInner {
         self.base + self.blocks.len() as u64 - 1
     }
 
-    /// The stored block `number`, `None` below the first retained one or above the tip.
+    /// Block `number` of the window, `None` below it or above the tip.
     pub fn at(&self, number: u64) -> Option<&Stored> {
         self.blocks
             .get(usize::try_from(number.checked_sub(self.base)?).ok()?)
+    }
+
+    /// The canonical header `number`: from the window, else from the store.
+    pub fn header_at(&self, number: u64) -> Option<Cow<'_, Header>> {
+        if let Some(s) = self.at(number) {
+            return Some(Cow::Borrowed(&s.header));
+        }
+        if number > self.tip_number() {
+            return None;
+        }
+        Some(Cow::Owned(self.src.as_ref()?.header(number).ok()??))
+    }
+
+    /// The canonical hash of block `number`: from the window, else from the store.
+    pub fn hash_at(&self, number: u64) -> Option<B256> {
+        if let Some(s) = self.at(number) {
+            return Some(s.hash);
+        }
+        if number > self.tip_number() {
+            return None;
+        }
+        self.src.as_ref()?.hash(number).ok()?
+    }
+
+    /// The number of canonical block `hash`: from the window, else from the store.
+    pub fn number_of(&self, hash: B256) -> Option<u64> {
+        if let Some(s) = self.by_hash(hash) {
+            return Some(s.header.number);
+        }
+        self.src
+            .as_ref()?
+            .number(hash)
+            .ok()?
+            .filter(|n| *n <= self.tip_number())
+    }
+
+    /// The canonical header `hash`.
+    pub fn header_by_hash(&self, hash: B256) -> Option<Cow<'_, Header>> {
+        let h = self.header_at(self.number_of(hash)?)?;
+        (h.hash() == hash).then_some(h)
+    }
+
+    /// Block number and index of canonical transaction `hash` (`TxLookup`).
+    pub fn tx(&self, hash: B256) -> Option<(u64, u32)> {
+        self.src
+            .as_ref()?
+            .tx(hash)
+            .ok()?
+            .filter(|(n, _)| *n <= self.tip_number())
+    }
+
+    /// The gap pool of gap block `number`: from the window, else from `ConsensusSnapshot`.
+    fn gap(&self, number: u64) -> Option<Cow<'_, SnapshotV2>> {
+        if let Some(g) = self.gaps.get(&number) {
+            return Some(Cow::Borrowed(g));
+        }
+        let row = self
+            .src
+            .as_ref()?
+            .row(T::ConsensusSnapshot, number)
+            .ok()??;
+        gap_of_row(number, &row).map(Cow::Owned)
     }
 
     /// Minimal mode: drops what the store dropped. Headers below `headers_from` go, bodies and
@@ -216,8 +337,6 @@ impl HistInner {
             b.receipts.clear();
             b.signs.clear();
         }
-        self.tx_index
-            .retain(|_, (n, _)| *n >= records_from.max(base));
         self.snaps = self.snaps.split_off(&base);
         self.gaps = self.gaps.split_off(&gaps_from);
         let keep = self
@@ -228,8 +347,10 @@ impl HistInner {
         self.switches.drain(..keep);
     }
 
+    /// Block `hash` of the window.
     pub fn by_hash(&self, hash: B256) -> Option<&Stored> {
-        // ponytail: linear in the chain; an index by hash comes with the MDBX store
+        // ponytail: linear in the window (eight epochs); below it [`HistInner::number_of`] reads
+        // `HeaderNumbers`
         self.blocks.iter().rev().find(|b| b.hash == hash)
     }
 
@@ -237,7 +358,7 @@ impl HistInner {
     /// `GetMasternodesFromEpochSwitchHeader`, `engine_v2/engine.go:1656-1705`): `extraData` up to and
     /// including the V2 switch block, `validators` above it.
     fn list_at(&self, number: u64) -> Option<Vec<Address>> {
-        let h = &self.at(number)?.header;
+        let h = self.header_at(number)?;
         if self.v2_cfg().is_none_or(|v| number <= v.switch_block) {
             masternodes_of(&h.extra_data).ok()
         } else {
@@ -254,9 +375,9 @@ impl HistInner {
     fn epoch_list(&self, x: u64, own: &Header) -> Result<Vec<Address>, String> {
         let cp = x - x % self.spec.xdpos.epoch;
         let h = if cp == x && x == own.number {
-            own
+            Cow::Borrowed(own)
         } else {
-            &self.at(cp).ok_or(format!("no checkpoint {cp}"))?.header
+            self.header_at(cp).ok_or(format!("no checkpoint {cp}"))?
         };
         masternodes_of(&h.extra_data).map_err(|e| e.to_string())
     }
@@ -267,10 +388,9 @@ impl HistInner {
         let cp = n - n % self.spec.xdpos.epoch;
         let checkpoint = if cp != n {
             Some(
-                self.at(cp)
+                self.header_at(cp)
                     .ok_or(format!("no checkpoint {cp}"))?
-                    .header
-                    .clone(),
+                    .into_owned(),
             )
         } else {
             None
@@ -290,19 +410,19 @@ impl HistInner {
     }
 
     fn switch_list(&self, w: &Switch) -> Vec<Address> {
-        let Some(s) = self.at(w.number) else {
+        let Some(h) = self.header_at(w.number) else {
             return vec![];
         };
         if self.v2_cfg().is_some_and(|v| v.switch_block == w.number) {
-            masternodes_of(&s.header.extra_data).unwrap_or_default()
+            masternodes_of(&h.extra_data).unwrap_or_default()
         } else {
-            addresses(&s.header.validators)
+            addresses(&h.validators)
         }
     }
 
     fn switch_penalties(&self, number: u64) -> Vec<Address> {
-        self.at(number)
-            .map(|s| addresses(&s.header.penalties))
+        self.header_at(number)
+            .map(|h| addresses(&h.penalties))
             .unwrap_or_default()
     }
 
@@ -320,14 +440,14 @@ impl HistInner {
         let (epoch, gap) = (self.spec.xdpos.epoch, self.spec.xdpos.gap);
         let sw = self.v2_cfg().ok_or(v2::Error::NoV2)?.switch_block;
         if gap_snapshot::uses_v1_list(number, epoch, sw)? {
-            let s = self.at(sw).ok_or(v2::Error::Missing {
+            let h = self.header_at(sw).ok_or(v2::Error::Missing {
                 what: "V1 switch block",
                 number: sw,
             })?;
-            return gap_snapshot::bootstrap(&s.header.extra_data, sw);
+            return gap_snapshot::bootstrap(&h.extra_data, sw);
         }
         let g = gap_snapshot::gap_number(number, epoch, gap)?;
-        self.gaps.get(&g).cloned().ok_or(v2::Error::Missing {
+        self.gap(g).map(Cow::into_owned).ok_or(v2::Error::Missing {
             what: "gap snapshot",
             number: g,
         })
@@ -386,7 +506,8 @@ impl HistInner {
             .map_err(|_| HeaderError::UnknownAncestor(n - 1))
     }
 
-    /// Adds block `s` on the tip, with what its execution produced.
+    /// Adds block `s` on the tip, with what its execution produced. Returns the epoch switch it is,
+    /// if it is one (the caller stores it with the gap pool).
     pub fn push(
         &mut self,
         s: Stored,
@@ -394,9 +515,9 @@ impl HistInner {
         wide: Vec<(Address, Option<WideBalance>)>,
         snap: Option<Snapshot>,
         gap: Option<SnapshotV2>,
-    ) {
+    ) -> Option<Switch> {
         let n = s.header.number;
-        self.index(&s, n);
+        let switch = self.index(&s, n);
         self.td += s.header.difficulty;
         self.codes.extend(codes);
         for (a, w) in wide {
@@ -411,7 +532,7 @@ impl HistInner {
         if let Some(g) = gap {
             self.gaps.insert(g.number, g);
         }
-        self.blocks.push(s);
+        self.blocks.push_back(s);
         // the body and receipts that leave the memory window are read from the store from now on
         if let Some(old) = n
             .checked_sub(MEMORY_WINDOW)
@@ -421,6 +542,34 @@ impl HistInner {
             old.body = Body::default();
             old.receipts = Vec::new();
         }
+        self.trim();
+        switch
+    }
+
+    /// Drops what has left the windows: blocks below `window`, snapshots below [`MEMORY_WINDOW`],
+    /// gap pools below `window` (they are in `ConsensusSnapshot`).
+    pub fn trim(&mut self) {
+        while self.blocks.len() as u64 > self.window.max(1) {
+            self.blocks.pop_front();
+            self.base += 1;
+        }
+        let tip = self.tip_number();
+        let snaps_from = tip.saturating_sub(MEMORY_WINDOW);
+        while self
+            .snaps
+            .first_key_value()
+            .is_some_and(|(k, _)| *k < snaps_from)
+        {
+            self.snaps.pop_first();
+        }
+        let gaps_from = tip.saturating_sub(self.window);
+        while self
+            .gaps
+            .first_key_value()
+            .is_some_and(|(k, _)| *k < gaps_from)
+        {
+            self.gaps.pop_first();
+        }
     }
 
     /// True when block `n`'s body and receipts are in memory; below the window they are in the store
@@ -429,23 +578,26 @@ impl HistInner {
         n + MEMORY_WINDOW > self.tip_number()
     }
 
-    /// The transaction index and the epoch switches of a block about to be appended.
-    pub fn index(&mut self, s: &Stored, n: u64) {
-        for (i, t) in s.body.transactions.iter().enumerate() {
-            self.tx_index
-                .insert(keccak256(t), (n, u32::try_from(i).unwrap_or(u32::MAX)));
-        }
-        if let Some(v) = self.spec.xdpos.v2.as_ref().filter(|v| n >= v.switch_block) {
-            if let Ok((true, epoch)) = epoch_switch::of_header(v, self.spec.xdpos.epoch, &s.header)
-            {
-                self.switches.push(Switch {
-                    number: n,
-                    hash: s.hash,
-                    round: self.round_of(&s.header),
-                    epoch,
-                });
-            }
-        }
+    /// The epoch switch of a block about to be appended, added to `switches`.
+    pub fn index(&mut self, s: &Stored, n: u64) -> Option<Switch> {
+        let v = self
+            .spec
+            .xdpos
+            .v2
+            .as_ref()
+            .filter(|v| n >= v.switch_block)?;
+        let (true, epoch) = epoch_switch::of_header(v, self.spec.xdpos.epoch, &s.header).ok()?
+        else {
+            return None;
+        };
+        let w = Switch {
+            number: n,
+            hash: s.hash,
+            round: self.round_of(&s.header),
+            epoch,
+        };
+        self.switches.push(w.clone());
+        Some(w)
     }
 
     pub fn is_gap_block(&self, n: u64) -> bool {
@@ -458,5 +610,67 @@ impl HistInner {
 
     pub fn switch_pen(&self, w: &Switch) -> Vec<Address> {
         self.switch_penalties(w.number)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use xone_chainspec::Network;
+    use xone_sync::bootstrap::{Class, Retention};
+
+    use super::*;
+
+    /// The window holds every header, body and receipt a consensus rule reads below the block it runs
+    /// on, on every network, at genesis, around the V2 switch and far above it.
+    #[test]
+    fn window_covers_every_rule() {
+        for net in Network::ALL {
+            let spec = net.spec();
+            let w = window_of(&spec);
+            let sw = spec.xdpos.v2.as_ref().map_or(0, |v| v.switch_block);
+            let e = spec.xdpos.epoch;
+            for pivot in [
+                e,
+                sw.saturating_sub(e),
+                sw,
+                sw + 5 * e,
+                sw + 100_000,
+                100_000_000,
+            ] {
+                let r = Retention::derive(&spec, pivot).unwrap();
+                for c in [Class::Header, Class::Body, Class::Receipt] {
+                    // the window counts the block being imported, the retention its pivot
+                    assert!(
+                        r.window(c).0 < w,
+                        "{net:?} {pivot} {c:?} {:?} {w}",
+                        r.window(c)
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn rows_round_trip() {
+        let w = Switch {
+            number: 7,
+            hash: B256::repeat_byte(3),
+            round: 1 << 40,
+            epoch: 9,
+        };
+        let back = switch_of_row(7, &switch_row(&w)).unwrap();
+        assert_eq!(
+            (back.hash, back.round, back.epoch),
+            (w.hash, w.round, w.epoch)
+        );
+        let g = SnapshotV2 {
+            number: 5,
+            candidates: vec![Address::repeat_byte(1), Address::repeat_byte(2)],
+        };
+        assert_eq!(
+            gap_of_row(5, &gap_row(&g)).unwrap().candidates,
+            g.candidates
+        );
+        assert!(gap_of_row(5, &[0; 21]).is_none());
     }
 }

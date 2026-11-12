@@ -6,7 +6,7 @@
 //! again.
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, VecDeque},
     path::{Path, PathBuf},
     sync::{Mutex, PoisonError, RwLock},
     time::{SystemTime, UNIX_EPOCH},
@@ -21,6 +21,7 @@ use xone_consensus::{
     v2::gap_snapshot,
     verify::{Body, HeaderError, HeaderVerifier},
 };
+use xone_db::mdbx::T;
 use xone_executor::{execute_block, ExecCtx};
 use xone_primitives::{Header, WideBalance};
 use xone_state::{
@@ -37,11 +38,13 @@ use xone_sync::{
         Chain, ChainRead, HeaderCheck, InsertError,
     },
     executor::{BlockExecutor, ExecError, Execution},
-    store::{Block, Store, Unwound},
+    store::{Block, Store, StoreError, Unwound},
 };
 
 use super::{
-    hist::{reseed, HistInner, Stored, MEMORY_WINDOW},
+    hist::{
+        gap_row, reseed, switch_of_row, switch_row, window_of, HistInner, Stored, MEMORY_WINDOW,
+    },
     store::{self, Ckpt, FileError, NodeStore},
 };
 
@@ -76,6 +79,10 @@ pub enum CoreError {
     NotAnchored,
     #[error("minimal mode: {0}")]
     Minimal(String),
+    #[error("store: {0}")]
+    Store(#[from] StoreError),
+    #[error("the datadir was written by a build without the history tables (TxLookup, ConsensusEpoch, ConsensusSnapshot): remove it and sync again")]
+    NoHistoryTables,
 }
 
 /// The state as a sized reader, so the generic executor and the pool can take a `&dyn StateRead`.
@@ -287,7 +294,8 @@ fn genesis_state(
     Ok((flat, codes, header))
 }
 
-fn miner_of(spec: &ChainSpec, h: &Header) -> Result<Address, CoreError> {
+/// The seal signer (V1) or the coinbase (V2) of `h`; zero for the genesis block.
+pub(crate) fn miner_of(spec: &ChainSpec, h: &Header) -> Result<Address, CoreError> {
     if h.number == 0 {
         return Ok(Address::ZERO);
     }
@@ -359,35 +367,19 @@ impl Core {
             }
             Resumed::Head { .. } => {}
         }
+        if loaded.is_some() && !node_store.has_history_tables()? {
+            return Err(CoreError::NoHistoryTables);
+        }
         let ck = loaded.as_ref().and_then(|l| {
             store::load_ckpt(dir, l.number, |c| {
-                c.number
-                    .checked_sub(l.first)
-                    .and_then(|n| usize::try_from(n).ok())
-                    .and_then(|n| l.headers.get(n))
-                    .map(Header::hash)
-                    == Some(c.hash)
+                c.number >= l.first && node_store.canonical_hash(c.number) == Some(c.hash)
             })
         });
-        let hist_of = |blocks: Vec<Stored>, codes, snaps, gaps| HistInner {
-            spec: spec.clone(),
-            base: 0,
-            blocks,
-            codes,
-            wide: BTreeMap::new(),
-            snaps,
-            gaps,
-            switches: vec![],
-            tx_index: Default::default(),
-            td: U256::ZERO,
-        };
-        let genesis_block = Stored {
-            hash: g.hash(),
-            header: g.clone(),
-            miner: Address::ZERO,
-            signs: vec![],
-            body: Body::default(),
-            receipts: vec![],
+        let window = window_of(&spec);
+        let header = |n: u64| {
+            node_store.canonical_header(n)?.ok_or_else(|| {
+                CoreError::Inconsistent(format!("block {n} is missing from the store"))
+            })
         };
         let (start, flat, mut inner) = match (&ck, &loaded) {
             (Some(c), Some(l)) => {
@@ -406,35 +398,37 @@ impl Core {
                         )
                     })
                     .collect();
-                let mut inner = hist_of(
-                    vec![],
-                    c.codes.clone(),
-                    BTreeMap::from([(c.number, snap)]),
+                // The window below the checkpoint: headers from the store, sign transactions from the
+                // checkpoint (it holds those of its own window, from `signs_from`), bodies and
+                // receipts for the memory window only. A minimal node holds nothing below its first
+                // retained header.
+                let first = if anchored { l.first } else { 0 };
+                let from = first
+                    .max(c.signs_from)
+                    .max((c.number + 1).saturating_sub(window));
+                let mut inner = HistInner {
+                    spec: spec.clone(),
+                    base: from,
+                    blocks: VecDeque::new(),
+                    window,
+                    src: Some(node_store.reader()),
+                    codes: c.codes.clone(),
+                    wide: BTreeMap::new(),
+                    snaps: BTreeMap::from([(c.number, snap)]),
                     gaps,
-                );
-                if anchored {
-                    // The history starts at the first retained header. Its total difficulty is not
-                    // known (no block below it is held): the window's own sum is a lower bound, and
-                    // XDPoS peers rank by block number and round, not by difficulty.
-                    inner.base = l.first;
-                } else {
-                    inner.td = genesis_block.header.difficulty;
-                    inner.blocks.push(genesis_block);
-                }
-                for (i, header) in l
-                    .headers
-                    .iter()
-                    .take((c.number + 1 - l.first) as usize)
-                    .enumerate()
-                {
-                    let n = l.first + i as u64;
-                    // every body is read once for the transaction index; the history keeps the
-                    // window's only (`MEMORY_WINDOW`)
-                    let (body, receipts) = store::records(&node_store, l, n)?;
-                    let mut s = Stored {
+                    switches: vec![],
+                    td: U256::ZERO,
+                };
+                for n in from..=c.number {
+                    let header = header(n)?;
+                    let (body, receipts) = if n + MEMORY_WINDOW > c.number {
+                        store::records(&node_store, l, n)?
+                    } else {
+                        (Body::default(), vec![])
+                    };
+                    let s = Stored {
                         hash: header.hash(),
-                        header: header.clone(),
-                        miner: miner_of(&spec, header)?,
+                        miner: miner_of(&spec, &header)?,
                         signs: c.signs.get(&n).map_or(vec![], |v| {
                             v.iter()
                                 .map(|(sender, signed, ok)| SignTx {
@@ -444,16 +438,33 @@ impl Core {
                                 })
                                 .collect()
                         }),
+                        header,
                         body,
                         receipts,
                     };
                     inner.index(&s, n);
-                    if n + MEMORY_WINDOW <= c.number {
-                        (s.body, s.receipts) = (Body::default(), vec![]);
-                    }
                     inner.td += s.header.difficulty;
-                    inner.blocks.push(s);
+                    inner.blocks.push_back(s);
                 }
+                if !anchored {
+                    // The history starts inside the chain: the checkpoint carries the total
+                    // difficulty. A minimal node does not know it (no block below its first retained
+                    // one is held): the window's own sum is a lower bound, and XDPoS peers rank by
+                    // block number and round, not by difficulty.
+                    inner.td = c.td;
+                }
+                // the switches below the window are rows of `ConsensusEpoch`
+                let mut switches = Vec::new();
+                for (n, row) in node_store.reader().rows(T::ConsensusEpoch)? {
+                    if n >= from {
+                        break;
+                    }
+                    switches.push(switch_of_row(n, &row).ok_or_else(|| {
+                        CoreError::Inconsistent(format!("the epoch switch row of block {n}"))
+                    })?);
+                }
+                switches.append(&mut inner.switches);
+                inner.switches = switches;
                 let flat = c.flat();
                 (c.number, flat, inner)
             }
@@ -463,14 +474,26 @@ impl Core {
                     g.hash(),
                     masternodes_of(&g.extra_data).map_err(|e| CoreError::Genesis(e.to_string()))?,
                 );
-                let mut inner = hist_of(
-                    vec![],
-                    codes0,
-                    BTreeMap::from([(0, snap)]),
-                    Default::default(),
-                );
-                inner.td = genesis_block.header.difficulty;
-                inner.blocks.push(genesis_block);
+                let inner = HistInner {
+                    spec: spec.clone(),
+                    base: 0,
+                    blocks: VecDeque::from([Stored {
+                        hash: g.hash(),
+                        header: g.clone(),
+                        miner: Address::ZERO,
+                        signs: vec![],
+                        body: Body::default(),
+                        receipts: vec![],
+                    }]),
+                    window,
+                    src: Some(node_store.reader()),
+                    codes: codes0,
+                    wide: BTreeMap::new(),
+                    snaps: BTreeMap::from([(0, snap)]),
+                    gaps: BTreeMap::new(),
+                    switches: vec![],
+                    td: g.difficulty,
+                };
                 (0, flat0, inner)
             }
         };
@@ -498,12 +521,7 @@ impl Core {
         // below.
         let replay = match &loaded {
             Some(l) => (start + 1..=l.number)
-                .map(|n| {
-                    let h = l.header(n).cloned().ok_or_else(|| {
-                        CoreError::Inconsistent(format!("block {n} is not loaded"))
-                    })?;
-                    Ok((h, store::records(&node_store, l, n)?.0))
-                })
+                .map(|n| Ok((header(n)?, store::records(&node_store, l, n)?.0)))
                 .collect::<Result<Vec<_>, CoreError>>()?,
             None => vec![],
         };
@@ -620,7 +638,8 @@ impl Core {
         let (p, snap, gap, miner) = derived.inspect_err(|_| {
             let _ = self.chain.set_head(number - 1);
         })?;
-        self.hist.write().push(
+        let gap_row = gap.as_ref().map(|g| (g.number, gap_row(g)));
+        let switch = self.hist.write().push(
             Stored {
                 hash,
                 header,
@@ -634,6 +653,21 @@ impl Core {
             snap,
             gap,
         );
+        // What the history keeps of a block beyond its window, in the store's consensus tables. They
+        // are written before any checkpoint of this block, so a restart that replays from a checkpoint
+        // finds the rows of every block at or below it, and an unwind deletes the rows above its
+        // target with the blocks.
+        if switch.is_some() || gap_row.is_some() {
+            self.chain.with_store_mut(|s| -> Result<(), StoreError> {
+                if let Some(w) = &switch {
+                    s.put_consensus(T::ConsensusEpoch, w.number, &switch_row(w))?;
+                }
+                if let Some((n, row)) = &gap_row {
+                    s.put_consensus(T::ConsensusSnapshot, *n, row)?;
+                }
+                Ok(())
+            })?;
+        }
         self.head.send_replace((number, hash));
         if self.ckpt_every != 0 && number % self.ckpt_every == 0 {
             self.checkpoint()?;
@@ -676,6 +710,8 @@ impl Core {
                 )
             })
             .collect();
+        c.signs_from = h.base;
+        c.td = h.td;
         c.gaps = h
             .gaps
             .iter()
@@ -704,9 +740,11 @@ impl Core {
     pub fn records(&self, n: u64, hash: B256) -> Option<(Body, Vec<Bytes>)> {
         {
             let h = self.hist.read();
-            let s = h.at(n).filter(|s| s.hash == hash)?;
-            if h.in_memory(n) {
-                return Some((s.body.clone(), s.receipts.clone()));
+            match h.at(n) {
+                Some(s) if s.hash != hash => return None,
+                Some(s) if h.in_memory(n) => return Some((s.body.clone(), s.receipts.clone())),
+                None if n > h.tip_number() => return None,
+                _ => {}
             }
         }
         let (header, body, receipts) = self.chain.with_store(|s| s.canonical_block(n)).ok()??;
