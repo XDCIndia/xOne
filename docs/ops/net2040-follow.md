@@ -108,11 +108,77 @@ Every block was imported only after its header check and its execution on the no
 state root, receipts root, bloom, gas used and, from 21,600, the block access list hash equal to the header;
 the only refusals in `node.log` are those of the table above (11,699 and 13,499, before the fixes).
 
+## MDBX store
+
+Run of 2026-11-11/12 on `integration/2026-11-11` (#109 with #110 merged): the node store is `MdbxStore`
+(`chain.mdbx` plus CRC-32C segment chunks, ADR-005). What changed against the run above:
+
+* the history keeps headers, sign transactions and the transaction index; bodies and receipts only for the
+  last 128 blocks (`hist::MEMORY_WINDOW`, geth's `TriesInMemory`); older ones are read from the store
+  (`Core::records`) for `eth_getBlock*`, receipts, eth/63 `GetBlockBodies` and the board;
+* a restart reads the stored headers, reads every body once for the transaction index, replays the blocks
+  above the newest checkpoint and keeps the newest two checkpoints (an older one is outside the unwind
+  window);
+* group commit carried onto MDBX (`mdbx::Config::group_commit`, a node that does not sign): block commits
+  skip the journal, segment and directory syncs and MDBX runs `SafeNoSync`; once a second the segment
+  chunks the deferred blocks wrote to are synced and then MDBX is made steady. Without it the commit made
+  about a dozen syncs per block (30 ms each on this disk, `dd oflag=dsync`: 3 blocks per second). A node
+  with a producer keeps the durable per-block commit; `durability()` is not `Durable` while blocks are
+  deferred. Fault test `tests/fault/tests/group_commit.rs`: `kill -9` loses nothing, a power loss returns to
+  the last steady point.
+
+Second instance, beside the live node (which was not touched), from an empty datadir:
+
+```
+/mnt/data/xone-net2040/mdbx-xone --network net2040 --datadir /mnt/data/xone-net2040/mdbx-data \
+    --bootnodes enode://0337f630...a9@135.181.117.109:35071 --port 30305 \
+    --http --http.addr 127.0.0.1 --http.port 18545 --http.api eth,net,web3,XDPoS \
+    --ws --ws.addr 127.0.0.1 --ws.port 18547 --identity xone-rs-net2040-mdbx
+```
+
+(30304 and 18546 were held by outgoing connections of other processes on this host, whose ephemeral range
+is 15000-65000.) First start 22:23 UTC with `xOne/v0.1.0-27ebd217`, one restart at block 22,045 to
+`xOne/v0.1.0-cc644fb0` (checkpoint retention; it replayed 22,001..=22,045 from the checkpoint of 22,000 and
+followed on in 77 s), head of the archive reached at 23:58 UTC: genesis to 762,846 in about 95 minutes.
+Checked at 2026-11-11T23:58:30Z, local vs archive (`ssh xdc02 curl ... :10071`, read only), whole JSON:
+
+```
+local 762846 archive 762847 lag 1
+1      eth_getBlockByNumber equal (0x38bc3bc6c4027502f23a7b0a6103cb311fd64b6488e75a3928a697ef8b0bcfcd)
+18000  eth_getBlockByNumber equal (0x68e72f4b8a1b61aab2872966088a8383917721da51e27b3fc009fc56d5caf907)
+21600  eth_getBlockByNumber equal (0xacbb3da137b6fbe6e2d2f4ed0cad6ce1c4dc6f574347bf1daeeef10c9eeec589)
+177963 eth_getBlockByNumber equal (0xa60cb194097f344e6193dd0a8c6139892ee7720562c4891b8087ab4354338a74)
+525514 eth_getBlockByNumber equal (0xc4d088108728c869473a5d06b20cd433fda917a53ffb2d50b3075dbb891a7345)
+754000 eth_getBlockByNumber equal (0xa88229f5aebbd5cb8461b4f3b3c5d94e9a0d9b3fec46ef369c40c093130e476b)
+762836 eth_getBlockByNumber equal (0x9541313378fe4168b73632a1b3065afcb06dd0f85f35b2f1e1ed2dbeee6a320b)  head-10
+762849 eth_getBlockByNumber equal (0xb85d3f243161583880ff39afa3a0c6db7aa16efb2fce79561c69d55369fdd381)  head
+762849 XDPoS_getMasternodesByNumber equal (13)
+```
+
+No block was refused (`node.log` has no refusal). Resident memory, sampled every 10 s: peak 7.07 GB at the
+head (13 GB for the memory store above), 4.5 GB at block 200,000; the rest is the 32 million transaction
+hashes of the index and the headers. Datadir at the head: 17 GB (segments, MDBX, two checkpoints).
+
+Restart at the head: SIGTERM at 23:58:46 (stopped in 4 s, state checkpoint of 762,849 written), start at
+23:58:49; the store reconciled at its committed head 762,849, the node followed from it after 120 s (the
+headers and every body read once), imported the 38 blocks the archive had made meanwhile and reported
+`eth_syncing` false; peak 5.7 GB. Then:
+
+```
+local 762890 archive 762887
+762880 eth_getBlockByNumber equal (0x29c8cc8b58a331beb0d0e59320ea76d6694aae6460bf6181d238cf4ba7888218)
+762890 eth_getBlockByNumber equal (0x30ab11aaa7950dd5a8db76da86d2a87f23e49bc29468d84c9664b052c8323924)
+762890 XDPoS_getMasternodesByNumber equal (13)
+```
+
+The ignored `live_net2040` test (genesis to block 1,000 against the archive peer, on the MDBX store) passed
+once on this build: `cargo test --release --locked -p xone-node --test live_net2040 -- --ignored`, 39.4 s.
+
 ## What is not covered
 
-* The store is still the memory model with files: the history (headers, bodies, the transaction index) is
-  held in memory and a restart re-executes the blocks above the newest checkpoint, which takes minutes in
-  the dense ranges of this chain.
+* The history still holds every header and the transaction index in memory (about 7 GB at 762,000
+  blocks), and a restart reads every body once to rebuild the index (2 minutes here). Persisting them in
+  the store's consensus and index tables removes both.
 * One peer, one request in flight at a time.
 * The geth `StorageWrite` of a slot written and restored within one transaction (geth lists it as a write
   of its original value, the overlay sees no change) has not occurred on this chain; the hash comparison
