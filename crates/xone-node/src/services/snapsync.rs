@@ -30,6 +30,7 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+use super::gaprpc;
 use alloy_primitives::{keccak256, Address, Bytes, B256, U256};
 use alloy_rlp::Decodable;
 use tokio::{runtime::Handle, sync::mpsc::Receiver, time::timeout};
@@ -126,6 +127,8 @@ pub enum SnapSyncError {
     V1(u64),
     #[error("gap block {number}: {why}")]
     Gap { number: u64, why: String },
+    #[error("gap block {number}: no source for its 0x88 state. Geth serves snap/1 only for recent state, so a geth-only peer set cannot supply it. Either connect an xOne peer (snap/1 serves it from its 4,096-block window) or pass --snap.gap-rpc <url> of any archive RPC that serves eth_getProof (every proof is verified against the header; the RPC is not trusted)")]
+    GapSource { number: u64 },
     #[error("state: {0}")]
     State(#[from] SyncError),
     #[error("state root {got} rebuilt from the hashed rows, the pivot header says {want}")]
@@ -273,9 +276,14 @@ impl Drv<'_> {
 
     /// The peer that serves state: snap/1, fewest faults.
     fn source(&self) -> Option<PeerId> {
+        self.pick(false)
+    }
+
+    /// `xone`: only peers that also offer xpre/1 (xOne nodes, which keep older state in their window).
+    fn pick(&self, xone: bool) -> Option<PeerId> {
         self.known
             .keys()
-            .filter(|p| self.has(p, Sub::Snap))
+            .filter(|p| self.has(p, Sub::Snap) && (!xone || self.has(p, Sub::Xpre)))
             .min_by_key(|p| (self.faults.get(*p).copied().unwrap_or(0), **p))
             .copied()
     }
@@ -390,12 +398,12 @@ impl Drv<'_> {
 }
 
 /// The snap/1 source of `xone_snap::client`: the current snap/1 peer; a fault moves to the next.
-struct Src<'a, 'b>(&'a mut Drv<'b>);
+struct Src<'a, 'b>(&'a mut Drv<'b>, bool);
 
 impl PeerSource for Src<'_, '_> {
     fn exchange(&mut self, req: Snap) -> Result<Snap, PeerError> {
         let d = &mut *self.0;
-        let peer = d.source().ok_or(PeerError::Disconnected)?;
+        let peer = d.pick(self.1).ok_or(PeerError::Disconnected)?;
         let c = &mut d.n;
         match req {
             Snap::GetAccountRange(_) => c.account_ranges += 1,
@@ -409,7 +417,7 @@ impl PeerSource for Src<'_, '_> {
     }
 
     fn report(&mut self, fault: &Fault) {
-        if let Some(p) = self.0.source() {
+        if let Some(p) = self.0.pick(self.1) {
             eprintln!("snap: peer {}: {fault}", short(&p));
             self.0.fault(&p);
         }
@@ -747,16 +755,8 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
             .get(&g)
             .map(|h| h.state_root)
             .ok_or_else(|| gerr("header not downloaded".into()))?;
-        let (account, slots) = client::account_at(&mut Src(d), &scfg, root, k88)?
-            .ok_or_else(|| gerr("no 0x88 account in the proven state".into()))?;
-        let n = slots.len();
-        let pool =
-            gap_snapshot::build(&One { account, slots }, g).map_err(|e| gerr(e.to_string()))?;
-        eprintln!(
-            "snap: gap block {g} root {root}: 0x88 account and {n} slots proven, {} candidates",
-            pool.candidates.len()
-        );
-        side.gaps.insert(g, pool.candidates);
+        let pool = gap_pool(d, cfg, &scfg, root, g, k88)?;
+        side.gaps.insert(g, pool);
     }
 
     // ---- the pivot state
@@ -767,7 +767,7 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
         anchor.state_root,
         short(&d.src()?)
     );
-    client::sync(&mut st, &mut Src(d), &scfg)?;
+    client::sync(&mut st, &mut Src(d, false), &scfg)?;
     let slots: usize = st.storage.values().map(BTreeMap::len).sum();
     let c = &d.n;
     eprintln!(
@@ -852,6 +852,49 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
         pivot + 1
     );
     Ok(())
+}
+
+/// The pool of gap block `g` from its 0x88 state, in this order: an xOne peer over snap/1 (its window
+/// keeps the state), else the archive RPC of `--snap.gap-rpc` with every proof verified against the
+/// header's state root, else a typed error that names both. Never an empty pool.
+fn gap_pool(
+    d: &mut Drv<'_>,
+    cfg: &Config,
+    scfg: &client::Config,
+    root: B256,
+    g: u64,
+    k88: B256,
+) -> R<Vec<Address>> {
+    let gerr = |why: String| SnapSyncError::Gap { number: g, why };
+    if d.pick(true).is_some() {
+        match client::account_at(&mut Src(d, true), scfg, root, k88) {
+            Ok(Some((account, slots))) => {
+                let n = slots.len();
+                let pool = gap_snapshot::build(&One { account, slots }, g)
+                    .map_err(|e| gerr(e.to_string()))?;
+                eprintln!(
+                    "snap: gap block {g} root {root}: 0x88 account and {n} slots proven over snap/1 from an xOne peer, {} candidates",
+                    pool.candidates.len()
+                );
+                return Ok(pool.candidates);
+            }
+            Ok(None) => {
+                eprintln!("snap: gap block {g}: the xOne peer has no 0x88 account at {root}")
+            }
+            Err(e) => eprintln!("snap: gap block {g}: the xOne peer did not serve it: {e}"),
+        }
+    }
+    let Some(url) = &cfg.sync.snap_gap_rpc else {
+        return Err(SnapSyncError::GapSource { number: g });
+    };
+    let mut rpc = gaprpc::Rpc::new(url, g).map_err(|e| gerr(format!("--snap.gap-rpc: {e}")))?;
+    let pool = gaprpc::pool(&mut rpc, root, g).map_err(|e| gerr(format!("--snap.gap-rpc: {e}")))?;
+    eprintln!(
+        "snap: gap block {g} root {root}: 0x88 pool of {} candidates, {} eth_getProof requests, every proof verified against the header's state root",
+        pool.len(),
+        rpc.requests
+    );
+    Ok(pool)
 }
 
 /// Two peers serve the same header for the switch number: the pin of the anchor (geth's trust in

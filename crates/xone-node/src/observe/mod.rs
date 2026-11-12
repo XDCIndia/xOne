@@ -9,7 +9,7 @@ pub mod ethstats;
 pub mod heartbeat;
 pub mod logs;
 pub mod metrics;
-mod wire;
+pub(crate) mod wire;
 
 /// One block as the stats board shows it.
 #[derive(Clone, Debug, PartialEq, Eq)]

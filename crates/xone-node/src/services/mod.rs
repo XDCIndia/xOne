@@ -1,6 +1,7 @@
 //! The runnable node: services over `xone-net`, `xone-sync`, `xone-builder` and `xone-rpc`.
 pub mod chain;
 pub mod core;
+pub mod gaprpc;
 pub mod hist;
 pub mod net;
 pub mod pool;
