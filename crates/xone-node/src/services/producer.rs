@@ -325,7 +325,10 @@ impl Worker {
         let Some((h, txs)) = self.pending.take() else {
             return;
         };
-        let (n, head) = self.core.head();
+        let (n, head) = {
+            let t = self.core.hist.read();
+            (t.tip_number(), t.tip().hash)
+        };
         if h.parent_hash == head && h.number == n + 1 {
             say(format!(
                 "finishing the block {} that was being signed",
@@ -351,7 +354,15 @@ impl Worker {
     fn tick(&mut self) {
         self.inbound();
         self.finish_pending();
-        let (n, head) = self.core.head();
+        // The head as the BFT machine sees it: the history's tip. `Core::head` is the store's head, which a
+        // block reaches before the history does (`Core::import` commits, then derives and pushes); a tick in
+        // between fed the machine a Proposal for a block it could not read yet, `on_proposal` dropped it, `fed`
+        // kept it from being fed again, and the votes that had arrived first never made the QC: the leader of
+        // the next round timed out with the votes in its pool (the round-37 misses, gate D rehearsal).
+        let (n, head) = {
+            let h = self.core.hist.read();
+            (h.tip_number(), h.tip().hash)
+        };
         if head != self.last_head {
             self.last_head = head;
             self.on_head(n, head);
