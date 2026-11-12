@@ -557,16 +557,7 @@ impl HistInner {
     /// at the tip only, not their values before each block. Keep an undo per block when a chain with them
     /// needs a branch switch.
     pub fn pop_to(&mut self, number: u64) -> Result<Vec<Stored>, String> {
-        if number < self.base || number > self.tip_number() {
-            return Err(format!(
-                "block {number} is outside the history ({}..={})",
-                self.base,
-                self.tip_number()
-            ));
-        }
-        if !self.wide.is_empty() {
-            return Err("accounts above 2^256 are held at the tip only".into());
-        }
+        self.can_pop_to(number)?;
         let mut out = Vec::new();
         while self.tip_number() > number {
             let Some(s) = self.blocks.pop_back() else {
@@ -580,6 +571,27 @@ impl HistInner {
         self.gaps.retain(|n, _| *n <= number);
         out.reverse();
         Ok(out)
+    }
+
+    /// Whether [`HistInner::pop_to`] can go back to `number` and the history then verify its child: inside the
+    /// window, no balance above 2^256 held, and for a V1 child the V1 snapshot of `number` in memory (a start
+    /// from a state checkpoint holds the checkpoint's snapshot only).
+    pub fn can_pop_to(&self, number: u64) -> Result<(), String> {
+        if number < self.base || number > self.tip_number() {
+            return Err(format!(
+                "block {number} is outside the history ({}..={})",
+                self.base,
+                self.tip_number()
+            ));
+        }
+        if !self.wide.is_empty() {
+            return Err("accounts above 2^256 are held at the tip only".into());
+        }
+        let v1_child = self.v2_cfg().is_none_or(|v| number < v.switch_block);
+        if v1_child && !self.snaps.contains_key(&number) {
+            return Err(format!("no V1 snapshot of block {number} in memory"));
+        }
+        Ok(())
     }
 
     /// Drops what has left the windows: blocks below `window`, snapshots below [`MEMORY_WINDOW`],

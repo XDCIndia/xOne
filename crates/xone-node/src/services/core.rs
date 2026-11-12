@@ -715,6 +715,8 @@ impl Core {
                 c.number
             )));
         }
+        // nothing is unwound unless the history can follow the store back to the fork
+        self.hist.read().can_pop_to(fork).map_err(bad)?;
         self.chain
             .set_head(fork)
             .map_err(|e| bad(format!("set head {fork}: {e}")))?;

@@ -173,6 +173,15 @@ impl Follower {
         self.ask(peer, Origin::Hash(head), Stage::Headers);
     }
 
+    /// The lowest block a branch switch may start above: the committed block (V2), or `BATCH` below the head
+    /// where nothing is committed (V1 has no finality; geth takes the newer branch there as well).
+    fn fork_floor(&self, head: u64) -> u64 {
+        self.core
+            .chain
+            .committed()
+            .map_or(head.saturating_sub(BATCH), |c| c.number)
+    }
+
     /// `BATCH + 1` headers from `origin`.
     fn ask(&mut self, peer: PeerId, origin: Origin, stage: Stage) {
         let (id, wire) = self.rid(&peer);
@@ -206,6 +215,9 @@ impl Follower {
         };
         let at = match at {
             Ok(at) => at,
+            // the peer has not imported our newest block yet (it just left us, or another peer gave it to
+            // us first): propagation lag, not an offence; geth does not drop a peer for a head it lacks
+            Err("no branch: every header is ours") => return,
             Err(why) => return self.ban(peer, why),
         };
         let branch = headers[at..].to_vec();
@@ -312,7 +324,7 @@ impl Follower {
             }
             // our head may be a block of ours that the network left (sealed, then the round timed out and
             // the next leader built on the block below it): ask from the committed block for its branch
-            let floor = self.core.chain.committed().map_or(0, |c| c.number);
+            let floor = self.fork_floor(number);
             if headers.is_empty() && floor < number {
                 self.ask(peer, Origin::Number(floor), Stage::Fork);
                 return;
@@ -328,7 +340,14 @@ impl Follower {
             // serves nothing above ours is set aside
             let holds = |h: B256| h == head || self.core.hist.read().number_of(h).is_some();
             if self.known.get(&peer).is_none_or(|p| !holds(p.head)) {
-                self.ban(peer, "advertises a head it does not serve");
+                // it holds our head as a side block and is on another branch: ask for it from below (a V1 fork
+                // of two sealers at one height; set aside if it shows no longer branch)
+                let floor = self.fork_floor(number);
+                if floor < number {
+                    self.ask(peer, Origin::Number(floor), Stage::Fork);
+                } else {
+                    self.ban(peer, "advertises a head it does not serve");
+                }
                 return;
             }
             self.progress.confirmed.store(true, Ordering::Relaxed);
