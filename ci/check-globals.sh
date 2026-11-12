@@ -6,9 +6,19 @@
 set -u
 cd "$(dirname "$0")/.."
 if [ $# -eq 0 ]; then
-  set -- crates/xone-chainspec crates/xone-consensus crates/xone-evm crates/xone-state crates/xone-primitives crates/xone-signer crates/xone-net crates/xone-sync crates/xone-snap crates/xone-builder crates/xone-rpc
+  set -- crates/xone-chainspec crates/xone-consensus crates/xone-evm crates/xone-state crates/xone-primitives crates/xone-signer crates/xone-net crates/xone-executor crates/xone-sync crates/xone-snap crates/xone-builder crates/xone-rpc
 fi
-if grep -rnE --include='*.rs' '^[^/]*(\bstatic[[:space:]]+mut\b|\blazy_static\b|\bonce_cell\b)' "$@"; then
-  echo "check-globals: forbidden global state (R3 rule 2)" >&2
-  exit 1
-fi
+status=0
+grep -rnE --include='*.rs' '^[^/]*(\bstatic[[:space:]]+mut\b|\blazy_static\b|\bonce_cell\b)' "$@" || status=$?
+case "$status" in
+  0)
+    echo "check-globals: forbidden global state (R3 rule 2)" >&2
+    exit 1
+    ;;
+  1) exit 0 ;; # grep completed and found no forbidden declarations.
+  *)
+    echo "check-globals: scan failed (grep exit $status); no qualification result" >&2
+    exit "$status"
+    ;;
+esac
+

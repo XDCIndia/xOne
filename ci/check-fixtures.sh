@@ -50,8 +50,13 @@ echo "== layering fixtures"
 ci/check-layering.sh --fixtures || fail=1
 
 echo "== real crates must pass"
-ci/check-globals.sh && echo "ok    check-globals"
+if ci/check-globals.sh; then
+  echo "ok    check-globals"
+else
+  echo "FAIL  check-globals"; fail=1
+fi
 for c in "${RULE_CRATES[@]}"; do
   if cargo clippy --locked --all-targets -p "$c" -- -D warnings >/dev/null 2>&1; then echo "ok    $c"; else echo "FAIL  $c"; fail=1; fi
 done
 [ "$fail" -eq 0 ] && echo "check-fixtures: PASS" || { echo "check-fixtures: FAIL"; exit 1; }
+
