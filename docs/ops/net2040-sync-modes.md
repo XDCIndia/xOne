@@ -213,3 +213,57 @@ cd /data/xone-net2040-minimal && env XONE_ETHSTATS=<minimal value> setsid nohup 
 * a moving pivot and a resumed download: the net2040 state (9,532 accounts) downloads in under a second, so
   neither was exercised; a stop before the install leaves the datadir empty and the next start begins again.
 * an archive state store (historical state served for every block).
+
+## Resync 2026-11-12, second run
+
+All three anchored nodes were wiped (`rm -rf data`) and resynced one at a time, build 24e39236. The
+full producer `xone-rs-net2040-h95` (1676b87) and `xone-rs-net2040-archive-h4` kept running. Time is
+from the start of the loop (after the old loop exited) to "following at the tip": node head within 1
+of archive-h4 for three polls in a row. Peak RSS is VmRSS sampled every second.
+
+| Node | Flag | Time to tip | Data moved | Datadir at tip | Peak RSS | Pivot / anchor |
+| --- | --- | --- | --- | --- | --- | --- |
+| `xone-rs-net2040-snap-h95` | `--syncmode snap` | 12 s (install 4 s) | 2 MB over snap/1 + xpre/1 | 72 MB | 80,668 kB | pivot 776638 (head 776702 - 64) |
+| `xone-rs-net2040-fast-h213` | `--syncmode fast` | 12 s (install 3 s) | 2 MB over snap/1 + xpre/1 | 72 MB | 79,604 kB | pivot 776694 (head 776758 - 64) |
+| `xone-rs-net2040-minimal-h213` | `--minimal` after import | 13 s (import 1.0 s) | 5,187,407 B snapshot | 72 MB | 55,920 kB follow, 46,312 kB import | anchor 776785 |
+
+Mechanism evidence (node.log):
+
+- snap: `shared snap/1 xpre/1` with 462cba59 (archive-h4); headers 772075..=776702 linked; window
+  bodies and receipts 774840..=776638; 4 gap blocks with 0x88 proven; 9532 accounts, 10935 slots,
+  6 codes in 5 account ranges, 6 storage ranges, 1 bytecodes, 0 heal requests; `state root 0xb2cf721a..
+  verified at the pivot 776638`; 20445 preimages over xpre/1; `executing from 776639`.
+- fast: first line `--syncmode fast is an alias of snap, as in geth-XDC: syncing in snap mode`, then the
+  same steps; root 0x27e9597c.. verified at 776694; `executing from 776695`.
+- minimal: `xone snapshot export` on archive-h4 (loop stopped, export, loop restarted with its env):
+  `exported block 776785 0x849eddb3..042483 ... 5187407 bytes in 2.8s`, sha256 e9f7a6d5..63107249.
+  pins.txt `776785 0x849eddb3ae705f4be624afc4dc404f8ccfa82327ea3d2394487178b32d042483` (archive-h4 hash,
+  equal on the xdc02 geth archive). `xone snapshot import ... --pins`: `imported block 776785 ... 14
+  chunks ... in 1.0s`; then `chain: following from block 776785`.
+
+Verification on each node against archive-h4: `eth_getBlockByNumber(n, true)` equal at the pivot or
+anchor, pivot + 1, two later heights and head - 10; `XDPoS_getMasternodesByNumber` at the head equal
+(13 masternodes); `eth_getBlockByNumber(firstRetained - 1)` gives the typed -32000 refusal and
+`firstRetained` itself is served. Board: all three `active:true`; `syncMode` is `snap` for snap and
+fast, `full` for minimal (#123).
+
+RPC sweep before the resync (all five nodes against archive-h4, archive-h4 against xdc02): blocks with
+and without transactions by number and hash, transaction, receipt, logs, balance, code, storage, nonce,
+masternodes, chainId, net_version are equal inside each window, including `validators`, `validator`
+and `penalties`. Differences: the refusal `pivot` field gives the head (#121); `eth_subscribe` gives an
+id but no notification on any node (#122); `XDPoS_getCandidates` is refused on both sides with
+different messages (no issue). archive-h4 runs `--syncmode full` with no `--gcmode archive` and
+refuses state below about head - 4100 (the xdc02 archive serves it).
+
+Mint readiness, borrowed seats, one at a time (mint-c33a.log, mint-00ce.log): every node sealed 3 of 3
+eligible turns, each block equal on archive-h4 (hash, miner, child parentHash), then rolled back (0
+`--mine` xone processes besides h95, geth unit active, follower loop back, staged key removed).
+
+| Node | Seat | Seals (block hash) | Producer up / rolled back |
+| --- | --- | --- | --- |
+| snap-h95 | 0xc33a | 776899 0x8b4984c1.., 776912 0x2865357c.., 776925 0x928e78d0.. | 08:58:40Z / 08:59:55Z |
+| fast-h213 | 0x00ce | 776952 0x3e0ae6a3.., 776965 0x821fe3b5.., 776978 0x0ec52145.. | 09:01:26Z / 09:02:45Z |
+| minimal-h213 | 0x00ce | 777004 0x3c2a01eb.., 777017 0x7fd00d78.., 777030 0x4490cc8c.. | 09:03:27Z / 09:04:42Z |
+
+Round 770296 (index 3, 0x00ce) timed out in the cutover gap before fast-h213 started, while no signer
+held the key; this is the known gap of the protocol (stop geth, wait 3 blocks), not a producer miss.
