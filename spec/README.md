@@ -54,6 +54,8 @@ A rule with no source line is not a rule. A value that a page states must come f
 | [messages](snap/messages.md) | the eight snap/1 messages, the RLPx offset, wide-balance slim accounts, response limits, the server and the Q15 bounds |
 | [range-proofs](snap/range-proofs.md) | what a range must prove, when it is refused, healing and resume |
 | [completeness](snap/completeness.md) | the pre-pivot headers, bodies, receipts and gap snapshots without which the sync is not complete |
+| [pivot](snap/pivot.md) | `--syncmode snap` in the node: head minus 64, the anchor proof, the pin, what is downloaded and checked in which order |
+| [preimages](snap/preimages.md) | xpre/1, the xOne-only preimage capability; snap sync needs an xOne peer |
 
 ### Keys (xone-signer)
 | Page | Rule |

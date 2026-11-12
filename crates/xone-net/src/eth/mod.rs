@@ -249,6 +249,13 @@ pub enum Message {
         code: u64,
         item: Raw,
     },
+    /// A message of snap/1 or xpre/1: the code relative to that capability and the body, which
+    /// the application decodes (`xone_snap::codec`). Sent only to a peer that shares the capability.
+    Sub {
+        sub: crate::rlpx::Sub,
+        code: u64,
+        body: Bytes,
+    },
     /// Codes 0x08 and 0x09: DEX order and lending transactions on legacy peers. Geth drains them
     /// without decoding (`handler.go:238-268`); so do we, within the size cap.
     Drained {
@@ -270,7 +277,9 @@ impl Message {
             Message::GetReceipts { .. } => codes::GET_RECEIPTS,
             Message::Receipts { .. } => codes::RECEIPTS,
             Message::Bft(m) => m.code(),
-            Message::Opaque { code, .. } | Message::Drained { code } => *code,
+            Message::Opaque { code, .. }
+            | Message::Drained { code }
+            | Message::Sub { code, .. } => *code,
         }
     }
 }
@@ -429,7 +438,9 @@ pub fn encode(f: Framing, msg: &Message) -> Result<(u64, Vec<u8>), WireError> {
         } => frame(f, *id, &alloy_rlp::encode(last_incomplete), per_block)?,
         Message::Bft(m) => m.encode_body(),
         Message::Opaque { item, .. } => item.0.to_vec(),
-        Message::Drained { code } => return Err(WireError::UnknownCode(*code)),
+        Message::Drained { code } | Message::Sub { code, .. } => {
+            return Err(WireError::UnknownCode(*code))
+        }
     };
     let code = msg.code();
     let max = codes::max_size(code);

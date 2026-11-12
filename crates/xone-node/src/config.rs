@@ -85,8 +85,12 @@ pub struct Config {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct SyncCfg {
-    /// full; snap and fast are refused (`sync_mode`).
+    /// full or snap; fast is stored as snap (`sync_mode`).
     pub mode: String,
+    /// `--snap.pins`: a pins file (`<number> <0x hash>` per line, the `snapshot import --pins`
+    /// form) that pins the pivot's epoch-switch header; without it two peers must serve the same
+    /// header (`spec/snap/pivot.md`).
+    pub snap_pins: Option<PathBuf>,
     /// full; archive is refused (`gc_mode`).
     pub gcmode: String,
     pub from_block: Option<u64>,
@@ -228,6 +232,7 @@ defaults!(Config {
 });
 defaults!(SyncCfg {
     mode: "full".into(),
+    snap_pins: None,
     gcmode: "full".into(),
     from_block: None,
     minimal: false,
@@ -324,16 +329,16 @@ fn list(v: &str) -> Vec<String> {
         .collect()
 }
 
-/// The node implements full sync only: snap/1 is not offered on RLPx and `xone-snap`'s state download
-/// is not wired into the node, so `snap` and `fast` would silently sync in full from genesis.
+/// `full`, or `snap` (state download at a pivot, `services::snapsync`). geth-XDC runs `fast` as
+/// snap (`eth/downloader/modes.go`: `FastSync` is an alias of `SnapSync`), so does this node: the
+/// value is stored as `snap` and the start logs it.
 fn sync_mode(key: &str, v: &str) -> Result<String, ConfigError> {
     match v {
-        "full" => Ok(v.to_owned()),
-        "snap" | "fast" => Err(invalid(
-            key,
-            v,
-            "not implemented in this build (no snap/1 state download; the node would sync in full from genesis): use full",
-        )),
+        "full" | "snap" => Ok(v.to_owned()),
+        "fast" => {
+            eprintln!("--{key} fast is an alias of snap, as in geth-XDC: syncing in snap mode");
+            Ok("snap".to_owned())
+        }
         _ => Err(invalid(key, v, "not an allowed value")),
     }
 }
@@ -355,7 +360,8 @@ fn gc_mode(key: &str, v: &str) -> Result<String, ConfigError> {
 impl Config {
     pub fn from_toml(text: &str) -> Result<Self, ConfigError> {
         let c: Self = toml::from_str(text).map_err(|e| ConfigError::Toml(e.to_string()))?;
-        sync_mode("sync.mode", &c.sync.mode)?;
+        let mut c = c;
+        c.sync.mode = sync_mode("sync.mode", &c.sync.mode)?;
         gc_mode("sync.gcmode", &c.sync.gcmode)?;
         Ok(c)
     }
@@ -409,6 +415,7 @@ impl Config {
             "syncmode" => self.sync.mode = sync_mode(key, v)?,
             "gcmode" => self.sync.gcmode = gc_mode(key, v)?,
             "syncfromblock" => self.sync.from_block = Some(num(key, v)?),
+            "snap.pins" => self.sync.snap_pins = Some(v.into()),
             "minimal" => self.sync.minimal = flag(key, v)?,
             "cache" => self.sync.cache_mb = num(key, v)?,
             "history.transactions" | "txlookuplimit" => self.sync.tx_history = num(key, v)?,
@@ -519,18 +526,23 @@ mod tests {
     }
 
     /// Modes the node does not run are refused by the flag and the config file alike, never accepted
-    /// and then synced in full from genesis.
+    /// and then synced in full from genesis; fast is snap.
     #[test]
-    fn unimplemented_sync_modes_are_refused() {
+    fn sync_modes() {
         let mut c = Config::default();
-        for (k, v) in [
-            ("syncmode", "snap"),
-            ("syncmode", "fast"),
-            ("gcmode", "archive"),
-        ] {
-            let e = c.set(k, v).unwrap_err().to_string();
-            assert!(e.contains("not implemented in this build"), "{k}={v}: {e}");
+        let e = c.set("gcmode", "archive").unwrap_err().to_string();
+        assert!(e.contains("not implemented in this build"), "{e}");
+        for (v, want) in [("snap", "snap"), ("fast", "snap")] {
+            c.set("syncmode", v).unwrap_or_else(|e| panic!("{e}"));
+            assert_eq!(c.sync.mode, want);
         }
+        assert_eq!(
+            Config::from_toml("[sync]\nmode = \"fast\"\n")
+                .unwrap_or_else(|e| panic!("{e}"))
+                .sync
+                .mode,
+            "snap"
+        );
         c.set("syncmode", "full").unwrap_or_else(|e| panic!("{e}"));
         c.set("gcmode", "full").unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(
@@ -539,7 +551,7 @@ mod tests {
         );
         assert_eq!(Config::default().sync.mode, "full");
         for t in [
-            "[sync]\nmode = \"snap\"\n",
+            "[sync]\nmode = \"light\"\n",
             "[sync]\ngcmode = \"archive\"\n",
         ] {
             assert!(

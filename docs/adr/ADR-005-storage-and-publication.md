@@ -317,3 +317,25 @@ What the code does where this ADR left a choice. None changes the commit order, 
 - **Format version**: a segment header of another version is reported to `reconcile` as `ManifestState::Invalid(Version(v))`, so it refuses as `FormatVersion(v)` with no file change.
 - **Pruning** (`prune_to`) requires the floor to be chunk aligned and not above the oldest openable block, so a pruned block never has a state or a changeset that is still served.
 - **Measured** (Apothem blocks 0 to 1,800 through the node on this host): see the report of the XA-06 Gate B run attached to issue #11; fsync calls per block are counted with `strace -f -c`.
+
+## 16. Amendment 2026-11-12: the state window is 4,096 blocks (XB-17)
+
+The node keeps the state of the last `RETENTION` canonical blocks openable (`xone_node::services::core::RETENTION`,
+the `retention` of `MdbxStore`: changesets in `AccountChangeSets` and `StorageChangeSets`, and the in-memory read
+model above the head checkpoint). It was 1,024; it is now **4,096**.
+
+Reason: a node that snap-syncs (`--syncmode snap`, `spec/snap/pivot.md`) needs the candidate pool of every gap
+block up to `3E + G - 1` blocks below its pivot (`spec/retention.md`, rows 3, 7 and 11: 3,149 on every XDC network
+today). The pool is derived from the 0x88 state at that block, so the client fetches the 0x88 account and storage at
+the gap block's state root over snap/1 with range proofs. A node serves snap/1 only for roots it can open; with the
+pivot 64 below its head, the deepest root it must open is `64 + 3,149 = 3,213` blocks deep, and 4,096 leaves about 880
+blocks (30 minutes at 2 s) for the client to fetch the gap states and about 4,000 blocks (2.2 hours) to download the
+pivot state.
+
+Unchanged: the checkpoint interval (`CHECKPOINT_EVERY` 1,000), the restart rule (unwind to the newest checkpoint
+inside the window and replay), the atomic unwind of section 8 (`retained_first <= n < head`, now with a deeper
+`retained_first`), the formats and the manifest. Only how many changesets are kept changes, and keeping more needs no
+migration: a datadir written with 1,024 opens with its 1,024 changesets and grows to 4,096. Cost: the changesets of
+3,072 more blocks in MDBX and in memory (on net2040, a few MB; on mainnet, where a block touches more accounts, the
+measured figure goes in `docs/ops/net2040-sync-modes.md` when one is taken). Evidence: the MDBX kill matrix
+(`tests/fault`) and the node tests pass with 4,096 (`docs/ops/net2040-sync-modes.md`, gates of XB-17).

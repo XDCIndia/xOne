@@ -217,11 +217,51 @@ pub fn import_datadir(
         .map_err(|e| ImportDatadirError::Io(format!("{}: {e}", input.display())))?;
     let mut stage = FileStaging(dir.join("snapshot.part"));
     let v = verify(&cfg, &mut file, &mut stage)?;
-    // the state checkpoint first, then the store in one commit
-    let flat = v.install.state.clone();
+    install(
+        &dir,
+        &mut store,
+        v.anchor.number,
+        v.anchor.hash,
+        &v.side,
+        v.install,
+    )
+    .map_err(|e| match e {
+        InstallError::Io(e) => ImportDatadirError::Io(e),
+        InstallError::Store(e) => ImportDatadirError::Import(ImportError::Store(e)),
+    })?;
+    stage
+        .truncate(0)
+        .map_err(|e| ImportDatadirError::Io(e.to_string()))?;
+    Ok(Imported {
+        anchor: v.anchor,
+        side: v.side,
+        stats: v.stats,
+    })
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum InstallError {
+    #[error("{0}")]
+    Io(String),
+    #[error("store: {0}")]
+    Store(xone_sync::store::StoreError),
+}
+
+/// Writes a verified pivot into the empty datadir `dir`: the state checkpoint of the pivot first,
+/// then the store in one commit (`Store::install_snapshot`). The one install path of `snapshot
+/// import` and of `--syncmode snap` (`spec/bootstrap/snap-install.md`).
+pub fn install(
+    dir: &Path,
+    store: &mut store::NodeStore,
+    number: u64,
+    hash: B256,
+    side: &Side,
+    install: xone_sync::store::Install,
+) -> Result<(), InstallError> {
+    let flat = &install.state;
     let mut ck = Ckpt {
-        number: v.anchor.number,
-        hash: v.anchor.hash,
+        number,
+        hash,
         accounts: flat
             .accounts
             .iter()
@@ -235,34 +275,23 @@ pub fn import_datadir(
             })
             .collect(),
         storage: flat.storage.clone(),
-        codes: v.side.codes.clone(),
-        signers: v.side.signers.clone(),
-        recents: v.side.recents.clone(),
-        signs: v
-            .side
+        codes: side.codes.clone(),
+        signers: side.signers.clone(),
+        recents: side.recents.clone(),
+        signs: side
             .signs
             .iter()
             .map(|(n, r)| (*n, r.iter().map(|s| (s.sender, s.signed, s.ok)).collect()))
             .collect(),
-        gaps: v.side.gaps.iter().map(|(n, c)| (*n, c.clone())).collect(),
-        // the signs of the exported window, which covers every consensus read of the retained
-        // range; the total difficulty below the anchor is not known
+        gaps: side.gaps.iter().map(|(n, c)| (*n, c.clone())).collect(),
+        // the signs of the window, which covers every consensus read of the retained range; the
+        // total difficulty below the anchor is not known
         signs_from: 0,
         td: U256::ZERO,
     };
     ck.gaps.sort();
-    save_ckpt(&dir, &ck).map_err(|e| ImportDatadirError::Io(e.to_string()))?;
-    store
-        .install_snapshot(v.install)
-        .map_err(|e| ImportDatadirError::Import(ImportError::Store(e)))?;
-    stage
-        .truncate(0)
-        .map_err(|e| ImportDatadirError::Io(e.to_string()))?;
-    Ok(Imported {
-        anchor: v.anchor,
-        side: v.side,
-        stats: v.stats,
-    })
+    save_ckpt(dir, &ck).map_err(|e| InstallError::Io(e.to_string()))?;
+    store.install_snapshot(install).map_err(InstallError::Store)
 }
 
 #[derive(Debug, thiserror::Error)]

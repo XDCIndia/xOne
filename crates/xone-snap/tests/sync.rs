@@ -839,3 +839,53 @@ mod hostile {
             .unwrap();
     }
 }
+
+#[test]
+fn one_account_and_its_storage_are_fetched_with_proofs() {
+    let (flat, codes) = flat_state(500);
+    let mut peer = Loopback::new(server(&flat, &codes));
+    let root = peer.server.snapshot().root();
+    // account 0 has 3,000 slots: several proven storage ranges
+    let h0 = keccak256(addr(0));
+    let (acc, slots) = account_at(&mut peer, &small(), root, h0).unwrap().unwrap();
+    assert_eq!(slots.len(), 3000);
+    assert_eq!(acc.nonce, 0);
+    let want: std::collections::BTreeMap<B256, U256> = flat
+        .slots(addr(0))
+        .map(|(s, v)| (keccak256(s), v))
+        .collect();
+    assert_eq!(slots, want);
+    // an absent account is proven absent, not an error
+    assert_eq!(
+        account_at(&mut peer, &small(), root, B256::repeat_byte(0x42)).unwrap(),
+        None
+    );
+    // a root the peer does not hold is Unavailable
+    assert_eq!(
+        account_at(&mut peer, &small(), B256::repeat_byte(1), h0),
+        Err(SyncError::Unavailable)
+    );
+}
+
+#[test]
+fn preimages_of_plain_rows_are_served() {
+    use xone_snap::preimage::GetPreimages;
+    let (flat, codes) = flat_state(50);
+    let accounts: Vec<_> = flat.accounts().collect();
+    let storage: Vec<_> = accounts
+        .iter()
+        .flat_map(|(a, _)| flat.slots(*a).map(move |(s, v)| (*a, s, v)))
+        .collect();
+    let snap = Snapshot::from_rows(&accounts, &storage, codes.clone());
+    assert_eq!(snap.root(), Snapshot::from_flat(&flat, codes).root());
+    let srv = Server::new(snap, Limits::default());
+    let a = addr(10);
+    let (s, _) = flat.slots(a).next().unwrap();
+    let r = srv.preimages(&GetPreimages {
+        id: 3,
+        hashes: vec![keccak256(a), B256::repeat_byte(9), keccak256(s)],
+    });
+    assert_eq!(r.id, 3);
+    let want: Vec<Bytes> = vec![a.0.to_vec().into(), s.0.to_vec().into()];
+    assert_eq!(r.preimages, want);
+}
