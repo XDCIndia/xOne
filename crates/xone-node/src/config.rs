@@ -85,9 +85,9 @@ pub struct Config {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct SyncCfg {
-    /// snap, fast or full.
+    /// full; snap and fast are refused (`sync_mode`).
     pub mode: String,
-    /// full or archive.
+    /// full; archive is refused (`gc_mode`).
     pub gcmode: String,
     pub from_block: Option<u64>,
     /// Start from the anchor of an imported snapshot and keep only the retention window.
@@ -227,7 +227,7 @@ defaults!(Config {
     limits: Limits::default(),
 });
 defaults!(SyncCfg {
-    mode: "snap".into(),
+    mode: "full".into(),
     gcmode: "full".into(),
     from_block: None,
     minimal: false,
@@ -324,17 +324,40 @@ fn list(v: &str) -> Vec<String> {
         .collect()
 }
 
-fn one_of(key: &str, v: &str, ok: &[&str]) -> Result<String, ConfigError> {
-    if ok.contains(&v) {
-        Ok(v.to_owned())
-    } else {
-        Err(invalid(key, v, "not an allowed value"))
+/// The node implements full sync only: snap/1 is not offered on RLPx and `xone-snap`'s state download
+/// is not wired into the node, so `snap` and `fast` would silently sync in full from genesis.
+fn sync_mode(key: &str, v: &str) -> Result<String, ConfigError> {
+    match v {
+        "full" => Ok(v.to_owned()),
+        "snap" | "fast" => Err(invalid(
+            key,
+            v,
+            "not implemented in this build (no snap/1 state download; the node would sync in full from genesis): use full",
+        )),
+        _ => Err(invalid(key, v, "not an allowed value")),
+    }
+}
+
+/// The node keeps a 128-block state window and its newest checkpoints whatever `gcmode` says, so
+/// `archive` is refused rather than reported to the board as a mode the node does not run.
+fn gc_mode(key: &str, v: &str) -> Result<String, ConfigError> {
+    match v {
+        "full" => Ok(v.to_owned()),
+        "archive" => Err(invalid(
+            key,
+            v,
+            "not implemented in this build (historical state is pruned to the state window): use full",
+        )),
+        _ => Err(invalid(key, v, "not an allowed value")),
     }
 }
 
 impl Config {
     pub fn from_toml(text: &str) -> Result<Self, ConfigError> {
-        toml::from_str(text).map_err(|e| ConfigError::Toml(e.to_string()))
+        let c: Self = toml::from_str(text).map_err(|e| ConfigError::Toml(e.to_string()))?;
+        sync_mode("sync.mode", &c.sync.mode)?;
+        gc_mode("sync.gcmode", &c.sync.gcmode)?;
+        Ok(c)
     }
 
     pub fn from_file(path: &Path) -> Result<Self, ConfigError> {
@@ -383,8 +406,8 @@ impl Config {
                     }
                 });
             }
-            "syncmode" => self.sync.mode = one_of(key, v, &["snap", "fast", "full"])?,
-            "gcmode" => self.sync.gcmode = one_of(key, v, &["full", "archive"])?,
+            "syncmode" => self.sync.mode = sync_mode(key, v)?,
+            "gcmode" => self.sync.gcmode = gc_mode(key, v)?,
             "syncfromblock" => self.sync.from_block = Some(num(key, v)?),
             "minimal" => self.sync.minimal = flag(key, v)?,
             "cache" => self.sync.cache_mb = num(key, v)?,
@@ -493,6 +516,37 @@ mod tests {
             Err(ConfigError::Invalid { .. })
         ));
         assert!(Config::from_toml("bogus = 1").is_err());
+    }
+
+    /// Modes the node does not run are refused by the flag and the config file alike, never accepted
+    /// and then synced in full from genesis.
+    #[test]
+    fn unimplemented_sync_modes_are_refused() {
+        let mut c = Config::default();
+        for (k, v) in [
+            ("syncmode", "snap"),
+            ("syncmode", "fast"),
+            ("gcmode", "archive"),
+        ] {
+            let e = c.set(k, v).unwrap_err().to_string();
+            assert!(e.contains("not implemented in this build"), "{k}={v}: {e}");
+        }
+        c.set("syncmode", "full").unwrap_or_else(|e| panic!("{e}"));
+        c.set("gcmode", "full").unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(
+            (c.sync.mode.as_str(), c.sync.gcmode.as_str()),
+            ("full", "full")
+        );
+        assert_eq!(Config::default().sync.mode, "full");
+        for t in [
+            "[sync]\nmode = \"snap\"\n",
+            "[sync]\ngcmode = \"archive\"\n",
+        ] {
+            assert!(
+                matches!(Config::from_toml(t), Err(ConfigError::Invalid { .. })),
+                "{t}"
+            );
+        }
     }
 
     #[test]
