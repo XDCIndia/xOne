@@ -60,10 +60,12 @@ pub enum T {
     Stages,
     StagedHeaders,
     StagedBodies,
+    /// transaction hash to `block u64 BE || index u32 BE`, for every canonical block's transactions.
+    TxLookup,
 }
 
 impl T {
-    pub const ALL: [T; 21] = [
+    pub const ALL: [T; 22] = [
         T::Meta,
         T::CanonicalHeaders,
         T::HeaderNumbers,
@@ -85,6 +87,7 @@ impl T {
         T::Stages,
         T::StagedHeaders,
         T::StagedBodies,
+        T::TxLookup,
     ];
 
     pub fn name(self) -> &'static str {
@@ -110,6 +113,7 @@ impl T {
             T::Stages => "Stages",
             T::StagedHeaders => "StagedHeaders",
             T::StagedBodies => "StagedBodies",
+            T::TxLookup => "TxLookup",
         }
     }
 }

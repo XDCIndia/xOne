@@ -14,7 +14,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use alloy_primitives::{Bytes, B256};
+use alloy_primitives::{Bytes, B256, U256};
 use xone_chainspec::{ChainSpec, Genesis, Network};
 use xone_sync::{
     bootstrap::{
@@ -245,6 +245,10 @@ pub fn import_datadir(
             .map(|(n, r)| (*n, r.iter().map(|s| (s.sender, s.signed, s.ok)).collect()))
             .collect(),
         gaps: v.side.gaps.iter().map(|(n, c)| (*n, c.clone())).collect(),
+        // the signs of the exported window, which covers every consensus read of the retained
+        // range; the total difficulty below the anchor is not known
+        signs_from: 0,
+        td: U256::ZERO,
     };
     ck.gaps.sort();
     save_ckpt(&dir, &ck).map_err(|e| ImportDatadirError::Io(e.to_string()))?;

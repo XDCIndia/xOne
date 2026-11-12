@@ -320,16 +320,16 @@ impl Follower {
                 let amount = query.amount.min(192);
                 let start = match query.origin {
                     Origin::Number(n) => Some(n),
-                    Origin::Hash(x) => h.by_hash(x).map(|s| s.header.number),
+                    Origin::Hash(x) => h.number_of(x),
                 };
                 let mut out = vec![];
                 let mut at = start;
                 while let (Some(n), true) = (at, u64::try_from(out.len()).is_ok_and(|l| l < amount))
                 {
-                    let Some(s) = h.at(n) else {
+                    let Some(s) = h.header_at(n) else {
                         break;
                     };
-                    out.push(s.header.clone());
+                    out.push(s.into_owned());
                     let step = query.skip.saturating_add(1);
                     at = if query.reverse {
                         n.checked_sub(step)
@@ -346,7 +346,7 @@ impl Follower {
                 let found: Vec<_> = hashes
                     .iter()
                     .take(128)
-                    .filter_map(|x| Some((h.by_hash(*x)?.header.number, *x)))
+                    .filter_map(|x| Some((h.number_of(*x)?, *x)))
                     .collect();
                 drop(h);
                 Message::BlockBodies {

@@ -4,15 +4,11 @@
 //! replay harness that carry what the node's in-memory history needs beyond the store (V1 snapshots,
 //! deployed code, sign transactions, V2 gap pools).
 //!
-//! A restart reads the committed headers back from the store, loads the newest checkpoint, reads the
+//! A restart loads the newest checkpoint, reads the headers of the history's window below it and the
 //! bodies of the blocks above it, unwinds the store to it and replays them through `Chain::insert`, so
-//! that nothing stored is trusted without being verified and executed again. Bodies and receipts below
-//! the history's memory window are read from the store when asked for ([`records`]).
-//!
-//! ponytail: the history (`hist.rs`) keeps every header, sign transaction and transaction hash in
-//! memory and is rebuilt this way (every body is read once at start for the transaction index). Persisting its rows in
-//! the consensus tables of the store (`ConsensusEpoch`, `ConsensusSnapshot`, `Aux`) replaces the
-//! checkpoint files and the replay; nothing above this module changes.
+//! that nothing stored is trusted without being verified and executed again. Below the window the
+//! history reads headers, `TxLookup`, `ConsensusEpoch` and `ConsensusSnapshot` from the store
+//! (`hist.rs`); bodies and receipts below the memory window are read when asked for ([`records`]).
 
 use std::{
     collections::BTreeMap,
@@ -70,9 +66,8 @@ pub fn open(
     .map_err(|e| FileError(format!("{}: {e}", dir.display())))
 }
 
-/// What a start-up reads from the store: the headers of blocks `first..=number`, every frame
-/// CRC-checked. Bodies and receipts stay in the store ([`records`]): the history keeps them in memory
-/// for its window only.
+/// What a start-up reads from the store: the head, checked against its stored header, and the first
+/// block held. Headers, bodies and receipts stay in the store.
 pub struct Loaded {
     pub number: u64,
     pub hash: B256,
@@ -83,18 +78,9 @@ pub struct Loaded {
     pub records_from: u64,
     /// The manifest of the snapshot the datadir was made from.
     pub anchor: Option<Bytes>,
-    pub headers: Vec<Header>,
 }
 
-impl Loaded {
-    /// The stored header of block `n`.
-    pub fn header(&self, n: u64) -> Option<&Header> {
-        self.headers
-            .get(usize::try_from(n.checked_sub(self.first)?).ok()?)
-    }
-}
-
-/// Reads the committed headers back. `None` for a store that holds nothing.
+/// Reads the committed head back. `None` for a store that holds nothing.
 pub fn load(store: &NodeStore) -> Result<Option<Loaded>, FileError> {
     let Some(m) = store.manifest() else {
         return Ok(None);
@@ -103,15 +89,10 @@ pub fn load(store: &NodeStore) -> Result<Option<Loaded>, FileError> {
     let (h_from, records_from) = (m.entries[0].first_block, m.entries[1].first_block);
     let first = if anchor.is_some() { h_from } else { 1 };
     let (number, hash) = store.head();
-    let mut headers = Vec::new();
-    for n in first..=number {
-        let missing = || FileError(format!("block {n} is missing from the store"));
-        let e = |e: xone_sync::store::StoreError| FileError(e.to_string());
-        headers.push(store.canonical_header(n).map_err(e)?.ok_or_else(missing)?);
-    }
-    if headers.last().map_or(0, |h| h.number) != number
-        || headers.last().map(Header::hash).unwrap_or(hash) != hash
-    {
+    let head = store
+        .canonical_header(number)
+        .map_err(|e| FileError(e.to_string()))?;
+    if head.as_ref().map(Header::hash) != Some(hash) {
         return Err(FileError(
             "the last stored header is not the head of the manifest".into(),
         ));
@@ -122,7 +103,6 @@ pub fn load(store: &NodeStore) -> Result<Option<Loaded>, FileError> {
         first,
         records_from,
         anchor,
-        headers,
     }))
 }
 
@@ -152,6 +132,12 @@ pub struct Ckpt {
     pub signs: BTreeMap<u64, Vec<(Address, B256, bool)>>,
     #[serde(default)]
     pub gaps: Vec<(u64, Vec<Address>)>,
+    /// The first block whose sign transactions `signs` holds (the history's window); 0 for all.
+    #[serde(default)]
+    pub signs_from: u64,
+    /// Total difficulty at `number` (0 for a checkpoint of an imported snapshot).
+    #[serde(default)]
+    pub td: U256,
 }
 
 impl Ckpt {
@@ -200,6 +186,8 @@ impl Ckpt {
             recents: BTreeMap::new(),
             signs: BTreeMap::new(),
             gaps: vec![],
+            signs_from: 0,
+            td: U256::ZERO,
         }
     }
 }

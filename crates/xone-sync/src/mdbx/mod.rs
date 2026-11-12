@@ -52,6 +52,9 @@ use crate::store::{
 
 const COMMITTED_KEY: &[u8] = b"committed";
 const ANCHOR_KEY: &[u8] = b"anchor";
+/// Written with the first commit of a datadir whose every block commit writes its `TxLookup` rows (and
+/// whose node writes its consensus rows). A datadir without it was made by an older build.
+const HISTORY_KEY: &[u8] = b"history";
 const FSYNC_FAILED: &str = "FSYNC_FAILED";
 
 pub struct Config {
@@ -114,6 +117,26 @@ fn cs_key(n: u64, a: &Address) -> Vec<u8> {
 
 fn cs_skey(n: u64, a: &Address, s: &B256) -> Vec<u8> {
     [&be(n)[..], a.as_slice(), s.as_slice()].concat()
+}
+
+/// The `TxLookup` rows of block `n`'s transactions: `keccak(tx) -> n u64 BE || index u32 BE`.
+fn put_tx_lookup(tx: &Wr, n: u64, body: &Body) -> R<()> {
+    for (i, t) in body.transactions.iter().enumerate() {
+        let i = u32::try_from(i).unwrap_or(u32::MAX);
+        tx.put(
+            T::TxLookup,
+            keccak256(t).as_slice(),
+            &[&be(n)[..], &i.to_be_bytes()].concat(),
+        )?;
+    }
+    Ok(())
+}
+
+fn del_tx_lookup(tx: &Wr, body: &Body) -> R<()> {
+    for t in &body.transactions {
+        tx.del(T::TxLookup, keccak256(t).as_slice())?;
+    }
+    Ok(())
 }
 
 fn hashed_skey(a: &Address, s: &B256) -> Vec<u8> {
@@ -662,6 +685,16 @@ impl<D: SegDir> MdbxStore<D> {
         self.rd().ok()?.get(table, &be(number)).ok()?
     }
 
+    /// True when the datadir was made by a build that writes `TxLookup` with every block (`Meta`
+    /// row `history`); an older one has no transaction index and no consensus rows.
+    pub fn has_history_tables(&self) -> Result<bool, StoreError> {
+        Ok(self
+            .rd()?
+            .get(T::Meta, HISTORY_KEY)
+            .map_err(|e| StoreError::Damaged(e.to_string()))?
+            .is_some())
+    }
+
     // ---- writes outside the head: one MDBX transaction each
 
     /// S5 and S6 for a write that does not move the head: the rows and `after` (the in-memory
@@ -756,6 +789,7 @@ impl<D: SegDir> MdbxStore<D> {
         tx.del(T::Stateless, b.hash().as_slice())?;
         match anchor {
             Some(flat) => {
+                tx.put(T::Meta, HISTORY_KEY, &[1])?;
                 for (a, acc) in flat.accounts() {
                     put_account(tx, &a, &acc.rlp())?;
                     for (s, v) in flat.slots(a) {
@@ -764,6 +798,7 @@ impl<D: SegDir> MdbxStore<D> {
                 }
             }
             None => {
+                put_tx_lookup(tx, n, &b.body)?;
                 write_diff(tx, n, &rec.diff)?;
                 tx.put(T::BlockDiffs, &be(n), &enc_diff(&rec.diff))?;
                 if !rec.aux.is_empty() {
@@ -1126,6 +1161,106 @@ impl<D: SegDir> MdbxStore<D> {
     }
 }
 
+/// Reads of committed rows that do not go through the store's owner, so they never wait for an import
+/// and an import never waits for them: each call is one MDBX read transaction, and a header is read
+/// from its segment frame (CRC-checked) and checked against the canonical index. The node's history
+/// reads what is below its memory window through it.
+pub struct StoreReader<D: SegDir> {
+    env: Arc<Env>,
+    segs: Segs<D>,
+}
+
+impl<D: SegDir + Clone> MdbxStore<D> {
+    pub fn reader(&self) -> StoreReader<D> {
+        StoreReader {
+            env: self.env.clone(),
+            segs: Segs::new(self.segs.dir.clone(), self.cfg.per_file),
+        }
+    }
+}
+
+impl<D: SegDir> StoreReader<D> {
+    fn get(&self, t: T, key: &[u8]) -> Result<Option<Vec<u8>>, StoreError> {
+        let db = |e: MdbxError| StoreError::Damaged(e.to_string());
+        self.env.read().map_err(db)?.get(t, key).map_err(db)
+    }
+
+    /// The canonical hash of block `n`.
+    pub fn hash(&self, n: u64) -> Result<Option<B256>, StoreError> {
+        match self.get(T::CanonicalHeaders, &be(n))? {
+            Some(b) if b.len() == 32 => Ok(Some(B256::from_slice(&b))),
+            Some(_) => Err(bad_row("canonical index", n)),
+            None => Ok(None),
+        }
+    }
+
+    /// The number of canonical block `hash`.
+    pub fn number(&self, hash: B256) -> Result<Option<u64>, StoreError> {
+        self.get(T::HeaderNumbers, hash.as_slice())?
+            .map(|b| be_u64(&b).ok_or_else(|| StoreError::Damaged(format!("number of {hash}"))))
+            .transpose()
+    }
+
+    /// The header of canonical block `n`.
+    pub fn header(&self, n: u64) -> Result<Option<Header>, StoreError> {
+        let db = |e: MdbxError| StoreError::Damaged(e.to_string());
+        let rd = self.env.read().map_err(db)?;
+        let Some(hash) = rd.get(T::CanonicalHeaders, &be(n)).map_err(db)? else {
+            return Ok(None);
+        };
+        if hash.len() != 32 {
+            return Err(bad_row("canonical index", n));
+        }
+        let start = rd
+            .get(T::SegIdx, &seg_key(Segment::Headers, n))
+            .map_err(db)?
+            .and_then(|b| le_u64(&b))
+            .ok_or_else(|| bad_row("header index", n))?;
+        let h = self
+            .segs
+            .read(Segment::Headers, n, start)
+            .map_err(|e| StoreError::Damaged(e.to_string()))
+            .and_then(|b| dec_header(&b).ok_or_else(|| bad_row("header", n)))?;
+        if h.hash() != B256::from_slice(&hash) {
+            return Err(bad_row("header (hash differs from the index)", n));
+        }
+        Ok(Some(h))
+    }
+
+    /// Block number and index of transaction `hash` in the canonical chain.
+    pub fn tx(&self, hash: B256) -> Result<Option<(u64, u32)>, StoreError> {
+        self.get(T::TxLookup, hash.as_slice())?
+            .map(|b| {
+                let n = be_u64(&b);
+                let i = b
+                    .get(8..12)
+                    .and_then(|i| i.try_into().ok())
+                    .map(u32::from_be_bytes);
+                n.zip(i)
+                    .ok_or_else(|| StoreError::Damaged(format!("transaction index row of {hash}")))
+            })
+            .transpose()
+    }
+
+    /// The row of block `n` in a block-keyed table.
+    pub fn row(&self, t: T, n: u64) -> Result<Option<Vec<u8>>, StoreError> {
+        self.get(t, &be(n))
+    }
+
+    /// Every row of a block-keyed table, ascending.
+    pub fn rows(&self, t: T) -> Result<Vec<(u64, Vec<u8>)>, StoreError> {
+        let db = |e: MdbxError| StoreError::Damaged(e.to_string());
+        self.env
+            .read()
+            .map_err(db)?
+            .range(t, &[], None)
+            .map_err(db)?
+            .into_iter()
+            .map(|(k, v)| Ok((be_u64(&k).ok_or_else(|| bad_row(t.name(), 0))?, v)))
+            .collect()
+    }
+}
+
 fn bad_row(what: &str, n: u64) -> StoreError {
     StoreError::Damaged(format!("{what} row of block {n}"))
 }
@@ -1183,6 +1318,7 @@ impl<D: SegDir> MdbxStore<D> {
             for rec in &dropped {
                 let k = rec.block.number();
                 revert_block(&tx, k)?;
+                del_tx_lookup(&tx, &rec.block.body)?;
                 tx.del(T::HeaderNumbers, rec.block.hash().as_slice())?;
                 if blocks == Unwound::Keep {
                     tx.put(T::SideBlocks, rec.block.hash().as_slice(), &enc_record(rec))?;
@@ -1589,7 +1725,9 @@ impl<D: SegDir> Store for MdbxStore<D> {
                 for (i, sg) in [(1, Segment::Bodies), (2, Segment::Receipts)] {
                     tx.put(T::SegIdx, &seg_key(sg, n), &starts[i][&n].to_le_bytes())?;
                 }
+                put_tx_lookup(&tx, n, &r.block.body)?;
             }
+            tx.put(T::Meta, HISTORY_KEY, &[1])?;
             if !s.anchor.is_empty() {
                 tx.put(T::Meta, ANCHOR_KEY, &s.anchor)?;
             }
