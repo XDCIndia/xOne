@@ -29,7 +29,22 @@ fn serve(
     rt: &Runtime,
     blocks: Arc<Vec<WireBlock>>,
     peers: Peers,
+    rx: tokio::sync::mpsc::Receiver<Event>,
+) {
+    serve_as(rt, blocks, peers, rx, Duration::ZERO, Instant::now(), false);
+}
+
+/// [`serve`], with each answer sent `delay` late, and before `until` every header answer is
+/// empty (a peer that is behind) or, with `echo`, the origin alone (a peer still importing the head
+/// it announced).
+fn serve_as(
+    rt: &Runtime,
+    blocks: Arc<Vec<WireBlock>>,
+    peers: Peers,
     mut rx: tokio::sync::mpsc::Receiver<Event>,
+    delay: Duration,
+    until: Instant,
+    echo: bool,
 ) {
     rt.spawn(async move {
         while let Some(ev) = rx.recv().await {
@@ -67,6 +82,9 @@ fn serve(
                             Some(n + step)
                         };
                     }
+                    if Instant::now() < until {
+                        headers.truncate(usize::from(echo));
+                    }
                     Message::BlockHeaders { id, headers }
                 }
                 Message::GetBlockBodies { id, hashes } => Message::BlockBodies {
@@ -83,7 +101,11 @@ fn serve(
                 },
                 _ => continue,
             };
-            let _ = peers.send(&peer, reply);
+            let p = peers.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(delay).await;
+                let _ = p.send(&peer, reply);
+            });
         }
     });
 }
@@ -251,4 +273,115 @@ fn an_echo_only_peer_does_not_confirm_caught_up() {
     assert_ne!(call(port, "eth_syncing", json!([])), json!(false));
     built.node.stop().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Starts an Apothem node with HTTP and connects it to a fake peer that holds `blocks` and
+/// advertises the last of them, served by [`serve_as`].
+fn with_fake_peer(
+    tag: &str,
+    blocks: &Arc<Vec<WireBlock>>,
+    delay: Duration,
+    until: Instant,
+    echo: bool,
+) -> (
+    services::Built,
+    std::path::PathBuf,
+    Runtime,
+    Peers,
+    xone_net::rlpx::PeerId,
+) {
+    let dir = scratch(tag);
+    let mut cfg = Config::default();
+    cfg.set("apothem", "true").unwrap();
+    cfg.datadir = dir.clone();
+    cfg.p2p.port = 0;
+    cfg.p2p.no_discover = true;
+    cfg.ipc.disabled = true;
+    let (marker, spec, genesis) = datadir::prepare_chain(&cfg).unwrap();
+    let mut built = services::build(&cfg, &marker, spec, &genesis, STAMP).unwrap();
+    built.node.start().unwrap();
+    let rt = Runtime::new().unwrap();
+    let mut pc = PeersConfig::new("fake", 51, built.core.genesis);
+    pc.head = blocks[blocks.len() - 1].header.hash();
+    pc.td = U256::from(1_000_000u64);
+    let key = secp256k1::SecretKey::from_slice(&[7u8; 32]).unwrap();
+    let (fake, rx) = Peers::new(pc, key);
+    serve_as(&rt, blocks.clone(), fake.clone(), rx, delay, until, echo);
+    let (a, b) = tokio::io::duplex(1 << 20);
+    let ours = built.net.peers.clone();
+    let our_id = built.net.id;
+    let (r1, r2) =
+        rt.block_on(async { tokio::join!(ours.attach(a, None), fake.attach(b, Some(our_id))) });
+    r1.unwrap();
+    r2.unwrap();
+    (built, dir, rt, fake, our_id)
+}
+
+fn wait_head(built: &services::Built, n: u64, within: Duration) {
+    let t = Instant::now();
+    while built.core.head().0 < n {
+        assert!(
+            t.elapsed() < within,
+            "head {:?} after {:?}, want {n}",
+            built.core.head(),
+            t.elapsed()
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+/// A `NewBlock` whose parent is our head is imported at once, also while a request is in flight
+/// (geth-XDC `eth/handler_eth.go:205-296`). The late answer to a header poll, which starts at the head
+/// the poll was sent from, is not taken for a peer that does not know our head, and a late body
+/// answer skips the blocks a `NewBlock` delivered meanwhile.
+#[test]
+fn new_block_is_imported_while_a_poll_is_in_flight() {
+    let blocks = Arc::new(vectors(20));
+    let t0 = Instant::now();
+    let (mut built, dir, rt, fake, our_id) = with_fake_peer(
+        "nbpoll",
+        &blocks,
+        Duration::from_secs(3),
+        Instant::now(),
+        false,
+    );
+    let announce = |r: std::ops::RangeInclusive<usize>| {
+        for b in &blocks[r] {
+            let nb = xone_net::eth::NewBlock {
+                block: b.clone(),
+                td: U256::from(1_000_000u64),
+            };
+            fake.send(&our_id, Message::NewBlock(Box::new(nb))).unwrap();
+        }
+    };
+    // every answer takes three seconds: the headers of the poll sent at genesis arrive at about
+    // 3 s, the bodies of 11 to 20 at about 6 s; the blocks 1 to 10 come as NewBlock at once
+    announce(1..=10);
+    wait_head(&built, 10, Duration::from_millis(2500));
+    // 11 and 12 come as NewBlock while the bodies are in flight
+    std::thread::sleep(Duration::from_millis(4500).saturating_sub(t0.elapsed()));
+    announce(11..=12);
+    wait_head(&built, 12, Duration::from_millis(1000));
+    wait_head(&built, 20, Duration::from_secs(15));
+    assert_eq!(built.core.head().1, blocks[20].header.hash());
+    built.node.stop().unwrap();
+    drop(rt);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A peer that answers polls with nothing (behind us) or with our head alone while it advertises
+/// more (still importing what it announced) is asked again within seconds, not set aside for a
+/// minute: here it is the only peer, and it serves its head after 1.5 s.
+#[test]
+fn a_peer_that_is_not_yet_there_is_asked_again_soon() {
+    for (tag, echo) in [("notyet-empty", false), ("notyet-echo", true)] {
+        let blocks = Arc::new(vectors(20));
+        let until = Instant::now() + Duration::from_millis(1500);
+        let (mut built, dir, rt, _fake, _) =
+            with_fake_peer(tag, &blocks, Duration::ZERO, until, echo);
+        wait_head(&built, 20, Duration::from_secs(15));
+        built.node.stop().unwrap();
+        drop(rt);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
