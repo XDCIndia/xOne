@@ -24,7 +24,9 @@ use xone_consensus::{
 use xone_db::mdbx::T;
 use xone_executor::{execute_block, ExecCtx};
 use xone_primitives::{Header, WideBalance};
-use xone_state::{trie::flat_root, Account, FlatWrite, MemFlat, Missing, StateDiff, StateRead};
+use xone_state::{
+    trie::flat_root, Account, FlatRead, FlatWrite, MemFlat, Missing, StateDiff, StateRead,
+};
 use xone_sync::{
     bootstrap::{
         minimal::{self, Held},
@@ -500,11 +502,21 @@ impl Core {
                 (0, flat0, inner)
             }
         };
-        inner.wide = flat
-            .accounts()
-            .filter(|(_, a)| a.balance.is_wide())
-            .map(|(a, x)| (a, x.balance))
-            .collect();
+        // Accounts above 2^256 are tracked by address (`Env::wide_balances`); the flat state holds only
+        // hashes, so each address comes from the preimage table (filled by execution, genesis and
+        // installs). An unknown one is an error, never a silently narrowed balance.
+        for (ha, a) in flat.hashed_accounts().filter(|(_, a)| a.balance.is_wide()) {
+            let addr = node_store
+                .preimage(ha)
+                .filter(|p| p.len() == 20)
+                .map(|p| Address::from_slice(&p))
+                .ok_or_else(|| {
+                    CoreError::Inconsistent(format!(
+                        "the account with key {ha} holds more than 2^256 and its address is not in this datadir"
+                    ))
+                })?;
+            inner.wide.insert(addr, a.balance);
+        }
         let anchor = inner.tip().header.clone();
         if flat_root(&flat) != anchor.state_root {
             return Err(CoreError::Inconsistent(format!(

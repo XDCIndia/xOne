@@ -49,7 +49,7 @@ use xone_primitives::Header;
 use xone_snap::{
     client::{self, Fault, PeerError, PeerSource, StateStore, SyncError},
     codec::Message as Snap,
-    preimage,
+    preimage::{self, GetPreimages},
 };
 use xone_state::{
     system_contracts::validator_0x88, trie::flat_root, Account, FlatWrite, MemFlat, StateRead,
@@ -131,6 +131,8 @@ pub enum SnapSyncError {
     GapSource { number: u64 },
     #[error("state: {0}")]
     State(#[from] SyncError),
+    #[error("the account with key {0} holds more than 2^256 and no xOne peer (xpre/1) told its address; the executor needs the address of such an account, so this sync cannot continue")]
+    WideAddress(B256),
     #[error("state root {got} rebuilt from the hashed rows, the pivot header says {want}")]
     Root { got: B256, want: B256 },
     #[error("{0}")]
@@ -842,6 +844,20 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
             rows.storage.push((*h, *k, *v));
         }
     }
+    // An account above 2^256 is tracked by address by the executor. snap/1 gives only its hash, so
+    // its preimage (a handful of accounts at most) is asked of an xOne peer over xpre/1, checked by
+    // its hash; no other account needs one.
+    let wide: Vec<B256> = rows
+        .accounts
+        .iter()
+        .filter(|(_, x)| x.balance.is_wide())
+        .map(|(h, _)| *h)
+        .collect();
+    let mut wide_pre = Vec::new();
+    for h in wide {
+        let p = wide_preimage(d, h).ok_or(SnapSyncError::WideAddress(h))?;
+        wide_pre.push((h, p));
+    }
     let mut flat = MemFlat::default();
     for (h, x) in &rows.accounts {
         flat.set_hashed_account(*h, Some(x.clone()));
@@ -873,7 +889,7 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
         headers: win,
         records,
         state: rows,
-        preimages: vec![],
+        preimages: wide_pre,
         retention: RETENTION,
     };
     crate::snapshot::install(&dir, &mut store, pivot, anchor.hash, &side, install)
@@ -891,6 +907,34 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
         pivot + 1
     );
     Ok(())
+}
+
+/// The address behind `hash` from an xOne peer (xpre/1), kept only if it hashes to `hash`.
+fn wide_preimage(d: &mut Drv<'_>, hash: B256) -> Option<Bytes> {
+    for _ in 0..3 {
+        let peer = d.pick(true)?;
+        d.next_id += 1;
+        let id = d.next_id;
+        let req = preimage::Message::Get(GetPreimages {
+            id,
+            hashes: vec![hash],
+        });
+        let Ok((code, body)) = d.sub(peer, Sub::Xpre, req.code(), req.encode(), id) else {
+            d.fault(&peer);
+            continue;
+        };
+        if let Ok(preimage::Message::Answer(a)) = preimage::Message::decode(code, &body) {
+            if let Some(p) = a
+                .preimages
+                .into_iter()
+                .find(|p| p.len() == 20 && keccak256(p) == hash)
+            {
+                return Some(p);
+            }
+        }
+        d.fault(&peer);
+    }
+    None
 }
 
 /// The pool of gap block `g` from its 0x88 state, in this order: an xOne peer over snap/1 (its window
