@@ -1,38 +1,39 @@
-//! The node's store: `xone_sync::testkit::MemStore` (state, canonical index and the ADR-005 protocol,
-//! in memory) plus the files of `<datadir>/xone/`:
+//! The node's store: [`MdbxStore`] over `<datadir>/xone/` (ADR-005): `chain.mdbx` (state, indexes,
+//! changesets, the manifest), `static/{headers,bodies,receipts}/` (CRC-32C segment frames, 100,000
+//! blocks per file), `journal/`, and `state/ckpt-<number>.json.gz`, the state checkpoints of the
+//! replay harness that carry what the node's in-memory history needs beyond the store (V1 snapshots,
+//! deployed code, sign transactions, V2 gap pools).
 //!
-//! * `static/{headers,bodies,receipts}.seg`: one frame per block, `len u32 LE | number u64 LE |
-//!   payload | tag`, appended and fsynced before `head.json` moves (ADR-005 sections 5 and 6.1;
-//!   the tag is the first 4 bytes of keccak256 of the rest, not CRC-32C, to add no crate);
-//! * `head.json`: the head and the committed length of each segment, written by tmp file, fsync,
-//!   rename and directory fsync. Bytes of a segment beyond its length are never read;
-//! * `state/ckpt-<number>.json.gz`: the state checkpoints of the replay harness.
+//! A restart reads the committed headers back from the store, loads the newest checkpoint, reads the
+//! bodies of the blocks above it, unwinds the store to it and replays them through `Chain::insert`, so
+//! that nothing stored is trusted without being verified and executed again. Bodies and receipts below
+//! the history's memory window are read from the store when asked for ([`records`]).
 //!
-//! ponytail: the whole chain is held in memory and a restart re-executes the blocks above the newest
-//! checkpoint. The MDBX store replaces `MemStore` and these files (ADR-005); nothing above this
-//! module changes.
+//! ponytail: the history (`hist.rs`) keeps every header, sign transaction and transaction hash in
+//! memory and is rebuilt this way (every body is read once at start for the transaction index). Persisting its rows in
+//! the consensus tables of the store (`ConsensusEpoch`, `ConsensusSnapshot`, `Aux`) replaces the
+//! checkpoint files and the replay; nothing above this module changes.
 
 use std::{
     collections::BTreeMap,
-    fs::{self, File, OpenOptions},
-    io::Write,
+    fs::{self, File},
     path::{Path, PathBuf},
 };
 
-use alloy_primitives::{keccak256, Address, Bytes, B256, U256};
-use alloy_rlp::{Decodable, RlpDecodable, RlpEncodable};
+use alloy_primitives::{Address, Bytes, B256, U256};
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use serde::{Deserialize, Serialize};
-use xone_consensus::{v2::commit::Link, verify::Body};
-use xone_db::{Action, Cause, Durability};
+use xone_consensus::verify::Body;
+use xone_db::segments::{OsDir, BLOCKS_PER_FILE};
 use xone_primitives::{Header, WideBalance};
-use xone_state::{Account, FlatRead, FlatWrite, MemFlat, Missing, StateRead};
+use xone_state::{Account, FlatRead, FlatWrite, MemFlat};
 use xone_sync::{
-    store::{Block, Record, Scan, Stage, Store, StoreError, Unwound},
-    testkit::MemStore,
+    mdbx::{Config, MdbxStore},
+    store::Store,
 };
 
-const SEGS: [&str; 3] = ["headers", "bodies", "receipts"];
+/// The node's store: real MDBX, real files.
+pub type NodeStore = MdbxStore<OsDir>;
 
 #[derive(Debug, thiserror::Error)]
 #[error("{0}")]
@@ -42,154 +43,99 @@ fn io<T>(what: &Path, r: std::io::Result<T>) -> Result<T, FileError> {
     r.map_err(|e| FileError(format!("{}: {e}", what.display())))
 }
 
-#[derive(RlpEncodable, RlpDecodable)]
-struct BodyFrame {
-    txs: Vec<Bytes>,
-    uncles: Vec<Header>,
+/// Opens (or creates) the store of `<dir>`: takes the datadir lock and opens MDBX, with group commit
+/// for `Some` (`xone_sync::mdbx::Config::group_commit`). Reconciliation is `Chain::open`'s or
+/// `resume`'s.
+pub fn open(
+    dir: &Path,
+    retention: u64,
+    group_commit: Option<std::time::Duration>,
+) -> Result<NodeStore, FileError> {
+    if dir.join("head.json").exists() {
+        return Err(FileError(format!(
+            "{} holds the file store of an older build; it cannot be opened (remove the datadir and sync again)",
+            dir.display()
+        )));
+    }
+    let seg = io(dir, OsDir::open(dir))?;
+    MdbxStore::open(
+        &dir.join("chain.mdbx"),
+        seg,
+        Config {
+            retention,
+            per_file: BLOCKS_PER_FILE,
+            group_commit,
+        },
+    )
+    .map_err(|e| FileError(format!("{}: {e}", dir.display())))
 }
 
-fn tag(len: u32, number: u64, payload: &[u8]) -> [u8; 4] {
-    let mut v = len.to_le_bytes().to_vec();
-    v.extend_from_slice(&number.to_le_bytes());
-    v.extend_from_slice(payload);
-    let h = keccak256(v);
-    [h[0], h[1], h[2], h[3]]
-}
-
-fn frame(number: u64, payload: &[u8]) -> Vec<u8> {
-    let len = u32::try_from(payload.len()).unwrap_or(u32::MAX);
-    let mut v = len.to_le_bytes().to_vec();
-    v.extend_from_slice(&number.to_le_bytes());
-    v.extend_from_slice(payload);
-    v.extend_from_slice(&tag(len, number, payload));
-    v
-}
-
-fn payloads(rec: &Record) -> [Vec<u8>; 3] {
-    [
-        alloy_rlp::encode(&rec.block.header),
-        alloy_rlp::encode(BodyFrame {
-            txs: rec.block.body.transactions.clone(),
-            uncles: rec.block.body.uncles.clone(),
-        }),
-        alloy_rlp::encode(&rec.receipts),
-    ]
-}
-
-#[derive(Serialize, Deserialize)]
-struct HeadFile {
-    number: u64,
-    hash: B256,
-    lens: [u64; 3],
-}
-
-/// A block as the files hold it.
-pub struct Stored3 {
-    pub header: Header,
-    pub body: Body,
-    pub receipts: Vec<Bytes>,
-}
-
-/// What a start-up reads from the segment files: blocks `1..=number`.
+/// What a start-up reads from the store: the headers of blocks `first..=number`, every frame
+/// CRC-checked. Bodies and receipts stay in the store ([`records`]): the history keeps them in memory
+/// for its window only.
 pub struct Loaded {
     pub number: u64,
     pub hash: B256,
-    pub blocks: Vec<Stored3>,
-    ends: BTreeMap<u64, [u64; 3]>,
+    /// The first block held: 1 for a node that followed from genesis, the first retained header of an
+    /// imported snapshot otherwise.
+    pub first: u64,
+    /// Bodies and receipts below this block are not held ([`records`] gives empty ones).
+    pub records_from: u64,
+    /// The manifest of the snapshot the datadir was made from.
+    pub anchor: Option<Bytes>,
+    pub headers: Vec<Header>,
 }
 
-fn sync_dir(dir: &Path) -> Result<(), FileError> {
-    io(dir, File::open(dir).and_then(|d| d.sync_all()))
+impl Loaded {
+    /// The stored header of block `n`.
+    pub fn header(&self, n: u64) -> Option<&Header> {
+        self.headers
+            .get(usize::try_from(n.checked_sub(self.first)?).ok()?)
+    }
 }
 
-fn write_head(dir: &Path, h: &HeadFile) -> Result<(), FileError> {
-    let (tmp, path) = (dir.join("head.json.tmp"), dir.join("head.json"));
-    let text = serde_json::to_string(h).map_err(|e| FileError(e.to_string()))?;
-    let mut f = io(&tmp, File::create(&tmp))?;
-    io(&tmp, f.write_all(text.as_bytes()))?;
-    io(&tmp, f.sync_all())?;
-    io(&path, fs::rename(&tmp, &path))?;
-    sync_dir(dir)
-}
-
-fn seg_path(dir: &Path, i: usize) -> PathBuf {
-    dir.join("static").join(format!("{}.seg", SEGS[i]))
-}
-
-/// Reads the committed part of the three segments. `None` for a datadir without a head file.
-pub fn load(dir: &Path) -> Result<Option<Loaded>, FileError> {
-    let path = dir.join("head.json");
-    let text = match fs::read_to_string(&path) {
-        Ok(t) => t,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(FileError(format!("{}: {e}", path.display()))),
+/// Reads the committed headers back. `None` for a store that holds nothing.
+pub fn load(store: &NodeStore) -> Result<Option<Loaded>, FileError> {
+    let Some(m) = store.manifest() else {
+        return Ok(None);
     };
-    let head: HeadFile =
-        serde_json::from_str(&text).map_err(|e| FileError(format!("{}: {e}", path.display())))?;
-    let mut parts: [Vec<Vec<u8>>; 3] = Default::default();
-    let mut ends: BTreeMap<u64, [u64; 3]> = BTreeMap::new();
-    for (i, part) in parts.iter_mut().enumerate() {
-        let p = seg_path(dir, i);
-        let bytes = io(&p, fs::read(&p))?;
-        let len = usize::try_from(head.lens[i]).unwrap_or(usize::MAX);
-        let bytes = bytes.get(..len).ok_or_else(|| {
-            FileError(format!(
-                "{} is shorter than the committed length {}",
-                p.display(),
-                head.lens[i]
-            ))
-        })?;
-        let (mut at, mut n) = (0usize, 1u64);
-        while at < bytes.len() {
-            let bad = || FileError(format!("{}: damaged frame for block {n}", p.display()));
-            let h = bytes.get(at..at + 12).ok_or_else(bad)?;
-            let plen = u32::from_le_bytes([h[0], h[1], h[2], h[3]]);
-            let number = u64::from_le_bytes([h[4], h[5], h[6], h[7], h[8], h[9], h[10], h[11]]);
-            let end = at + 12 + usize::try_from(plen).unwrap_or(usize::MAX);
-            let payload = bytes.get(at + 12..end).ok_or_else(bad)?;
-            if number != n || bytes.get(end..end + 4) != Some(&tag(plen, number, payload)[..]) {
-                return Err(bad());
-            }
-            part.push(payload.to_vec());
-            at = end + 4;
-            ends.entry(n).or_default()[i] = at as u64; // ponytail: usize is u64 here
-            n += 1;
-        }
+    let anchor = store.anchor();
+    let (h_from, records_from) = (m.entries[0].first_block, m.entries[1].first_block);
+    let first = if anchor.is_some() { h_from } else { 1 };
+    let (number, hash) = store.head();
+    let mut headers = Vec::new();
+    for n in first..=number {
+        let missing = || FileError(format!("block {n} is missing from the store"));
+        let e = |e: xone_sync::store::StoreError| FileError(e.to_string());
+        headers.push(store.canonical_header(n).map_err(e)?.ok_or_else(missing)?);
     }
-    let count = parts[0].len();
-    if parts[1].len() != count || parts[2].len() != count || count as u64 != head.number {
+    if headers.last().map_or(0, |h| h.number) != number
+        || headers.last().map(Header::hash).unwrap_or(hash) != hash
+    {
         return Err(FileError(
-            "the segments and head.json disagree on the block count".into(),
-        ));
-    }
-    let mut blocks = Vec::with_capacity(count);
-    for (i, ((hp, bp), rp)) in parts[0].iter().zip(&parts[1]).zip(&parts[2]).enumerate() {
-        let bad =
-            |what: &str, e: alloy_rlp::Error| FileError(format!("block {}: {what}: {e}", i + 1));
-        let header = Header::decode(&mut &hp[..]).map_err(|e| bad("header", e))?;
-        let b = BodyFrame::decode(&mut &bp[..]).map_err(|e| bad("body", e))?;
-        let receipts = Vec::<Bytes>::decode(&mut &rp[..]).map_err(|e| bad("receipts", e))?;
-        blocks.push(Stored3 {
-            header,
-            body: Body {
-                transactions: b.txs,
-                uncles: b.uncles,
-                withdrawals: None,
-            },
-            receipts,
-        });
-    }
-    if blocks.last().map(|b| b.header.hash()) != Some(head.hash) {
-        return Err(FileError(
-            "the last stored header is not the head of head.json".into(),
+            "the last stored header is not the head of the manifest".into(),
         ));
     }
     Ok(Some(Loaded {
-        number: head.number,
-        hash: head.hash,
-        blocks,
-        ends,
+        number,
+        hash,
+        first,
+        records_from,
+        anchor,
+        headers,
     }))
+}
+
+/// Body and receipts of stored block `n`; empty ones below `records_from`.
+pub fn records(store: &NodeStore, l: &Loaded, n: u64) -> Result<(Body, Vec<Bytes>), FileError> {
+    if n < l.records_from {
+        return Ok((Body::default(), vec![]));
+    }
+    let (_, body, receipts) = store
+        .canonical_block(n)
+        .map_err(|e| FileError(e.to_string()))?
+        .ok_or_else(|| FileError(format!("block {n} is missing from the store")))?;
+    Ok((body, receipts))
 }
 
 /// The state checkpoint of the replay harness (`conformance/harness/src/replay.rs`), plus the V2 gap
@@ -273,6 +219,22 @@ pub fn save_ckpt(dir: &Path, c: &Ckpt) -> Result<(), FileError> {
     io(&to, fs::rename(&tmp, &to))
 }
 
+/// Removes the state checkpoints below `number` (`Core::checkpoint` says which are kept).
+pub fn drop_ckpts_below(dir: &Path, number: u64) {
+    if let Ok(rd) = fs::read_dir(ckpt_dir(dir)) {
+        for e in rd.filter_map(Result::ok) {
+            let name = e.file_name().to_string_lossy().into_owned();
+            let n = name
+                .strip_prefix("ckpt-")
+                .and_then(|r| r.strip_suffix(".json.gz"))
+                .and_then(|r| r.parse::<u64>().ok());
+            if n.is_some_and(|n| n < number) {
+                let _ = fs::remove_file(e.path());
+            }
+        }
+    }
+}
+
 /// The newest checkpoint at or below `upto` that `ok` accepts (it is of this chain).
 pub fn load_ckpt(dir: &Path, upto: u64, ok: impl Fn(&Ckpt) -> bool) -> Option<Ckpt> {
     let mut files: Vec<_> = fs::read_dir(ckpt_dir(dir))
@@ -286,187 +248,4 @@ pub fn load_ckpt(dir: &Path, upto: u64, ok: impl Fn(&Ckpt) -> bool) -> Option<Ck
         let c: Ckpt = serde_json::from_reader(GzDecoder::new(File::open(f).ok()?)).ok()?;
         (c.number <= upto && ok(&c)).then_some(c)
     })
-}
-
-/// `MemStore` with its commits written through to the segment files.
-pub struct FileStore {
-    inner: MemStore,
-    dir: PathBuf,
-    /// Head number on disk. Blocks at or below it are replayed from the files and not written again.
-    persisted: u64,
-    ends: BTreeMap<u64, [u64; 3]>,
-}
-
-impl FileStore {
-    pub fn new(inner: MemStore, dir: &Path, loaded: Option<&Loaded>) -> Result<Self, FileError> {
-        io(&dir.join("static"), fs::create_dir_all(dir.join("static")))?;
-        // Bytes beyond the committed length are a torn append or leftovers: cut them, so that the next
-        // frame lands where `head.json` says the segment ends.
-        let lens = loaded
-            .and_then(|l| l.ends.get(&l.number).copied())
-            .unwrap_or([0; 3]);
-        for (i, len) in lens.iter().enumerate() {
-            let p = seg_path(dir, i);
-            if p.exists() {
-                let f = io(&p, OpenOptions::new().write(true).open(&p))?;
-                if io(&p, f.metadata())?.len() > *len {
-                    io(&p, f.set_len(*len))?;
-                    io(&p, f.sync_all())?;
-                }
-            }
-        }
-        Ok(Self {
-            inner,
-            dir: dir.to_owned(),
-            persisted: loaded.map_or(0, |l| l.number),
-            ends: loaded.map(|l| l.ends.clone()).unwrap_or_default(),
-        })
-    }
-
-    /// The flat tables of the head, for a checkpoint.
-    pub fn head_flat(&self) -> &MemFlat {
-        self.inner.head_flat()
-    }
-
-    fn append(&mut self, rec: &Record) -> Result<(), FileError> {
-        let n = rec.block.number();
-        if n != self.persisted + 1 {
-            return Err(FileError(format!(
-                "block {n} does not follow the stored head {}",
-                self.persisted
-            )));
-        }
-        let mut lens = self.ends.get(&self.persisted).copied().unwrap_or([0; 3]);
-        for (i, p) in payloads(rec).iter().enumerate() {
-            let path = seg_path(&self.dir, i);
-            let f = frame(n, p);
-            let mut file = io(
-                &path,
-                OpenOptions::new().create(true).append(true).open(&path),
-            )?;
-            io(&path, file.write_all(&f))?;
-            io(&path, file.sync_all())?;
-            lens[i] += f.len() as u64; // ponytail: usize is u64 here
-        }
-        sync_dir(&self.dir.join("static"))?;
-        write_head(
-            &self.dir,
-            &HeadFile {
-                number: n,
-                hash: rec.block.hash(),
-                lens,
-            },
-        )?;
-        self.ends.insert(n, lens);
-        self.persisted = n;
-        Ok(())
-    }
-
-    fn cut(&mut self, number: u64) -> Result<(), FileError> {
-        let lens = if number == 0 {
-            [0; 3]
-        } else {
-            *self
-                .ends
-                .get(&number)
-                .ok_or_else(|| FileError(format!("no stored frames for block {number}")))?
-        };
-        for (i, len) in lens.iter().enumerate() {
-            let p = seg_path(&self.dir, i);
-            let f = io(&p, OpenOptions::new().write(true).open(&p))?;
-            io(&p, f.set_len(*len))?;
-            io(&p, f.sync_all())?;
-        }
-        let hash = self.inner.canonical_hash(number).unwrap_or_default();
-        write_head(&self.dir, &HeadFile { number, hash, lens })?;
-        self.ends.retain(|n, _| *n <= number);
-        self.persisted = number;
-        Ok(())
-    }
-}
-
-fn degraded(_: FileError) -> StoreError {
-    StoreError::Degraded(Cause::Io)
-}
-
-impl Store for FileStore {
-    fn head(&self) -> (u64, B256) {
-        self.inner.head()
-    }
-    fn canonical_hash(&self, number: u64) -> Option<B256> {
-        self.inner.canonical_hash(number)
-    }
-    fn header(&self, hash: B256) -> Option<Header> {
-        self.inner.header(hash)
-    }
-    fn record(&self, hash: B256) -> Option<Record> {
-        self.inner.record(hash)
-    }
-    fn stateless(&self, hash: B256) -> Option<Block> {
-        self.inner.stateless(hash)
-    }
-    fn state_at(&self, hash: B256) -> Result<Box<dyn StateRead + '_>, Missing> {
-        self.inner.state_at(hash)
-    }
-    fn committed(&self) -> Option<Link> {
-        self.inner.committed()
-    }
-    fn stateless_children(&self, parent: B256) -> usize {
-        self.inner.stateless_children(parent)
-    }
-    fn durability(&self) -> Durability {
-        self.inner.durability()
-    }
-    fn commit_block(&mut self, rec: &Record, committed: Option<Link>) -> Result<(), StoreError> {
-        self.inner.commit_block(rec, committed)?;
-        if rec.block.number() > self.persisted {
-            self.append(rec).map_err(degraded)?;
-        }
-        Ok(())
-    }
-    fn unwind_to(&mut self, number: u64, blocks: Unwound) -> Result<(), StoreError> {
-        self.inner.unwind_to(number, blocks)?;
-        if number < self.persisted {
-            self.cut(number).map_err(degraded)?;
-        }
-        Ok(())
-    }
-    fn put_side(&mut self, rec: &Record) -> Result<(), StoreError> {
-        self.inner.put_side(rec)
-    }
-    fn put_stateless(&mut self, block: &Block) -> Result<(), StoreError> {
-        self.inner.put_stateless(block)
-    }
-    // Staged sync rows (XB-14) are not file-backed: this node's chain service drives `Chain::insert`
-    // directly and replays the stored blocks at start, so the pipeline's rows stay in the memory model.
-    fn checkpoint(&self, stage: Stage) -> u64 {
-        self.inner.checkpoint(stage)
-    }
-    fn staged_header(&self, number: u64) -> Option<Header> {
-        self.inner.staged_header(number)
-    }
-    fn staged_body(&self, number: u64) -> Option<Body> {
-        self.inner.staged_body(number)
-    }
-    fn stage_headers(&mut self, headers: &[Header]) -> Result<(), StoreError> {
-        self.inner.stage_headers(headers)
-    }
-    fn stage_bodies(&mut self, from: u64, bodies: &[Body]) -> Result<(), StoreError> {
-        self.inner.stage_bodies(from, bodies)
-    }
-    fn set_checkpoint(&mut self, stage: Stage, number: u64) -> Result<(), StoreError> {
-        self.inner.set_checkpoint(stage, number)
-    }
-    fn finish(&mut self, up_to: u64) -> Result<(), StoreError> {
-        self.inner.finish(up_to)
-    }
-    fn unwind_stages(&mut self, number: u64) -> Result<(), StoreError> {
-        self.inner.unwind_stages(number)
-    }
-    fn scan(&self) -> Scan {
-        self.inner.scan()
-    }
-    fn repair(&mut self, actions: &[Action]) -> Result<(), StoreError> {
-        self.inner.repair(actions)
-    }
 }

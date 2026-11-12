@@ -23,6 +23,9 @@ allow = [
     "BSD-3-Clause",
     "Unicode-3.0",
     "Zlib",
+    "CDLA-Permissive-2.0", # webpki-roots (CA list data)
+    "ISC", # ring, rustls-webpki, libloading (bindgen of mdbx-sys); permissive, MIT-equivalent
+    "MPL-2.0", # libmdbx 0.6.6 and mdbx-sys 13.11.0 (XA-06); file-level copyleft, compatible with GPL-3.0-or-later
     "CC0-1.0",
     "Unlicense",
 ]

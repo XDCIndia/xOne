@@ -174,7 +174,7 @@ impl<'a> BodyVerifier<'a> {
             .transactions
             .iter()
             .map(|t| {
-                if t[0] >= 0xc0 {
+                if t.first().is_some_and(|b| *b >= 0xc0) {
                     t.len()
                 } else {
                     list_len_str(t.len())
@@ -320,4 +320,22 @@ impl<'a> BodyVerifier<'a> {
 /// Length of a byte string of `n` bytes (more than one byte, so it has a header).
 fn list_len_str(n: usize) -> usize {
     n + alloy_rlp::length_of_length(n)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An empty encoded transaction (wire `0x80`) is a typed rejection, not a panic in sizing.
+    #[test]
+    fn empty_transaction_is_rejected_not_panicking() {
+        let spec = xone_chainspec::mainnet();
+        let body = Body {
+            transactions: vec![Bytes::new()],
+            uncles: vec![],
+            withdrawals: None,
+        };
+        let r = BodyVerifier::new(&spec).verify_body(&Header::default(), &body);
+        assert!(matches!(r, Err(BodyError::TxDecode(_))), "{r:?}");
+    }
 }

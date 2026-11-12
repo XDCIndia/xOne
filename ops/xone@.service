@@ -2,11 +2,14 @@
 Description=xone XDC node (%i)
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=exec
 # %i = network instance: mainnet | apothem | devnet (or a custom name with GENESIS and CHAINID in the env file)
 Environment=NETWORK=%i
+Environment=XONE_BIN=/opt/xone/xone
 # Secrets (ETHSTATS_SECRET) live only in this file: chmod 600, owner root.
 EnvironmentFile=-/etc/xone/%i.env
 ExecStart=/opt/xone/run-xone.sh
@@ -21,8 +24,21 @@ LimitNOFILE=65536
 MemoryMax=15G
 User=xone
 Group=xone
+# Hardening that leaves the datadir alone. DATADIR is chosen by the operator, so ProtectSystem is
+# `full` (/usr, /boot, /etc read-only; /data, /var, /opt stay writable), not `strict`.
 NoNewPrivileges=true
 PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=full
+ProtectHome=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077
 
 [Install]
 WantedBy=multi-user.target

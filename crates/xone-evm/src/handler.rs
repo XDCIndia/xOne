@@ -190,8 +190,14 @@ impl<DB: Database> Handler for XdcHandler<DB> {
     /// A special transaction (to 0x89 or 0x90) is exempt from the fee-cap floor: it is minted with
     /// a zero fee cap and geth skips `ErrFeeCapTooLow` for it (`core/state_transition.go:684`). revm's
     /// check compares against the block's base fee, so it runs against zero for such a transaction.
+    ///
+    /// Between London and `Eip1559Block` the header has no base fee and geth checks the fee cap
+    /// against none (`core/state_transition.go:681-684`, `st.evm.Context.BaseFee != nil`); the BASEFEE
+    /// opcode reports 12.5 gwei there ([`XdcRules::block_env`]), which must not reject a cheaper
+    /// transaction.
     fn validate_env(&self, evm: &mut Self::Evm) -> Result<(), Self::Error> {
-        if !is_special_tx(evm.ctx_ref().tx().kind().to().copied()) {
+        let priced = evm.ctx_ref().chain().rules.header_has_basefee;
+        if priced && !is_special_tx(evm.ctx_ref().tx().kind().to().copied()) {
             return revm::handler::validation::validate_env(evm.ctx());
         }
         let basefee = std::mem::take(&mut evm.ctx().block.basefee);
@@ -206,10 +212,11 @@ impl<DB: Database> Handler for XdcHandler<DB> {
     ) -> Result<InitialAndFloorGas, Self::Error> {
         let ctx = evm.ctx_ref();
         let (tx, r) = (ctx.tx(), &ctx.chain().rules);
-        let mut g = ctx.cfg().gas_params().initial_tx_gas_for_tx(tx, None);
+        let info = gas::eip2780(r, tx.value(), tx.kind().to() == Some(&tx.caller()));
+        let mut g = ctx.cfg().gas_params().initial_tx_gas_for_tx(tx, info);
         g.set_floor_gas(
             gas::floor_params(r)
-                .initial_tx_gas_for_tx(tx, None)
+                .initial_tx_gas_for_tx(tx, info)
                 .floor_gas(),
         );
         if g.initial_total_gas() > tx.gas_limit() {

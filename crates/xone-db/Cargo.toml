@@ -8,6 +8,7 @@ publish.workspace = true
 
 [dependencies]
 alloy-primitives.workspace = true
+libmdbx.workspace = true
 thiserror.workspace = true
 xone-primitives.workspace = true
 

@@ -1,8 +1,9 @@
-//! The chain as the node runs it: `xone_sync::chain::Chain` over the [`FileStore`], the executor
-//! adapter (`xone_executor::execute_block`) and the header check adapter (`HeaderVerifier`), both
-//! reading the node's own [`History`]. A restart re-opens the files and replays every block above
-//! the newest state checkpoint through the same `Chain::insert`, so nothing that was stored is
-//! trusted without being verified and executed again.
+//! The chain as the node runs it: `xone_sync::chain::Chain` over the [`NodeStore`] (MDBX and the
+//! segment files, ADR-005), the executor adapter (`xone_executor::execute_block`) and the header
+//! check adapter (`HeaderVerifier`), both reading the node's own [`History`]. A restart reconciles
+//! the store, unwinds it to the newest state checkpoint and replays every block above it through the
+//! same `Chain::insert`, so nothing that was stored is trusted without being verified and executed
+//! again.
 
 use std::{
     collections::BTreeMap,
@@ -26,21 +27,36 @@ use xone_state::{
     trie::flat_root, Account, FlatRead, FlatWrite, MemFlat, Missing, StateDiff, StateRead,
 };
 use xone_sync::{
-    chain::{insert::Outcome, resume::ResumeError, Chain, ChainRead, HeaderCheck, InsertError},
+    bootstrap::{
+        minimal::{self, Held},
+        Class, Retention,
+    },
+    chain::{
+        insert::Outcome,
+        resume::{resume, ResumeError, Resumed},
+        Chain, ChainRead, HeaderCheck, InsertError,
+    },
     executor::{BlockExecutor, ExecError, Execution},
-    store::{Block, Store},
-    testkit::MemStore,
+    store::{Block, Store, Unwound},
 };
 
 use super::{
-    hist::{reseed, HistInner, Stored},
-    store::{self, Ckpt, FileError, FileStore},
+    hist::{reseed, HistInner, Stored, MEMORY_WINDOW},
+    store::{self, Ckpt, FileError, NodeStore},
 };
+
+/// Minimal mode deletes when the floor has moved this many blocks past the first held block: a
+/// rewrite of the segment files every 256 blocks, not every block.
+pub const PRUNE_SLACK: u64 = 256;
 
 /// Blocks above the anchor whose state can be opened (RPC reads at a block, unwind window).
 pub const RETENTION: u64 = 1024;
-/// Blocks per segment chunk of the in-memory store model.
-const BLOCKS_PER_FILE: u64 = 100_000;
+
+/// ponytail: group commit of a node that does not sign. The block commits of this interval become
+/// steady together: one sync of each touched segment chunk, the segment directories and MDBX, instead
+/// of a dozen syncs per block (about 30 ms each on a busy disk, 3 blocks per second). A crash of the
+/// system loses at most this interval, which is fetched again. Shorter if that is too much.
+pub const GROUP_COMMIT: std::time::Duration = std::time::Duration::from_secs(1);
 
 #[derive(Debug, thiserror::Error)]
 pub enum CoreError {
@@ -54,6 +70,12 @@ pub enum CoreError {
     Insert { number: u64, error: InsertError },
     #[error("{0}")]
     Inconsistent(String),
+    #[error("the datadir was bootstrapped from a snapshot and has no history below its anchor: start it with --minimal")]
+    Anchored,
+    #[error("--minimal starts from the anchor of an imported snapshot, and this datadir has none: run `xone snapshot import` first (a minimal node never syncs from genesis or reads an archive)")]
+    NotAnchored,
+    #[error("minimal mode: {0}")]
+    Minimal(String),
 }
 
 /// The state as a sized reader, so the generic executor and the pool can take a `&dyn StateRead`.
@@ -176,7 +198,7 @@ impl BlockExecutor for NodeExec {
             receipts: out.receipt_encodings,
             state_root: out.state_root,
             gas_used: out.gas_used,
-            access_list_hash: None,
+            access_list_hash: out.bal_hash,
             aux: Bytes::new(),
         })
     }
@@ -205,7 +227,7 @@ impl HeaderCheck for NodeCheck {
     }
 }
 
-pub type NodeChain = Chain<FileStore, NodeExec, NodeCheck>;
+pub type NodeChain = Chain<NodeStore, NodeExec, NodeCheck>;
 
 pub struct Core {
     pub spec: ChainSpec,
@@ -215,6 +237,10 @@ pub struct Core {
     pub genesis: B256,
     ckpt_every: u64,
     pub head: watch::Sender<(u64, B256)>,
+    /// Started from an imported snapshot: prunes below the retention floor, serves nothing below it.
+    pub minimal: bool,
+    /// Blocks the retention floor moves before the store is rewritten ([`PRUNE_SLACK`]; a test sets 0).
+    pub prune_slack: u64,
 }
 
 pub fn now() -> u64 {
@@ -277,6 +303,14 @@ fn miner_of(spec: &ChainSpec, h: &Header) -> Result<Address, CoreError> {
         .map_err(|e| CoreError::Inconsistent(format!("block {}: {e}", h.number)))
 }
 
+impl Drop for Core {
+    fn drop(&mut self) {
+        if let Err(e) = self.chain.with_store_mut(NodeStore::steady) {
+            eprintln!("store: the last blocks are not steady on close: {e}");
+        }
+    }
+}
+
 impl Core {
     /// Opens `<dir>`: genesis on a new datadir, else the checkpoint and the stored blocks above it,
     /// replayed and verified. Refuses a datadir whose files do not fit `genesis`.
@@ -286,27 +320,58 @@ impl Core {
         dir: &Path,
         ckpt_every: u64,
     ) -> Result<Self, CoreError> {
+        Self::open_with(spec, genesis, dir, ckpt_every, false, false)
+    }
+
+    /// [`Core::open`], and with `minimal` the start of a node from the anchor of an imported snapshot
+    /// (`spec/bootstrap/minimal-mode.md`): the datadir must be anchored, holds nothing below its
+    /// first retained block, and prunes to the derived retention floor as the head moves. An
+    /// anchored datadir is never opened as a full node, and a full datadir never as a minimal one.
+    /// `group_commit` (a node that does not sign) makes the block commits steady once per
+    /// [`GROUP_COMMIT`] instead of each on the device before it returns (`xone_sync::mdbx::Config`).
+    pub fn open_with(
+        spec: ChainSpec,
+        genesis: &Genesis,
+        dir: &Path,
+        ckpt_every: u64,
+        minimal: bool,
+        group_commit: bool,
+    ) -> Result<Self, CoreError> {
         let (flat0, codes0, g) = genesis_state(genesis, &spec)?;
         std::fs::create_dir_all(dir).map_err(|e| FileError(format!("{}: {e}", dir.display())))?;
-        let loaded = store::load(dir)?;
-        if let Some(l) = &loaded {
-            if l.blocks.first().map(|b| b.header.parent_hash) != Some(g.hash()) {
+        let mut node_store = store::open(dir, RETENTION, group_commit.then_some(GROUP_COMMIT))?;
+        let resumed = resume(&mut node_store)?;
+        let loaded = store::load(&node_store)?;
+        let anchored = loaded.as_ref().is_some_and(|l| l.anchor.is_some());
+        match (anchored, minimal) {
+            (true, false) => return Err(CoreError::Anchored),
+            (false, true) => return Err(CoreError::NotAnchored),
+            _ => {}
+        }
+        match resumed {
+            Resumed::Fresh => node_store
+                .init_anchor(g.clone(), flat0.clone())
+                .map_err(|e| CoreError::Inconsistent(e.to_string()))?,
+            Resumed::Head { .. } if !anchored && node_store.canonical_hash(0) != Some(g.hash()) => {
                 return Err(CoreError::Inconsistent(
                     "the stored chain does not start at this genesis".into(),
                 ));
             }
+            Resumed::Head { .. } => {}
         }
         let ck = loaded.as_ref().and_then(|l| {
             store::load_ckpt(dir, l.number, |c| {
-                usize::try_from(c.number)
-                    .ok()
-                    .and_then(|n| l.blocks.get(n.checked_sub(1)?))
-                    .map(|b| b.header.hash())
+                c.number
+                    .checked_sub(l.first)
+                    .and_then(|n| usize::try_from(n).ok())
+                    .and_then(|n| l.headers.get(n))
+                    .map(Header::hash)
                     == Some(c.hash)
             })
         });
         let hist_of = |blocks: Vec<Stored>, codes, snaps, gaps| HistInner {
             spec: spec.clone(),
+            base: 0,
             blocks,
             codes,
             wide: BTreeMap::new(),
@@ -347,14 +412,29 @@ impl Core {
                     BTreeMap::from([(c.number, snap)]),
                     gaps,
                 );
-                inner.td = genesis_block.header.difficulty;
-                inner.blocks.push(genesis_block);
-                for (i, b) in l.blocks.iter().take(c.number as usize).enumerate() {
-                    let n = i as u64 + 1;
-                    let s = Stored {
-                        hash: b.header.hash(),
-                        header: b.header.clone(),
-                        miner: miner_of(&spec, &b.header)?,
+                if anchored {
+                    // The history starts at the first retained header. Its total difficulty is not
+                    // known (no block below it is held): the window's own sum is a lower bound, and
+                    // XDPoS peers rank by block number and round, not by difficulty.
+                    inner.base = l.first;
+                } else {
+                    inner.td = genesis_block.header.difficulty;
+                    inner.blocks.push(genesis_block);
+                }
+                for (i, header) in l
+                    .headers
+                    .iter()
+                    .take((c.number + 1 - l.first) as usize)
+                    .enumerate()
+                {
+                    let n = l.first + i as u64;
+                    // every body is read once for the transaction index; the history keeps the
+                    // window's only (`MEMORY_WINDOW`)
+                    let (body, receipts) = store::records(&node_store, l, n)?;
+                    let mut s = Stored {
+                        hash: header.hash(),
+                        header: header.clone(),
+                        miner: miner_of(&spec, header)?,
                         signs: c.signs.get(&n).map_or(vec![], |v| {
                             v.iter()
                                 .map(|(sender, signed, ok)| SignTx {
@@ -364,10 +444,13 @@ impl Core {
                                 })
                                 .collect()
                         }),
-                        body: b.body.clone(),
-                        receipts: b.receipts.clone(),
+                        body,
+                        receipts,
                     };
                     inner.index(&s, n);
+                    if n + MEMORY_WINDOW <= c.number {
+                        (s.body, s.receipts) = (Body::default(), vec![]);
+                    }
                     inner.td += s.header.difficulty;
                     inner.blocks.push(s);
                 }
@@ -402,12 +485,42 @@ impl Core {
                 "the state checkpoint of block {start} does not give its state root"
             )));
         }
+        if anchored && ck.is_none() {
+            return Err(CoreError::Inconsistent(
+                "an anchored datadir without a state checkpoint at or below its head".into(),
+            ));
+        }
         let hist = std::sync::Arc::new(History {
             inner: RwLock::new(inner),
             pending: Mutex::new(None),
         });
-        let mem = MemStore::with_anchor(anchor, flat, RETENTION, BLOCKS_PER_FILE);
-        let files = FileStore::new(mem, dir, loaded.as_ref())?;
+        // The blocks above the checkpoint are read before the store goes back to it, and replayed
+        // below.
+        let replay = match &loaded {
+            Some(l) => (start + 1..=l.number)
+                .map(|n| {
+                    let h = l.header(n).cloned().ok_or_else(|| {
+                        CoreError::Inconsistent(format!("block {n} is not loaded"))
+                    })?;
+                    Ok((h, store::records(&node_store, l, n)?.0))
+                })
+                .collect::<Result<Vec<_>, CoreError>>()?,
+            None => vec![],
+        };
+        if loaded.as_ref().is_some_and(|l| start < l.number) {
+            node_store.unwind_to(start, Unwound::Drop).map_err(|e| {
+                CoreError::Inconsistent(format!(
+                    "no state checkpoint within the last {RETENTION} blocks to replay from: {e}"
+                ))
+            })?;
+        }
+        if node_store.head() != (start, anchor.hash())
+            || node_store.flat_root() != anchor.state_root
+        {
+            return Err(CoreError::Inconsistent(format!(
+                "the store at block {start} is not the checkpoint's state"
+            )));
+        }
         let exec = NodeExec {
             spec: spec.clone(),
             hist: hist.clone(),
@@ -416,7 +529,7 @@ impl Core {
             spec: spec.clone(),
             hist: hist.clone(),
         };
-        let (chain, _) = Chain::open(spec.clone(), files, exec, check)?;
+        let chain = Chain::new(spec.clone(), node_store, exec, check);
         let (head, _) = watch::channel((start, hist.read().tip().hash));
         let core = Self {
             spec,
@@ -426,22 +539,27 @@ impl Core {
             genesis: g.hash(),
             ckpt_every,
             head,
+            minimal,
+            prune_slack: PRUNE_SLACK,
         };
-        if let Some(l) = loaded {
-            for b in l.blocks.into_iter().skip(start as usize) {
-                let number = b.header.number;
-                match core.import(b.header, b.body, now())? {
-                    Outcome::Extended => {}
-                    o => {
-                        return Err(CoreError::Inconsistent(format!(
-                            "stored block {number} replayed as {o:?}"
-                        )))
-                    }
+        if minimal {
+            core.check_start()?;
+        }
+        for (header, body) in replay {
+            let number = header.number;
+            match core.import(header, body, now())? {
+                Outcome::Extended => {}
+                o => {
+                    return Err(CoreError::Inconsistent(format!(
+                        "stored block {number} replayed as {o:?}"
+                    )))
                 }
             }
+        }
+        if let Some(l) = loaded {
             if core.chain.head() != (l.number, l.hash) {
                 return Err(CoreError::Inconsistent(format!(
-                    "the replay ends at {:?}, head.json says {} {}",
+                    "the replay ends at {:?}, the store's head was {} {}",
                     core.chain.head(),
                     l.number,
                     l.hash
@@ -466,32 +584,42 @@ impl Core {
         if out != Outcome::Extended {
             return Ok(out);
         }
-        let p = self
-            .hist
-            .pending()
-            .take()
-            .filter(|p| p.hash == hash)
-            .ok_or_else(|| CoreError::Inconsistent(format!("no execution record for {hash}")))?;
-        let (mut snap, mut gap, mut err) = (p.snap, None, None);
-        let want_gap = self.hist.read().is_gap_block(number);
-        self.chain
-            .reader()
-            .with_state(hash, &mut |s| {
-                if let Some(sn) = snap.as_mut() {
-                    err = reseed(&self.spec, sn, &Dyn(s), number).err();
-                }
-                if want_gap && err.is_none() {
-                    match gap_snapshot::build(&Dyn(s), number) {
-                        Ok(g) => gap = Some(g),
-                        Err(e) => err = Some(e.to_string()),
+        // The block is committed. If its history context cannot be built, rewind the chain to the
+        // parent so the store head and the history tip stay the same block.
+        let derived = (|| -> Result<_, CoreError> {
+            let mut p = self
+                .hist
+                .pending()
+                .take()
+                .filter(|p| p.hash == hash)
+                .ok_or_else(|| {
+                    CoreError::Inconsistent(format!("no execution record for {hash}"))
+                })?;
+            let (mut snap, mut gap, mut err) = (p.snap.take(), None, None);
+            let want_gap = self.hist.read().is_gap_block(number);
+            self.chain
+                .reader()
+                .with_state(hash, &mut |s| {
+                    if let Some(sn) = snap.as_mut() {
+                        err = reseed(&self.spec, sn, &Dyn(s), number).err();
                     }
-                }
-            })
-            .map_err(|e| CoreError::Inconsistent(e.to_string()))?;
-        if let Some(e) = err {
-            return Err(CoreError::Inconsistent(format!("block {number}: {e}")));
-        }
-        let miner = miner_of(&self.spec, &header)?;
+                    if want_gap && err.is_none() {
+                        match gap_snapshot::build(&Dyn(s), number) {
+                            Ok(g) => gap = Some(g),
+                            Err(e) => err = Some(e.to_string()),
+                        }
+                    }
+                })
+                .map_err(|e| CoreError::Inconsistent(e.to_string()))?;
+            if let Some(e) = err {
+                return Err(CoreError::Inconsistent(format!("block {number}: {e}")));
+            }
+            let miner = miner_of(&self.spec, &header)?;
+            Ok((p, snap, gap, miner))
+        })();
+        let (p, snap, gap, miner) = derived.inspect_err(|_| {
+            let _ = self.chain.set_head(number - 1);
+        })?;
         self.hist.write().push(
             Stored {
                 hash,
@@ -509,6 +637,9 @@ impl Core {
         self.head.send_replace((number, hash));
         if self.ckpt_every != 0 && number % self.ckpt_every == 0 {
             self.checkpoint()?;
+        }
+        if self.minimal {
+            self.prune()?;
         }
         Ok(out)
     }
@@ -537,11 +668,10 @@ impl Core {
         c.signs = h
             .blocks
             .iter()
-            .enumerate()
-            .filter(|(_, b)| !b.signs.is_empty())
-            .map(|(i, b)| {
+            .filter(|b| !b.signs.is_empty())
+            .map(|b| {
                 (
-                    i as u64,
+                    b.header.number,
                     b.signs.iter().map(|s| (s.sender, s.signed, s.ok)).collect(),
                 )
             })
@@ -551,11 +681,72 @@ impl Core {
             .iter()
             .map(|(n, g)| (*n, g.candidates.clone()))
             .collect();
+        drop(h);
         store::save_ckpt(&self.dir, &c)?;
+        // A restart replays from the newest checkpoint at or below the head and within the unwind
+        // window, so an older one is never read: a minimal node keeps the newest only, a full node
+        // also the one before it (the newest may be above a head that a crash took back).
+        let keep_from = if self.minimal {
+            n
+        } else {
+            n.saturating_sub(self.ckpt_every)
+        };
+        store::drop_ckpts_below(&self.dir, keep_from);
         Ok(Some(n))
     }
 
     pub fn head(&self) -> (u64, B256) {
         self.chain.head()
+    }
+
+    /// Body and receipts of canonical block `n` (`hash`): from the history inside its memory window,
+    /// else from the store (`MEMORY_WINDOW`). `None` for a block the node does not hold.
+    pub fn records(&self, n: u64, hash: B256) -> Option<(Body, Vec<Bytes>)> {
+        {
+            let h = self.hist.read();
+            let s = h.at(n).filter(|s| s.hash == hash)?;
+            if h.in_memory(n) {
+                return Some((s.body.clone(), s.receipts.clone()));
+            }
+        }
+        let (header, body, receipts) = self.chain.with_store(|s| s.canonical_block(n)).ok()??;
+        (header.hash() == hash).then_some((body, receipts))
+    }
+
+    fn check_start(&self) -> Result<(), CoreError> {
+        self.chain
+            .with_store(|s| minimal::check_start(&self.spec, s))
+            .map_err(|e| CoreError::Minimal(e.to_string()))
+    }
+
+    /// What a minimal node holds, for the RPC; `None` on a node that followed from genesis.
+    pub fn held(&self) -> Option<Held> {
+        self.minimal
+            .then(|| {
+                self.chain
+                    .with_store(|s| Held::of_store(&self.spec, s, RETENTION))
+                    .ok()
+            })
+            .flatten()
+    }
+
+    /// Deletes what the retention floor of the head has passed, from the store and the history
+    /// (`minimal::prune`; the committed block is a ceiling).
+    fn prune(&self) -> Result<(), CoreError> {
+        let committed = self.chain.committed().map(|l| l.number);
+        let kept = self
+            .chain
+            .with_store_mut(|s| minimal::prune(&self.spec, s, committed, self.prune_slack))
+            .map_err(|e| CoreError::Minimal(e.to_string()))?;
+        if let Some(k) = kept {
+            let (head, _) = self.chain.head();
+            let gaps_from = Retention::derive(&self.spec, head)
+                .map_err(|e| CoreError::Minimal(e.to_string()))?
+                .floor(Class::GapSnapshot);
+            self.hist
+                .write()
+                .prune(k.headers_from, k.records_from, gaps_from);
+        }
+        Ok(())
     }
 }

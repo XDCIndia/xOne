@@ -31,7 +31,7 @@ RANK = {
 # signer to a third crate needs its own dependency edge, which this rule rejects.
 RESTRICTED = {"xone-signer": {"xone-consensus", "xone-node"}}
 # Test-only trees: may depend on anything, nothing may depend on them.
-TEST_ONLY_DIRS = ("sim", "spikes", "labs", "conformance")
+TEST_ONLY_DIRS = ("sim", "spikes", "labs", "conformance", "tests")
 
 # Wrong-direction edges that exist today, each with the reason and the way out.
 # An edge listed here is allowed only as a normal dependency and is printed on every run.

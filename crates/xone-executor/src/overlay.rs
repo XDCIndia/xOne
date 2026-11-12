@@ -11,7 +11,10 @@ use revm::{
     state::{AccountInfo, Bytecode, EvmState},
     Database,
 };
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, BTreeSet},
+};
 use xone_primitives::{WideBalance, WideBalanceError};
 use xone_state::{Account, StateDiff, StateRead};
 
@@ -37,6 +40,17 @@ pub struct Overlay<'a, S, E> {
     /// Accounts deleted in this block: their base storage no longer exists.
     wiped: BTreeSet<Address>,
     codes: BTreeMap<B256, Bytes>,
+    /// While a transaction runs under EIP-7928: every account and slot it reads, with the value it
+    /// had at the first read (geth `getStateObject` and `GetCommittedState` record each access,
+    /// `core/state/statedb.go:632-636`, `state_object.go:186-190`).
+    rec: RefCell<Option<Reads>>,
+}
+
+/// What one transaction read, with the value before it ran.
+#[derive(Default)]
+pub struct Reads {
+    pub accounts: BTreeMap<Address, Option<Account>>,
+    pub slots: BTreeMap<(Address, B256), U256>,
 }
 
 impl<'a, S: StateRead, E: Env> Overlay<'a, S, E> {
@@ -48,25 +62,44 @@ impl<'a, S: StateRead, E: Env> Overlay<'a, S, E> {
             storage: BTreeMap::new(),
             wiped: BTreeSet::new(),
             codes: BTreeMap::new(),
+            rec: RefCell::new(None),
         }
     }
 
+    /// Starts recording the reads of a transaction.
+    pub fn record(&mut self) {
+        *self.rec.get_mut() = Some(Reads::default());
+    }
+
+    /// Stops recording and returns what was read, `None` when nothing was recording.
+    pub fn take_reads(&mut self) -> Option<Reads> {
+        self.rec.get_mut().take()
+    }
+
     pub fn account(&self, a: Address) -> Option<Account> {
-        match self.accounts.get(&a) {
+        let x = match self.accounts.get(&a) {
             Some(x) => x.clone(),
             None => self.base.account(a),
+        };
+        if let Some(r) = self.rec.borrow_mut().as_mut() {
+            r.accounts.entry(a).or_insert_with(|| x.clone());
         }
+        x
     }
 
     /// A slot as this block sees it (geth `GetState`).
     pub fn slot(&self, a: Address, k: B256) -> U256 {
-        if let Some(v) = self.storage.get(&(a, k)) {
-            return *v;
+        let v = if let Some(v) = self.storage.get(&(a, k)) {
+            *v
+        } else if self.wiped.contains(&a) {
+            U256::ZERO
+        } else {
+            self.base.storage(a, k)
+        };
+        if let Some(r) = self.rec.borrow_mut().as_mut() {
+            r.slots.entry((a, k)).or_insert(v);
         }
-        if self.wiped.contains(&a) {
-            return U256::ZERO;
-        }
-        self.base.storage(a, k)
+        v
     }
 
     /// Remove an account and its storage (SELFDESTRUCT, EIP-161 deletion, the `TIPSigning` wipe).
@@ -113,6 +146,14 @@ impl<'a, S: StateRead, E: Env> Overlay<'a, S, E> {
         let mut acc = self.account(a).unwrap_or_else(blank);
         acc.balance = acc.balance.checked_sub(amount)?;
         self.set(a, acc, eip158).map(|_| ())
+    }
+
+    /// geth `SetCode`: the account is created if it does not exist; balance, nonce and storage stay.
+    pub fn set_code(&mut self, a: Address, code: Bytes) -> Result<(), OverlayError> {
+        let mut acc = self.account(a).unwrap_or_else(blank);
+        acc.code_hash = alloy_primitives::keccak256(&code);
+        self.codes.insert(acc.code_hash, code);
+        self.set(a, acc, true).map(|_| ())
     }
 
     pub fn set_nonce(&mut self, a: Address, nonce: u64) -> Result<(), OverlayError> {

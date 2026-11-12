@@ -3,9 +3,10 @@
 use revm::{
     context_interface::cfg::{
         gas::STANDARD_TOKEN_COST,
-        gas_params::{GasId, GasParams},
+        gas_params::{Eip2780TxInfo, GasId, GasParams},
     },
     interpreter::InitialAndFloorGas,
+    primitives::{hardfork::SpecId, U256},
 };
 
 use crate::spec::XdcRules;
@@ -33,6 +34,16 @@ pub fn floor_params(rules: &XdcRules) -> GasParams {
     GasParams::new_spec(rules.spec_id)
 }
 
+/// From Amsterdam the base of the intrinsic gas and of the calldata floor is priced by what the
+/// transaction does (geth `intrinsicBaseGasEIP2780`, `core/state_transition.go:200-228`): a create,
+/// a self-transfer, and whether it carries value. Before it there is nothing to say.
+pub fn eip2780(rules: &XdcRules, value: U256, is_self_transfer: bool) -> Option<Eip2780TxInfo> {
+    (rules.spec_id >= SpecId::AMSTERDAM).then_some(Eip2780TxInfo {
+        value,
+        is_self_transfer,
+    })
+}
+
 /// Intrinsic gas of a message: geth `IntrinsicGas` (`core/state_transition.go:84`) called with the
 /// rules copy that `execute` builds (`:803-806`). Access lists and authorizations are counted by
 /// number of addresses and storage keys.
@@ -42,6 +53,7 @@ pub fn intrinsic_gas(
     create: bool,
     access_list_accounts: u64,
     access_list_storages: u64,
+    eip2780: Option<Eip2780TxInfo>,
 ) -> InitialAndFloorGas {
     gas_params(rules).initial_tx_gas(
         data,
@@ -49,7 +61,7 @@ pub fn intrinsic_gas(
         access_list_accounts,
         access_list_storages,
         0,
-        None,
+        eip2780,
     )
 }
 
@@ -75,6 +87,7 @@ impl IntrinsicTables {
         create: bool,
         access_list_accounts: u64,
         access_list_storages: u64,
+        eip2780: Option<Eip2780TxInfo>,
     ) -> (u64, u64) {
         let intrinsic = self.params.initial_tx_gas(
             data,
@@ -82,7 +95,7 @@ impl IntrinsicTables {
             access_list_accounts,
             access_list_storages,
             0,
-            None,
+            eip2780,
         );
         let floor = self.floor.initial_tx_gas(
             data,
@@ -90,7 +103,7 @@ impl IntrinsicTables {
             access_list_accounts,
             access_list_storages,
             0,
-            None,
+            eip2780,
         );
         (intrinsic.initial_total_gas(), floor.floor_gas())
     }

@@ -52,11 +52,14 @@ fn run(args: impl IntoIterator<Item = OsString>) -> ExitCode {
     match m.subcommand() {
         Some(("import", s)) => return cmd::import(s),
         Some(("export", s)) => return cmd::export(s),
+        Some(("snapshot", s)) => return cmd::snapshot(s),
         _ => {}
     }
-    let profiles = ["xdcmainnet", "apothem", "xdcdevnet"];
-    if profiles.iter().filter(|k| on(k)).count() > 1 {
-        eprintln!("xone: --xdcmainnet, --apothem and --xdcdevnet are mutually exclusive");
+    let profiles = ["xdcmainnet", "apothem", "xdcdevnet", "net2040"];
+    if profiles.iter().filter(|k| on(k)).count() + usize::from(m.contains_id("network")) > 1 {
+        eprintln!(
+            "xone: --xdcmainnet, --apothem, --xdcdevnet, --net2040 and --network are mutually exclusive"
+        );
         return ExitCode::from(2);
     }
     let mut cfg = match m.get_one::<String>("config") {
@@ -108,7 +111,7 @@ fn run(args: impl IntoIterator<Item = OsString>) -> ExitCode {
 /// Check the datadir marker, open the chain (a restart replays what is stored), then run net, chain,
 /// pool and rpc until SIGTERM or SIGINT.
 fn start(cfg: &Config) -> ExitCode {
-    let (marker, net, genesis) = match datadir::prepare_chain(cfg) {
+    let (marker, spec, genesis) = match datadir::prepare_chain(cfg) {
         Ok(m) => m,
         Err(e) => return fail(e),
     };
@@ -116,7 +119,7 @@ fn start(cfg: &Config) -> ExitCode {
     if let Err(e) = shutdown.install_signals() {
         return fail(e);
     }
-    let mut node = match services::build(cfg, &marker, net, &genesis, stamp()) {
+    let mut node = match services::build(cfg, &marker, spec, &genesis, stamp()) {
         Ok(b) => b.node,
         Err(e) => return fail(e),
     };

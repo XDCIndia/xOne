@@ -271,8 +271,42 @@ impl Chain {
                 .then(|| self.get(cp).map(|s| s.header.clone()))
                 .flatten(),
             // only read where geth runs the full V1 verification, which it does not on Apothem
-            checkpoint_signers: vec![],
+            checkpoint_signers: if self.spec.chain_id == 51 || cp != n {
+                vec![]
+            } else {
+                self.checkpoint_signers(header, snap)?
+            },
         })))
+    }
+
+    /// geth `checkSignersOnCheckpoint` (`consensus/XDPoS/xdpos.go:1028-1130`): the snapshot's signers
+    /// minus the penalties of the checkpoint and of the `LimitPenaltyEpoch` epochs before it. The
+    /// penalties are the header's own and those stored in the earlier checkpoints; their derivation
+    /// from state (`HookPenaltyTIPSigning`) is not repeated here.
+    fn checkpoint_signers(&self, header: &Header, snap: &Snapshot) -> Result<Vec<Address>, String> {
+        use xone_consensus::v1::checkpoint;
+        let n = header.number;
+        let mut previous = BTreeMap::new();
+        for i in 1..=checkpoint::LIMIT_PENALTY_EPOCH {
+            if let Some(k) = n.checked_sub(i * self.epoch).filter(|k| *k > 0) {
+                let h = self
+                    .get(k)
+                    .ok_or(format!("no checkpoint {k} for the penalties"))?;
+                previous.insert(k, addresses(&h.header.penalties));
+            }
+        }
+        let removed = checkpoint::checkpoint_penalties(
+            n,
+            self.epoch,
+            &addresses(&header.penalties),
+            &previous,
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(snap
+            .get_signers()
+            .into_iter()
+            .filter(|a| !removed.contains(a))
+            .collect())
     }
 }
 

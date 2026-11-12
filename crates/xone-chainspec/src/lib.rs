@@ -12,7 +12,9 @@ use std::collections::BTreeMap;
 use alloy_primitives::{Address, B256};
 
 pub use genesis::Genesis;
-pub use networks::{apothem, devnet, devnet551, load, load_named, mainnet, Network};
+pub use networks::{
+    apothem, devnet, devnet551, load, load_custom, load_named, mainnet, net2040, Network,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -22,6 +24,8 @@ pub enum Error {
     MissingNetwork(&'static str),
     #[error("the generated fork table sets `{0}`, which this crate does not model")]
     UnmodelledFork(String),
+    #[error("required key `{0}` is absent from the genesis config")]
+    MissingConfig(&'static str),
     #[error("unknown network `{0}`")]
     UnknownNetwork(String),
     #[error("invalid genesis json: {0}")]
@@ -121,6 +125,9 @@ macro_rules! chain_spec {
         }
 
         impl ChainSpec {
+            /// The key of every fork row, in declaration order.
+            pub const FORK_KEYS: &'static [&'static str] = &[$($key),*];
+
             /// Every `*Block` row of the generated table must be present.
             fn from_table(
                 chain_id: u64,

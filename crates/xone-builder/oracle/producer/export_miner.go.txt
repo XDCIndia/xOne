@@ -1,0 +1,21 @@
+package miner
+
+import (
+	"math/big"
+
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/params"
+)
+
+// OracleGasLimit runs the real xdcGasLimit (miner/xdpos_worker.go:320) for the child of a parent block.
+func OracleGasLimit(cfg *params.ChainConfig, ceil, parentNumber, parentGasLimit uint64) uint64 {
+	w := &XdcWorker{miner: &Miner{config: &Config{GasCeil: ceil}, chainConfig: cfg}}
+	return w.xdcGasLimit(&types.Header{Number: new(big.Int).SetUint64(parentNumber), GasLimit: parentGasLimit})
+}
+
+// OracleIsSignBlock and OracleIsStale run the real gates of the sign transaction (miner/xdpos_worker.go:1184, :1207).
+func OracleIsSignBlock(cfg *params.ChainConfig, n uint64) bool {
+	return isSignBlock(cfg, new(big.Int).SetUint64(n))
+}
+
+func OracleIsStale(block, head uint64) bool { return isSigningTxStale(block, head) }

@@ -19,6 +19,8 @@ use xone_primitives::{BlockNonce, Header};
 
 pub const HOST: &str = "xdc02";
 pub const APOTHEM_PORT: u16 = 21105;
+/// The net2040 archive (geth-XDC `net2040-geth-archive-de6c`) on the same host.
+pub const NET2040_PORT: u16 = 10071;
 /// The validator contract (geth `common.MasternodeVotingSMCBinary`).
 const VALIDATOR: &str = "0x0000000000000000000000000000000000000088";
 /// `slotValidatorMapping["validatorsState"]`, geth `core/state/statedb_utils.go:77`.
@@ -40,18 +42,33 @@ pub fn is_special(to: &str) -> bool {
 pub struct Rpc {
     last: Instant,
     pub requests: u64,
+    port: u16,
 }
 
 impl Default for Rpc {
     fn default() -> Self {
-        Self {
-            last: Instant::now() - Duration::from_secs(1),
-            requests: 0,
-        }
+        Self::on(APOTHEM_PORT)
     }
 }
 
 impl Rpc {
+    fn on(port: u16) -> Self {
+        Self {
+            last: Instant::now() - Duration::from_secs(1),
+            requests: 0,
+            port,
+        }
+    }
+
+    /// The read-only archive of a network.
+    pub fn for_network(net: Network) -> Result<Self, String> {
+        match net {
+            Network::Apothem => Ok(Self::on(APOTHEM_PORT)),
+            Network::Net2040 => Ok(Self::on(NET2040_PORT)),
+            other => Err(format!("no archive for {}", other.name())),
+        }
+    }
+
     /// One HTTP request carrying a JSON-RPC batch; answers in request order.
     pub fn batch(&mut self, calls: Vec<(&str, Value)>) -> Result<Vec<Value>, String> {
         let gap = Duration::from_millis(260);
@@ -75,7 +92,7 @@ impl Rpc {
                 "--data-binary",
                 "@-",
             ])
-            .arg(format!("http://127.0.0.1:{APOTHEM_PORT}"))
+            .arg(format!("http://127.0.0.1:{}", self.port))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()

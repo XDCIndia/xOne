@@ -8,7 +8,7 @@
 //! fork row of the generated table can flip at (row - 1, row, row + 1).
 //! Vectors: `conformance/vectors/evm/{precompiles,rules}.json`, written by `oracle/run.sh`.
 
-use alloy_primitives::{hex, Address};
+use alloy_primitives::{hex, Address, U256};
 use revm::{interpreter::InitialAndFloorGas, primitives::hardfork::SpecId};
 use serde::Deserialize;
 use std::{collections::BTreeSet, str::FromStr};
@@ -190,12 +190,23 @@ fn intrinsic_gas_equals_geth_at_every_fork_row() {
             let rules = spec::rules(&spec, r.number).unwrap();
             for c in &r.intrinsic {
                 let (case, data) = c.case.rsplit_once('-').unwrap();
+                // the cases that carry value or send to the sender (EIP-2780 prices them apart)
+                let value = if case.ends_with('z')
+                    || !(case.starts_with("callv")
+                        || case.starts_with("self")
+                        || case.starts_with("createv"))
+                {
+                    U256::ZERO
+                } else {
+                    U256::from(1u64)
+                };
                 let g: InitialAndFloorGas = gas::intrinsic_gas(
                     &rules,
                     &hex::decode(data).unwrap(),
                     case.starts_with("create"),
                     0,
                     0,
+                    gas::eip2780(&rules, value, case.starts_with("self")),
                 );
                 assert_eq!(
                     g.initial_total_gas(),

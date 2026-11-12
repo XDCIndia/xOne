@@ -11,7 +11,10 @@ use std::{
 
 use alloy_primitives::{keccak256, Address, Bytes, B256, U256};
 use tokio::{runtime::Handle, task::JoinHandle};
-use xone_builder::txpool::{special::Authority, validate::min_gas_price, Config, Pool, PoolTx};
+use xone_builder::{
+    producer::build::Cand,
+    txpool::{special::Authority, validate::min_gas_price, Config, Pool, PoolTx},
+};
 use xone_net::eth::Raw;
 use xone_rpc::api::PoolApi;
 use xone_sync::chain::ChainRead;
@@ -75,6 +78,11 @@ impl PoolShared {
     }
 
     /// Consensus encodings in, one result per transaction (geth's error text on a refusal).
+    /// Executable transactions in the pool (the stats board's pending count).
+    pub fn pending_count(&self) -> usize {
+        self.lock().pool.stats().0
+    }
+
     pub fn add_raws(&self, raws: &[&[u8]]) -> Vec<Result<B256, String>> {
         let mut g = self.lock();
         let res = match self.on_head(|st| g.pool.add_raw(st, now(), raws)) {
@@ -99,6 +107,27 @@ impl PoolShared {
         let raws: Vec<Bytes> = txs.iter().map(from_wire).collect();
         let refs: Vec<&[u8]> = raws.iter().map(|r| &r[..]).collect();
         let _ = self.add_raws(&refs);
+    }
+
+    /// Who may send special transactions (the producer's own sign transactions need its node to be a candidate).
+    pub fn set_authority(&self, a: Authority) {
+        self.lock().pool.set_authority(a);
+    }
+
+    /// The executable transactions for the block packer, with their consensus encodings. The time a transaction
+    /// was first seen is not kept by the pool, so ties of price go by sender address.
+    pub fn pending_raws(
+        &self,
+        base_fee: u128,
+    ) -> (BTreeMap<Address, Vec<Cand>>, HashMap<B256, Bytes>) {
+        let g = self.lock();
+        let p = g
+            .pool
+            .pending(None, base_fee, None)
+            .into_iter()
+            .map(|(a, v)| (a, v.into_iter().map(|tx| Cand { tx, seen: 0 }).collect()))
+            .collect();
+        (p, g.raws.clone())
     }
 
     /// The pool follows the head: promote, demote and drop what the new state made stale.

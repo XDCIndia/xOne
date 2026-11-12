@@ -20,6 +20,7 @@ use std::{
     time::Duration,
 };
 
+use alloy_primitives::B256;
 use tokio::{
     runtime::Handle,
     sync::{mpsc::Receiver, watch},
@@ -28,7 +29,7 @@ use tokio::{
 };
 use xone_consensus::verify::Body;
 use xone_net::{
-    eth::{BlockAnnounce, BlockBody, GetHeaders, Message, Origin},
+    eth::{BlockBody, GetHeaders, Message, Origin},
     peers::{Event, Peers},
     rlpx::PeerId,
 };
@@ -61,6 +62,8 @@ pub struct Progress {
 struct Peer {
     version: u64,
     rank: u64,
+    /// The head the peer last advertised: its Status head, then its announcements.
+    head: B256,
 }
 
 enum Stage {
@@ -92,7 +95,7 @@ fn to_body(b: BlockBody) -> (Body, usize) {
         Body {
             transactions: b.transactions.iter().map(from_wire).collect(),
             uncles: b.uncles,
-            withdrawals: None,
+            withdrawals: b.withdrawals.map(|w| w.into_iter().map(|r| r.0).collect()),
         },
         n,
     )
@@ -196,6 +199,12 @@ impl Follower {
         }
         let rest = &headers[1..];
         if rest.is_empty() {
+            // an empty continuation proves "caught up" only from a peer that advertises our head;
+            // a peer that claims more and serves nothing is set aside
+            if self.known.get(&peer).is_none_or(|p| p.head != head) {
+                self.ban(peer, "advertises a head it does not serve");
+                return;
+            }
             self.progress.confirmed.store(true, Ordering::Relaxed);
             self.progress.highest.fetch_max(number, Ordering::Relaxed);
             return;
@@ -237,6 +246,26 @@ impl Follower {
             self.ban(peer, "no bodies");
             return;
         }
+        let mut headers = headers;
+        let rest = headers.split_off(bodies.len().min(headers.len()));
+        // A peer answers with what fits its response limit (2 MB in geth), often one dense block:
+        // the bodies still missing are asked for before the ones at hand are imported, so the next
+        // answer travels while this one executes.
+        if !rest.is_empty() {
+            let (id, wire) = self.rid(&peer);
+            let msg = Message::GetBlockBodies {
+                id: wire,
+                hashes: rest.iter().map(Header::hash).collect(),
+            };
+            if self.peers.send(&peer, msg).is_ok() {
+                self.inflight = Some(Inflight {
+                    peer,
+                    id,
+                    stage: Stage::Bodies(rest),
+                    deadline: Instant::now() + REQUEST_TIMEOUT,
+                });
+            }
+        }
         let blocks: Vec<_> = headers
             .into_iter()
             .zip(bodies)
@@ -246,15 +275,20 @@ impl Follower {
             self.ban(peer, &e);
             return;
         }
+        // the deadline of a request sent before a long import counts from its end
+        if let Some(i) = self.inflight.as_mut() {
+            i.deadline = i.deadline.max(Instant::now() + REQUEST_TIMEOUT);
+        }
         self.kick();
     }
 
     async fn on_new_block(&mut self, peer: PeerId, nb: Box<xone_net::eth::NewBlock>) {
         let rank = u64::try_from(nb.td).unwrap_or(u64::MAX);
+        let h = nb.block.header;
         if let Some(p) = self.known.get_mut(&peer) {
             p.rank = p.rank.max(rank);
+            p.head = h.hash();
         }
-        let h = nb.block.header;
         self.progress.highest.fetch_max(h.number, Ordering::Relaxed);
         let (number, head) = self.core.head();
         if h.number <= number {
@@ -264,7 +298,10 @@ impl Follower {
             let body = Body {
                 transactions: nb.block.transactions.iter().map(from_wire).collect(),
                 uncles: nb.block.uncles,
-                withdrawals: None,
+                withdrawals: nb
+                    .block
+                    .withdrawals
+                    .map(|w| w.into_iter().map(|r| r.0).collect()),
             };
             if let Err(e) = self.import(vec![(h, body)]).await {
                 self.ban(peer, &e);
@@ -289,7 +326,7 @@ impl Follower {
                 let mut at = start;
                 while let (Some(n), true) = (at, u64::try_from(out.len()).is_ok_and(|l| l < amount))
                 {
-                    let Some(s) = usize::try_from(n).ok().and_then(|i| h.blocks.get(i)) else {
+                    let Some(s) = h.at(n) else {
                         break;
                     };
                     out.push(s.header.clone());
@@ -305,18 +342,28 @@ impl Follower {
                     headers: out,
                 }
             }
-            Message::GetBlockBodies { id, hashes } => Message::BlockBodies {
-                id: *id,
-                bodies: hashes
+            Message::GetBlockBodies { id, hashes } => {
+                let found: Vec<_> = hashes
                     .iter()
                     .take(128)
-                    .filter_map(|x| h.by_hash(*x))
-                    .map(|s| BlockBody {
-                        transactions: s.body.transactions.iter().map(to_wire).collect(),
-                        uncles: s.body.uncles.clone(),
-                    })
-                    .collect(),
-            },
+                    .filter_map(|x| Some((h.by_hash(*x)?.header.number, *x)))
+                    .collect();
+                drop(h);
+                Message::BlockBodies {
+                    id: *id,
+                    bodies: found
+                        .into_iter()
+                        .filter_map(|(n, x)| self.core.records(n, x))
+                        .map(|(b, _)| BlockBody {
+                            transactions: b.transactions.iter().map(to_wire).collect(),
+                            uncles: b.uncles,
+                            withdrawals: b
+                                .withdrawals
+                                .map(|w| w.into_iter().map(xone_net::eth::Raw).collect()),
+                        })
+                        .collect(),
+                }
+            }
             _ => return,
         };
         // a full queue of the peer drops the answer; it asks again
@@ -329,17 +376,27 @@ impl Follower {
                 peer,
                 version,
                 rank,
+                head,
                 ..
             } => {
                 eprintln!(
                     "chain: peer {} connected, eth/{version}, rank {rank}",
                     short(&peer)
                 );
-                self.known.insert(peer, Peer { version, rank });
+                self.known.insert(
+                    peer,
+                    Peer {
+                        version,
+                        rank,
+                        head,
+                    },
+                );
                 self.kick();
             }
             Event::Disconnected { peer } => {
                 self.known.remove(&peer);
+                // the proof was bound to a peer session
+                self.progress.confirmed.store(false, Ordering::Relaxed);
                 if self.inflight.as_ref().is_some_and(|i| i.peer == peer) {
                     self.inflight = None;
                 }
@@ -359,11 +416,11 @@ impl Follower {
                 }
                 Message::NewBlock(nb) => self.on_new_block(peer, nb).await,
                 Message::NewBlockHashes(list) => {
-                    if let Some(m) = list
-                        .iter()
-                        .map(|BlockAnnounce { number, .. }| *number)
-                        .max()
-                    {
+                    if let Some(a) = list.iter().max_by_key(|a| a.number) {
+                        let m = a.number;
+                        if let Some(p) = self.known.get_mut(&peer) {
+                            p.head = a.hash;
+                        }
                         self.progress.highest.fetch_max(m, Ordering::Relaxed);
                         if m > self.core.head().0 {
                             self.progress.confirmed.store(false, Ordering::Relaxed);

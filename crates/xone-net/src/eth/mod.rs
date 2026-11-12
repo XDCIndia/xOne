@@ -143,17 +143,24 @@ pub struct BlockAnnounce {
     pub number: u64,
 }
 
+/// `BlockBody` (`eth/protocols/eth/protocol.go:325-329`): withdrawals are `rlp:"optional"`, present
+/// from the fork that adds `withdrawalsHash` to the header.
 #[derive(Debug, Clone, PartialEq, Eq, RlpEncodable, RlpDecodable)]
+#[rlp(trailing)]
 pub struct BlockBody {
     pub transactions: Vec<Raw>,
     pub uncles: Vec<Header>,
+    pub withdrawals: Option<Vec<Raw>>,
 }
 
+/// `extblock` (`core/types/block.go:278-283`), the same optional withdrawals.
 #[derive(Debug, Clone, PartialEq, Eq, RlpEncodable, RlpDecodable)]
+#[rlp(trailing)]
 pub struct Block {
     pub header: Header,
     pub transactions: Vec<Raw>,
     pub uncles: Vec<Header>,
+    pub withdrawals: Option<Vec<Raw>>,
 }
 
 /// `NewBlockPacket` (`protocol.go:215-218`): the block and the announcer's TD (rank only).

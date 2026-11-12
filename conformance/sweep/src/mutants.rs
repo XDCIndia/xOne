@@ -56,6 +56,9 @@ pub const MUTANTS: [(&str, Mutant, &str); 9] = [
         |r| {
             r.marker_opcodes = true;
             r.prevrandao_is_number_hash = true;
+            // London rules applied early include the fee-cap check against the 12.5 gwei the BASEFEE
+            // opcode reports; with the correct rule (no header base fee) geth does not check it.
+            r.header_has_basefee = true;
         },
         "PREVRANDAO before londonBlock",
     ),

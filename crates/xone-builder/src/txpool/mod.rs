@@ -241,6 +241,7 @@ pub(crate) struct Head {
     pub(crate) gas_limit: u64,
     /// The gas tables of geth `Config.Rules(head.Number, ..)` as xone-evm computes them, built once per head.
     pub(crate) gas: IntrinsicTables,
+    pub(crate) rules: xone_evm::spec::XdcRules,
 }
 
 impl Head {
@@ -250,6 +251,7 @@ impl Head {
             number,
             gas_limit,
             gas: IntrinsicTables::new(&r),
+            rules: r,
         })
     }
 }

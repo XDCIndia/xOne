@@ -143,7 +143,6 @@ func intrinsicCases(cfg *params.ChainConfig, rules params.Rules) []intrinsic {
 	}
 	from := common.HexToAddress("0x1111111111111111111111111111111111111111")
 	to := common.HexToAddress("0x2222222222222222222222222222222222222222")
-	zero := new(uint256.Int)
 	data := func(zeros, nonzero int) []byte {
 		return append(make([]byte, zeros), []byte(strings.Repeat("\x01", nonzero))...)
 	}
@@ -151,14 +150,21 @@ func intrinsicCases(cfg *params.ChainConfig, rules params.Rules) []intrinsic {
 		name   string
 		data   []byte
 		create bool
+		value  uint64
+		self   bool
 	}
 	cases := []c{
-		{"call-empty", nil, false},
-		{"call-4nz", data(0, 4), false},
-		{"call-10z-7nz", data(10, 7), false},
-		{"create-empty", nil, true},
-		{"create-33z-31nz", data(33, 31), true},
-		{"create-64nz", data(0, 64), true},
+		{"call-empty", nil, false, 0, false},
+		{"call-4nz", data(0, 4), false, 0, false},
+		{"call-10z-7nz", data(10, 7), false, 0, false},
+		{"create-empty", nil, true, 0, false},
+		{"create-33z-31nz", data(33, 31), true, 0, false},
+		{"create-64nz", data(0, 64), true, 0, false},
+		// EIP-2780 prices the base by value, self-transfer and creation (no effect before Amsterdam)
+		{"callv-empty", nil, false, 1, false},
+		{"self-empty", nil, false, 1, true},
+		{"selfz-empty", nil, false, 0, true},
+		{"createv-empty", nil, true, 1, false},
 	}
 	var out []intrinsic
 	for _, k := range cases {
@@ -166,7 +172,11 @@ func intrinsicCases(cfg *params.ChainConfig, rules params.Rules) []intrinsic {
 		if !k.create {
 			dst = &to
 		}
-		g, err := core.IntrinsicGas(k.data, nil, nil, from, dst, zero, intr)
+		src := from
+		if k.self {
+			dst = &src
+		}
+		g, err := core.IntrinsicGas(k.data, nil, nil, src, dst, uint256.NewInt(k.value), intr)
 		if err != nil {
 			panic(err)
 		}
@@ -194,6 +204,20 @@ func main() {
 		{"devnet", params.XDCDevnetChainConfig},
 		{"devnet551", params.XDCDevnet551ChainConfig},
 	}
+	// net2040 is not in geth's params: its config is read from the committed genesis file, as a node
+	// started on it reads it (same as conformance/exporter).
+	raw, err := os.ReadFile("../../../../crates/xone-chainspec/genesis/net2040.json")
+	if err != nil {
+		panic(err)
+	}
+	var g2040 core.Genesis
+	if err := json.Unmarshal(raw, &g2040); err != nil {
+		panic(err)
+	}
+	nets = append(nets, struct {
+		name string
+		cfg  *params.ChainConfig
+	}{"net2040", g2040.Config})
 	// EIP-1559 active at genesis (xOneGo#643): devnet551 with `Eip1559Block = 0`.
 	atGenesis := *params.XDCDevnet551ChainConfig
 	atGenesis.Eip1559Block = big.NewInt(0)

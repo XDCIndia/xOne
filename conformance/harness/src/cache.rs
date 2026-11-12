@@ -13,6 +13,7 @@ use std::{
     io::{BufRead, BufReader, Write},
     path::Path,
 };
+use xone_chainspec::Network;
 use xone_consensus::verify::Body;
 use xone_primitives::Header;
 use xone_sweep::fetch::Rpc;
@@ -33,15 +34,39 @@ pub struct Block {
 }
 
 pub fn read(path: &Path) -> Result<Vec<Line>, String> {
+    read_limit(path, usize::MAX)
+}
+
+/// The first `limit` lines (a cache of a whole chain is gigabytes: stop reading at the block asked for).
+pub fn read_limit(path: &Path, limit: usize) -> Result<Vec<Line>, String> {
+    lines(path, limit)?.collect()
+}
+
+/// [`read_limit`] decoded line by line: the raw lines of a whole chain are not held next to its blocks.
+/// Blocks below `bodies_from` keep their header only (a resumed run reads no body below its
+/// checkpoint).
+pub fn decode_limit(path: &Path, limit: usize, bodies_from: u64) -> Result<Vec<Block>, String> {
+    lines(path, limit)?
+        .map(|l| {
+            let mut b = decode(&l?)?;
+            if b.n < bodies_from {
+                b.body = Body::default();
+            }
+            Ok(b)
+        })
+        .collect()
+}
+
+fn lines(path: &Path, limit: usize) -> Result<impl Iterator<Item = Result<Line, String>>, String> {
     let f = File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let r: Box<dyn BufRead> = if path.extension().is_some_and(|e| e == "gz") {
         Box::new(BufReader::new(GzDecoder::new(f)))
     } else {
         Box::new(BufReader::new(f))
     };
-    r.lines()
-        .map(|l| serde_json::from_str(&l.map_err(|e| e.to_string())?).map_err(|e| e.to_string()))
-        .collect()
+    Ok(r.lines()
+        .take(limit)
+        .map(|l| serde_json::from_str(&l.map_err(|e| e.to_string())?).map_err(|e| e.to_string())))
 }
 
 /// Write `lines` gzipped.
@@ -85,6 +110,29 @@ pub fn decode(l: &Line) -> Result<Block, String> {
     }
     let mut rest = rest;
     let uncles = Vec::<Header>::decode(&mut rest).map_err(e)?;
+    // `extblock.Withdrawals`, `rlp:"optional"` (`core/types/block.go:278-283`): each item as encoded.
+    let withdrawals = if rest.is_empty() {
+        None
+    } else {
+        let list = RlpHeader::decode(&mut rest).map_err(e)?;
+        let (mut w, tail) = rest
+            .split_at_checked(list.payload_length)
+            .ok_or("short withdrawals")?;
+        if !list.list || !tail.is_empty() {
+            return Err(format!("block {}: bad withdrawals list", l.n));
+        }
+        let mut items = vec![];
+        while !w.is_empty() {
+            let start = w;
+            let item = RlpHeader::decode(&mut w).map_err(e)?;
+            let len = start.len() - w.len() + item.payload_length;
+            items.push(Bytes::copy_from_slice(
+                start.get(..len).ok_or("short withdrawal")?,
+            ));
+            w = &start[len..];
+        }
+        Some(items)
+    };
     Ok(Block {
         n: l.n,
         archive_hash: l.hash,
@@ -92,19 +140,47 @@ pub fn decode(l: &Line) -> Result<Block, String> {
         body: Body {
             transactions,
             uncles,
-            withdrawals: None,
+            withdrawals,
         },
     })
+}
+
+/// The number of the last line of the cache, read from its tail (a whole-chain cache is gigabytes).
+fn last_block(path: &Path) -> Result<Option<u64>, String> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut f = File::open(path).map_err(|e| e.to_string())?;
+    let size = f.metadata().map_err(|e| e.to_string())?.len();
+    let tail = size.min(64 << 20);
+    f.seek(SeekFrom::Start(size - tail))
+        .map_err(|e| e.to_string())?;
+    let mut buf = Vec::new();
+    f.read_to_end(&mut buf).map_err(|e| e.to_string())?;
+    // a line is complete when a newline ends it; the first line of the window may be cut
+    let mut lines: Vec<&[u8]> = buf.split(|b| *b == b'\n').collect();
+    lines.pop(); // after the last newline
+    let first_cut = size > tail;
+    let usable = lines.iter().skip(usize::from(first_cut)).next_back();
+    match usable {
+        None if size == 0 => Ok(None),
+        None => Err("a line of the cache is longer than 64 MB".into()),
+        Some(l) => {
+            let v: serde_json::Value = serde_json::from_slice(l).map_err(|e| e.to_string())?;
+            v["n"]
+                .as_u64()
+                .map(Some)
+                .ok_or("last line has no block number".into())
+        }
+    }
 }
 
 /// Append blocks `from..=to` that the cache at `path` does not hold yet. A cache starts at the
 /// block of its first line and must stay contiguous: a new file may start anywhere, an existing
 /// one continues after its last line. Batches of `BATCH` blocks, one request every 260 ms, so at
 /// most 4 requests per second (`xone_sweep::fetch::Rpc`).
-pub fn fetch(path: &Path, from: u64, to: u64) -> Result<u64, String> {
+pub fn fetch(net: Network, path: &Path, from: u64, to: u64) -> Result<u64, String> {
     const BATCH: u64 = 200;
     let next = if path.exists() {
-        read(path)?.last().map_or(from, |l| l.n + 1)
+        last_block(path)?.map_or(from, |n| n + 1)
     } else {
         from
     };
@@ -122,16 +198,28 @@ pub fn fetch(path: &Path, from: u64, to: u64) -> Result<u64, String> {
         .append(true)
         .open(path)
         .map_err(|e| e.to_string())?;
-    let mut rpc = Rpc::default();
+    let mut rpc = Rpc::for_network(net)?;
     let mut n = start;
+    // The archive refuses a response above its size limit and answers the blocks past the limit
+    // with an error: write the blocks before the first error and ask again with a smaller batch.
+    let mut batch = BATCH;
     while n <= to {
-        let last = (n + BATCH - 1).min(to);
+        let last = (n + batch - 1).min(to);
         let mut calls = vec![];
         for k in n..=last {
             calls.push(("debug_getRawBlock", json!([format!("{k:#x}")])));
         }
-        let hashed: Vec<u64> = (n..=last).filter(|k| k % 100 == 0 || *k == to).collect();
         let answers = rpc.batch(calls)?;
+        let good = answers.iter().take_while(|a| a["error"].is_null()).count() as u64;
+        if good == 0 {
+            if batch == 1 {
+                return Err(format!("block {n}: {}", answers[0]["error"]));
+            }
+            batch = (batch / 2).max(1);
+            continue;
+        }
+        let last = n + good - 1;
+        let hashed: Vec<u64> = (n..=last).filter(|k| k % 100 == 0 || *k == to).collect();
         let hashes = if hashed.is_empty() {
             vec![]
         } else {
@@ -141,7 +229,7 @@ pub fn fetch(path: &Path, from: u64, to: u64) -> Result<u64, String> {
                 .collect();
             rpc.batch(c)?
         };
-        for (i, a) in answers.iter().enumerate() {
+        for (i, a) in answers.iter().take(good as usize).enumerate() {
             let k = n + i as u64;
             let raw: Bytes = serde_json::from_value(a["result"].clone())
                 .map_err(|_| format!("block {k}: {}", a["error"]))?;
@@ -159,8 +247,15 @@ pub fn fetch(path: &Path, from: u64, to: u64) -> Result<u64, String> {
             )
             .map_err(|e| e.to_string())?;
         }
+        out.flush().map_err(|e| e.to_string())?;
+        if good < batch.min(to + 1 - n) {
+            batch = (good).max(1);
+        } else {
+            batch = (batch * 2).min(BATCH);
+        }
+        let prev = n;
         n = last + 1;
-        if n % 10_000 < BATCH {
+        if n / 10_000 != prev / 10_000 {
             eprintln!("fetched to {}", n - 1);
         }
     }

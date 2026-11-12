@@ -26,21 +26,32 @@ pub enum ConfigError {
     Toml(String),
 }
 
-/// Built-in network selected by `--xdcmainnet`, `--apothem` or `--xdcdevnet`.
+/// Built-in network selected by `--xdcmainnet`, `--apothem`, `--xdcdevnet`, `--net2040` or `--network`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Profile {
     Mainnet,
     Apothem,
     Devnet,
+    Net2040,
 }
 
 impl Profile {
+    pub fn of(n: Network) -> Option<Self> {
+        match n {
+            Network::Mainnet => Some(Self::Mainnet),
+            Network::Apothem => Some(Self::Apothem),
+            Network::Devnet => Some(Self::Devnet),
+            _ => None,
+        }
+    }
+
     pub fn network(self) -> Network {
         match self {
             Self::Mainnet => Network::Mainnet,
             Self::Apothem => Network::Apothem,
             Self::Devnet => Network::Devnet,
+            Self::Net2040 => Network::Net2040,
         }
     }
 }
@@ -54,6 +65,8 @@ pub struct Config {
     pub datadir: PathBuf,
     pub identity: Option<String>,
     pub override_genesis: Option<PathBuf>,
+    /// Fork table of a private chain (`--chainspec`); the table format of `generated/forks.json` with one network.
+    pub chainspec: Option<PathBuf>,
     /// `name:secret@host:port`, as geth.
     pub ethstats: Option<String>,
     pub sync: SyncCfg,
@@ -77,6 +90,8 @@ pub struct SyncCfg {
     /// full or archive.
     pub gcmode: String,
     pub from_block: Option<u64>,
+    /// Start from the anchor of an imported snapshot and keep only the retention window.
+    pub minimal: bool,
     pub cache_mb: u32,
     /// Blocks of transaction index kept; 0 is the whole chain.
     pub tx_history: u64,
@@ -139,6 +154,8 @@ pub struct Mining {
     pub etherbase: Option<String>,
     /// File with the account password. The password itself is never a flag or a key.
     pub password_file: Option<PathBuf>,
+    /// Keystore file of the validator key (`--keystore`). Block production needs it and the password file.
+    pub keystore: Option<PathBuf>,
     pub unlock: Vec<String>,
 }
 
@@ -195,6 +212,7 @@ defaults!(Config {
     datadir: PathBuf::from("xone-data"),
     identity: None,
     override_genesis: None,
+    chainspec: None,
     ethstats: None,
     sync: SyncCfg::default(),
     p2p: P2p::default(),
@@ -212,6 +230,7 @@ defaults!(SyncCfg {
     mode: "snap".into(),
     gcmode: "full".into(),
     from_block: None,
+    minimal: false,
     cache_mb: 4096,
     tx_history: 2_350_000
 });
@@ -257,6 +276,7 @@ defaults!(Mining {
     mine: false,
     etherbase: None,
     password_file: None,
+    keystore: None,
     unlock: vec![]
 });
 defaults!(Logging { verbosity: 3 });
@@ -336,19 +356,37 @@ impl Config {
             "networkid" => self.network_id = Some(num(key, v)?),
             "identity" => self.identity = Some(v.to_owned()),
             "override.genesis" => self.override_genesis = Some(v.into()),
+            "chainspec" => self.chainspec = Some(v.into()),
             "ethstats" => self.ethstats = Some(v.to_owned()),
-            "xdcmainnet" | "apothem" | "xdcdevnet" => {
+            "xdcmainnet" | "apothem" | "xdcdevnet" | "net2040" => {
                 if flag(key, v)? {
                     self.profile = Some(match key {
                         "xdcmainnet" => Profile::Mainnet,
                         "apothem" => Profile::Apothem,
+                        "net2040" => Profile::Net2040,
                         _ => Profile::Devnet,
                     });
                 }
             }
+            "network" => {
+                self.profile = Some(match v {
+                    "mainnet" => Profile::Mainnet,
+                    "apothem" => Profile::Apothem,
+                    "devnet" => Profile::Devnet,
+                    "net2040" => Profile::Net2040,
+                    _ => {
+                        return Err(ConfigError::Invalid {
+                            key: key.to_owned(),
+                            value: v.to_owned(),
+                            why: "one of mainnet, apothem, devnet, net2040",
+                        })
+                    }
+                });
+            }
             "syncmode" => self.sync.mode = one_of(key, v, &["snap", "fast", "full"])?,
             "gcmode" => self.sync.gcmode = one_of(key, v, &["full", "archive"])?,
             "syncfromblock" => self.sync.from_block = Some(num(key, v)?),
+            "minimal" => self.sync.minimal = flag(key, v)?,
             "cache" => self.sync.cache_mb = num(key, v)?,
             "history.transactions" | "txlookuplimit" => self.sync.tx_history = num(key, v)?,
             "port" => self.p2p.port = num(key, v)?,
@@ -377,6 +415,7 @@ impl Config {
             "mine" => self.mining.mine = flag(key, v)?,
             "miner.etherbase" => self.mining.etherbase = Some(v.to_owned()),
             "password" => self.mining.password_file = Some(v.into()),
+            "keystore" => self.mining.keystore = Some(v.into()),
             "unlock" => self.mining.unlock = list(v),
             "verbosity" => {
                 let n: u8 = num(key, v)?;

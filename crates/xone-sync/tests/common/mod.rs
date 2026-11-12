@@ -446,6 +446,21 @@ impl xone_sync::store::Store for Mutant {
     fn unwind_stages(&mut self, n: u64) -> Result<(), xone_sync::store::StoreError> {
         self.inner.unwind_stages(n)
     }
+    fn state_rows(&self, h: B256) -> Result<xone_sync::store::StateRows, xone_state::Missing> {
+        self.inner.state_rows(h)
+    }
+    fn install_snapshot(
+        &mut self,
+        s: xone_sync::store::Install,
+    ) -> Result<(), xone_sync::store::StoreError> {
+        self.inner.install_snapshot(s)
+    }
+    fn anchor(&self) -> Option<alloy_primitives::Bytes> {
+        self.inner.anchor()
+    }
+    fn prune(&mut self, h: u64, r: u64) -> Result<(), xone_sync::store::StoreError> {
+        self.inner.prune(h, r)
+    }
     fn scan(&self) -> xone_sync::store::Scan {
         self.inner.scan()
     }

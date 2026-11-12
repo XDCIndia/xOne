@@ -234,6 +234,45 @@ impl<F: FlatWrite> StateProvider<F> {
         Ok(())
     }
 
+    /// The accounts and the non-zero slots of the post-state of canonical block `hash`: the head
+    /// tables, and the keys that a later changeset touches (an account deleted after the block is
+    /// only there). Any order. ponytail: whole state in memory, the MDBX binding streams cursors.
+    #[allow(clippy::type_complexity)]
+    pub fn rows_at(
+        &self,
+        hash: B256,
+    ) -> Result<(Vec<(Address, Account)>, Vec<(Address, B256, U256)>), Missing> {
+        let view = self.at(hash)?;
+        let mut addrs: std::collections::BTreeSet<Address> =
+            self.flat.accounts().map(|(a, _)| a).collect();
+        let mut slots: std::collections::BTreeSet<(Address, B256)> = Default::default();
+        for (_, cs) in self
+            .chain
+            .range(view.number + 1..)
+            .map(|(n, (_, c))| (n, c))
+        {
+            addrs.extend(cs.accounts.keys());
+            slots.extend(cs.storage.keys());
+        }
+        let accounts: Vec<_> = addrs
+            .into_iter()
+            .filter_map(|a| view.account(a).map(|x| (a, x)))
+            .collect();
+        for (a, _) in &accounts {
+            slots.extend(self.flat.slots(*a).map(|(s, _)| (*a, s)));
+        }
+        let live: std::collections::BTreeSet<Address> = accounts.iter().map(|(a, _)| *a).collect();
+        let storage = slots
+            .into_iter()
+            .filter(|(a, _)| live.contains(a))
+            .filter_map(|(a, s)| {
+                let v = view.storage(a, s);
+                (!v.is_zero()).then_some((a, s, v))
+            })
+            .collect();
+        Ok((accounts, storage))
+    }
+
     /// The post-state of `hash`, canonical (inside the retained window) or side.
     pub fn at(&self, hash: B256) -> Result<StateView<'_, F>, Missing> {
         let mut overlays = Vec::new();

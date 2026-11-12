@@ -251,10 +251,12 @@ fn tx_receipt(c: &Ctx, p: &Params) -> R {
 fn balance(c: &Ctx, p: &Params) -> R {
     let a = p.address(0)?;
     let (_, h) = state_at(c, p, 1)?;
-    let s = c.be.state.state(h)?;
     // A balance above 2^256 (the wide-balance rows of XB-01) has no `hexutil.Big` limit in geth;
     // `to_u256` is `None` only then, and the answer is the low word's truth, so refuse instead.
-    let bal = s.account(a).map(|x| x.balance.to_u256());
+    let bal =
+        c.be.state
+            .query(h, |s| s.account(a))?
+            .map(|x| x.balance.to_u256());
     match bal {
         None => Ok(q(0)),
         Some(Some(v)) => Ok(qu(v)),
@@ -270,14 +272,17 @@ fn tx_count(c: &Ctx, p: &Params) -> R {
         }
     }
     let (_, h) = state_at(c, p, 1)?;
-    Ok(q(c.be.state.state(h)?.account(a).map_or(0, |x| x.nonce)))
+    Ok(q(c
+        .be
+        .state
+        .query(h, |s| s.account(a))?
+        .map_or(0, |x| x.nonce)))
 }
 
 fn code(c: &Ctx, p: &Params) -> R {
     let a = p.address(0)?;
     let (_, h) = state_at(c, p, 1)?;
-    let s = c.be.state.state(h)?;
-    let Some(acct) = s.account(a) else {
+    let Some(acct) = c.be.state.query(h, |s| s.account(a))? else {
         return Ok(hex(&[]));
     };
     if acct.code_hash == keccak256([]) {
@@ -300,7 +305,7 @@ fn storage(c: &Ctx, p: &Params) -> R {
     )
     .map_err(|_| RpcError::invalid_params("invalid storage key"))?;
     let (_, h) = state_at(c, p, 2)?;
-    let v = c.be.state.state(h)?.storage(a, B256::from(k));
+    let v = c.be.state.query(h, |s| s.storage(a, B256::from(k)))?;
     Ok(h256(B256::from(v)))
 }
 
@@ -390,7 +395,7 @@ fn get_logs(c: &Ctx, p: &Params) -> R {
         if from > to {
             return Err(RpcError::invalid_params("invalid block range"));
         }
-        if to - from + 1 > c.limits.logs_blocks {
+        if to - from >= c.limits.logs_blocks {
             return Err(RpcError::invalid_params(format!(
                 "exceed maximum block range: {}",
                 c.limits.logs_blocks

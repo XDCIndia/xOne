@@ -23,7 +23,7 @@ export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct)}"
 cargo build --locked --release -p xone
 bin=target/release/xone
 
-syms='xone_sim|pq_lab|wide_balance_spike|net_spike|xone_sweep'
+syms='xone_sim|pq_lab|wide_balance_spike|net_spike|xone_sweep|xone_db::fault|xone_db\.\.fault|MemDir|xone_fault'
 if hits=$( { nm -C "$bin" 2>/dev/null || true; strings -a "$bin"; } | grep -E "$syms" | sort -u | head -10) && [ -n "$hits" ]; then
   say "FAIL (b): test-only symbols in $bin:"; say "$hits"; fail=1
 else

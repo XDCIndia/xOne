@@ -248,7 +248,7 @@ impl StateRead for View<'_> {
 }
 
 impl StateApi for S {
-    fn state(&self, block: B256) -> Result<Box<dyn StateRead + '_>, Missing> {
+    fn state(&self, block: B256, f: &mut dyn FnMut(&dyn StateRead)) -> Result<(), Missing> {
         let i = self
             .0
             .by_hash
@@ -259,7 +259,8 @@ impl StateApi for S {
                 floor: 0,
                 pivot: 0,
             })?;
-        Ok(Box::new(View(&self.0.states[*i])))
+        f(&View(&self.0.states[*i]));
+        Ok(())
     }
     fn code(&self, h: B256) -> Option<Bytes> {
         self.0.codes.get(&h).cloned()

@@ -13,6 +13,7 @@ Source column: file:line in geth-XDC (`XDCIndia/go-ethereum` at `6fc8e8c2`; `fla
 | `--syncmode snap|fast|full` |  | snap | Blockchain sync mode. | flags.go:299 ; geth,xone |
 | `--gcmode full|archive` |  | full | State garbage collection mode. | flags.go:338 |
 | `--syncfromblock <n>` |  | unset | First block to import; unset means from genesis. xone-defined. | not in geth-XDC at the pin; task list |
+| `--minimal` |  | false | Start from the anchor of an imported snapshot (`xone snapshot import`), keep only the retention window, never sync from genesis or read an archive. | not in geth-XDC at the pin; issue #38 |
 | `--cache <n>` |  | 4096 | Megabytes of memory for internal caches. | flags.go:556 |
 | `--history.transactions <n>` | `-txlookuplimit` (deprecated) | 2350000 | Recent blocks whose transactions stay indexed; 0 is the whole chain. | flags.go:379 |
 | `--port <n>` |  | 30303 | P2P listening port (TCP). | flags.go:969 ; geth,xone |
@@ -43,12 +44,16 @@ Source column: file:line in geth-XDC (`XDCIndia/go-ethereum` at `6fc8e8c2`; `fla
 | `--miner.etherbase <string>` |  | unset | Address that receives block rewards. | flags_legacy.go:119 |
 | `--unlock <a,b,..>` |  | none | Accounts to unlock, comma-separated. | flags_legacy.go:144 |
 | `--password <path>` |  | unset | File with the account password; the password is never a flag. | flags.go:672 |
+| `--keystore <path>` |  | unset | Keystore file of the validator key. Block production (--mine) needs it with --password, and is refused on chain ids 50 and 51 in this build. | flags.go:124 ; xone |
 | `--ethstats <string>` |  | unset | Stats server as name:secret@host:port. | flags.go:786 ; geth,xone |
 | `--verbosity <n>` |  | 3 | Log level: 0 silent, 1 error, 2 warn, 3 info, 4 debug, 5 detail. | internal/debug/flags.go:42 |
 | `--override.genesis <path>` |  | unset | Genesis file; the datadir is initialised from it on first start. | flags.go:294 ; xone |
+| `--chainspec <path>` |  | unset | Fork table of a private chain (one network, the format of generated/forks.json); refused for chain ids 50 and 51. | not in geth-XDC; xone-defined |
 | `--xdcmainnet` |  | false | XDC mainnet profile (chain 50). | flags.go:166 |
 | `--apothem` |  | false | XDC Apothem profile (chain 51). | flags.go:171 |
 | `--xdcdevnet` |  | false | XDC devnet profile (chain 5551). | flags.go:176 |
+| `--net2040` |  | false | XDC net2040 end-to-end devnet profile (chain 2040). | chainspec genesis/net2040.json ; xone |
+| `--network <string>` |  | unset | Built-in network by name: mainnet, apothem, devnet or net2040; same as the profile flags. | xone |
 | `--config <path>` |  | unset | TOML config file; flags override it. Not a config key. | cmd/geth/config.go:65 |
 | `--metrics` |  | false | Enable the metrics endpoint. | flags.go:1074 |
 | `--metrics.addr <string>` |  | 127.0.0.1 | Metrics listen address. | flags.go:1083 |
@@ -58,4 +63,4 @@ Source column: file:line in geth-XDC (`XDCIndia/go-ethereum` at `6fc8e8c2`; `fla
 | `--pprof.port <n>` |  | 6060 | Profiling listen port. | internal/debug/flags.go:111 |
 | `--version` | `-V` | false | Print the version stamp and exit; never opens the datadir. Short form -V. | join.sh:481 (xOneGo lesson) |
 
-Subcommands: `init <genesis.json>`, `version`, `dumpconfig`, `genesis-hash --network <name>`, `import <file>`, `export <file> [from] [to] --input <blockfile>`.
+Subcommands: `init <genesis.json>`, `version`, `dumpconfig`, `genesis-hash --network <name>`, `import <file>`, `export <file> [from] [to] --input <blockfile>`, `snapshot export --datadir <dir> --out <file> [--at <block>]`, `snapshot import --datadir <dir> --in <file> --pins <file>`.

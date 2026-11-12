@@ -257,6 +257,15 @@ mod tests {
         );
     }
 
+    // Block 0 of the net2040 archive (`eth_getBlockByNumber(0)`, geth-XDC net2040-geth-archive-de6c).
+    #[test]
+    fn genesis_hash_net2040() {
+        assert_eq!(
+            hash_of(Network::Net2040),
+            b256!("8d8ff2e9d8369b7b4af5a84eb010e2b1a358eefa9f971985435d538dda235714")
+        );
+    }
+
     #[test]
     fn base_fee_follows_eip1559_block_not_london() {
         // Devnet has London at 0 but EIP-1559 at 25000: no base fee at genesis.

@@ -2,11 +2,11 @@
 //! [`crate::testkit::MemStore`]. Every write method is one ADR-005 step with its kill points; a
 //! method that returns `Ok` has published its generation (the commit returned).
 
-use alloy_primitives::{Bytes, B256};
+use alloy_primitives::{Address, Bytes, B256, U256};
 use xone_consensus::{v2::commit::Link, verify::Body};
 use xone_db::{Action, Cause, Durability, ManifestState, SegmentTail};
 use xone_primitives::Header;
-use xone_state::{CommitError, Missing, StateDiff, StateRead};
+use xone_state::{Account, CommitError, Missing, StateDiff, StateRead};
 
 /// A block with its hash, computed once.
 #[derive(Debug, Clone)]
@@ -116,9 +116,73 @@ pub enum KillPoint {
     U4b,
     U5a,
     U5b,
+    /// Pruning (ADR-005 section 10): before the floor commit, after it, after the first unlink,
+    /// after the last, directory synced.
+    PR1,
+    PR2,
+    PR3,
+    PR4,
+    PR5,
+    /// Start-up repair (section 7): after a truncate before the file fsync, after the file fsync
+    /// before the directory fsync, after the quarantine copy before the truncate.
+    RP1,
+    RP2,
+    RP3,
 }
 
 impl KillPoint {
+    /// The ID of `tests/fault/PLAN.md`.
+    pub fn name(self) -> &'static str {
+        match self {
+            KillPoint::K01 => "K01",
+            KillPoint::K02 => "K02",
+            KillPoint::K03 => "K03",
+            KillPoint::K04 => "K04",
+            KillPoint::K05 => "K05",
+            KillPoint::K06 => "K06",
+            KillPoint::K07 => "K07",
+            KillPoint::K08 => "K08",
+            KillPoint::K09 => "K09",
+            KillPoint::K10 => "K10",
+            KillPoint::K11 => "K11",
+            KillPoint::K12 => "K12",
+            KillPoint::K13 => "K13",
+            KillPoint::K14 => "K14",
+            KillPoint::K15 => "K15",
+            KillPoint::K16 => "K16",
+            KillPoint::K17 => "K17",
+            KillPoint::K18 => "K18",
+            KillPoint::K19 => "K19",
+            KillPoint::U1a => "U1a",
+            KillPoint::U1b => "U1b",
+            KillPoint::U3a => "U3a",
+            KillPoint::U3b => "U3b",
+            KillPoint::U4a => "U4a",
+            KillPoint::U4b => "U4b",
+            KillPoint::U5a => "U5a",
+            KillPoint::U5b => "U5b",
+            KillPoint::PR1 => "PR1",
+            KillPoint::PR2 => "PR2",
+            KillPoint::PR3 => "PR3",
+            KillPoint::PR4 => "PR4",
+            KillPoint::PR5 => "PR5",
+            KillPoint::RP1 => "RP1",
+            KillPoint::RP2 => "RP2",
+            KillPoint::RP3 => "RP3",
+        }
+    }
+
+    /// The pruning points, reachable only on a store that prunes (`MdbxStore::prune_to`).
+    pub const PRUNE: [KillPoint; 5] = [
+        KillPoint::PR1,
+        KillPoint::PR2,
+        KillPoint::PR3,
+        KillPoint::PR4,
+        KillPoint::PR5,
+    ];
+    /// The repair points, reachable only when `repair` has something to cut.
+    pub const REPAIR: [KillPoint; 3] = [KillPoint::RP1, KillPoint::RP2, KillPoint::RP3];
+    /// The commit and unwind points of ADR-005 sections 5 and 8: every store has them.
     pub const ALL: [KillPoint; 27] = {
         use KillPoint::*;
         [
@@ -140,6 +204,48 @@ pub enum StoreError {
     State(#[from] CommitError),
     #[error("cannot unwind to {0}: above the head or outside the retained window")]
     Unwind(u64),
+    /// A stored record failed its check (CRC, digest, root or decode). Nothing is served from it.
+    #[error("damaged datadir: {0}")]
+    Damaged(String),
+    /// `install_snapshot` on a datadir that already holds blocks.
+    #[error("the datadir is not empty")]
+    NotEmpty,
+    /// `install_snapshot` input that does not hold together (not the importer's doing: the importer
+    /// has checked all of this, the store checks it again before the one commit).
+    #[error("snapshot rejected by the store: {0}")]
+    BadInstall(&'static str),
+    /// `prune` with floors that are not `headers_from <= records_from <= head`.
+    #[error("cannot prune to {headers_from}/{records_from}: head is {head}")]
+    Prune {
+        headers_from: u64,
+        records_from: u64,
+        head: u64,
+    },
+}
+
+/// The plain state of one block: what a snapshot carries as its account and storage tables.
+/// Order is not specified; zero slots are absent.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct StateRows {
+    pub accounts: Vec<(Address, Account)>,
+    pub storage: Vec<(Address, B256, U256)>,
+}
+
+/// A verified snapshot, to be the whole content of an empty datadir ([`Store::install_snapshot`]).
+/// The last entry of `headers` and of `records` is the pivot, whose state is `state`.
+#[derive(Debug, Clone)]
+pub struct Install {
+    /// The anchor manifest as it was verified (RLP), kept so that a restart knows the datadir is
+    /// anchored and at which format.
+    pub anchor: Bytes,
+    /// Consecutive headers, first retained to pivot.
+    pub headers: Vec<Header>,
+    /// Consecutive blocks with their bodies and receipts, first retained to pivot. Their state
+    /// diffs and executor rows are empty.
+    pub records: Vec<Record>,
+    pub state: StateRows,
+    /// Blocks above the pivot whose state stays openable (the store's `retention`).
+    pub retention: u64,
 }
 
 /// What start-up reads from the datadir before `xone_db::reconcile` decides.
@@ -197,6 +303,23 @@ pub trait Store {
     fn finish(&mut self, up_to: u64) -> Result<(), StoreError>;
     /// Reorg: deletes the staged rows above `number` and cuts every checkpoint but `Execution` to it.
     fn unwind_stages(&mut self, number: u64) -> Result<(), StoreError>;
+
+    // ---- bootstrap (XB-18)
+    /// The plain state after the canonical block `hash`, inside the retained state window.
+    fn state_rows(&self, hash: B256) -> Result<StateRows, Missing>;
+    /// Makes an empty datadir the anchored datadir of `s`: one generation holds the state, the
+    /// canonical index, the headers, the records, the anchor manifest and the segment manifest
+    /// whose `first_block` is the first retained block of each segment (ADR-005 sections 6.3, 12).
+    /// [`StoreError::NotEmpty`] on a datadir that holds anything.
+    fn install_snapshot(&mut self, s: Install) -> Result<(), StoreError>;
+    /// The anchor manifest installed by [`Store::install_snapshot`], `None` on a datadir that was
+    /// not bootstrapped from a snapshot.
+    fn anchor(&self) -> Option<Bytes>;
+    /// ADR-005 section 10: headers below `headers_from` and records (bodies and receipts, state
+    /// diffs, executor rows) below `records_from` stop being visible and are deleted; a header
+    /// between the two floors stays. A floor below the current one is a no-op (the manifest
+    /// `first_block` only grows), one above the head is [`StoreError::Prune`].
+    fn prune(&mut self, headers_from: u64, records_from: u64) -> Result<(), StoreError>;
 
     // ---- restart
     fn scan(&self) -> Scan;

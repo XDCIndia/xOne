@@ -63,12 +63,14 @@ fn active_after(f: ForkBlock, n: u64) -> bool {
 
 /// geth `Rules` plus `core/vm/evm.go:182-226` (instruction set choice), per block number.
 pub fn rules(spec: &ChainSpec, n: u64) -> Result<XdcRules, SpecError> {
-    if spec.amsterdam.is_active(n) {
-        return Err(SpecError::UnsupportedFork("amsterdam"));
-    }
     let bundle = spec.is_eip1559(n);
     let marker_era = spec.berlin.is_active(n) || spec.london.is_active(n);
-    let spec_id = if spec.prague.is_active(n) {
+    // geth `core/vm/evm.go:172-180`: Amsterdam, Osaka and Prague each have their own instruction set.
+    let spec_id = if spec.amsterdam.is_active(n) {
+        SpecId::AMSTERDAM
+    } else if spec.osaka.is_active(n) {
+        SpecId::OSAKA
+    } else if spec.prague.is_active(n) {
         SpecId::PRAGUE
     } else if spec.cancun.is_active(n) {
         SpecId::CANCUN

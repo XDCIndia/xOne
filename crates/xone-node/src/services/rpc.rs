@@ -15,7 +15,7 @@ use std::{
     },
 };
 
-use alloy_primitives::{Address, Bytes, B256, U256};
+use alloy_primitives::{Address, Bytes, B256};
 use tokio::{net::TcpListener, runtime::Handle, task::JoinHandle};
 use xone_consensus::{
     v1::{
@@ -39,13 +39,7 @@ use xone_sync::{
     chain::ChainRead,
 };
 
-use super::{
-    chain::Progress,
-    core::{Core, NodeChain},
-    net::NetHandle,
-    pool::PoolShared,
-    to_wire,
-};
+use super::{chain::Progress, core::Core, net::NetHandle, pool::PoolShared, to_wire};
 use crate::{
     config::{Config, Limits as NodeLimits},
     enode::Enode,
@@ -66,21 +60,25 @@ impl ChainApi for RpcChain {
     }
     fn hash_by_number(&self, number: u64) -> Option<B256> {
         let h = self.core.hist.read();
-        Some(h.blocks.get(usize::try_from(number).ok()?)?.hash)
+        Some(h.at(number)?.hash)
     }
     fn block(&self, hash: B256) -> Option<BlockView> {
-        let h = self.core.hist.read();
-        let s = h.by_hash(hash)?;
+        let header = self.core.hist.read().by_hash(hash)?.header.clone();
+        let (body, _) = self.core.records(header.number, hash)?;
         let raw = alloy_rlp::encode(xone_net::eth::Block {
-            header: s.header.clone(),
-            transactions: s.body.transactions.iter().map(to_wire).collect(),
-            uncles: s.body.uncles.clone(),
+            header: header.clone(),
+            transactions: body.transactions.iter().map(to_wire).collect(),
+            uncles: body.uncles.clone(),
+            withdrawals: body
+                .withdrawals
+                .as_ref()
+                .map(|w| w.iter().cloned().map(xone_net::eth::Raw).collect()),
         });
         Some(BlockView {
             hash,
-            header: s.header.clone(),
-            txs: s.body.transactions.clone(),
-            uncles: s.body.uncles.clone(),
+            header,
+            txs: body.transactions,
+            uncles: body.uncles,
             raw: Bytes::from(raw),
         })
     }
@@ -88,15 +86,20 @@ impl ChainApi for RpcChain {
         Some(self.core.hist.read().by_hash(hash)?.header.clone())
     }
     fn receipts(&self, hash: B256) -> Option<Vec<Bytes>> {
-        Some(self.core.hist.read().by_hash(hash)?.receipts.clone())
+        let n = self.core.hist.read().by_hash(hash)?.header.number;
+        Some(self.core.records(n, hash)?.1)
     }
     fn tx_location(&self, tx: B256) -> Option<(B256, u64)> {
         let h = self.core.hist.read();
         let (n, i) = *h.tx_index.get(&tx)?;
-        Some((h.blocks.get(usize::try_from(n).ok()?)?.hash, u64::from(i)))
+        Some((h.at(n)?.hash, u64::from(i)))
     }
-    fn history(&self, _class: Class, _block: u64) -> Result<(), Missing> {
-        Ok(()) // the node holds every block it has followed, from genesis
+    fn history(&self, class: Class, block: u64) -> Result<(), Missing> {
+        // A node that followed from genesis holds every block. A minimal node holds what its
+        // store holds, and answers for the rest with the typed error, never an empty list.
+        self.core
+            .held()
+            .map_or(Ok(()), |h| h.is_within(class, block))
     }
     fn syncing(&self) -> Option<(u64, u64, u64)> {
         let (head, _) = self.core.head();
@@ -113,32 +116,6 @@ impl ChainApi for RpcChain {
     }
 }
 
-/// The state of one block, read through the chain's lock call by call: the state of a block does not
-/// change while it is inside the retained window, and a read below it answers nothing.
-struct At<'a> {
-    chain: &'a NodeChain,
-    hash: B256,
-}
-
-impl StateRead for At<'_> {
-    fn account(&self, address: Address) -> Option<xone_state::Account> {
-        let mut out = None;
-        let _ = self
-            .chain
-            .reader()
-            .with_state(self.hash, &mut |s| out = s.account(address));
-        out
-    }
-    fn storage(&self, address: Address, slot: B256) -> U256 {
-        let mut out = U256::ZERO;
-        let _ = self
-            .chain
-            .reader()
-            .with_state(self.hash, &mut |s| out = s.storage(address, slot));
-        out
-    }
-}
-
 struct RpcState {
     core: Arc<Core>,
 }
@@ -148,14 +125,10 @@ fn unsupported(what: &str) -> RpcError {
 }
 
 impl StateApi for RpcState {
-    fn state(&self, block: B256) -> Result<Box<dyn StateRead + '_>, Missing> {
-        if self
-            .core
-            .chain
-            .reader()
-            .with_state(block, &mut |_| {})
-            .is_err()
-        {
+    fn state(&self, block: B256, f: &mut dyn FnMut(&dyn StateRead)) -> Result<(), Missing> {
+        // the chain holds its read lock for the whole of `f`: the state cannot leave the retained
+        // window while it is read
+        if self.core.chain.reader().with_state(block, f).is_err() {
             let (head, _) = self.core.head();
             let number = self
                 .core
@@ -170,10 +143,7 @@ impl StateApi for RpcState {
                 pivot: 0,
             });
         }
-        Ok(Box::new(At {
-            chain: &self.core.chain,
-            hash: block,
-        }))
+        Ok(())
     }
     fn code(&self, code_hash: B256) -> Option<Bytes> {
         self.core.hist.read().codes.get(&code_hash).cloned()
@@ -305,8 +275,7 @@ impl ConsensusApi for RpcConsensus {
         }
         let cp = n - n % self.core.spec.xdpos.epoch;
         let s = h
-            .blocks
-            .get(usize::try_from(cp).map_err(|e| RpcError::server(e.to_string()))?)
+            .at(cp)
             .ok_or_else(|| RpcError::server("no checkpoint header"))?;
         masternodes_of(&s.header.extra_data).map_err(|e| RpcError::server(e.to_string()))
     }
@@ -341,7 +310,8 @@ impl ConsensusApi for RpcConsensus {
             &pool.candidates,
             &h.switch_masternodes(w),
             &addresses(
-                &h.blocks[usize::try_from(w.number).unwrap_or(0)]
+                &h.at(w.number)
+                    .ok_or_else(|| RpcError::server("no switch header"))?
                     .header
                     .penalties,
             ),

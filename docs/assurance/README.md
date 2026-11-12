@@ -129,3 +129,14 @@ SBOM and build provenance (#15 last box), the reproducible-build hash on a secon
 `cargo auditable build` embeds the dependency list in the binary: it needs `cargo install cargo-auditable --locked`,
 the release build to go through it, and `cargo audit bin target/release/xone` in CI. An SBOM needs `cargo cyclonedx`
 or `cargo sbom`, and provenance needs a signed attestation from the CI runner, so both wait for CI.
+
+## Release build (XB-26, issue #46)
+
+Reproducible build, SBOM and provenance rows of #73: `ci/release.sh` builds with `cargo auditable --locked`,
+`SOURCE_DATE_EPOCH` = commit time, path remap and no build id; writes a CycloneDX 1.5 SBOM, an in-toto/SLSA v1
+provenance file, `SHA256SUMS` and a gpg detached signature. `ci/test-release.sh` runs it in two clones at
+different paths (equal binary and tarball hashes on 2026-11-12), `ci/test-packaging.sh` runs shellcheck,
+`systemd-analyze verify` and the launcher presets, `ci/rehearse-release.sh` runs upgrade and rollback.
+Records: `docs/ops/release.md`, `docs/ops/release-rehearsal.md`. Gaps: two builders on separate machines,
+a different `CARGO_HOME`, signing key custody (owner), SBOM and provenance not signed beyond `SHA256SUMS`,
+no aarch64, no CI run on a tag.

@@ -7,7 +7,7 @@
 //! `float64(unique) < float64(len(masternodes)) * certThreshold` (`utils.go:373`, `timeout.go:436`),
 //! of the config at the round of the certificate.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use alloy_primitives::{keccak256, Address, Bytes, B256};
 use alloy_rlp::RlpEncodable;
@@ -142,7 +142,57 @@ fn check(unique: usize, masternodes: usize, threshold: f64) -> Result<(), Error>
 /// 0 (the V2 switch block) passes the threshold with no signature, but every signature it carries
 /// must still be valid. Gap number and block info are checked by the caller (header verifier).
 pub fn verify_qc(qc: &QuorumCert, masternodes: &[Address], threshold: f64) -> Result<(), Error> {
-    verify_qc_with(&Secp, qc, masternodes, threshold)
+    verify_qc_with(
+        &Recovered::new(&qc_digest(qc), &qc.signatures),
+        qc,
+        masternodes,
+        threshold,
+    )
+}
+
+/// [`Secp`] with the distinct signatures of one certificate recovered up front on worker threads, as
+/// geth's `recoverUniqueSigners` does (`engine_v2/utils.go:147-150`). The checks then read the results
+/// in signature order, so a certificate passes or fails with the error of the sequential loop.
+struct Recovered<'a>(BTreeMap<&'a [u8], Result<Address, Error>>);
+
+impl<'a> Recovered<'a> {
+    fn new(digest: &B256, signatures: &'a [Bytes]) -> Self {
+        let distinct: Vec<&[u8]> = signatures
+            .iter()
+            .map(|s| &s[..])
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        let workers = std::thread::available_parallelism()
+            .map_or(1, |n| n.get())
+            .clamp(1, distinct.len().max(1));
+        let chunk = distinct.len().div_ceil(workers).max(1);
+        Self(std::thread::scope(|s| {
+            let parts: Vec<_> = distinct
+                .chunks(chunk)
+                .map(|part| {
+                    s.spawn(move || {
+                        part.iter()
+                            .map(|sig| (*sig, Secp.recover(digest, sig)))
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .collect();
+            parts
+                .into_iter()
+                .flat_map(|p| p.join().unwrap_or_else(|e| std::panic::resume_unwind(e)))
+                .collect()
+        }))
+    }
+}
+
+impl Scheme for Recovered<'_> {
+    fn recover(&self, digest: &B256, sig: &[u8]) -> Result<Address, Error> {
+        match self.0.get(sig) {
+            Some(r) => r.clone(),
+            None => Secp.recover(digest, sig),
+        }
+    }
 }
 
 pub fn verify_qc_with<S: Scheme + ?Sized>(
