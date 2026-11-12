@@ -33,6 +33,7 @@ header. A peer can withhold (the client retries, then fails with `SnapSyncError:
 
 ## Consequence
 
-An xOne node snap-syncs only from xOne peers that serve xpre/1. With geth-only peers it refuses with
-`SnapSyncError::NoXpre`, naming the missing capability; it never falls back to a full sync under the snap flag.
-The hashed-key execution path that would remove this is a TODO row in [pivot](pivot.md).
+Since the hashed-key store (ADR-005 amendment 2026-11-12, issue #134) a snap sync needs no preimage: the state is
+keyed by `keccak(address)` and `keccak(slot)` like snap/1, and the client does not ask for xpre/1. An xOne node
+still offers xpre/1 and answers from its `Preimages` table, which execution and installs fill; a hash it has not
+seen is skipped. The text above describes the capability; the client no longer depends on it.

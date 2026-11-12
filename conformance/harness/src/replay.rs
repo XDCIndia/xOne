@@ -23,8 +23,8 @@ use xone_consensus::{
 use xone_executor::{execute_block, tx, BlockOutcome, ExecCtx};
 use xone_primitives::WideBalance;
 use xone_state::{
-    system_contracts::validator_0x88 as v88, trie::flat_root, Account, FlatRead, FlatWrite,
-    MemFlat, StateDiff, StateProvider,
+    system_contracts::validator_0x88 as v88, trie::flat_root, Account, FlatWrite, MemFlat,
+    StateDiff, StateProvider,
 };
 
 /// Changesets kept for unwind; a replay never unwinds, so the window is small.
@@ -121,7 +121,7 @@ pub fn genesis(
     spec: &ChainSpec,
 ) -> Result<(MemFlat, BTreeMap<B256, Bytes>, xone_primitives::Header), String> {
     let g = net.genesis().map_err(|e| e.to_string())?;
-    let mut flat = MemFlat::default();
+    let mut flat = MemFlat::recording();
     let mut codes = BTreeMap::new();
     for (a, acc) in &g.alloc {
         let code_hash = if acc.code.is_empty() {
@@ -437,7 +437,7 @@ pub fn run_from(
         if chain.get(c.number).map(|s| s.hash) != Some(c.hash) {
             return Err("the checkpoint is of another chain than the cache".into());
         }
-        let mut f = MemFlat::default();
+        let mut f = MemFlat::recording();
         for (a, nonce, bal, code_hash) in &c.accounts {
             f.set_account(
                 *a,

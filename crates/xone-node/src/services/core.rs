@@ -24,9 +24,7 @@ use xone_consensus::{
 use xone_db::mdbx::T;
 use xone_executor::{execute_block, ExecCtx};
 use xone_primitives::{Header, WideBalance};
-use xone_state::{
-    trie::flat_root, Account, FlatRead, FlatWrite, MemFlat, Missing, StateDiff, StateRead,
-};
+use xone_state::{trie::flat_root, Account, FlatWrite, MemFlat, Missing, StateDiff, StateRead};
 use xone_sync::{
     bootstrap::{
         minimal::{self, Held},
@@ -267,7 +265,7 @@ fn genesis_state(
     spec: &ChainSpec,
 ) -> Result<(MemFlat, BTreeMap<B256, Bytes>, Header), CoreError> {
     let e = |e: xone_chainspec::Error| CoreError::Genesis(e.to_string());
-    let mut flat = MemFlat::default();
+    let mut flat = MemFlat::recording();
     let mut codes = BTreeMap::new();
     for (a, acc) in &g.alloc {
         let code_hash = if acc.code.is_empty() {

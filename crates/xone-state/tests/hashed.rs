@@ -1,0 +1,130 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::as_conversions)]
+//! The hash-keyed flat tables give the root of an independent address-keyed model: random diffs
+//! (writes, zero writes, deletions with storage), the root after each, and unwinds back.
+
+use alloy_primitives::{Address, B256, U256};
+use proptest::prelude::*;
+use std::collections::BTreeMap;
+use xone_state::{
+    trie::{flat_root, root_after, state_root, storage_root},
+    Account, FlatRead, MemFlat, StateDiff, StateProvider,
+};
+
+/// The reference: plain maps, roots from the address-keyed trie functions (they hash inside).
+#[derive(Default, Clone)]
+struct Model {
+    accounts: BTreeMap<Address, Account>,
+    storage: BTreeMap<(Address, B256), U256>,
+}
+
+impl Model {
+    fn apply(&mut self, d: &StateDiff) {
+        for (a, x) in &d.accounts {
+            match x {
+                Some(x) => {
+                    self.accounts.insert(*a, x.clone());
+                }
+                None => {
+                    self.accounts.remove(a);
+                    self.storage.retain(|(b, _), _| b != a);
+                }
+            }
+        }
+        for (&(a, s), &v) in &d.storage {
+            if matches!(d.accounts.get(&a), Some(None)) {
+                continue;
+            }
+            if v.is_zero() {
+                self.storage.remove(&(a, s));
+            } else {
+                self.storage.insert((a, s), v);
+            }
+        }
+    }
+
+    fn root(&self) -> B256 {
+        state_root(self.accounts.iter().map(|(a, x)| {
+            let mut x = x.clone();
+            x.storage_root = storage_root(
+                self.storage
+                    .range((*a, B256::ZERO)..=(*a, B256::repeat_byte(0xff)))
+                    .map(|(&(_, s), &v)| (s, v)),
+            );
+            (*a, x)
+        }))
+    }
+}
+
+fn addr(i: u8) -> Address {
+    Address::repeat_byte(i)
+}
+
+fn diff() -> impl Strategy<Value = StateDiff> {
+    (
+        proptest::collection::btree_map(0u8..12, proptest::option::of(1u64..50), 0..6),
+        proptest::collection::btree_map((0u8..12, 0u8..8), 0u64..4, 0..10),
+    )
+        .prop_map(|(accs, slots)| StateDiff {
+            accounts: accs
+                .into_iter()
+                .map(|(a, n)| {
+                    (
+                        addr(a),
+                        n.map(|nonce| Account {
+                            nonce,
+                            ..Default::default()
+                        }),
+                    )
+                })
+                .collect(),
+            storage: slots
+                .into_iter()
+                .map(|((a, s), v)| ((addr(a), B256::repeat_byte(s)), U256::from(v)))
+                .collect(),
+        })
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(300))]
+
+    #[test]
+    fn hashed_roots_equal_the_address_keyed_model_and_unwind_restores_them(
+        diffs in proptest::collection::vec(diff(), 1..8)
+    ) {
+        let mut model = Model::default();
+        let mut roots = vec![model.root()];
+        let mut p = StateProvider::new(MemFlat::default(), 0, B256::ZERO, 16);
+        let mut parent = B256::ZERO;
+        for (i, d) in diffs.iter().enumerate() {
+            // the executor never writes a slot of an account that does not exist after the block
+            let mut d = d.clone();
+            d.storage.retain(|(a, _), _| match d.accounts.get(a) {
+                Some(x) => x.is_some(),
+                None => model.accounts.contains_key(a),
+            });
+            let d = &d;
+            // the root a diff would give, before it is written
+            let before = model.clone();
+            model.apply(d);
+            roots.push(model.root());
+            prop_assert_eq!(root_after(p.flat(), d), model.root());
+            let h = B256::repeat_byte(u8::try_from(i + 1).unwrap());
+            use xone_state::StateRead;
+            prop_assert_eq!(p.at(parent).unwrap().root_with(d).unwrap(), model.root());
+            p.commit_block(h, parent, d).unwrap();
+            parent = h;
+            prop_assert_eq!(flat_root(p.flat()), model.root());
+            prop_assert_eq!(p.root(), model.root());
+            // reads by address agree with the model
+            for a in 0u8..12 {
+                prop_assert_eq!(p.flat().account(addr(a)), model.accounts.get(&addr(a)).cloned());
+                let _ = &before;
+            }
+        }
+        for n in (0..diffs.len()).rev() {
+            p.unwind_to(u64::try_from(n).unwrap()).unwrap();
+            prop_assert_eq!(flat_root(p.flat()), roots[n]);
+            prop_assert_eq!(p.root(), roots[n]);
+        }
+    }
+}

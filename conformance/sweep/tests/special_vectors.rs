@@ -17,7 +17,7 @@ use xone_evm::{
     special::{apply_empty_tx, apply_sign_tx, tip_signing_wipe, Receipt},
 };
 use xone_primitives::{Header, WideBalance};
-use xone_state::{trie, Account, FlatRead, FlatWrite, MemFlat, StateDiff};
+use xone_state::{trie, Account, FlatWrite, MemFlat, StateDiff};
 
 fn vec_path(p: &str) -> String {
     format!(

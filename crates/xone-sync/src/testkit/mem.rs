@@ -78,6 +78,8 @@ struct Mdbx {
     staged_headers: BTreeMap<u64, Header>,
     staged_bodies: BTreeMap<u64, Body>,
     ckpt: BTreeMap<Stage, u64>,
+    /// Preimages an install carried.
+    pre: BTreeMap<B256, Bytes>,
     /// Headers below the record floor of a pruned or bootstrapped datadir.
     headers_only: HashMap<B256, Header>,
     /// The `Meta[anchor]` row of a datadir bootstrapped from a snapshot.
@@ -253,6 +255,7 @@ impl MemStore {
                 staged_headers: BTreeMap::new(),
                 staged_bodies: BTreeMap::new(),
                 ckpt: BTreeMap::new(),
+                pre: BTreeMap::new(),
                 headers_only: HashMap::new(),
                 anchor: None,
             },
@@ -292,6 +295,7 @@ impl MemStore {
                 staged_headers: BTreeMap::new(),
                 staged_bodies: BTreeMap::new(),
                 ckpt: BTreeMap::new(),
+                pre: BTreeMap::new(),
                 headers_only: HashMap::new(),
                 anchor: None,
             },
@@ -834,6 +838,10 @@ impl Store for MemStore {
         Ok(StateRows { accounts, storage })
     }
 
+    fn preimage(&self, hash: B256) -> Option<Bytes> {
+        self.d.mdbx.pre.get(&hash).cloned()
+    }
+
     fn anchor(&self) -> Option<Bytes> {
         self.d.mdbx.anchor.clone()
     }
@@ -867,10 +875,10 @@ impl Store for MemStore {
         let mut flat = MemFlat::default();
         for (a, x) in &s.state.accounts {
             x.balance.check_legal().map_err(CommitError::from)?;
-            flat.set_account(*a, Some(x.clone()));
+            flat.set_hashed_account(*a, Some(x.clone()));
         }
         for (a, k, v) in &s.state.storage {
-            flat.set_slot(*a, *k, *v);
+            flat.set_hashed_slot(*a, *k, *v);
         }
         if flat_root(&flat) != pivot.block.header.state_root {
             return Err(bad("the state does not give the pivot's state root"));
@@ -958,6 +966,12 @@ impl Store for MemStore {
             .collect();
         m.records = s.records.into_iter().map(|r| (r.block.hash(), r)).collect();
         m.state = StateProvider::new(flat, number, hash, s.retention);
+        m.pre = s
+            .preimages
+            .iter()
+            .filter(|(h, p)| keccak256(p) == *h)
+            .cloned()
+            .collect();
         m.segidx = segidx;
         m.anchor = (!s.anchor.is_empty()).then_some(s.anchor);
         self.d.segs = segs;

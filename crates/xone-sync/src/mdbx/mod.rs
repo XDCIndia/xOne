@@ -25,7 +25,7 @@ use std::{
     sync::Arc,
 };
 
-use alloy_primitives::{keccak256, Address, Bytes, B256, U256};
+use alloy_primitives::{keccak256, Bytes, B256, U256};
 use codec::{
     block_rlp, body_rlp, dec_account, dec_block, dec_body, dec_diff, dec_header, dec_link,
     dec_receipts, dec_record, enc_block, enc_diff, enc_link, enc_record, header_rlp, receipts_rlp,
@@ -55,6 +55,11 @@ const ANCHOR_KEY: &[u8] = b"anchor";
 /// Written with the first commit of a datadir whose every block commit writes its `TxLookup` rows (and
 /// whose node writes its consensus rows). A datadir without it was made by an older build.
 const HISTORY_KEY: &[u8] = b"history";
+/// `Meta` row: the layout of the state tables. Absent: version 1 (`PlainAccountState`,
+/// `PlainStorageState`, changesets keyed by address) or a datadir that holds nothing yet.
+const SCHEMA_KEY: &[u8] = b"schema";
+/// Version 2: state and changesets keyed by hash ([`migrate_v1`]).
+const SCHEMA: u64 = 2;
 const FSYNC_FAILED: &str = "FSYNC_FAILED";
 
 pub struct Config {
@@ -84,6 +89,47 @@ pub enum OpenError {
     Mdbx(#[from] MdbxError),
     #[error("{0}")]
     Io(#[from] io::Error),
+    #[error("this datadir has state-table schema {0}; this build reads up to {SCHEMA}. Use the build that wrote it")]
+    Schema(u64),
+}
+
+/// Version 1 to 2, in one MDBX transaction (all or nothing): the address-keyed state tables become
+/// the hash-keyed ones, the changesets are re-keyed, the plain tables are emptied. Every key is
+/// hashed from the address the old row carries, so nothing is looked up and nothing can be wrong
+/// but by a bug in `keccak256`. The state root is checked at load (`load_state`) as on any start.
+fn migrate_v1(tx: &Wr) -> R<()> {
+    for (k, v) in tx.range(T::PlainAccounts, &[], None)? {
+        put_account(tx, &keccak256(&k), &v)?;
+        put_preimage(tx, &k)?;
+    }
+    for (k, v) in tx.range(T::PlainStorage, &[], None)? {
+        let (a, s) = k.split_at(k.len().min(20));
+        tx.put(
+            T::HashedStorages,
+            &[keccak256(a).as_slice(), keccak256(s).as_slice()].concat(),
+            &v,
+        )?;
+        put_preimage(tx, a)?;
+        put_preimage(tx, s)?;
+    }
+    for (t, split) in [(T::AccountChangeSets, 28), (T::StorageChangeSets, 60)] {
+        for (k, v) in tx.range(t, &[], None)? {
+            let (n, rest) = k.split_at(8);
+            let mut nk = n.to_vec();
+            if split == 28 {
+                nk.extend_from_slice(keccak256(rest).as_slice());
+            } else {
+                let (a, s) = rest.split_at(20);
+                nk.extend_from_slice(keccak256(a).as_slice());
+                nk.extend_from_slice(keccak256(s).as_slice());
+            }
+            tx.del(t, &k)?;
+            tx.put(t, &nk, &v)?;
+        }
+    }
+    tx.del_range(T::PlainAccounts, &[], None)?;
+    tx.del_range(T::PlainStorage, &[], None)?;
+    tx.put(T::Meta, SCHEMA_KEY, &SCHEMA.to_le_bytes())
 }
 
 #[derive(Clone, Copy)]
@@ -111,12 +157,13 @@ fn be_u64(b: &[u8]) -> Option<u64> {
     Some(u64::from_be_bytes(b.get(..8)?.try_into().ok()?))
 }
 
-fn cs_key(n: u64, a: &Address) -> Vec<u8> {
-    [&be(n)[..], a.as_slice()].concat()
+/// Changeset keys: `block || keccak(address)` and `block || keccak(address) || keccak(slot)`.
+fn cs_key(n: u64, ha: &B256) -> Vec<u8> {
+    [&be(n)[..], ha.as_slice()].concat()
 }
 
-fn cs_skey(n: u64, a: &Address, s: &B256) -> Vec<u8> {
-    [&be(n)[..], a.as_slice(), s.as_slice()].concat()
+fn cs_skey(n: u64, ha: &B256, hs: &B256) -> Vec<u8> {
+    [&be(n)[..], ha.as_slice(), hs.as_slice()].concat()
 }
 
 /// The `TxLookup` rows of block `n`'s transactions: `keccak(tx) -> n u64 BE || index u32 BE`.
@@ -139,71 +186,76 @@ fn del_tx_lookup(tx: &Wr, body: &Body) -> R<()> {
     Ok(())
 }
 
-fn hashed_skey(a: &Address, s: &B256) -> Vec<u8> {
-    [keccak256(a).as_slice(), keccak256(s).as_slice()].concat()
+fn hashed_skey(ha: &B256, hs: &B256) -> Vec<u8> {
+    [ha.as_slice(), hs.as_slice()].concat()
 }
 
 type R<V> = Result<V, MdbxError>;
 
-fn put_account(tx: &Wr, a: &Address, rlp: &[u8]) -> R<()> {
-    tx.put(T::PlainAccounts, a.as_slice(), rlp)?;
-    tx.put(T::HashedAccounts, keccak256(a).as_slice(), rlp)?;
-    tx.put(T::Preimages, keccak256(a).as_slice(), a.as_slice())
+fn put_account(tx: &Wr, ha: &B256, rlp: &[u8]) -> R<()> {
+    tx.put(T::HashedAccounts, ha.as_slice(), rlp)
 }
 
-fn del_account(tx: &Wr, a: &Address) -> R<()> {
-    tx.del(T::PlainAccounts, a.as_slice())?;
-    tx.del(T::HashedAccounts, keccak256(a).as_slice())
+fn del_account(tx: &Wr, ha: &B256) -> R<()> {
+    tx.del(T::HashedAccounts, ha.as_slice())
 }
 
-fn put_slot(tx: &Wr, a: &Address, s: &B256, v: &[u8]) -> R<()> {
-    tx.put(T::PlainStorage, &[a.as_slice(), s.as_slice()].concat(), v)?;
-    tx.put(T::HashedStorages, &hashed_skey(a, s), v)?;
-    tx.put(T::Preimages, keccak256(a).as_slice(), a.as_slice())?;
-    tx.put(T::Preimages, keccak256(s).as_slice(), s.as_slice())
+fn put_slot(tx: &Wr, ha: &B256, hs: &B256, v: &[u8]) -> R<()> {
+    tx.put(T::HashedStorages, &hashed_skey(ha, hs), v)
 }
 
-fn del_slot(tx: &Wr, a: &Address, s: &B256) -> R<()> {
-    tx.del(T::PlainStorage, &[a.as_slice(), s.as_slice()].concat())?;
-    tx.del(T::HashedStorages, &hashed_skey(a, s))
+fn del_slot(tx: &Wr, ha: &B256, hs: &B256) -> R<()> {
+    tx.del(T::HashedStorages, &hashed_skey(ha, hs))
+}
+
+/// Keeps what execution knows: the address and the slot behind a hash. Never read back for
+/// consensus; only to show an address (export, dump) and to serve xpre/1.
+fn put_preimage(tx: &Wr, pre: &[u8]) -> R<()> {
+    tx.put(T::Preimages, keccak256(pre).as_slice(), pre)
 }
 
 /// Writes the diff of block `n` into the state tables and its changeset (whole prior records) into
 /// the changeset tables: the same semantics as `StateDiff::apply`, over the tables.
 fn write_diff(tx: &Wr, n: u64, d: &StateDiff) -> R<()> {
     for (a, new) in &d.accounts {
-        let prior = match tx.get(T::PlainAccounts, a.as_slice())? {
+        let ha = keccak256(a);
+        let prior = match tx.get(T::HashedAccounts, ha.as_slice())? {
             None => vec![0],
             Some(r) => [&[1][..], &r].concat(),
         };
-        tx.put(T::AccountChangeSets, &cs_key(n, a), &prior)?;
+        tx.put(T::AccountChangeSets, &cs_key(n, &ha), &prior)?;
         if new.is_none() {
-            for (k, v) in tx.prefix(T::PlainStorage, a.as_slice())? {
-                let slot = B256::from_slice(&k[20..]);
-                tx.put(T::StorageChangeSets, &cs_skey(n, a, &slot), &v)?;
-                del_slot(tx, a, &slot)?;
+            for (k, v) in tx.prefix(T::HashedStorages, ha.as_slice())? {
+                let hs = B256::from_slice(&k[32..]);
+                tx.put(T::StorageChangeSets, &cs_skey(n, &ha, &hs), &v)?;
+                del_slot(tx, &ha, &hs)?;
             }
+        } else {
+            put_preimage(tx, a.as_slice())?;
         }
     }
     for ((a, s), v) in &d.storage {
         if matches!(d.accounts.get(a), Some(None)) {
             continue;
         }
-        let key = [a.as_slice(), s.as_slice()].concat();
+        let (ha, hs) = (keccak256(a), keccak256(s));
         let prior = tx
-            .get(T::PlainStorage, &key)?
+            .get(T::HashedStorages, &hashed_skey(&ha, &hs))?
             .unwrap_or_else(|| vec![0; 32]);
-        tx.put(T::StorageChangeSets, &cs_skey(n, a, s), &prior)?;
+        tx.put(T::StorageChangeSets, &cs_skey(n, &ha, &hs), &prior)?;
         if v.is_zero() {
-            del_slot(tx, a, s)?;
+            del_slot(tx, &ha, &hs)?;
         } else {
-            put_slot(tx, a, s, &v.to_be_bytes::<32>())?;
+            put_slot(tx, &ha, &hs, &v.to_be_bytes::<32>())?;
+            put_preimage(tx, a.as_slice())?;
+            put_preimage(tx, s.as_slice())?;
         }
     }
     for (a, new) in &d.accounts {
+        let ha = keccak256(a);
         match new {
-            Some(x) => put_account(tx, a, &x.rlp())?,
-            None => del_account(tx, a)?,
+            Some(x) => put_account(tx, &ha, &x.rlp())?,
+            None => del_account(tx, &ha)?,
         }
     }
     Ok(())
@@ -212,22 +264,22 @@ fn write_diff(tx: &Wr, n: u64, d: &StateDiff) -> R<()> {
 /// Writes the changeset rows of block `k` back into the state tables and deletes them.
 fn revert_block(tx: &Wr, k: u64) -> R<()> {
     for (key, val) in tx.prefix(T::AccountChangeSets, &be(k))? {
-        let a = Address::from_slice(&key[8..28]);
+        let ha = B256::from_slice(&key[8..40]);
         match val.split_first() {
-            Some((1, rlp)) => put_account(tx, &a, rlp)?,
-            _ => del_account(tx, &a)?,
+            Some((1, rlp)) => put_account(tx, &ha, rlp)?,
+            _ => del_account(tx, &ha)?,
         }
         tx.del(T::AccountChangeSets, &key)?;
     }
     for (key, val) in tx.prefix(T::StorageChangeSets, &be(k))? {
-        let (a, s) = (
-            Address::from_slice(&key[8..28]),
-            B256::from_slice(&key[28..60]),
+        let (ha, hs) = (
+            B256::from_slice(&key[8..40]),
+            B256::from_slice(&key[40..72]),
         );
         if val.iter().all(|b| *b == 0) {
-            del_slot(tx, &a, &s)?;
+            del_slot(tx, &ha, &hs)?;
         } else {
-            put_slot(tx, &a, &s, &val)?;
+            put_slot(tx, &ha, &hs, &val)?;
         }
         tx.del(T::StorageChangeSets, &key)?;
     }
@@ -238,7 +290,7 @@ fn changeset_of(rd: &Rd, k: u64) -> Result<ChangeSet, StoreError> {
     let bad = || StoreError::Damaged(format!("changeset of block {k}"));
     let mut cs = ChangeSet::default();
     for (key, val) in rd.prefix(T::AccountChangeSets, &be(k)).map_err(|_| bad())? {
-        let a = Address::from_slice(key.get(8..28).ok_or_else(bad)?);
+        let a = B256::from_slice(key.get(8..40).ok_or_else(bad)?);
         let acc = match val.split_first() {
             Some((1, rlp)) => Some(dec_account(rlp).ok_or_else(bad)?),
             _ => None,
@@ -247,8 +299,8 @@ fn changeset_of(rd: &Rd, k: u64) -> Result<ChangeSet, StoreError> {
     }
     for (key, val) in rd.prefix(T::StorageChangeSets, &be(k)).map_err(|_| bad())? {
         let (a, s) = (
-            Address::from_slice(key.get(8..28).ok_or_else(bad)?),
-            B256::from_slice(key.get(28..60).ok_or_else(bad)?),
+            B256::from_slice(key.get(8..40).ok_or_else(bad)?),
+            B256::from_slice(key.get(40..72).ok_or_else(bad)?),
         );
         cs.storage.insert((a, s), U256::from_be_slice(&val));
     }
@@ -316,6 +368,18 @@ impl<D: SegDir> MdbxStore<D> {
             deferred: None,
             steady_at: std::time::Instant::now(),
         };
+        let schema = {
+            let rd = s.env.read()?;
+            rd.get(T::Meta, SCHEMA_KEY)?.and_then(|b| le_u64(&b))
+        };
+        if let Some(v) = schema.filter(|v| *v > SCHEMA) {
+            return Err(OpenError::Schema(v));
+        }
+        if schema.is_none() {
+            let tx = s.env.write()?;
+            migrate_v1(&tx)?;
+            tx.commit()?;
+        }
         let rd = s.env.read()?;
         s.generation = rd
             .get(T::Meta, GEN_KEY)?
@@ -790,11 +854,14 @@ impl<D: SegDir> MdbxStore<D> {
         match anchor {
             Some(flat) => {
                 tx.put(T::Meta, HISTORY_KEY, &[1])?;
-                for (a, acc) in flat.accounts() {
-                    put_account(tx, &a, &acc.rlp())?;
-                    for (s, v) in flat.slots(a) {
-                        put_slot(tx, &a, &s, &v.to_be_bytes::<32>())?;
+                for (ha, acc) in flat.hashed_accounts() {
+                    put_account(tx, &ha, &acc.rlp())?;
+                    for (hs, v) in flat.hashed_slots(ha) {
+                        put_slot(tx, &ha, &hs, &v.to_be_bytes::<32>())?;
                     }
+                }
+                for p in flat.preimages() {
+                    put_preimage(tx, &p)?;
                 }
             }
             None => {
@@ -1006,16 +1073,16 @@ impl<D: SegDir> MdbxStore<D> {
         let db = |e: MdbxError| StoreError::Damaged(e.to_string());
         let rd = self.rd()?;
         let mut flat = MemFlat::default();
-        for (k, v) in rd.range(T::PlainAccounts, &[], None).map_err(db)? {
-            flat.set_account(
-                Address::from_slice(k.get(..20).ok_or_else(|| bad("account key"))?),
+        for (k, v) in rd.range(T::HashedAccounts, &[], None).map_err(db)? {
+            flat.set_hashed_account(
+                B256::from_slice(k.get(..32).ok_or_else(|| bad("account key"))?),
                 Some(dec_account(&v).ok_or_else(|| bad("account row"))?),
             );
         }
-        for (k, v) in rd.range(T::PlainStorage, &[], None).map_err(db)? {
-            flat.set_slot(
-                Address::from_slice(k.get(..20).ok_or_else(|| bad("slot key"))?),
-                B256::from_slice(k.get(20..52).ok_or_else(|| bad("slot key"))?),
+        for (k, v) in rd.range(T::HashedStorages, &[], None).map_err(db)? {
+            flat.set_hashed_slot(
+                B256::from_slice(k.get(..32).ok_or_else(|| bad("slot key"))?),
+                B256::from_slice(k.get(32..64).ok_or_else(|| bad("slot key"))?),
                 U256::from_be_slice(&v),
             );
         }
@@ -1655,6 +1722,11 @@ impl<D: SegDir> Store for MdbxStore<D> {
         Ok(StateRows { accounts, storage })
     }
 
+    fn preimage(&self, hash: B256) -> Option<Bytes> {
+        let rd = self.env.read().ok()?;
+        rd.get(T::Preimages, hash.as_slice()).ok()?.map(Bytes::from)
+    }
+
     fn anchor(&self) -> Option<Bytes> {
         self.anchor.clone()
     }
@@ -1686,10 +1758,10 @@ impl<D: SegDir> Store for MdbxStore<D> {
         let mut flat = MemFlat::default();
         for (a, x) in &s.state.accounts {
             x.balance.check_legal().map_err(CommitError::from)?;
-            flat.set_account(*a, Some(x.clone()));
+            flat.set_hashed_account(*a, Some(x.clone()));
         }
         for (a, k, v) in &s.state.storage {
-            flat.set_slot(*a, *k, *v);
+            flat.set_hashed_slot(*a, *k, *v);
         }
         if flat_root(&flat) != pivot.block.header.state_root {
             return Err(bad("the state does not give the pivot's state root"));
@@ -1749,6 +1821,12 @@ impl<D: SegDir> Store for MdbxStore<D> {
             }
             for (a, k, v) in &s.state.storage {
                 put_slot(&tx, a, k, &v.to_be_bytes::<32>())?;
+            }
+            for (h, p) in &s.preimages {
+                // kept only when it proves itself, with the length of an address or of a slot
+                if keccak256(p) == *h && matches!(p.len(), 20 | 32) {
+                    tx.put(T::Preimages, h.as_slice(), p)?;
+                }
             }
             for h in &s.headers {
                 tx.put(T::CanonicalHeaders, &be(h.number), h.hash().as_slice())?;

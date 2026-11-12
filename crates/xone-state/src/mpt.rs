@@ -241,12 +241,11 @@ impl StateTrie {
             opaque: opaque.iter().map(|(a, r)| (keccak256(a), *r)).collect(),
             ..Self::default()
         };
-        for (a, acc) in flat.accounts() {
-            let slots: BTreeMap<_, _> = flat.slots(a).collect();
+        for (ha, acc) in flat.hashed_accounts() {
+            let slots: BTreeMap<_, _> = flat.hashed_slots(ha).collect();
             let mut acc = acc;
-            let ha = keccak256(a);
-            for (s, v) in slots {
-                t.set_slot(ha, s, v);
+            for (hs, v) in slots {
+                t.set_slot(ha, hs, v);
             }
             acc.storage_root = t.storage_root(ha);
             t.accounts.set(ha, Some(acc.rlp()));
@@ -255,8 +254,7 @@ impl StateTrie {
     }
 
     /// Sets a slot; returns its hashed key and the leaf it replaced.
-    fn set_slot(&mut self, ha: B256, slot: B256, v: U256) -> (B256, Option<Vec<u8>>) {
-        let hs = keccak256(slot);
+    fn set_slot(&mut self, ha: B256, hs: B256, v: U256) -> (B256, Option<Vec<u8>>) {
         let tr = self.storage.entry(ha).or_default();
         let old = tr.get(hs).map(<[u8]>::to_vec);
         tr.set(hs, slot_value(v));
@@ -280,21 +278,20 @@ impl StateTrie {
     /// part of any root (as in [`crate::trie::flat_root`]).
     pub fn apply(
         &mut self,
-        accounts: &BTreeMap<Address, Option<Account>>,
-        storage: &BTreeMap<(Address, B256), U256>,
+        accounts: &BTreeMap<B256, Option<Account>>,
+        storage: &BTreeMap<(B256, B256), U256>,
     ) -> (B256, Undo) {
         let mut undo = Undo::default();
-        let mut touched: BTreeMap<Address, Option<Account>> = BTreeMap::new();
+        let mut touched: BTreeMap<B256, Option<Account>> = BTreeMap::new();
         for (a, _) in storage.keys() {
             touched.entry(*a).or_insert(None);
         }
         for (a, x) in accounts {
             touched.insert(*a, x.clone());
         }
-        for (a, new) in touched {
-            let ha = keccak256(a);
+        for (ha, new) in touched {
             let old = self.accounts.get(ha).map(<[u8]>::to_vec);
-            let listed = accounts.contains_key(&a);
+            let listed = accounts.contains_key(&ha);
             if listed && new.is_none() {
                 undo.tries.push((ha, self.storage.remove(&ha)));
                 if let Some(r) = self.opaque.remove(&ha) {
@@ -312,8 +309,8 @@ impl StateTrie {
                 },
                 (None, None) => continue,
             };
-            for (&(_, s), &v) in storage.range((a, B256::ZERO)..=(a, B256::repeat_byte(0xff))) {
-                let (hs, was) = self.set_slot(ha, s, v);
+            for (&(_, hs), &v) in storage.range((ha, B256::ZERO)..=(ha, B256::repeat_byte(0xff))) {
+                let (hs, was) = self.set_slot(ha, hs, v);
                 undo.slots.push((ha, hs, was));
             }
             acc.storage_root = self.storage_root(ha);

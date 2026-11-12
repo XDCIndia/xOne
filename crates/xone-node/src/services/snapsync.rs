@@ -4,10 +4,10 @@
 //!
 //! In order, each step verified before the next:
 //!
-//! 1. Peers: the node's own net service on its own runtime. State comes from peers that share
-//!    snap/1 and xpre/1 (xOne nodes); none after the wait is [`SnapSyncError::NoXpre`], never a
-//!    fall back to full sync.
-//! 2. Pivot: the head of the best xpre/1 peer minus 64 (geth `fsMinFullBlocks`,
+//! 1. Peers: the node's own net service on its own runtime. State comes from a peer that shares
+//!    snap/1 (geth-XDC included: the store is keyed by hash like snap/1, no preimages are needed);
+//!    none after the wait is [`SnapSyncError::NoSnap`], never a fall back to full sync.
+//! 2. Pivot: the head of the best snap/1 peer minus 64 (geth `fsMinFullBlocks`,
 //!    `eth/downloader/downloader.go`), lowered to the first block whose anchor proof verifies
 //!    (`verify_anchor`: the epoch-switch header's masternodes certify the pivot by the 3-chain).
 //!    The switch header is pinned by the operator's pins file, or by two peers that serve the same
@@ -17,8 +17,7 @@
 //! 4. The candidate pool of every gap block of the plan, from the 0x88 account and storage at that
 //!    block's state root, each range proven (`xone_snap::client::account_at`).
 //! 5. The pivot state (`xone_snap::client::sync`: ranges with proofs, codes by hash, heal, root),
-//!    then every preimage over xpre/1, each checked by its hash, and the state root rebuilt from the
-//!    plain rows.
+//!    then the state root rebuilt from the hashed rows.
 //! 6. `snapshot::install`: the state checkpoint, then `Store::install_snapshot` in one commit.
 //!
 //! ponytail: one source peer at a time, the downloaded state in memory, a stop or a crash before the
@@ -26,7 +25,7 @@
 //! `StateStore` when a network's state outgrows memory.
 
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, HashMap},
     path::Path,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -49,7 +48,7 @@ use xone_primitives::Header;
 use xone_snap::{
     client::{self, Fault, PeerError, PeerSource, StateStore, SyncError},
     codec::Message as Snap,
-    preimage::{self, GetPreimages, MAX_PREIMAGES},
+    preimage,
 };
 use xone_state::{
     system_contracts::validator_0x88, trie::flat_root, Account, FlatWrite, MemFlat, StateRead,
@@ -93,8 +92,8 @@ pub enum SnapSyncError {
     Stopped,
     #[error("no peer after {0:?}")]
     NoPeers(Duration),
-    #[error("no peer serves xpre/1 (preimages; only xOne nodes do) with snap/1 after {0:?}: snap sync needs one, refusing (not falling back to full sync)")]
-    NoXpre(Duration),
+    #[error("no peer serves snap/1 after {0:?}: snap sync needs one, refusing (not falling back to full sync)")]
+    NoSnap(Duration),
     #[error("peer {peer}: {why}")]
     Peer { peer: String, why: String },
     #[error("no pivot within {PIVOT_SEARCH} blocks below {from} has a verified anchor: {last}")]
@@ -129,9 +128,7 @@ pub enum SnapSyncError {
     Gap { number: u64, why: String },
     #[error("state: {0}")]
     State(#[from] SyncError),
-    #[error("no peer served the preimage of {0}")]
-    Preimage(B256),
-    #[error("state root {got} rebuilt from the plain rows, the pivot header says {want}")]
+    #[error("state root {got} rebuilt from the hashed rows, the pivot header says {want}")]
     Root { got: B256, want: B256 },
     #[error("{0}")]
     Io(String),
@@ -161,7 +158,6 @@ struct Counts {
     storage_ranges: u64,
     byte_codes: u64,
     trie_nodes: u64,
-    preimage_requests: u64,
     snap_bytes: u64,
 }
 
@@ -172,7 +168,7 @@ struct Drv<'a> {
     known: BTreeMap<PeerId, Peer>,
     next_id: u64,
     stop: &'a Shutdown,
-    /// Faults per peer: the source is the xpre/1 peer with the fewest.
+    /// Faults per peer: the source is the snap/1 peer with the fewest.
     faults: HashMap<PeerId, u32>,
     n: Counts,
 }
@@ -255,16 +251,12 @@ impl Drv<'_> {
         self.known.get(p).is_some_and(|x| x.subs.contains(&s))
     }
 
-    /// Waits until a peer shares snap/1 and xpre/1 (and, for the pin, until `others` more peers are
-    /// connected or the wait is over).
+    /// Waits until a peer shares snap/1 (and, for the pin, until `others` more peers are connected
+    /// or the wait is over).
     fn wait_peers(&mut self, others: usize) -> R<()> {
         let until = Instant::now() + PEER_WAIT;
-        let ready = |d: &Self| {
-            d.known
-                .keys()
-                .any(|p| d.has(p, Sub::Snap) && d.has(p, Sub::Xpre))
-                && d.known.len() > others
-        };
+        let ready =
+            |d: &Self| d.known.keys().any(|p| d.has(p, Sub::Snap)) && d.known.len() > others;
         while !ready(self) {
             if self.next(until)?.is_none() {
                 break;
@@ -274,22 +266,22 @@ impl Drv<'_> {
             return Err(SnapSyncError::NoPeers(PEER_WAIT));
         }
         if self.source().is_none() {
-            return Err(SnapSyncError::NoXpre(PEER_WAIT));
+            return Err(SnapSyncError::NoSnap(PEER_WAIT));
         }
         Ok(())
     }
 
-    /// The xOne peer that serves state: snap/1 and xpre/1, fewest faults.
+    /// The peer that serves state: snap/1, fewest faults.
     fn source(&self) -> Option<PeerId> {
         self.known
             .keys()
-            .filter(|p| self.has(p, Sub::Snap) && self.has(p, Sub::Xpre))
+            .filter(|p| self.has(p, Sub::Snap))
             .min_by_key(|p| (self.faults.get(*p).copied().unwrap_or(0), **p))
             .copied()
     }
 
     fn src(&self) -> R<PeerId> {
-        self.source().ok_or(SnapSyncError::NoXpre(Duration::ZERO))
+        self.source().ok_or(SnapSyncError::NoSnap(Duration::ZERO))
     }
 
     fn fault(&mut self, p: &PeerId) {
@@ -397,7 +389,7 @@ impl Drv<'_> {
     }
 }
 
-/// The snap/1 source of `xone_snap::client`: the current xpre/1 peer; a fault moves to the next.
+/// The snap/1 source of `xone_snap::client`: the current snap/1 peer; a fault moves to the next.
 struct Src<'a, 'b>(&'a mut Drv<'b>);
 
 impl PeerSource for Src<'_, '_> {
@@ -547,9 +539,7 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
         .map_err(|e| SnapSyncError::Pins(format!("{}: {e}", p.display())))?,
         None => vec![],
     };
-    eprintln!(
-        "snap: --syncmode snap on an empty datadir: state download at a pivot (snap/1, xpre/1)"
-    );
+    eprintln!("snap: --syncmode snap on an empty datadir: state download at a pivot (snap/1)");
     d.wait_peers(if pins.is_empty() { 1 } else { 0 })?;
 
     // ---- the head and the pivot
@@ -795,22 +785,11 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
         c.trie_nodes, anchor.state_root
     );
 
-    // ---- preimages
-    let mut want: BTreeSet<B256> = st.accounts.keys().copied().collect();
-    for s in st.storage.values() {
-        want.extend(s.keys());
-    }
-    let pre = preimages(d, &want)?;
-    let addr = |h: &B256| -> R<Address> {
-        pre.get(h)
-            .filter(|p| p.len() == 20)
-            .map(|p| Address::from_slice(p))
-            .ok_or(SnapSyncError::Preimage(*h))
-    };
+    // ---- the rows, by hashed key as snap/1 gives them
     let mut rows = StateRows::default();
     for (h, a) in &st.accounts {
         rows.accounts.push((
-            addr(h)?,
+            *h,
             Account {
                 nonce: a.nonce,
                 balance: a.balance.clone(),
@@ -820,22 +799,16 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
         ));
     }
     for (h, slots) in &st.storage {
-        let a = addr(h)?;
         for (k, v) in slots {
-            let s = pre
-                .get(k)
-                .filter(|p| p.len() == 32)
-                .map(|p| B256::from_slice(p))
-                .ok_or(SnapSyncError::Preimage(*k))?;
-            rows.storage.push((a, s, *v));
+            rows.storage.push((*h, *k, *v));
         }
     }
     let mut flat = MemFlat::default();
-    for (a, x) in &rows.accounts {
-        flat.set_account(*a, Some(x.clone()));
+    for (h, x) in &rows.accounts {
+        flat.set_hashed_account(*h, Some(x.clone()));
     }
-    for (a, k, v) in &rows.storage {
-        flat.set_slot(*a, *k, *v);
+    for (h, k, v) in &rows.storage {
+        flat.set_hashed_slot(*h, *k, *v);
     }
     let got = flat_root(&flat);
     if got != anchor.state_root {
@@ -845,9 +818,9 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
         });
     }
     eprintln!(
-        "snap: {} preimages over xpre/1 in {} requests, each checked by its hash; state root {got} rebuilt from the plain rows",
-        pre.len(),
-        d.n.preimage_requests
+        "snap: state root {got} rebuilt from {} hashed accounts and {} hashed slots; no preimages needed",
+        rows.accounts.len(),
+        rows.storage.len()
     );
 
     // ---- install
@@ -861,6 +834,7 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
         headers: win,
         records,
         state: rows,
+        preimages: vec![],
         retention: RETENTION,
     };
     crate::snapshot::install(&dir, &mut store, pivot, anchor.hash, &side, install)
@@ -872,7 +846,7 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
     std::fs::write(dir.join("snap-pivot.txt"), record)
         .map_err(|e| SnapSyncError::Io(e.to_string()))?;
     eprintln!(
-        "snap: installed pivot {pivot} as an anchored datadir in {} s total ({} MB over snap/1 and xpre/1); executing from {}",
+        "snap: installed pivot {pivot} as an anchored datadir in {} s total ({} MB over snap/1); executing from {}",
         t0.elapsed().as_secs(),
         d.n.snap_bytes / 1_000_000,
         pivot + 1
@@ -915,55 +889,6 @@ fn witness(d: &mut Drv<'_>, number: u64, hash: B256) -> R<(Vec<(u64, B256)>, Str
         vec![(number, hash)],
         format!("peers {} serve switch {number} {hash}", agree.join(",")),
     ))
-}
-
-/// Every preimage of `want` over xpre/1, each kept only if it hashes to a requested key.
-fn preimages(d: &mut Drv<'_>, want: &BTreeSet<B256>) -> R<HashMap<B256, Bytes>> {
-    let mut got: HashMap<B256, Bytes> = HashMap::with_capacity(want.len());
-    let all: Vec<B256> = want.iter().copied().collect();
-    for chunk in all.chunks(MAX_PREIMAGES) {
-        let mut tries = 0;
-        loop {
-            let missing: Vec<B256> = chunk
-                .iter()
-                .filter(|h| !got.contains_key(*h))
-                .copied()
-                .collect();
-            if missing.is_empty() {
-                break;
-            }
-            tries += 1;
-            if tries > 8 {
-                return Err(SnapSyncError::Preimage(missing[0]));
-            }
-            let peer = d.src()?;
-            d.next_id += 1;
-            let id = d.next_id;
-            d.n.preimage_requests += 1;
-            let req = preimage::Message::Get(GetPreimages {
-                id,
-                hashes: missing.clone(),
-            });
-            let Ok((code, body)) = d.sub(peer, Sub::Xpre, req.code(), req.encode(), id) else {
-                d.fault(&peer);
-                continue;
-            };
-            let Ok(preimage::Message::Answer(a)) = preimage::Message::decode(code, &body) else {
-                d.fault(&peer);
-                continue;
-            };
-            let asked: BTreeSet<&B256> = missing.iter().collect();
-            for p in a.preimages {
-                let h = keccak256(&p);
-                if asked.contains(&h) {
-                    got.insert(h, p);
-                } else {
-                    d.fault(&peer);
-                }
-            }
-        }
-    }
-    Ok(got)
 }
 
 #[cfg(test)]

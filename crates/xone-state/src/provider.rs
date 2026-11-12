@@ -16,7 +16,7 @@ use crate::{
     mpt::{StateTrie, Undo},
     Account,
 };
-use alloy_primitives::{Address, B256, U256};
+use alloy_primitives::{keccak256, Address, B256, U256};
 use std::{
     collections::{BTreeMap, HashMap},
     sync::{Mutex, MutexGuard, PoisonError},
@@ -82,7 +82,8 @@ impl Head {
             }
         }
         self.settle();
-        let (root, undo) = self.trie.apply(&diff.accounts, &diff.storage);
+        let h = diff.hashed();
+        let (root, undo) = self.trie.apply(&h.accounts, &h.storage);
         self.pending = Some((diff.clone(), root, undo));
         root
     }
@@ -183,7 +184,8 @@ impl<F: FlatWrite> StateProvider<F> {
                 if let Some((_, _, undo)) = pending {
                     h.trie.undo(undo);
                 }
-                h.trie.apply(&diff.accounts, &diff.storage);
+                let hd = diff.hashed();
+                h.trie.apply(&hd.accounts, &hd.storage);
             }
         }
         self.chain.insert(number + 1, (hash, cs));
@@ -234,18 +236,22 @@ impl<F: FlatWrite> StateProvider<F> {
         Ok(())
     }
 
-    /// The accounts and the non-zero slots of the post-state of canonical block `hash`: the head
-    /// tables, and the keys that a later changeset touches (an account deleted after the block is
-    /// only there). Any order. ponytail: whole state in memory, the MDBX binding streams cursors.
+    /// The accounts and the non-zero slots of the post-state of canonical block `hash`, by hashed
+    /// key: the head tables, and the keys that a later changeset touches (an account deleted after
+    /// the block is only there). Any order. A side block is [`Missing::Block`].
+    /// ponytail: whole state in memory, the MDBX binding streams cursors.
     #[allow(clippy::type_complexity)]
     pub fn rows_at(
         &self,
         hash: B256,
-    ) -> Result<(Vec<(Address, Account)>, Vec<(Address, B256, U256)>), Missing> {
+    ) -> Result<(Vec<(B256, Account)>, Vec<(B256, B256, U256)>), Missing> {
         let view = self.at(hash)?;
-        let mut addrs: std::collections::BTreeSet<Address> =
-            self.flat.accounts().map(|(a, _)| a).collect();
-        let mut slots: std::collections::BTreeSet<(Address, B256)> = Default::default();
+        if !view.overlays.is_empty() {
+            return Err(Missing::Block(hash));
+        }
+        let mut addrs: std::collections::BTreeSet<B256> =
+            self.flat.hashed_accounts().map(|(a, _)| a).collect();
+        let mut slots: std::collections::BTreeSet<(B256, B256)> = Default::default();
         for (_, cs) in self
             .chain
             .range(view.number + 1..)
@@ -256,17 +262,17 @@ impl<F: FlatWrite> StateProvider<F> {
         }
         let accounts: Vec<_> = addrs
             .into_iter()
-            .filter_map(|a| view.account(a).map(|x| (a, x)))
+            .filter_map(|a| view.hashed_account(a).map(|x| (a, x)))
             .collect();
         for (a, _) in &accounts {
-            slots.extend(self.flat.slots(*a).map(|(s, _)| (*a, s)));
+            slots.extend(self.flat.hashed_slots(*a).map(|(s, _)| (*a, s)));
         }
-        let live: std::collections::BTreeSet<Address> = accounts.iter().map(|(a, _)| *a).collect();
+        let live: std::collections::BTreeSet<B256> = accounts.iter().map(|(a, _)| *a).collect();
         let storage = slots
             .into_iter()
             .filter(|(a, _)| live.contains(a))
             .filter_map(|(a, s)| {
-                let v = view.storage(a, s);
+                let v = view.hashed_storage(a, s);
                 (!v.is_zero()).then_some((a, s, v))
             })
             .collect();
@@ -347,13 +353,7 @@ impl<F: FlatRead> StateRead for StateView<'_, F> {
         if let Some(a) = self.overlays.iter().find_map(|d| d.accounts.get(&address)) {
             return a.clone();
         }
-        let above = self.provider.chain.range(self.number + 1..);
-        for (_, (_, cs)) in above {
-            if let Some(old) = cs.accounts.get(&address) {
-                return old.clone();
-            }
-        }
-        self.provider.flat.account(address)
+        self.hashed_account(keccak256(address))
     }
 
     fn storage(&self, address: Address, slot: B256) -> U256 {
@@ -365,11 +365,27 @@ impl<F: FlatRead> StateRead for StateView<'_, F> {
                 return *v;
             }
         }
+        self.hashed_storage(keccak256(address), keccak256(slot))
+    }
+}
+
+impl<F: FlatRead> StateView<'_, F> {
+    /// The canonical state at `self.number`, by hashed key (side overlays not consulted).
+    fn hashed_account(&self, ha: B256) -> Option<Account> {
         for (_, (_, cs)) in self.provider.chain.range(self.number + 1..) {
-            if let Some(old) = cs.storage.get(&(address, slot)) {
+            if let Some(old) = cs.accounts.get(&ha) {
+                return old.clone();
+            }
+        }
+        self.provider.flat.hashed_account(ha)
+    }
+
+    fn hashed_storage(&self, ha: B256, hs: B256) -> U256 {
+        for (_, (_, cs)) in self.provider.chain.range(self.number + 1..) {
+            if let Some(old) = cs.storage.get(&(ha, hs)) {
                 return *old;
             }
         }
-        self.provider.flat.storage(address, slot)
+        self.provider.flat.hashed_storage(ha, hs)
     }
 }
