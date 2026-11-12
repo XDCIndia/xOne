@@ -29,7 +29,8 @@ use xone_rpc::{
         Backend, BlockView, CallOutput, CallRequest, ChainApi, ConsensusApi, EpochInfo,
         MissedRounds, NetApi, NodeInfo, PeerInfo, StateApi, TraceOut, Tracer,
     },
-    server::{Limits, Registry, Rpc},
+    policy::{registry, Policy},
+    server::{Limits, Rpc},
     transport::{serve_http, serve_ipc, serve_ws},
     types::RpcError,
 };
@@ -363,30 +364,22 @@ fn limits(l: &NodeLimits) -> Limits {
     }
 }
 
-/// An `Rpc` that serves only `namespaces` (geth `--http.api`).
-fn rpc_for(be: &Backend, lim: &Limits, namespaces: &[String]) -> Arc<Rpc> {
+/// An `Rpc` that serves only `namespaces` (geth `--http.api`) and checks `Host` against `vhosts` and
+/// `Origin` against `origins`. An unknown namespace is a startup error.
+fn rpc_for(
+    be: &Backend,
+    lim: &Limits,
+    namespaces: &[String],
+    policy: Policy,
+) -> Result<Arc<Rpc>, String> {
+    let reg = registry(namespaces).map_err(|e| e.to_string())?;
     let mut rpc = Rpc::new(be.clone(), lim.clone());
-    let mut reg = Registry::default();
-    for ns in namespaces {
-        match ns.to_ascii_lowercase().as_str() {
-            "eth" => {
-                xone_rpc::eth::register(&mut reg);
-                xone_rpc::xdc_ext::register(&mut reg);
-            }
-            "net" => xone_rpc::net::register(&mut reg),
-            "web3" => xone_rpc::web3::register(&mut reg),
-            "txpool" => xone_rpc::txpool::register(&mut reg),
-            "admin" => xone_rpc::admin::register(&mut reg),
-            "debug" => xone_rpc::debug::register(&mut reg),
-            "xdpos" => xone_rpc::xdpos::register(&mut reg),
-            other => eprintln!("rpc: unknown API namespace `{other}` ignored"),
-        }
-    }
     // `Rpc::new` returns the only handle, so the registry can be replaced before it is shared
     if let Some(r) = Arc::get_mut(&mut rpc) {
         r.reg = reg;
+        r.policy = policy;
     }
-    rpc
+    Ok(rpc)
 }
 
 pub struct RpcService {
@@ -432,7 +425,15 @@ impl RpcService {
             .then(|| {
                 Ok::<_, String>((
                     addr(&cfg.http.addr, cfg.http.port)?,
-                    rpc_for(&be, &lim, &cfg.http.api),
+                    rpc_for(
+                        &be,
+                        &lim,
+                        &cfg.http.api,
+                        Policy {
+                            vhosts: cfg.http.vhosts.clone(),
+                            origins: vec![],
+                        },
+                    )?,
                 ))
             })
             .transpose()?;
@@ -442,24 +443,36 @@ impl RpcService {
             .then(|| {
                 Ok::<_, String>((
                     addr(&cfg.ws.addr, cfg.ws.port)?,
-                    rpc_for(&be, &lim, &cfg.ws.api),
+                    rpc_for(
+                        &be,
+                        &lim,
+                        &cfg.ws.api,
+                        Policy {
+                            vhosts: vec![],
+                            origins: cfg.ws.origins.clone(),
+                        },
+                    )?,
                 ))
             })
             .transpose()?;
-        let ipc = (!cfg.ipc.disabled).then(|| {
-            (
-                cfg.ipc
-                    .path
-                    .clone()
-                    .unwrap_or_else(|| cfg.datadir.join("xone.ipc")),
-                // the IPC endpoint is local and serves every namespace, as geth's
-                rpc_for(
-                    &be,
-                    &lim,
-                    &["eth", "net", "web3", "txpool", "admin", "debug", "XDPoS"].map(String::from),
-                ),
-            )
-        });
+        let ipc = (!cfg.ipc.disabled)
+            .then(|| {
+                Ok::<_, String>((
+                    cfg.ipc
+                        .path
+                        .clone()
+                        .unwrap_or_else(|| cfg.datadir.join("xone.ipc")),
+                    // the IPC endpoint is local and serves every namespace, as geth's
+                    rpc_for(
+                        &be,
+                        &lim,
+                        &["eth", "net", "web3", "txpool", "admin", "debug", "XDPoS"]
+                            .map(String::from),
+                        Policy::default(),
+                    )?,
+                ))
+            })
+            .transpose()?;
         Ok(Self {
             rt,
             http,

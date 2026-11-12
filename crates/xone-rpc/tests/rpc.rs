@@ -658,9 +658,13 @@ fn misc_methods_answer() {
 }
 
 async fn raw_http(addr: std::net::SocketAddr, body: &str) -> String {
+    raw_http_host(addr, "localhost", body).await
+}
+
+async fn raw_http_host(addr: std::net::SocketAddr, host: &str, body: &str) -> String {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     let mut s = tokio::net::TcpStream::connect(addr).await.expect("connect");
-    let msg = format!("POST / HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+    let msg = format!("POST / HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
     s.write_all(msg.as_bytes()).await.expect("write");
     let mut out = String::new();
     s.read_to_string(&mut out).await.expect("read");
@@ -881,4 +885,117 @@ fn lost_state_is_a_typed_error_not_zero() {
             "{m}: {e}"
         );
     }
+}
+
+/// An `Rpc` whose registry is the `--http.api`/`--ws.api` list `api` (geth `rpc.Server.RegisterName` per module).
+fn rpc_api(api: &[&str], policy: xone_rpc::policy::Policy) -> Arc<Rpc> {
+    let mut r = rpc();
+    let api: Vec<String> = api.iter().map(|s| (*s).to_owned()).collect();
+    let rm = Arc::get_mut(&mut r).expect("unshared");
+    rm.reg = xone_rpc::policy::registry(&api).expect("known namespaces");
+    rm.policy = policy;
+    r
+}
+
+#[test]
+fn unknown_namespace_is_refused_and_defaults_hide_privileged_methods() {
+    use xone_rpc::policy::{registry, Refusal};
+    let bad = ["eth".to_owned(), "*".to_owned()];
+    assert_eq!(
+        registry(&bad).err(),
+        Some(Refusal::UnknownNamespace("*".into()))
+    );
+    let r = rpc_api(&["eth", "net", "web3"], Default::default());
+    let e = ask(&r, req(1, "admin_peers", json!([])));
+    assert_eq!(e["error"]["code"], -32601);
+    assert_eq!(
+        ask(&r, req(1, "debug_traceTransaction", json!([])))["error"]["code"],
+        -32601
+    );
+}
+
+#[tokio::test]
+async fn http_refuses_methods_outside_its_list_and_a_wrong_host() {
+    let r = rpc_api(&["eth"], Default::default());
+    let ls = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
+    let addr = ls.local_addr().expect("addr");
+    let h = tokio::spawn(xone_rpc::transport::serve_http(r, ls));
+    let ok = raw_http(addr, &req(1, "eth_chainId", json!([])).to_string()).await;
+    assert!(ok.contains("\"result\":\"0x33\""), "{ok}");
+    let no = raw_http(addr, &req(1, "net_version", json!([])).to_string()).await;
+    assert!(no.contains("-32601"), "{no}");
+    // a hostname that is not a listed vhost never reaches dispatch; an IP address does
+    let bad = raw_http_host(
+        addr,
+        "evil.example:8545",
+        &req(1, "eth_chainId", json!([])).to_string(),
+    )
+    .await;
+    assert!(bad.starts_with("HTTP/1.1 403"), "{bad}");
+    assert!(bad.contains("invalid host specified") && !bad.contains("result"));
+    let ip = raw_http_host(
+        addr,
+        "10.1.2.3:8545",
+        &req(1, "eth_chainId", json!([])).to_string(),
+    )
+    .await;
+    assert!(ip.contains("\"result\""), "{ip}");
+    h.abort();
+}
+
+#[tokio::test]
+async fn websocket_refuses_methods_outside_its_list_and_a_wrong_origin() {
+    use futures_util::{SinkExt, StreamExt};
+    use tokio_tungstenite::tungstenite::{client::IntoClientRequest, Message};
+    let r = rpc_api(
+        &["eth"],
+        xone_rpc::policy::Policy {
+            vhosts: vec![],
+            origins: vec!["https://app.example".into()],
+        },
+    );
+    let ls = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
+    let addr = ls.local_addr().expect("addr");
+    let h = tokio::spawn(xone_rpc::transport::serve_ws(r, ls));
+    let connect = |origin: &'static str| async move {
+        let mut q = format!("ws://{addr}").into_client_request().expect("req");
+        q.headers_mut()
+            .insert("origin", origin.parse().expect("hdr"));
+        tokio_tungstenite::connect_async(q).await
+    };
+    assert!(connect("http://evil.example").await.is_err());
+    let (mut ws, _) = connect("https://app.example")
+        .await
+        .expect("allowed origin");
+    ws.send(Message::text(req(1, "eth_chainId", json!([])).to_string()))
+        .await
+        .expect("send");
+    let ok: Value = serde_json::from_str(
+        ws.next()
+            .await
+            .expect("msg")
+            .expect("ok")
+            .to_text()
+            .expect("text"),
+    )
+    .expect("json");
+    assert_eq!(ok["result"], "0x33");
+    ws.send(Message::text(req(2, "admin_peers", json!([])).to_string()))
+        .await
+        .expect("send");
+    let no: Value = serde_json::from_str(
+        ws.next()
+            .await
+            .expect("msg")
+            .expect("ok")
+            .to_text()
+            .expect("text"),
+    )
+    .expect("json");
+    assert_eq!(no["error"]["code"], -32601);
+    h.abort();
 }
