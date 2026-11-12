@@ -123,6 +123,7 @@ pub fn build(
                 pool.clone(),
                 nh.peers.clone(),
                 bft_rx,
+                progress.clone(),
             )
         })
         .transpose()?;

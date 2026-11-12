@@ -69,6 +69,39 @@ struct Peer {
 enum Stage {
     Headers,
     Bodies(Vec<Header>),
+    /// Headers from our committed block, asked of a peer that does not know our head.
+    Fork,
+    /// The bodies of a peer's branch that leaves our chain above the committed block.
+    Branch(Vec<Header>),
+}
+
+/// Where the peer's `headers` (consecutive, from a block we hold) leave our chain: the index of the first one
+/// that is not ours. `ours(n)` is our canonical hash at `n`. `Err` when they do not link, do not start on our
+/// chain, or do not end above our head (`head`): only a longer branch replaces ours (geth `keepsV2Head`,
+/// `core/blockchain.go:2419-2442`).
+fn branch_start(
+    headers: &[Header],
+    ours: impl Fn(u64) -> Option<B256>,
+    head: u64,
+) -> Result<usize, &'static str> {
+    let first = headers.first().ok_or("no headers")?;
+    if ours(first.number) != Some(first.hash()) {
+        return Err("the headers do not start on our chain");
+    }
+    let linked = headers
+        .windows(2)
+        .all(|w| w[1].parent_hash == w[0].hash() && w[1].number == w[0].number + 1);
+    if !linked {
+        return Err("headers do not link");
+    }
+    let at = headers
+        .iter()
+        .position(|h| ours(h.number) != Some(h.hash()))
+        .ok_or("no branch: every header is ours")?;
+    if headers.last().map_or(0, |h| h.number) <= head {
+        return Err("the branch does not end above our head");
+    }
+    Ok(at)
 }
 
 struct Inflight {
@@ -136,12 +169,17 @@ impl Follower {
             return;
         }
         let Some(peer) = self.best() else { return };
-        let (id, wire) = self.rid(&peer);
         let (_, head) = self.core.head();
+        self.ask(peer, Origin::Hash(head), Stage::Headers);
+    }
+
+    /// `BATCH + 1` headers from `origin`.
+    fn ask(&mut self, peer: PeerId, origin: Origin, stage: Stage) {
+        let (id, wire) = self.rid(&peer);
         let msg = Message::GetBlockHeaders {
             id: wire,
             query: GetHeaders {
-                origin: Origin::Hash(head),
+                origin,
                 amount: BATCH + 1,
                 skip: 0,
                 reverse: false,
@@ -151,9 +189,74 @@ impl Follower {
             self.inflight = Some(Inflight {
                 peer,
                 id,
-                stage: Stage::Headers,
+                stage,
                 deadline: Instant::now() + REQUEST_TIMEOUT,
             });
+        }
+    }
+
+    /// The answer to `Stage::Fork`: the peer's chain from our committed block. A branch that leaves ours above
+    /// it and ends above our head is fetched and adopted (`Core::adopt`).
+    fn on_fork_headers(&mut self, peer: PeerId, headers: Vec<Header>) {
+        self.inflight = None;
+        let (number, _) = self.core.head();
+        let at = {
+            let h = self.core.hist.read();
+            branch_start(&headers, |n| h.hash_at(n), number)
+        };
+        let at = match at {
+            Ok(at) => at,
+            Err(why) => return self.ban(peer, why),
+        };
+        let branch = headers[at..].to_vec();
+        let (id, wire) = self.rid(&peer);
+        let msg = Message::GetBlockBodies {
+            id: wire,
+            hashes: branch.iter().map(Header::hash).collect(),
+        };
+        if self.peers.send(&peer, msg).is_ok() {
+            self.inflight = Some(Inflight {
+                peer,
+                id,
+                stage: Stage::Branch(branch),
+                deadline: Instant::now() + REQUEST_TIMEOUT,
+            });
+        }
+    }
+
+    /// The bodies of a branch: adopted in one step, or the peer is set aside.
+    async fn on_branch_bodies(
+        &mut self,
+        peer: PeerId,
+        mut headers: Vec<Header>,
+        bodies: Vec<BlockBody>,
+    ) {
+        headers.truncate(bodies.len());
+        let blocks: Vec<_> = headers
+            .into_iter()
+            .zip(bodies)
+            .map(|(h, b)| (h, to_body(b).0))
+            .collect();
+        let core = self.core.clone();
+        let r = tokio::task::spawn_blocking(move || core.adopt(blocks, now()))
+            .await
+            .map_err(|e| e.to_string())
+            .and_then(|r| r.map_err(|e| e.to_string()));
+        match r {
+            Ok((dropped, added)) => {
+                let (n, h) = {
+                    let g = self.core.hist.read();
+                    (g.tip_number(), (g.tip().hash, g.td))
+                };
+                self.peers.set_head(h.0, h.1);
+                self.progress.confirmed.store(false, Ordering::Relaxed);
+                eprintln!(
+                    "chain: adopted the branch of peer {}: {dropped} block(s) of ours dropped, {added} imported, head {n}",
+                    short(&peer)
+                );
+                self.kick();
+            }
+            Err(e) => self.ban(peer, &format!("branch not adopted: {e}")),
         }
     }
 
@@ -199,6 +302,21 @@ impl Follower {
         self.inflight = None;
         let (number, head) = self.core.head();
         if headers.first().map(Header::hash) != Some(head) {
+            let held = headers
+                .first()
+                .is_some_and(|h| self.core.hist.read().number_of(h.hash()).is_some());
+            if held {
+                // our head moved while the request was out (a NewBlock came first): the answer is stale
+                self.kick();
+                return;
+            }
+            // our head may be a block of ours that the network left (sealed, then the round timed out and
+            // the next leader built on the block below it): ask from the committed block for its branch
+            let floor = self.core.chain.committed().map_or(0, |c| c.number);
+            if headers.is_empty() && floor < number {
+                self.ask(peer, Origin::Number(floor), Stage::Fork);
+                return;
+            }
             self.ban(peer, "does not know our head");
             return;
         }
@@ -243,12 +361,16 @@ impl Follower {
     }
 
     async fn on_bodies(&mut self, peer: PeerId, bodies: Vec<BlockBody>) {
-        let Some(Inflight {
-            stage: Stage::Bodies(headers),
-            ..
-        }) = self.inflight.take()
-        else {
-            return;
+        let headers = match self.inflight.take() {
+            Some(Inflight {
+                stage: Stage::Bodies(h),
+                ..
+            }) => h,
+            Some(Inflight {
+                stage: Stage::Branch(h),
+                ..
+            }) => return self.on_branch_bodies(peer, h, bodies).await,
+            _ => return,
         };
         if bodies.is_empty() {
             self.ban(peer, "no bodies");
@@ -412,11 +534,10 @@ impl Follower {
             }
             Event::Message { peer, msg } => match msg {
                 Message::BlockHeaders { id, headers } if self.matches(&peer, id) => {
-                    if matches!(
-                        self.inflight.as_ref().map(|i| &i.stage),
-                        Some(Stage::Headers)
-                    ) {
-                        self.on_headers(peer, headers).await;
+                    match self.inflight.as_ref().map(|i| &i.stage) {
+                        Some(Stage::Headers) => self.on_headers(peer, headers).await,
+                        Some(Stage::Fork) => self.on_fork_headers(peer, headers),
+                        _ => {}
                     }
                 }
                 Message::BlockBodies { id, bodies } if self.matches(&peer, id) => {
@@ -560,5 +681,54 @@ impl Service for ChainService {
             Ok(None) => {}
             Err(e) => eprintln!("chain: no checkpoint written: {e}"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `n` headers from block `from`, each the child of the one before; `salt` makes a different branch.
+    fn chain(from: u64, n: u64, parent: B256, salt: u8) -> Vec<Header> {
+        let mut out: Vec<Header> = Vec::new();
+        let mut p = parent;
+        for i in from..from + n {
+            let h = Header {
+                number: i,
+                parent_hash: p,
+                extra_data: vec![salt].into(),
+                ..Header::default()
+            };
+            p = h.hash();
+            out.push(h);
+        }
+        out
+    }
+
+    /// The restart case of the gate D rehearsal: we hold 100..=103, the last of them our own block that the
+    /// network left; the peer serves 100..=102 then its own 103', 104', 105'. The branch starts at 103' and
+    /// is adopted; a branch that does not end above our head, a gap, or a foreign start are refused.
+    #[test]
+    fn a_longer_branch_is_found_above_our_committed_block() {
+        let base = chain(100, 3, B256::repeat_byte(7), 0);
+        let mut ours = base.clone();
+        ours.extend(chain(103, 1, base[2].hash(), 1));
+        let lookup = |n: u64| ours.iter().find(|h| h.number == n).map(Header::hash);
+        let mut theirs = base.clone();
+        theirs.extend(chain(103, 3, base[2].hash(), 2));
+        assert_eq!(branch_start(&theirs, lookup, 103), Ok(3));
+        // as long as ours: no switch
+        assert!(branch_start(&theirs[..4], lookup, 103).is_err());
+        // a header missing in the middle
+        let mut gap = theirs.clone();
+        gap.remove(4);
+        assert_eq!(branch_start(&gap, lookup, 103), Err("headers do not link"));
+        // not from our chain
+        let foreign = chain(100, 6, B256::repeat_byte(9), 3);
+        assert!(branch_start(&foreign, lookup, 103).is_err());
+        // our own chain extended: the "branch" starts above our head and drops nothing
+        let mut ext = ours.clone();
+        ext.extend(chain(104, 1, ours[3].hash(), 1));
+        assert_eq!(branch_start(&ext, lookup, 103), Ok(4));
     }
 }

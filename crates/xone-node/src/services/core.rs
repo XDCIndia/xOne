@@ -678,6 +678,72 @@ impl Core {
         Ok(out)
     }
 
+    /// Switches to the branch `blocks` (consecutive, the first one's parent is a canonical block of ours): our
+    /// blocks above that parent are unwound (`Chain::set_head`, never below the committed block) and taken off
+    /// the history, then the branch is imported. Only a branch that ends above our head is taken: geth keeps its V2 head
+    /// against a sibling at or below it and reorganises to a block above it whose parent is not the head
+    /// (`keepsV2Head`, `writeBlockAndSetHead`, `core/blockchain.go:2419-2442`). If the branch fails to import, our blocks are imported back. Returns (dropped, added).
+    /// The safety record is not touched: it lives outside the chain store (ADR-010 section 5).
+    pub fn adopt(
+        &self,
+        blocks: Vec<(Header, Body)>,
+        now: u64,
+    ) -> Result<(usize, usize), CoreError> {
+        let bad = |m: String| CoreError::Inconsistent(m);
+        let (Some((first, _)), Some((last, _))) = (blocks.first(), blocks.last()) else {
+            return Ok((0, 0));
+        };
+        let fork = first
+            .number
+            .checked_sub(1)
+            .ok_or_else(|| bad("a branch from genesis".into()))?;
+        let (head, _) = self.head();
+        if last.number <= head {
+            return Err(bad(format!(
+                "the branch ends at {}, not above our head {head}",
+                last.number
+            )));
+        }
+        if self.hist.read().hash_at(fork) != Some(first.parent_hash) {
+            return Err(bad(format!(
+                "the branch does not start on our block {fork}"
+            )));
+        }
+        if let Some(c) = self.chain.committed().filter(|c| fork < c.number) {
+            return Err(bad(format!(
+                "the branch starts below the committed block {}",
+                c.number
+            )));
+        }
+        self.chain
+            .set_head(fork)
+            .map_err(|e| bad(format!("set head {fork}: {e}")))?;
+        let dropped = self.hist.write().pop_to(fork).map_err(bad)?;
+        *self.hist.pending() = None;
+        self.head.send_replace((fork, first.parent_hash));
+        let mut added = 0;
+        for (h, b) in blocks {
+            match self.import(h, b, now) {
+                Ok(Outcome::Extended) => added += 1,
+                r => {
+                    // our own blocks back, the branch is refused
+                    let back =
+                        self.chain.set_head(fork).is_ok() && self.hist.write().pop_to(fork).is_ok();
+                    for s in dropped.iter().filter(|_| back) {
+                        if !matches!(
+                            self.import(s.header.clone(), s.body.clone(), now),
+                            Ok(Outcome::Extended)
+                        ) {
+                            break;
+                        }
+                    }
+                    return Err(bad(format!("the branch does not import: {r:?}")));
+                }
+            }
+        }
+        Ok((dropped.len(), added))
+    }
+
     /// Writes a state checkpoint of the head. A snapshot with votes in flight is not saved: the
     /// checkpoint would lose them (the harness's rule). Returns the number saved.
     pub fn checkpoint(&self) -> Result<Option<u64>, CoreError> {

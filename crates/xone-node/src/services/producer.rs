@@ -67,6 +67,7 @@ use xone_sync::{
 };
 
 use super::{
+    chain::Progress,
     core::{now, Core, Dyn},
     hist::{HistInner, Stored},
     pool::PoolShared,
@@ -226,6 +227,9 @@ struct Worker {
     last_skip: Option<std::mem::Discriminant<schedule::Skip>>,
     /// The last round a timeout was said for (geth resends one every timeout period).
     timeout_said: u64,
+    /// The chain service's progress, and whether it proved us caught up once since the start.
+    progress: Arc<Progress>,
+    caught_up: bool,
     /// Peer votes received per round (the last 16 rounds), for the `stuck` line.
     votes_in: BTreeMap<u64, u32>,
 }
@@ -408,6 +412,9 @@ impl Worker {
     // ---- V1 ----
 
     fn v1_tick(&mut self, n: u64) {
+        if self.synced().is_err() {
+            return;
+        }
         let (head, parent_creator, ctx, snap_signers, parent) = {
             let h = self.core.hist.read();
             let tip = h.tip();
@@ -638,6 +645,9 @@ impl Worker {
             Ok(f) => f,
             Err(why) => return self.stuck(round, &why),
         };
+        if let Err(why) = self.synced() {
+            return self.stuck(round, why);
+        }
         let now_s = now();
         let mp = self.mine_period.max(1);
         if !timing::v2_period_elapsed(parent.timestamp, mp, now_s) {
@@ -672,6 +682,24 @@ impl Worker {
         ) {
             say(format!("block {} (round {round}) not produced: {e}", n + 1));
         }
+    }
+
+    /// geth's worker does not mint before the node is synced (`miner/xdpos_worker.go:383-387`). Here: a peer is
+    /// connected, the chain service has seen a peer serve nothing above our head at least once since the start
+    /// (its caught-up proof), and no peer announced a block above our head. A block sealed without that reaches
+    /// no one, or lands beside a chain the network has already extended.
+    fn synced(&mut self) -> Result<(), &'static str> {
+        if self.peers.peer_ids().is_empty() {
+            return Err("not synced: no peers");
+        }
+        self.caught_up |= self.progress.confirmed.load(Ordering::Relaxed);
+        if !self.caught_up {
+            return Err("not synced: no peer has confirmed our head since the start");
+        }
+        if self.progress.highest.load(Ordering::Relaxed) > self.core.head().0 {
+            return Err("not synced: a peer announced a block above our head");
+        }
+        Ok(())
     }
 
     /// Why this tick did not reach the turn check, said once per round when the round is older than a mine
@@ -1011,7 +1039,14 @@ impl Worker {
             for t in d.timeouts {
                 if self.timeout_said != t.round {
                     self.timeout_said = t.round;
-                    say(format!("timeout for round {} sent", t.round));
+                    let votes = self.votes_in.get(&t.round).copied().unwrap_or(0);
+                    let head = self.core.head().0;
+                    say(format!(
+                        "timeout for round {} sent (head {head}, {votes} peer votes received for round {}, highest QC round {})",
+                        t.round,
+                        t.round,
+                        self.bft.highest_qc().proposed_block_info.round
+                    ));
                 }
                 self.peers.broadcast_bft(&BftMessage::Timeout(t.clone()));
                 q.push_back(Event::Timeout(t, None));
@@ -1051,6 +1086,7 @@ impl ProducerService {
         pool: Arc<PoolShared>,
         peers: Peers,
         bft_in: Receiver<(PeerId, BftMessage)>,
+        progress: Arc<Progress>,
     ) -> Result<Self, String> {
         let signer = xone_signer::local_keystore::load(&plan.keystore, &plan.password, None)
             .map_err(|e| format!("keystore: {e}"))?;
@@ -1108,6 +1144,8 @@ impl ProducerService {
                 stuck_said: 0,
                 last_skip: None,
                 timeout_said: 0,
+                progress,
+                caught_up: false,
                 votes_in: BTreeMap::new(),
             }),
             stop,

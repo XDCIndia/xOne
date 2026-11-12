@@ -550,6 +550,38 @@ impl HistInner {
         switch
     }
 
+    /// Takes the blocks above `number` off the tip, with what they added (epoch switches, snapshots, gap
+    /// pools, difficulty), for a branch switch (`Core::adopt`). Returns them, lowest first.
+    ///
+    /// ponytail: refused while any account holds a balance above 2^256: the history keeps those balances
+    /// at the tip only, not their values before each block. Keep an undo per block when a chain with them
+    /// needs a branch switch.
+    pub fn pop_to(&mut self, number: u64) -> Result<Vec<Stored>, String> {
+        if number < self.base || number > self.tip_number() {
+            return Err(format!(
+                "block {number} is outside the history ({}..={})",
+                self.base,
+                self.tip_number()
+            ));
+        }
+        if !self.wide.is_empty() {
+            return Err("accounts above 2^256 are held at the tip only".into());
+        }
+        let mut out = Vec::new();
+        while self.tip_number() > number {
+            let Some(s) = self.blocks.pop_back() else {
+                break;
+            };
+            self.td = self.td.saturating_sub(s.header.difficulty);
+            out.push(s);
+        }
+        self.switches.retain(|w| w.number <= number);
+        self.snaps.retain(|n, _| *n <= number);
+        self.gaps.retain(|n, _| *n <= number);
+        out.reverse();
+        Ok(out)
+    }
+
     /// Drops what has left the windows: blocks below `window`, snapshots below [`MEMORY_WINDOW`],
     /// gap pools below `window` (they are in `ConsensusSnapshot`).
     pub fn trim(&mut self) {
