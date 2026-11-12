@@ -1,0 +1,178 @@
+{
+  "schema_version": 1,
+  "record_kind": "static_source_review_snapshot",
+  "review_id": "20261112-main-876bb8e",
+  "reviewed_source": {
+    "repository": "XDCIndia/xOne",
+    "commit": "876bb8e9679d3df67aabccea32cfe7047a3284c3",
+    "integration_pr": "https://github.com/XDCIndia/xOne/pull/93",
+    "oracle_repository": "XDCIndia/go-ethereum",
+    "oracle_commit": "6fc8e8c2088b7f18264f5663036669d04fa7becf"
+  },
+  "scope": {
+    "source_review": true,
+    "product_tests_run_by_this_review": false,
+    "public_network_runs": false,
+    "runtime_qualification": false,
+    "worker_lease": false,
+    "note": "This is a pinned source-audit record, not live execution state, an ownership claim or a gate-completion ledger."
+  },
+  "observed_source_state": {
+    "implementation_crates_under_crates_directory": 14,
+    "simulator_workspace_present": true,
+    "development_follower_wiring_merged": true,
+    "v2_checkpoint_context_complete": false,
+    "file_store_persists_staged_sync_rows": false,
+    "public_or_mainnet_qualification_claimed": false,
+    "sources": [
+      "Cargo.toml",
+      "bin/xone/src/main.rs",
+      "crates/xone-node/src/services/",
+      "docs/ops/first-follow.md",
+      "conformance/harness/RUNS.md",
+      "https://github.com/XDCIndia/xOne/pull/93"
+    ]
+  },
+  "reported_test_evidence": {
+    "classification": "author_report_not_independently_rerun_by_this_review",
+    "pr93_local_tests_passed": 538,
+    "pr93_local_loopback_follow_blocks": 50,
+    "pr93_local_loopback_max_lag_blocks": 1,
+    "genesis_replay_blocks_reported": 432000,
+    "diagnostic_v2_pivot_blocks_reported": 273099,
+    "diagnostic_v2_epoch_switches_reported": 302,
+    "diagnostic_reward_windows_blocks_reported": [
+      6999,
+      6500
+    ],
+    "limitations": [
+      "The documented full-history and 1000-switch gates remain incomplete.",
+      "Diagnostic pivots use archive-sourced state and do not establish authenticated bootstrap.",
+      "Historical run records describe base commits plus working-tree changes; retain that provenance rather than assigning them to a later artifact.",
+      "Short loopback and model tests do not establish real-disk fault recovery or public-network qualification."
+    ],
+    "sources": [
+      "https://github.com/XDCIndia/xOne/pull/93",
+      "conformance/harness/RUNS.md",
+      "docs/ops/first-follow.md"
+    ]
+  },
+  "remote_ci_observation": {
+    "integration_head": "812cc0c7b0c8b44f247ba0c6431b3dfbb213f1c2",
+    "run_url": "https://github.com/XDCIndia/xOne/actions/runs/43078213786",
+    "status": "completed",
+    "conclusion": "failure",
+    "jobs": {
+      "check": "failure",
+      "assurance": "failure",
+      "miri": "failure",
+      "fork-table-drift": "failure"
+    },
+    "billing_hold": "reported_by_pr_author_not_independently_established",
+    "query_limit": "The commit-workflow connector returns PR-triggered runs; no result at the merge commit does not establish push-run status.",
+    "oracle_guard_source_observation": "At the reviewed source pin, a missing oracle deploy key produces a passing notice instead of an oracle comparison. That comparison is unqualified."
+  },
+  "readiness": {
+    "build_tracker": "https://github.com/XDCIndia/xOne/issues/51",
+    "deliverable_contract": "https://github.com/XDCIndia/xOne/issues/57",
+    "oracle_drift_contract": "https://github.com/XDCIndia/xOne/issues/6",
+    "machine_readable_deliverable_graph_present_at_reviewed_pin": false,
+    "active_lease_ledger_present_at_reviewed_pin": false,
+    "rule": "A deliverable starts from evidenced prerequisite outputs. Its parent remains open until all final acceptance criteria pass.",
+    "historical_audit_session": ".audit/session.json",
+    "historical_audit_session_is_current_execution_state": false
+  },
+  "next_findings": [
+    {
+      "id": "CI-01",
+      "issue": 101,
+      "url": "https://github.com/XDCIndia/xOne/issues/101",
+      "goal": "Fail closed on global-scan errors and propagate real-crate violations.",
+      "parallel": true,
+      "remediation_pr": "https://github.com/XDCIndia/xOne/pull/102"
+    },
+    {
+      "id": "oracle-readiness",
+      "issues": [
+        6,
+        57
+      ],
+      "goal": "Fail closed on unavailable oracle qualification and retain truthful proof states.",
+      "parallel": true
+    },
+    {
+      "id": "CR-02",
+      "issue": 95,
+      "url": "https://github.com/XDCIndia/xOne/issues/95",
+      "goal": "Keep durable head and visible consensus context coherent across fallible import work.",
+      "priority_order": 1
+    },
+    {
+      "id": "RUN-02",
+      "issue": 97,
+      "url": "https://github.com/XDCIndia/xOne/issues/97",
+      "goal": "Acquire exclusive datadir ownership before recovery or mutation.",
+      "priority_order": 2
+    },
+    {
+      "id": "CR-01",
+      "issue": 94,
+      "url": "https://github.com/XDCIndia/xOne/issues/94",
+      "goal": "Reject empty encoded transactions before size calculation can panic.",
+      "priority_order": 3
+    },
+    {
+      "id": "RUN-01",
+      "issue": 96,
+      "url": "https://github.com/XDCIndia/xOne/issues/96",
+      "goal": "Use the correct absolute-expiry clock at the runtime discovery boundary.",
+      "priority_order": 4
+    },
+    {
+      "id": "SEC-01",
+      "issue": 99,
+      "url": "https://github.com/XDCIndia/xOne/issues/99",
+      "goal": "Reject overflowing log-query ranges before unbounded history work.",
+      "priority_order": 5
+    },
+    {
+      "id": "SEC-02",
+      "issue": 100,
+      "url": "https://github.com/XDCIndia/xOne/issues/100",
+      "goal": "Pin query state or return typed unavailability instead of fabricated zeros.",
+      "priority_order": 5
+    },
+    {
+      "id": "RUN-03",
+      "issue": 98,
+      "url": "https://github.com/XDCIndia/xOne/issues/98",
+      "goal": "Bind sync confirmation to peer/session/head and expire stale confirmation.",
+      "priority_order": 6
+    }
+  ],
+  "remaining_final_gates": [
+    "Own-state historical replay and exact positive/negative consensus checks",
+    "Real storage-fault, unwind and signer-safety proof",
+    "Interoperable live follower and measured resource qualification",
+    "Isolated producer safety and soak",
+    "Conformance on exact packaged artifacts",
+    "Authorized public producer qualification and mainnet follower replay/soak"
+  ],
+  "model_routing": {
+    "implementation_preference": "Sonnet when actually available",
+    "bounded_extraction_preference": "Haiku when actually available",
+    "provider_invoked_by_this_source_snapshot": false,
+    "rule": "Record the provider used. Do not claim unavailable model execution or an unattended scheduler."
+  },
+  "remediation_validation": {
+    "source_commit": "3e94721592b7c12a639887fa29bc4b103ec00614",
+    "scope": "CI shell orchestration only; separate from reviewed runtime source",
+    "python_black_box_tests_passed": 8,
+    "independent_reviewer_reran_python_tests": true,
+    "bash_syntax_scripts_passed": 3,
+    "baseline_controls": "The original scripts fail the missing-input, executor-scope and real-crate aggregation regression assertions.",
+    "workflow_yaml_parsed": true,
+    "rust_clippy_miri_oracle_checks_run": false,
+    "hosted_ci_success_claimed": false
+  }
+}

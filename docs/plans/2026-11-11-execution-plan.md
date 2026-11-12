@@ -1,48 +1,65 @@
-# xOne execution plan: goal, workflow, loop (2026-11-11)
+# xOne execution plan
 
-Status of the backlog on this date: audit issues XA-00..XA-15 (#5 tracker, #6-#20) are filed. The build
-backlog XB-02..XB-29 (markers `<!-- xone-build:XB-NN -->`) is being filed from the plan in #1. The xOneGo
-tree and its open defects were compared against both sets; no top-level outcome is missing. The remaining
-gaps are acceptance rows inside existing issues (regression vectors for xOneGo #669-#733, the exact
-`XDPoS_*` RPC method set, the `run-xone.sh` and `/etc/xone/<net>.env` operator contract).
+This plan describes the source reviewed at `876bb8e9679d3df67aabccea32cfe7047a3284c3`. [#51](https://github.com/XDCIndia/xOne/issues/51) holds the build backlog and final gates. [#57](https://github.com/XDCIndia/xOne/issues/57) defines readiness for individual deliverables. The filename is retained for existing links; the first skeleton batch is historical.
 
 ## Goal
 
-One binary, `xone`, that follows Apothem and mainnet at 0 mismatches against geth-XDC, survives any stop,
-never double-signs, and can be deployed the way xOneGo is deployed today (systemd unit, env file, ethstats,
-`XDPoS_*` RPC). Rust, revm, alloy and MDBX; geth-XDC at an exact pin is the oracle.
+Deliver an XDC-compatible client that can initialize, follow, restart and serve its supported operator interfaces from a qualified artifact. Acceptance requires execution on the client's own state, exact consensus validation, durable canonical and signer state, interoperable sync, measured resource behavior and the declared network soaks. Merged modules and short diagnostic runs are progress toward those gates.
 
-## Workflow (one work item, one branch, one PR)
+Keep Rust for the core and Go for the pinned oracle/exporter. Keep post-quantum readiness and protocol research separate from current-consensus implementation. Neither a language choice nor a microbenchmark establishes quantum resistance or network finality latency.
 
-1. Pick the next ready issue from #5 (all `Blocked by` closed). Re-pin geth-XDC; record the SHA in the PR.
-2. Establish failing evidence: a vector from the archive or a property that fails on the current tree.
-3. Implement one bounded change in the owning crate. Dependencies point upward only
-   (`xone-primitives` <- `xone-chainspec` <- `xone-state`/`xone-evm` <- `xone-consensus` <- `xone-db`
-   <- `xone-sync`/`xone-net` <- `xone-rpc` <- `xone-node` <- `bin/xone`).
-4. Targeted checks: `cargo fmt`, `cargo clippy -D warnings`, `cargo test` for the crate.
-5. Gate for the item: differential (xone-rs-diff-exec), fork boundary (xone-rs-fork-boundary-gate),
-   restart/unwind (xone-rs-restart-unwind-gate) or durability/signer, as the issue names it.
-6. Independent review by a second agent that did not write the code; it re-runs the gate.
-7. PR with the three repository trailers, the spec page link and the differential result. Owner merges.
-8. Tick the item in #5 and record the evidence in the issue.
+## Current evidence
 
-## Loop
+PR #93 merged the development follower, sync, observability, snap, V2 replay and BFT slices. Its author reports local tests and a short private-loopback follow. Hosted CI at the integration head failed; the reported billing cause has not been independently established by this source review.
 
-- Restart the loop on any code, vector, spec or dependency change that touches the item.
-- Three unchanged failures on one approach: stop, write the escalation in the issue with evidence and
-  alternatives. Do not weaken a gate or edit an expected value to pass.
-- Full-range replay only at integration boundaries (milestone close, geth re-pin, revm bump).
-- A safety fault (wrong root, head ahead of data, lowered safety record, double sign) stops the affected
-  rollout; unrelated research continues.
+[RUNS.md](../../conformance/harness/RUNS.md) records a 432,000-block Apothem genesis replay and separate diagnostic pivot windows. The V2 pivot window covers 302 epoch switches; the 1,000-switch and full-history gates remain open. Archive-sourced pivots do not establish authenticated bootstrap. Node/sync contexts still lack the V2 gap-snapshot wiring required at checkpoint blocks, and `FileStore` does not persist staged-sync rows.
 
-## Order of the first batch
+The [current review snapshot](../../.audit/current-review.json) is a source-audit record. It is not a worker lease, test result or gate-completion ledger. Preserve historical run records and add exact provenance for new results.
 
-| # | Item | Gate |
-|---|---|---|
-| 1 | XB-02 workspace + XB-04 header RLP + XB-05 genesis/chainspec (this PR) | 4 genesis hashes equal geth-XDC; fork table has no `Missing` |
-| 2 | XA-01 rule register and generated fork table | CI rejects drift from the geth pin |
-| 3 | XA-02 wide-balance and revm matrix | every row matches geth without a revm fork |
-| 4 | XB-06/XB-08 revm hooks and special transactions | Apothem blocks 0..1800 at 0 mismatches |
-| 5 | XA-06 storage publication design, XB-07 state | recovery after every injected fault |
+## Readiness and ownership
 
-Producer work (XB-23, XB-27) does not start before XA-06, XA-07 and XB-13 pass.
+Start a deliverable when its own prerequisite outputs have the required evidence. A parent issue can stay open while a dependent foundation slice proceeds. For example, storage design can enable a writer implementation while the storage umbrella still awaits real I/O and unwind proof. Keep every final parent acceptance criterion.
+
+Before a worker changes code, record its deliverable, responsible session, branch/worktree, base and head, owned paths, prerequisite evidence, pending writes and next action. Reconcile current remote state before claiming work. One integrator owns shared manifests, lockfiles and branch integration. Preserve another session's branches and datadirs.
+
+Use these states distinctly: proposed, implemented, reported tested, independently tested, merged and qualified. A merged PR does not automatically advance an umbrella to qualified. [#57](https://github.com/XDCIndia/xOne/issues/57) still owns the machine-readable deliverable graph, readiness validation and active-session ledger; this document does not claim those tools exist.
+
+## Next deliverables
+
+Work on independent slices in parallel only after ownership and interface boundaries are clear. Start import coherence and datadir ownership first; run independent CI guard work in parallel. Serialize edits that share node-service or RPC files.
+
+| Order | Deliverable | Evidence needed before integration |
+| --- | --- | --- |
+| Parallel | [#101 CI guards](https://github.com/XDCIndia/xOne/issues/101) ([PR #102](https://github.com/XDCIndia/xOne/pull/102)), [#6 oracle drift](https://github.com/XDCIndia/xOne/issues/6) and [#57 readiness](https://github.com/XDCIndia/xOne/issues/57) | Scan errors and real-crate violations fail the assurance runner; missing oracle access cannot appear qualified; seeded drift fails; hosted CI state is separate from local checks |
+| 1 | [#95 Import coherence](https://github.com/XDCIndia/xOne/issues/95) | Fallible consensus-context work cannot leave durable head and visible history split; post-commit failure and restart regressions pass |
+| 2 | [#97 Exclusive datadir ownership](https://github.com/XDCIndia/xOne/issues/97) | A second opener is refused before recovery, truncation, key-file changes or publication; the ownership guard covers the required process lifetime |
+| 3 | [#94 Empty transaction rejection](https://github.com/XDCIndia/xOne/issues/94) | Malformed wire input reaches a typed rejection before size calculation; no import-task panic |
+| 4 | [#96 Discovery clock](https://github.com/XDCIndia/xOne/issues/96) | The runtime uses the correct absolute-expiry clock and completes a controlled exchange with an independently clocked peer |
+| 5 | [#99 Log-query bounds](https://github.com/XDCIndia/xOne/issues/99) and [#100 RPC state views](https://github.com/XDCIndia/xOne/issues/100) | Maximum-u64 ranges cannot bypass work limits; queries retain a consistent state view or return a typed availability error |
+| 6 | [#98 Sync confirmation](https://github.com/XDCIndia/xOne/issues/98) | Confirmation is bound to peer/session/head and expires on disconnect; an echo-only high-ranked peer cannot prevent progress |
+
+These regressions feed the existing execution, storage, consensus and operator umbrellas. After them, complete the actual staged-sync wiring and persistence, V2 checkpoint contexts, transport policy in [#60](https://github.com/XDCIndia/xOne/issues/60), supported operator surfaces and remaining interoperability. Keep full replay, real storage-fault testing, isolated producer proof, exact packaged-artifact conformance and public qualification. Refresh the next batch when a decisive result changes readiness.
+
+## Workflow
+
+1. Read the current tracker, review snapshot and active execution state. Claim one ready deliverable on nonoverlapping paths.
+2. Keep the declared source, oracle and fixture pins fixed. Establish a failing regression or measured baseline. Re-pin only through an explicit reviewed change and rerun the affected evidence.
+3. Implement one bounded change against the agreed interface. Use Sonnet for implementation and substantive review, and Haiku for bounded extraction or fixture bookkeeping, only when those models are actually available. Record the provider used; do not claim an unavailable route ran.
+4. Run targeted checks and the relevant differential, negative-input, fault, interoperability or performance gate. Record the exact command, source tree, artifact/input digests, environment, result and remaining parent criteria.
+5. Have an independent verifier repeat the decisive check on a clean checkout with the same inputs.
+6. Open one PR with the required repository identity/trailers, specification link, evidence and limits. Integrate under the existing review and merge authority.
+7. Update the deliverable and parent evidence. Close the parent only when all its acceptance criteria pass.
+
+## Verification loop
+
+Select ready output -> establish failure/baseline -> implement -> targeted checks -> decisive gate -> independent verification -> PR/integration -> checkpoint -> select the next ready output.
+
+A code, specification, fixture or dependency change invalidates the evidence it affects. Run full historical replay at declared integration boundaries and relevant pin changes. Do not rewrite expected output, skip validation or reduce a gate to obtain a pass. Three failures of an unchanged approach require a written root-cause decision and alternatives. A root, durability or signing fault stops the affected qualification path; unrelated work can continue.
+
+Checkpoint after each decisive result and external write. On a rate limit, retain Retry-After/reset metadata, reduce concurrency and use bounded backoff. Reconcile an uncertain mutation by its stable issue/PR identity before retry. Do not claim automatic resumption without an actual scheduler.
+
+## Final qualification
+
+Keep Gate A feasibility, Gate B foundational correctness, Gate C sync/resources and follower qualification, Gate D isolated producer safety, and Gate E packaged release/public rollout. Evidence for a prerequisite deliverable permits dependent engineering work; it does not bypass a final gate.
+
+Before public producer qualification, complete the required B/C/D evidence, exact-artifact checks and the authorized host/run decisions in [#47](https://github.com/XDCIndia/xOne/issues/47). Keep the mainnet follower's full own-state replay and 14-day soak in [#48](https://github.com/XDCIndia/xOne/issues/48). Mainnet signing and protocol activation remain separate decisions. Track Q research cannot substitute for those client gates.
