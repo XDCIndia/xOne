@@ -336,3 +336,65 @@ Three seals are a smoke test, not reliability evidence. Rounds were the seat's t
 rounds (eligible turns 3, seals 3). Stopping geth before the producer starts leaves a gap (72 s on
 fast-h213, whose cutover waited for 3 blocks with no 0x00ce signer); minimal-h213 sealed its first
 block 83 s after start for the same reason.
+
+## Resync 2026-11-12, fourth run (build xOne/v0.1.0-8fe27572-12112026)
+
+Build 8fe27572 is main with PR #130 (sibling stale-round guard, pool re-inject). The four followers
+(snap-h95, fast-h213, minimal-h213, archive-h4) were swapped to it by exact pid with their ethstats
+env kept; fast-h213 came from the release stamp 9465ddb4, kept as `xone.prev-9465ddb4`. The live
+producer (pid 3497548) was not touched. The old contents of each datadir were deleted before the
+resync (h95 disk is at 99 %, 27 GB free). Time is from the start of the loop (minimal: from the start
+of `snapshot import`) to node head within 1 of archive-h4 for three polls; peak RSS is VmRSS sampled
+every second.
+
+| Node | Flag | Time to tip | Data moved | Datadir at tip | Peak RSS | Pivot / anchor |
+| --- | --- | --- | --- | --- | --- | --- |
+| `xone-rs-net2040-snap-h95` | `--syncmode snap` | 10 s (install 2 s) | 2 MB over snap/1 + xpre/1 | 72 MB (77 MB before wipe) | 75,936 kB | pivot 782717 (head 782781 - 64) |
+| `xone-rs-net2040-fast-h213` | `--syncmode fast` | 12 s (install 2 s) | 2 MB over snap/1 + xpre/1 | 72 MB (77 MB before wipe) | 75,792 kB | pivot 782726 (head 782790 - 64) |
+| `xone-rs-net2040-minimal-h213` | `--minimal` after import | 7 s (import 0.9 s) | 4,956,408 B snapshot | 72 MB (77 MB before wipe) | 53,332 kB | anchor 782798 |
+
+Mechanism evidence (node.log):
+
+- snap: `--syncmode snap on an empty datadir`; peers 462cba59 (archive-h4), 66f9d65d, f45edd8a, f22d6239
+  share `snap/1 xpre/1`; `pivot block 782717 ... (head 782781 - 64); anchor verified: switch 782431
+  0x6c0582a4.. with 13 masternodes certifies it by the 3-chain`; 9532 accounts, 10956 slots, 6 codes in
+  5 account ranges, 6 storage ranges, 1 bytecodes, 0 heal requests, every range proven; `state root
+  0xe606d4fc.. verified at the pivot 782717`; 20466 preimages over xpre/1; `executing from 782718`.
+- fast: first line `--syncmode fast is an alias of snap, as in geth-XDC: syncing in snap mode`; head
+  782790 from 462cba59, 4628 headers linked; window bodies and receipts 780928..=782726 (1799 blocks);
+  same counts, 0 heal; root 0x450aeea8.. verified at 782726; `executing from 782727`.
+- minimal: `xone snapshot export` on archive-h4 (loop stopped by pid, export, loop restarted with its
+  env): `exported block 782798 0xd6d495cc..9fe756 ... 4956408 bytes in 2.8s`, sha256 40a4690f.. (equal
+  after the copy through this host). pins.txt `782798 0xd6d495cca920a668686eaae94af9ada951d0bd84315aedb96c48ac0c269fe756`
+  (archive-h4 and the xdc02 geth archive agree). `snapshot import --pins`: `imported block 782798 ...
+  14 chunks ... in 0.9s`; `chain: following from block 782798`.
+
+Verification against archive-h4: `eth_getBlockByNumber(n, true)` equal at the pivot or anchor, pivot + 1,
+two later heights and head - 10 on all three nodes; `XDPoS_getMasternodesByNumber` at the head equal
+(13); the typed -32000 refusal at firstRetained - 1 and `firstRetained` served (snap 780919, fast
+780928, minimal 781000). Board: all four active; `syncMode` snap for snap and fast, `full` for
+minimal (#123 still open).
+
+RPC sweep (rpc/sweep.py, five nodes against archive-h4, archive-h4 against xdc02): equal inside every
+window (blocks by number and hash with and without transactions including validators, validator and
+penalties, transaction, receipt, logs, balance, code, storage, nonce, masternodes, chainId,
+net_version); the only follower difference is the typed refusal below the window. Still open and
+filed: the refusal `pivot` field equals the head (#121, e.g. snap 782786 at head 782786); `eth_subscribe
+newHeads` returns an id and delivers nothing within 20 s on every node type (#122); minimal board
+`syncMode` (#123). Not issues: archive-h4 refuses state below about head - 4100 (no `--gcmode
+archive`); `XDPoS_getCandidates` is refused on both sides with different messages. No new difference.
+
+Mint readiness, borrowed seats, one at a time (mint-c33a.log, mint-00ce.log): 3 of 3 eligible turns
+sealed on each node; each block equal on archive-h4 (hash, miner, child parentHash) and present as a
+`sealed and sent` line in the node's log; then rolled back (0 `--mine` xone besides the live
+producer, geth units active, STOP removed, follower loops back with env, staged keys deleted, password
+and ethstats secret not found in any log by value). The new `no sibling` guard line did not appear
+in any node log in this run (0 matches on all three).
+
+| Node | Seat | Seals (block hash) | Producer up / rolled back |
+| --- | --- | --- | --- |
+| snap-h95 | 0xc33a | 782847 0xd4a3bf7d.., 782859 0xe6b74768.., 782872 0xd73623dd.. | 12:50:23Z / 12:52:19Z |
+| fast-h213 | 0x00ce | 782899 0x8a3a6ded.., 782912 0x333953dc.., 782925 0x0157a501.. | 12:52:51Z / 12:55:10Z |
+| minimal-h213 | 0x00ce | 782938 0x9bf2b256.., 782951 0x84eae34d.., 782964 0xfae2c232.. | 12:55:29Z / 12:56:37Z |
+
+Three seals are a smoke test, not reliability evidence.
