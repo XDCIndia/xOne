@@ -242,6 +242,11 @@ impl MemStore {
             head_hash: hash,
             entries,
         };
+        let pre0: BTreeMap<B256, Bytes> = flat
+            .preimages()
+            .into_iter()
+            .map(|p| (keccak256(&p), p.into()))
+            .collect();
         Self::open(Disk {
             mdbx: Mdbx {
                 generation: 1,
@@ -255,7 +260,7 @@ impl MemStore {
                 staged_headers: BTreeMap::new(),
                 staged_bodies: BTreeMap::new(),
                 ckpt: BTreeMap::new(),
-                pre: BTreeMap::new(),
+                pre: pre0,
                 headers_only: HashMap::new(),
                 anchor: None,
             },
@@ -473,6 +478,21 @@ impl MemStore {
         let m = &mut self.d.mdbx;
         // The one fallible step goes first: the rest of the transaction is plain map writes.
         m.state.commit_block(b.hash(), b.parent(), &rec.diff)?;
+        for p in rec
+            .diff
+            .accounts
+            .iter()
+            .filter(|(_, x)| x.is_some())
+            .map(|(a, _)| a.to_vec())
+            .chain(
+                rec.diff
+                    .storage
+                    .keys()
+                    .flat_map(|(a, s)| [a.to_vec(), s.to_vec()]),
+            )
+        {
+            m.pre.insert(keccak256(&p), p.into());
+        }
         m.canonical.insert(b.number(), b.hash());
         m.records.insert(b.hash(), rec.clone());
         m.stateless.remove(&b.hash());

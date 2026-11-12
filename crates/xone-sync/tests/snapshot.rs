@@ -85,7 +85,7 @@ fn plain(n: u64, parent: B256, root: B256) -> Header {
 
 /// The state of the pivot: contracts with storage, a wide balance, plain accounts.
 fn state() -> (MemFlat, Side) {
-    let mut flat = MemFlat::default();
+    let mut flat = MemFlat::recording();
     let mut side = Side::default();
     for i in 0..60u32 {
         let a = Address::from_slice(&keccak256(i.to_be_bytes())[..20]);
@@ -1033,7 +1033,7 @@ mod property {
             stalled in prop::option::of(0u64..300),
         ) {
             let spec = small_spec();
-            let mut flat = MemFlat::default();
+            let mut flat = MemFlat::recording();
             flat.set_account(Address::repeat_byte(1), Some(Account::default()));
             let g = plain(0, B256::ZERO, flat_root(&flat));
             let mut store = MemStore::with_anchor(g.clone(), flat, 8, 100_000);
