@@ -232,6 +232,8 @@ struct Worker {
     caught_up: bool,
     /// The block of `pending.rlp` found at the start, until `finish_pending` decides.
     pending: Option<(Header, Vec<Bytes>)>,
+    /// How long the last seal took (record write, sync and signature).
+    seal_ms: u128,
     /// Peer votes received per round (the last 16 rounds), for the `stuck` line.
     votes_in: BTreeMap<u64, u32>,
 }
@@ -925,7 +927,16 @@ impl Worker {
     }
 
     /// The seal: the unit decides, writes its record, then signs (`seal_v1::seal`, `seal_v2::seal`).
+    /// [`Worker::seal_now`], timed: the time is the safety record's write and sync plus the signature, and
+    /// goes into the "sealed and sent" line, so a stalled disk shows as a number.
     fn seal(&mut self, h: Header) -> Result<Header, String> {
+        let t = Instant::now();
+        let r = self.seal_now(h);
+        self.seal_ms = t.elapsed().as_millis();
+        r
+    }
+
+    fn seal_now(&mut self, h: Header) -> Result<Header, String> {
         self.durability();
         let spec = &self.spec;
         let number = h.number;
@@ -955,6 +966,7 @@ impl Worker {
     fn import_and_send(&mut self, h: Header, body: Body) -> Result<(), String> {
         let hash = h.hash();
         let number = h.number;
+        let t = Instant::now();
         let out = self
             .core
             .import(h.clone(), body.clone(), now())
@@ -980,7 +992,11 @@ impl Worker {
         for p in self.peers.peer_ids() {
             let _ = self.peers.send(&p, msg.clone());
         }
-        say(format!("block {number} {hash} sealed and sent"));
+        say(format!(
+            "block {number} {hash} sealed and sent (seal {} ms, import {} ms)",
+            self.seal_ms,
+            t.elapsed().as_millis()
+        ));
         self.sign_tx_for(number, hash);
         Ok(())
     }
@@ -1041,7 +1057,15 @@ impl Worker {
                 let h = self.core.hist.read();
                 self.bft.step(&HistChain(&h), dur, ev)
             };
-            let d = match drive(&self.bft, &mut self.unit, fx) {
+            let t = Instant::now();
+            let driven = drive(&self.bft, &mut self.unit, fx);
+            if t.elapsed() > Duration::from_millis(500) {
+                say(format!(
+                    "slow safety write: a BFT step took {} ms to persist and sign",
+                    t.elapsed().as_millis()
+                ));
+            }
+            let d = match driven {
                 Ok(d) => d,
                 Err(e) => {
                     say(format!("stopping: {e}"));
@@ -1186,6 +1210,7 @@ impl ProducerService {
                 progress,
                 caught_up: false,
                 pending: None,
+                seal_ms: 0,
                 votes_in: BTreeMap::new(),
             }),
             stop,
