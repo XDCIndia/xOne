@@ -174,6 +174,107 @@ local 762890 archive 762887
 The ignored `live_net2040` test (genesis to block 1,000 against the archive peer, on the MDBX store) passed
 once on this build: `cargo test --release --locked -p xone-node --test live_net2040 -- --ignored`, 39.4 s.
 
+## Lag
+
+How far the follower is behind the network, measured against the xdc02 archive (port 10071, read
+only). A sample every 2 s for 15 minutes: `eth_blockNumber` of the node and of the archive (lag in
+blocks, archive minus node), `net_peerCount`, and the timestamp of the node's head against the wall
+clock. `node.log` was stamped line by line as it was written, giving each single-block import's time
+minus its header timestamp. The board view (`/api/v1/fleet/status`, lag at each report's `lastSeen`
+against `/api/v1/stats/chain-tip`) has a coarser resolution: one report every 10 to 50 s.
+
+### Before: `46e8769`, the live node, 2026-11-12 02:54-03:09 UTC
+
+| lag (blocks) | 0 | 1 | 2 | 3-5 | >5 |
+| --- | --- | --- | --- | --- | --- |
+| samples (445) | 142 (31.9%) | 45 (10.1%) | 22 (4.9%) | 63 (14.2%) | 173 (38.9%) |
+
+The maximum was 23 and the mean 5.5. Head-timestamp lag was p50 12.7 s, p95 42.5 s, maximum 63 s.
+There were 7 to 10 peers. Of the 82 single-block imports, the time from the header timestamp to the
+import was p50 0.25 s, p90 1.16 s, maximum 22 s. In the same window the follower set peers aside for
+60 s 132 times: 109 "advertises a head it does not serve" and 23 "does not know our head". On the
+board, 03:13-03:28 UTC, `xone-rs-net2040-h95` sent 28 reports: 17 at 0-1 blocks, 2 at 2, 6 at 3-5 and
+3 above 5, median 0.7, maximum 13.7. `geth-net2040-00ce` sent 18: 14 at 0-1, 1 at 2, 3 at 3-5, maximum
+3.1.
+
+The same 15 minutes on `xone-rs-net2040-archive-h4` (65.21.71.4, also `46e8769`, 04:16-04:31 UTC,
+right after it reached the tip):
+
+| lag (blocks) | 0 | 1 | 2 | 3-5 | >5 |
+| --- | --- | --- | --- | --- | --- |
+| samples (449) | 140 (31.2%) | 17 (3.8%) | 18 (4.0%) | 60 (13.4%) | 214 (47.7%) |
+
+The maximum was 23 and head-timestamp lag p50 14.2 s. Single-block imports were p50 0.31 s after
+their header timestamp. There were 110 and 18 set-asides of 60 s.
+
+### Causes
+
+* A `NewBlock` that extends the head was dropped while any request was in flight. The one-second
+  poll keeps a request in flight much of the time, so the block waited for the next poll and, at
+  worst, for the next peer. geth-XDC inserts a direct extension at once, whatever its syncer does
+  (`eth/handler_eth.go:205-296`).
+* Peers that were only "not yet there", or whose last announcement was old, were set aside for 60 s.
+  geth-XDC (GP5) sends `NewBlock` only for a block it sealed (`eth/handler_xdc.go:102-150`), so a
+  peer's advertised head is its own last block: up to 13 blocks old on net2040. A poll that finds
+  nothing above our head from such a peer read as "advertises a head it does not serve", for almost
+  every peer in turn. A peer that relays a block before its own import, and a peer one block behind us
+  ("does not know our head"), gave the same answers. geth-XDC never counts an empty answer at the tip
+  against a peer. It counts a strike only when another peer served the same range, and puts the peer
+  on a cooldown after 3 strikes (`eth/sync_xdc.go:165-173`, `:305-311`). With every pollable peer set
+  aside, a block whose sealer is not a direct peer is not recovered until a minute runs out: 10-23
+  blocks of lag, worst right after a restart.
+* Not a cause: the group-commit steady point. It runs inside the commit of a block under the store's
+  write lock (`xone-sync` `mdbx/mod.rs:937-940`, `chain/insert.rs:212`), so `eth_blockNumber` waits
+  for it. Over 300 calls on the live node it answered in p50 0.5 ms, p99 8 ms, maximum 64 ms; an
+  fsync of this disk takes about 10 ms.
+
+The producer branch `6ea75ea` (`b4e2ffe` with the synced guard and branch adoption) already stops
+the set-aside for a stale announcement. The fix below also covers the other cases.
+
+### Fix (`8a8fa1a`, `services/chain.rs`)
+
+* A `NewBlock` whose parent is the head is imported even while a request is in flight.
+* A header poll keeps the hash it was asked from. The answer must start there; a peer that starts
+  anywhere else is still set aside for 60 s. Headers at or below a head that a `NewBlock` moved
+  meanwhile are skipped, and so are bodies of blocks that are already canonical.
+* An empty answer, or our head alone from a peer that advertises more, sets the peer aside for 4 s
+  (`NOT_YET`). The caught-up proof is unchanged: an empty continuation, asked from our current head,
+  from a peer that advertises that head.
+
+Tests: `crates/xone-node/tests/follow.rs` `new_block_is_imported_while_a_poll_is_in_flight` and
+`a_peer_that_is_not_yet_there_is_asked_again_soon`. Both fail on `46e8769`.
+
+### After
+
+`8a8fa1a` on `xone-rs-net2040-archive-h4`, binary swapped through its loop with the flags unchanged,
+04:32:07-04:47:07 UTC. The live node, still on `46e8769`, was sampled in the same window:
+
+| lag (blocks) | 0 | 1 | 2 | 3-5 | >5 | max |
+| --- | --- | --- | --- | --- | --- | --- |
+| h4, `8a8fa1a` (449) | 428 (95.3%) | 16 (3.6%) | 5 (1.1%) | 0 | 0 | 2 |
+| live, `46e8769` (444) | 427 (96.2%) | 7 (1.6%) | 9 (2.0%) | 1 (0.2%) | 0 | 3 |
+
+On h4, 98.9% of samples were at 0-1 blocks and none above 2. Head-timestamp lag was p50 1.7 s and
+p95 4.1 s; the maximum, 18.3 s, was the same on both nodes, a slow round of the chain itself. Of the
+365 single-block imports, the time from the header timestamp to the import was p50 0.27 s, p90 1.27 s,
+maximum 2.28 s. On the board, h4 sent 36 reports: 35 at 0-1 blocks, maximum 1.5. `xone-rs-net2040-h95`
+sent 20, all at 0-1. `geth-net2040-00ce` sent 17: 16 at 0-1, maximum 1.5.
+
+The old build followed as well in this window, so the comparison shows the failure is episodic. With
+`46e8769`, the 60 s set-asides take all pollable peers in turn, and lag then builds whenever the next
+block's sealer is not a direct peer. Both "before" windows show it: 31-32% at lag 0 and a maximum of
+23. With `8a8fa1a`, the same answers set a peer aside for 4 s. Polling never stops: there were 723 such
+set-asides in the window and no lag above 2.
+
+Restart at the head: SIGTERM at 04:50:53.6 UTC. The node stopped and wrote its checkpoint at once,
+the loop started it 5 s later, and it was following from 770,548 at 04:50:59.0. Its first RPC answer,
+6.3 s after the SIGTERM, was 770,550, equal to the archive. The next 1 s samples were at lag 0, with
+one at 1.
+
+Still open: `eth_syncing` on `8a8fa1a` stays an object. The caught-up proof needs the polled peer to
+advertise our head, and GP5 peers' stale announcements rarely do. `6ea75ea` accepts an advertised head
+that we already hold; keep that when the branches meet.
+
 ## What is not covered
 
 * The history still holds every header and the transaction index in memory (about 7 GB at 762,000

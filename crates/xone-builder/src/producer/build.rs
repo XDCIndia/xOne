@@ -225,7 +225,16 @@ pub struct Roots {
     pub receipt_root: B256,
     pub bloom: Bloom,
     pub gas_used: u64,
+    /// From Amsterdam: the hash of the block access list the execution built.
+    pub bal_hash: Option<B256>,
 }
+
+/// geth `types.EmptyWithdrawalsHash` (`core/types/hashes.go:41`).
+const EMPTY_WITHDRAWALS_HASH: B256 =
+    alloy_primitives::b256!("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421");
+/// geth `types.EmptyRequestsHash` (`core/types/hashes.go:44`).
+const EMPTY_REQUESTS_HASH: B256 =
+    alloy_primitives::b256!("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
 
 impl From<&xone_executor::BlockOutcome> for Roots {
     fn from(o: &xone_executor::BlockOutcome) -> Self {
@@ -235,11 +244,16 @@ impl From<&xone_executor::BlockOutcome> for Roots {
             receipt_root: o.receipt_root,
             bloom: o.bloom,
             gas_used: o.gas_used,
+            bal_hash: o.bal_hash,
         }
     }
 }
 
-/// `Finalize`: the roots, and the empty uncle hash. Nothing else of the header changes.
+/// `Finalize`: the roots, and the empty uncle hash. From Amsterdam (the execution built a block access list)
+/// also geth `core.FillAmsterdamHeader` (`core/state_processor.go:789-809`, called by the worker after
+/// `Finalize`, `miner/xdpos_worker.go:693-702` and `:906-915`): the block access list hash and the canonical
+/// empty values of the fields before it, which `verifyNoUnsealedFields` requires (`consensus/XDPoS/xdpos.go:770-797`).
+/// The body of such a block carries an empty withdrawals list (`types.Withdrawals{}`).
 pub fn assemble(mut h: Header, r: &Roots) -> Header {
     h.state_root = r.state_root;
     h.tx_root = r.tx_root;
@@ -247,5 +261,47 @@ pub fn assemble(mut h: Header, r: &Roots) -> Header {
     h.bloom = r.bloom;
     h.gas_used = r.gas_used;
     h.uncle_hash = EMPTY_UNCLE_HASH;
+    if let Some(bal) = r.bal_hash {
+        h.withdrawals_hash = Some(EMPTY_WITHDRAWALS_HASH);
+        h.blob_gas_used = Some(0);
+        h.excess_blob_gas = Some(0);
+        h.parent_beacon_root = Some(B256::ZERO);
+        h.requests_hash = Some(EMPTY_REQUESTS_HASH);
+        h.block_access_list_hash = Some(bal);
+    }
     h
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn roots(bal_hash: Option<B256>) -> Roots {
+        Roots {
+            state_root: B256::with_last_byte(1),
+            tx_root: B256::with_last_byte(2),
+            receipt_root: B256::with_last_byte(3),
+            bloom: Bloom::ZERO,
+            gas_used: 0,
+            bal_hash,
+        }
+    }
+
+    /// An Amsterdam block carries the access list hash and geth's canonical empty values before it
+    /// (`core.FillAmsterdamHeader`); without them every node refused the block (`verifyNoUnsealedFields`, gate D
+    /// devnet from block 58). A block before Amsterdam keeps all of them unset.
+    #[test]
+    fn amsterdam_fields_follow_fill_amsterdam_header() {
+        let bal = B256::with_last_byte(9);
+        let h = assemble(Header::default(), &roots(Some(bal)));
+        assert_eq!(h.block_access_list_hash, Some(bal));
+        assert_eq!(h.withdrawals_hash, Some(EMPTY_WITHDRAWALS_HASH));
+        assert_eq!((h.blob_gas_used, h.excess_blob_gas), (Some(0), Some(0)));
+        assert_eq!(h.parent_beacon_root, Some(B256::ZERO));
+        assert_eq!(h.requests_hash, Some(EMPTY_REQUESTS_HASH));
+        assert_eq!(h.slot_number, None);
+        let old = assemble(Header::default(), &roots(None));
+        assert!(old.withdrawals_hash.is_none() && old.block_access_list_hash.is_none());
+        assert!(old.requests_hash.is_none() && old.parent_beacon_root.is_none());
+    }
 }

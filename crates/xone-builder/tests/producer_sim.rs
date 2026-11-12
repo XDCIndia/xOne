@@ -248,6 +248,7 @@ fn three_validators_only_the_leader_proposes_and_every_proposal_commits() {
                 receipt_root: B256::with_last_byte(3),
                 bloom: Bloom::ZERO,
                 gas_used: 0,
+                bal_hash: None,
             },
         );
         let sealed = seal_v2::seal(h.clone(), round, &mut n.unit).unwrap();

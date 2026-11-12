@@ -128,13 +128,29 @@ pub fn build(
     let nh = net_svc.handle();
     let rth = nh.runtime();
     let pool = Arc::new(pool::PoolShared::new(core.clone())?);
-    let chain_svc =
-        chain::ChainService::new(core.clone(), rth.clone(), nh.clone(), pool.clone(), events);
+    // the producer's BFT machine reads the votes, timeouts and SyncInfos the follower receives
+    let (bft_tx, bft_rx) = std::sync::mpsc::channel();
+    let chain_svc = chain::ChainService::new(
+        core.clone(),
+        rth.clone(),
+        nh.clone(),
+        pool.clone(),
+        events,
+        producer_plan.is_some().then_some(bft_tx),
+    );
     let progress = chain_svc.progress.clone();
     let pool_svc = pool::PoolService::new(pool.clone(), rth.clone());
     let producer_svc = producer_plan
         .map(|p| {
-            producer::ProducerService::new(&p, cfg, core.clone(), pool.clone(), nh.peers.clone())
+            producer::ProducerService::new(
+                &p,
+                cfg,
+                core.clone(),
+                pool.clone(),
+                nh.peers.clone(),
+                bft_rx,
+                progress.clone(),
+            )
         })
         .transpose()?;
     let stats = Arc::new(stats::NodeStats {
