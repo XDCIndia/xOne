@@ -965,3 +965,35 @@ fn preimages(d: &mut Drv<'_>, want: &BTreeSet<B256>) -> R<HashMap<B256, Bytes>> 
     }
     Ok(got)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// What `chain.rs` serves for `GetReceipts` is what the snap client reads back: a legacy
+    /// receipt as its list, a typed one inside an RLP string.
+    #[test]
+    fn receipts_round_trip_through_the_wire() {
+        let legacy = Receipt {
+            tx_type: 0,
+            post_state_or_status: vec![1u8].into(),
+            cumulative_gas_used: 21_000,
+            logs: vec![],
+        };
+        let typed = Receipt {
+            tx_type: 2,
+            post_state_or_status: Bytes::new(),
+            cumulative_gas_used: 42_000,
+            logs: vec![],
+        };
+        let enc: Vec<Bytes> = [legacy, typed]
+            .iter()
+            .map(|r| Bytes::from(r.encode_consensus()))
+            .collect();
+        let wire = super::super::chain::receipts_wire(&enc);
+        let raw: Raw =
+            alloy_rlp::decode_exact(alloy_rlp::encode(&wire)).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(receipts_of(&raw).unwrap_or_else(|e| panic!("{e}")), enc);
+        assert!(receipts_of(&Raw(vec![0x80].into())).is_err());
+    }
+}

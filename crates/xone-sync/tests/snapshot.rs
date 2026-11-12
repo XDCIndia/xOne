@@ -129,6 +129,17 @@ struct Fix {
 /// The chain: plain blocks up to S-1, then the V2 epoch switch S, the pivot S+1 and three blocks
 /// whose QCs commit it. `signer(i, digest)` is who signs the QC of proof header `i`.
 fn fixture(signer: Signer<'_>) -> Fix {
+    fixture_with(signer, false)
+}
+
+/// `withdrawals`: every header carries `withdrawalsHash` (the empty root) and every body an empty
+/// withdrawals list, as on net2040 after its Shanghai and Amsterdam rows.
+fn fixture_with(signer: Signer<'_>, withdrawals: bool) -> Fix {
+    let plain = |n: u64, parent: B256, root: B256| {
+        let mut h = plain(n, parent, root);
+        h.withdrawals_hash = withdrawals.then_some(EMPTY_ROOT_HASH);
+        h
+    };
     let spec = Network::Apothem.spec();
     let (flat, mut side) = state();
     let root = flat_root(&flat);
@@ -190,8 +201,12 @@ fn fixture(signer: Signer<'_>) -> Fix {
     }
     let mut store = MemStore::with_anchor(headers[0].clone(), flat.clone(), 64, 100_000);
     for h in &headers[1..] {
+        let body = Body {
+            withdrawals: withdrawals.then(Vec::new),
+            ..Body::default()
+        };
         let rec = Record {
-            block: Block::new(h.clone(), Body::default()),
+            block: Block::new(h.clone(), body),
             receipts: vec![],
             diff: Default::default(),
             aux: Default::default(),
@@ -1059,4 +1074,27 @@ mod property {
             }
         }
     }
+}
+
+/// A body with a withdrawals list (every post-Shanghai block of net2040) survives export and import:
+/// the import used to rebuild it without the list and refused it ("withdrawals missing in the body").
+#[test]
+fn a_body_with_withdrawals_round_trips() {
+    let ms = masters();
+    let f = fixture_with(&|_, d| ms[..7].iter().map(|k| sign(k, d)).collect(), true);
+    let file = exported(&f);
+    let pins = pins(&f);
+    let mut store = MemStore::empty(100_000);
+    let mut stage: Vec<u8> = vec![];
+    import(
+        &cfg(&f, &pins),
+        &mut Cursor::new(&file),
+        &mut stage,
+        &mut store,
+    )
+    .unwrap();
+    let (n, hash) = store.head();
+    assert_eq!(n, PIVOT);
+    let rec = store.record(hash).unwrap();
+    assert_eq!(rec.block.body.withdrawals, Some(vec![]));
 }

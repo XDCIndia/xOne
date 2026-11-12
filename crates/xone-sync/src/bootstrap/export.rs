@@ -171,6 +171,7 @@ pub fn export<S: Store, W: Write>(
             number: n,
             txs: rec.block.body.transactions.clone(),
             uncles: rec.block.body.uncles.clone(),
+            withdrawals: rec.block.body.withdrawals.clone(),
         });
         receipts.push(ReceiptsRow {
             number: n,

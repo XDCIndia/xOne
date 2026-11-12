@@ -70,6 +70,8 @@ pub fn snapshot(m: &ArgMatches) -> ExitCode {
                     profile: xone_node::Profile::of(net),
                     ..Default::default()
                 };
+                let marker = datadir.join(xone_node::datadir::MARKER);
+                let fresh = !marker.exists();
                 xone_node::datadir::prepare_chain(&cfg).map_err(|e| e.to_string())?;
                 let pins = s.get_one::<String>("pins").map(Path::new);
                 let d = import_datadir(
@@ -80,7 +82,14 @@ pub fn snapshot(m: &ArgMatches) -> ExitCode {
                     now(),
                     num(s, "max-age-cap", 7 * DAY)?,
                 )
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| {
+                    // a refused import leaves no chain marker it wrote; the staging prefix of an
+                    // interrupted one stays for the next run
+                    if fresh {
+                        let _ = std::fs::remove_file(&marker);
+                    }
+                    e.to_string()
+                })?;
                 let st = &d.stats;
                 println!(
                     "imported block {} {} root {}: {} accounts, {} slots, {} codes, {} headers, {} bodies, {} chunks, {} bytes in {:.1}s{}",

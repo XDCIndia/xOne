@@ -106,7 +106,7 @@ struct Follower {
 
 /// One block's receipts as eth carries them: a list whose items are the consensus encodings, a
 /// typed receipt wrapped in an RLP string (the same rule as a transaction, [`to_wire`]).
-fn receipts_wire(receipts: &[alloy_primitives::Bytes]) -> Raw {
+pub(crate) fn receipts_wire(receipts: &[alloy_primitives::Bytes]) -> Raw {
     let items: Vec<Raw> = receipts.iter().map(to_wire).collect();
     Raw(alloy_rlp::encode(&items).into())
 }

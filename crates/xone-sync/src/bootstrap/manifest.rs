@@ -73,11 +73,17 @@ pub struct SideRow {
     pub signs: Vec<SignsRow>,
 }
 
+/// A block body of the window. `withdrawals` is the body's list from the fork that adds
+/// `withdrawalsHash` to the header (Shanghai; every post-Amsterdam net2040 block has it, empty),
+/// each item the withdrawal's RLP inside a string; a row written before the field existed decodes
+/// as `None`.
 #[derive(Debug, Clone, PartialEq, Eq, RlpEncodable, RlpDecodable)]
+#[rlp(trailing)]
 pub struct BodyRow {
     pub number: u64,
     pub txs: Vec<Bytes>,
     pub uncles: Vec<Header>,
+    pub withdrawals: Option<Vec<Bytes>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, RlpEncodable, RlpDecodable)]

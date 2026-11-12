@@ -42,6 +42,7 @@ impl Profile {
             Network::Mainnet => Some(Self::Mainnet),
             Network::Apothem => Some(Self::Apothem),
             Network::Devnet => Some(Self::Devnet),
+            Network::Net2040 => Some(Self::Net2040),
             _ => None,
         }
     }
@@ -559,6 +560,18 @@ mod tests {
                 "{t}"
             );
         }
+    }
+
+    /// Every built-in network with a profile maps back to itself: `snapshot import --network net2040`
+    /// once initialised the datadir for mainnet (no Net2040 arm).
+    #[test]
+    fn every_profile_round_trips_its_network() {
+        for n in Network::ALL {
+            if let Some(p) = Profile::of(n) {
+                assert_eq!(p.network(), n);
+            }
+        }
+        assert_eq!(Profile::of(Network::Net2040), Some(Profile::Net2040));
     }
 
     #[test]
