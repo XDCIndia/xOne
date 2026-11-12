@@ -20,6 +20,8 @@
 
 200 real Apothem V2 blocks (with an epoch switch) rebuilt to the canonical hash. Mutant: a wrong round in `extraData`. Safety mutants (`tests/producer_mutants.rs`, `tests/producer_unit.rs`): a round proposed twice (guard off, record ignored), signing before persisting.
 
+From Amsterdam the header carries the block access list hash and the canonical empty withdrawals, blob gas, beacon root and requests values, and the body an empty withdrawals list (`core.FillAmsterdamHeader`, `core/state_processor.go:789-809`; `miner/xdpos_worker.go:693-702`; checked by `verifyNoUnsealedFields`, `consensus/XDPoS/xdpos.go:770-797`). The genesis block counts as a V1 epoch switch in the V2 reward walk (`xdpos_api.go:228-235`), so a chain that switches at its first checkpoint has a first reward window.
+
 ## Not covered
 
-The timeout path across epoch boundaries (`epoch_of_round` answers with the last known epoch), the reward window of the second V2 epoch on a chain with fewer than two V1 checkpoints (`reward::v2::locate`), the producer tick budget with a cold state cache, `Stop()` inside a long execution (a stop is honoured between transactions and phases).
+The timeout path across epoch boundaries (`epoch_of_round` answers with the last known epoch), the producer tick budget with a cold state cache, `Stop()` inside a long execution (a stop is honoured between transactions and phases).

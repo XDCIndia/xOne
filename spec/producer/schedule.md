@@ -21,6 +21,8 @@
 
 `tests/producer_schedule.rs`: 200 real Apothem V1 blocks (each creator is in a slot the rule allows, difficulty equal, 0 out of turn in that window) and hand vectors of the hop wait; 200 real Apothem V2 blocks (the coinbase leads its round in the list of its epoch, across the first epoch switch; the already-mined and not-leader answers). `tests/producer_sim.rs`: three validators through the XB-15 machine, only the leader proposes. Mutants: mined-round guard off, any masternode may lead (V2), no out-of-turn wait (V1).
 
+A node that is not synced proposes nothing (`miner/xdpos_worker.go:383-387`): a peer, the follower's caught-up proof once since the start, and no peer announcing a block above the head (gate D rehearsal: a restart as the next leader sealed to no peer).
+
 ## Not covered
 
-The leader-side sibling proposal after a timeout (the leader builds on the highest-QC block, not the head): the producer builds on the block of the highest QC, but only when it is the chain head; the node executes no side branches yet. A validator that joins mid-V2 (xOneGo #718) is covered by the machine's chain facts, not by a devnet run.
+The leader-side sibling proposal is built for one level only: when the head has no QC and the highest QC is for its parent, the leader takes the head off (`Core::unwind_to`, never below the committed block) and builds on the QC block (`engine_v2/engine.go:3294-3319`); geth keeps its head as a side block instead (`core/blockchain.go:2419-2442`), xone executes on its head only. A deeper uncertified tail is not unwound by the producer (the follower's branch rule adopts a longer certified branch). A validator that joins mid-V2 (xOneGo #718) is covered by the machine's chain facts, not by a devnet run.
