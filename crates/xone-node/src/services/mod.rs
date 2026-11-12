@@ -7,6 +7,8 @@ pub mod pool;
 pub mod producer;
 pub mod rpc;
 pub mod safety_file;
+pub mod snap;
+pub mod snapsync;
 pub mod stats;
 pub mod store;
 
@@ -42,6 +44,25 @@ pub struct Built {
     pub core: std::sync::Arc<core::Core>,
 }
 
+/// `--syncmode snap` on an empty datadir: fills it from peers (`snapsync`) before [`build`] opens
+/// it. On a datadir that holds a chain, and in full mode, it does nothing.
+pub fn snap_sync(
+    cfg: &crate::Config,
+    spec: &xone_chainspec::ChainSpec,
+    genesis: &xone_chainspec::Genesis,
+    stamp: &str,
+    stop: &crate::lifecycle::Shutdown,
+) -> Result<(), snapsync::SnapSyncError> {
+    if cfg.sync.mode != "snap" {
+        return Ok(());
+    }
+    if !snapsync::is_fresh(&cfg.datadir).map_err(snapsync::SnapSyncError::Io)? {
+        eprintln!("snap: the datadir holds a chain: continuing it (snap sync fills an empty datadir only)");
+        return Ok(());
+    }
+    snapsync::run(cfg, spec, genesis, stamp, stop)
+}
+
 /// The node of the config: net, chain, pool, producer (with `--mine`) and rpc, in that order (stopped in reverse, each with
 /// its deadline). `stamp` is the build's one version string (`xone --version`): it is the p2p
 /// client name and `web3_clientVersion`. A restart replays the stored chain here, before the
@@ -63,18 +84,23 @@ pub fn build(
         .transpose()
         .map_err(|e| e.to_string())?;
 
-    let core = Arc::new(
+    let open = |minimal: bool| {
         core::Core::open_with(
-            spec,
+            spec.clone(),
             genesis,
             &cfg.datadir.join("xone"),
             CHECKPOINT_EVERY,
-            cfg.sync.minimal,
+            minimal,
             // a node that signs commits every block to the device before it goes on
             producer_plan.is_none(),
         )
-        .map_err(|e| e.to_string())?,
-    );
+    };
+    // a snap-synced datadir is anchored: it runs as a minimal node from its pivot
+    let core = match open(cfg.sync.minimal) {
+        Err(core::CoreError::Anchored) if cfg.sync.mode == "snap" => open(true),
+        r => r,
+    };
+    let core = Arc::new(core.map_err(|e| e.to_string())?);
     if core.genesis.to_string() != marker.genesis_hash {
         return Err("the genesis hash of the node differs from the chain marker".into());
     }
@@ -162,7 +188,7 @@ pub fn build(
             crate::observe::ethstats::EthstatsCfg {
                 url: url.clone(),
                 allow_plaintext: false,
-                identity: identity(cfg, marker, stamp),
+                identity: identity(cfg, marker, stamp, core.minimal),
             },
             stats.clone(),
             stats,
@@ -180,6 +206,7 @@ fn identity(
     cfg: &crate::Config,
     marker: &crate::datadir::Marker,
     stamp: &str,
+    anchored: bool,
 ) -> crate::observe::ethstats::Identity {
     crate::observe::ethstats::Identity {
         node: stamp.to_owned(),
@@ -189,7 +216,12 @@ fn identity(
         protocol: "eth/63, xdpos/100".into(),
         os: std::env::consts::OS.into(),
         os_v: std::env::consts::ARCH.into(),
-        sync_mode: "full".into(),
+        // a node started with snap whose datadir is anchored got its state by snap sync
+        sync_mode: if cfg.sync.mode == "snap" && anchored {
+            "snap".into()
+        } else {
+            "full".into()
+        },
         gc_mode: cfg.sync.gcmode.clone(),
         state_scheme: "hash".into(),
     }

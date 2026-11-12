@@ -6,7 +6,7 @@
 //! No I/O and no clock: `now_ms` is an argument. A node that has no snapshot has no [`Snapshot`],
 //! so it has no [`Server`] and must not advertise snap/1 (there is no stub that answers empty).
 
-use alloy_primitives::{keccak256, Bytes, B256, B512, KECCAK256_EMPTY, U256};
+use alloy_primitives::{keccak256, Address, Bytes, B256, B512, KECCAK256_EMPTY, U256};
 use alloy_trie::{HashBuilder, Nibbles, EMPTY_ROOT_HASH};
 use std::collections::{BTreeMap, HashMap};
 use xone_state::{flat::FlatRead, provider::StateProvider, Account, FlatWrite};
@@ -18,6 +18,7 @@ use crate::{
         SOFT_RESPONSE_LIMIT,
     },
     mpt::{from_compact, Trie},
+    preimage::{GetPreimages, Preimages, MAX_PREIMAGES},
 };
 
 /// geth `stateLookupSlack` (`handler.go:41`): a storage response may exceed `bytes` by 10 % so
@@ -40,6 +41,9 @@ pub struct Snapshot {
     storage: HashMap<B256, Slots>,
     /// Contract code by code hash; the code table of the node.
     pub codes: BTreeMap<B256, Bytes>,
+    /// The address or slot behind each hashed key, for xpre/1 ([`crate::preimage`]). Empty for a
+    /// snapshot built from hashed data.
+    preimages: HashMap<B256, Bytes>,
 }
 
 #[derive(Debug)]
@@ -82,7 +86,34 @@ impl Snapshot {
             account_trie,
             storage: tries,
             codes,
+            preimages: HashMap::new(),
         }
+    }
+
+    /// From plain rows (`xone_sync::store::StateRows`): keys are hashed here and their preimages
+    /// kept for xpre/1.
+    pub fn from_rows(
+        accounts: &[(Address, Account)],
+        storage: &[(Address, B256, U256)],
+        codes: BTreeMap<B256, Bytes>,
+    ) -> Self {
+        let mut pre = HashMap::new();
+        let mut accts = BTreeMap::new();
+        for (a, acc) in accounts {
+            let h = keccak256(a);
+            pre.insert(h, Bytes::copy_from_slice(a.as_slice()));
+            accts.insert(h, acc.clone());
+        }
+        let mut slots: BTreeMap<B256, BTreeMap<B256, U256>> = BTreeMap::new();
+        for (a, k, v) in storage {
+            let h = keccak256(k);
+            pre.entry(h)
+                .or_insert_with(|| Bytes::copy_from_slice(k.as_slice()));
+            slots.entry(keccak256(a)).or_default().insert(h, *v);
+        }
+        let mut s = Self::from_hashed(accts, &slots, codes);
+        s.preimages = pre;
+        s
     }
 
     /// From address-keyed flat tables: addresses and slots are hashed here.
@@ -379,6 +410,20 @@ impl Server {
         &self.snap
     }
 
+    /// xpre/1: the preimages the snapshot knows, in request order, at most [`MAX_PREIMAGES`]
+    /// lookups. Small and bounded by count, so not admitted against the Q15 byte budget.
+    pub fn preimages(&self, req: &GetPreimages) -> Preimages {
+        Preimages {
+            id: req.id,
+            preimages: req
+                .hashes
+                .iter()
+                .take(MAX_PREIMAGES)
+                .filter_map(|h| self.snap.preimages.get(h).cloned())
+                .collect(),
+        }
+    }
+
     /// Opens a session for `peer`, or says which bound is hit. The rate is a bucket of one
     /// second of bytes that refills in proportion to `now_ms`.
     pub fn admit(&mut self, peer: B512, now_ms: u64) -> Result<(), Reject> {
@@ -447,7 +492,9 @@ impl Server {
     }
 }
 
-fn empty_reply(req: &Message) -> Option<Message> {
+/// The empty answer to a request (`None` for a response): what a node sends for a root it does not
+/// hold, as geth does.
+pub fn empty_reply(req: &Message) -> Option<Message> {
     let id = req.id();
     Some(match req {
         Message::GetAccountRange(_) => Message::AccountRange(AccountRange {

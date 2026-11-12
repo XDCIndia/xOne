@@ -52,8 +52,11 @@ use super::{
 /// rewrite of the segment files every 256 blocks, not every block.
 pub const PRUNE_SLACK: u64 = 256;
 
-/// Blocks above the anchor whose state can be opened (RPC reads at a block, unwind window).
-pub const RETENTION: u64 = 1024;
+/// Blocks above the anchor whose state can be opened (RPC reads at a block, unwind window, the roots
+/// a node serves over snap/1). 4096: a snap client needs the 0x88 state of every gap block up to
+/// `3E + G - 1` (3,149 on every XDC network) below its pivot, and its pivot 64 below the head of the
+/// node that serves it (ADR-005 amendment 2026-11-12, `spec/snap/pivot.md`).
+pub const RETENTION: u64 = 4096;
 
 /// ponytail: group commit of a node that does not sign. The block commits of this interval become
 /// steady together: one sync of each touched segment chunk, the segment directories and MDBX, instead

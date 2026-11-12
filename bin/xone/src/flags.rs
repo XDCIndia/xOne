@@ -68,11 +68,19 @@ pub const FLAGS: &[Flag] = &[
     ),
     f(
         "syncmode",
-        Some("full"),
+        Some("full|snap|fast"),
         "full",
-        "full",
-        "Blockchain sync mode. Only full is implemented: snap and fast are refused with a typed error (no snap/1 state download in this build).",
+        "snap",
+        "Blockchain sync mode. full executes from genesis. snap, on an empty datadir, downloads the state at a pivot over snap/1 with every range proven, the preimages over xpre/1 (xOne peers only), installs it as an anchored datadir and executes from pivot+1 (spec/snap/pivot.md); on a datadir that holds a chain it continues that chain. fast is an alias of snap, as in geth-XDC.",
         "flags.go:299 ; geth,xone",
+    ),
+    f(
+        "snap.pins",
+        P,
+        "unset",
+        "pins.txt",
+        "Pins file for --syncmode snap (`<number> <0x hash>` per line): the pivot's epoch-switch header (or the pivot) must be in it. Unset: two peers must serve the same switch header. Recommended beyond test networks.",
+        "not in geth-XDC at the pin; XB-17",
     ),
     f(
         "gcmode",

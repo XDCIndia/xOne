@@ -495,7 +495,7 @@ fn assemble(
         let body = Body {
             transactions: b.txs,
             uncles: b.uncles,
-            withdrawals: None,
+            withdrawals: b.withdrawals,
         };
         if number > 0 {
             let bad = |e: &dyn std::fmt::Display| ImportError::Block {

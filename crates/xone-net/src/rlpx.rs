@@ -15,8 +15,8 @@ use crate::{eth, NetError};
 
 pub use reth_network_peers::PeerId;
 
-/// Message codes below this belong to the base p2p protocol (`p2p/peer.go:43`). With `eth` the
-/// only capability we offer, eth codes start here.
+/// Message codes below this belong to the base p2p protocol (`p2p/peer.go:43`). `eth` sorts first
+/// of the capabilities we offer, so eth codes start here.
 pub const BASE_LEN: u64 = 16;
 /// Base protocol version; snappy is on from 5 (`p2p/peer.go:42,46`).
 pub const P2P_VERSION: u64 = 5;
@@ -48,6 +48,59 @@ impl Cap {
     }
 }
 
+/// A capability offered next to `eth`. Its codes follow the eth codes in name order
+/// (`matchProtocols`, `p2p/peer.go:438-459`: sorted by name, each gets the next `Length` codes).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Sub {
+    /// snap/1, 8 messages (`eth/protocols/snap/protocol.go:45`).
+    Snap,
+    /// xpre/1, xOne's preimage extension (`spec/snap/preimages.md`): 2 messages. Not in geth;
+    /// a peer that does not offer it never sees its codes.
+    Xpre,
+}
+
+impl Sub {
+    /// In name order, which is the order of their codes.
+    pub const ALL: [Sub; 2] = [Sub::Snap, Sub::Xpre];
+
+    pub fn cap(self) -> Cap {
+        let name = match self {
+            Sub::Snap => "snap",
+            Sub::Xpre => "xpre",
+        };
+        Cap {
+            name: name.into(),
+            version: 1,
+        }
+    }
+
+    /// Number of message codes.
+    pub fn codes(self) -> u64 {
+        match self {
+            Sub::Snap => 8,
+            Sub::Xpre => 2,
+        }
+    }
+
+    /// Even codes are requests, odd codes their answers (snap/1 and xpre/1 alike).
+    pub fn is_request(code: u64) -> bool {
+        code.is_multiple_of(2)
+    }
+}
+
+/// The eth-relative first code of each capability both sides offer, after the eth codes.
+pub fn shared_subs(local: &[Cap], remote: &[Cap]) -> Vec<(Sub, u64)> {
+    let mut base = eth::codes::MESSAGE_COUNT;
+    let mut out = Vec::new();
+    for s in Sub::ALL {
+        let c = s.cap();
+        if local.contains(&c) && remote.contains(&c) {
+            out.push((s, base));
+            base += s.codes();
+        }
+    }
+    out
+}
 /// p2p Hello (`p2p/peer.go:60-67`). Fields after `id` are ignored on decode, as geth does, and
 /// are never sent.
 #[derive(Debug, Clone, PartialEq, Eq, RlpEncodable)]
@@ -228,6 +281,8 @@ pub struct Conn<Io> {
     pub hello: Hello,
     /// The shared eth version: 100 or 101.
     pub eth_version: u64,
+    /// The other shared capabilities and their first eth-relative code.
+    pub subs: Vec<(Sub, u64)>,
 }
 
 impl<Io: AsyncRead + AsyncWrite + Unpin> Conn<Io> {
@@ -280,6 +335,7 @@ impl<Io: AsyncRead + AsyncWrite + Unpin> Conn<Io> {
             io,
             snappy: hello.version >= P2P_VERSION,
             remote,
+            subs: shared_subs(&local.caps, &hello.caps),
             hello,
             eth_version,
         })
@@ -403,5 +459,23 @@ mod tests {
             Some(101)
         );
         assert_eq!(shared_eth(&h.caps, &[Cap::eth(63)]), None);
+    }
+
+    #[test]
+    fn subs_follow_eth_in_name_order() {
+        let ours = [Cap::eth(101), Sub::Snap.cap(), Sub::Xpre.cap()];
+        // geth: snap at 16 + 229, nothing else
+        let geth = [Cap::eth(101), Cap::eth(100), Sub::Snap.cap()];
+        assert_eq!(shared_subs(&ours, &geth), vec![(Sub::Snap, 229)]);
+        assert_eq!(
+            shared_subs(&ours, &ours),
+            vec![(Sub::Snap, 229), (Sub::Xpre, 237)]
+        );
+        // a peer with xpre and no snap puts xpre right after eth
+        assert_eq!(
+            shared_subs(&ours, &[Cap::eth(101), Sub::Xpre.cap()]),
+            vec![(Sub::Xpre, 229)]
+        );
+        assert!(shared_subs(&[Cap::eth(101)], &ours).is_empty());
     }
 }

@@ -544,3 +544,71 @@ async fn per_peer_queues_are_bounded() {
         DisconnectReason::SubprotocolError
     );
 }
+
+/// snap/1 and xpre/1 sit after the 229 eth codes in name order; a peer that shares only snap/1
+/// (geth) gets snap at 229 and never an xpre/1 frame; a request reaches the app as `Message::Sub`.
+#[tokio::test]
+async fn snap_and_xpre_codes_follow_eth() {
+    use xone_net::rlpx::Sub;
+    let (node, mut rx) = Peers::new(cfg(), key(1));
+    // an xOne peer: both capabilities
+    let mut caps = both();
+    caps.extend([Sub::Snap.cap(), Sub::Xpre.cap()]);
+    let (r, f) = join_with(&node, key(2), caps, 64 * 1024, |v| status(v, NET)).await;
+    let (xone, mut f) = (r.unwrap(), f.unwrap());
+    assert_eq!(f.conn.subs, vec![(Sub::Snap, 229), (Sub::Xpre, 237)]);
+    match next_event(&mut rx).await {
+        Event::Connected { subs, .. } => assert_eq!(subs, vec![Sub::Snap, Sub::Xpre]),
+        e => panic!("{e:?}"),
+    }
+    f.conn.send(229 + 2, b"\xc1\x01").await.unwrap(); // snap GetStorageRanges
+    f.conn.send(237, b"\xc1\x07").await.unwrap(); // xpre GetPreimages
+    let (_, m) = next_msg(&mut rx).await;
+    assert_eq!(
+        m,
+        Message::Sub {
+            sub: Sub::Snap,
+            code: 2,
+            body: vec![0xc1, 0x01].into()
+        }
+    );
+    let (_, m) = next_msg(&mut rx).await;
+    assert!(matches!(
+        m,
+        Message::Sub {
+            sub: Sub::Xpre,
+            code: 0,
+            ..
+        }
+    ));
+    node.send(
+        &xone,
+        Message::Sub {
+            sub: Sub::Xpre,
+            code: 1,
+            body: vec![0xc0].into(),
+        },
+    )
+    .unwrap();
+    assert_eq!(f.recv().await.unwrap(), (238, vec![0xc0]));
+
+    // a geth-like peer: snap/1 only
+    let mut caps = both();
+    caps.push(Sub::Snap.cap());
+    let (r, f) = join_with(&node, key(3), caps, 64 * 1024, |v| status(v, NET)).await;
+    let (geth, mut f) = (r.unwrap(), f.unwrap());
+    assert_eq!(f.conn.subs, vec![(Sub::Snap, 229)]);
+    for (sub, code) in [(Sub::Xpre, 1), (Sub::Snap, 3)] {
+        node.send(
+            &geth,
+            Message::Sub {
+                sub,
+                code,
+                body: vec![0xc0].into(),
+            },
+        )
+        .unwrap();
+    }
+    // the xpre frame was not sent: the first frame is the snap answer
+    assert_eq!(f.recv().await.unwrap(), (232, vec![0xc0]));
+}

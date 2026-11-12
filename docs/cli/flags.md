@@ -10,7 +10,8 @@ Source column: file:line in geth-XDC (`XDCIndia/go-ethereum` at `6fc8e8c2`; `fla
 |---|---|---|---|---|
 | `--datadir <path>` |  | xone-data | Data directory for the databases and the chain marker. | flags.go:93 ; geth,xone |
 | `--networkid <n>` |  | chain id of the profile or genesis | Network id. Must equal the chain id of the genesis in use. | flags.go:141 ; geth,xone |
-| `--syncmode full` |  | full | Blockchain sync mode. Only full is implemented: snap and fast are refused with a typed error (no snap/1 state download in this build). | flags.go:299 ; geth,xone |
+| `--syncmode full|snap|fast` |  | full | Blockchain sync mode. full executes from genesis. snap, on an empty datadir, downloads the state at a pivot over snap/1 with every range proven, the preimages over xpre/1 (xOne peers only), installs it as an anchored datadir and executes from pivot+1 (spec/snap/pivot.md); on a datadir that holds a chain it continues that chain. fast is an alias of snap, as in geth-XDC. | flags.go:299 ; geth,xone |
+| `--snap.pins <path>` |  | unset | Pins file for --syncmode snap (`<number> <0x hash>` per line): the pivot's epoch-switch header (or the pivot) must be in it. Unset: two peers must serve the same switch header. Recommended beyond test networks. | not in geth-XDC at the pin; XB-17 |
 | `--gcmode full` |  | full | State garbage collection mode. Only full is implemented: archive is refused with a typed error (state is pruned to the state window). | flags.go:338 |
 | `--syncfromblock <n>` |  | unset | First block to import; unset means from genesis. xone-defined. | not in geth-XDC at the pin; task list |
 | `--minimal` |  | false | Start from the anchor of an imported snapshot (`xone snapshot import`), keep only the retention window, never sync from genesis or read an archive. | not in geth-XDC at the pin; issue #38 |

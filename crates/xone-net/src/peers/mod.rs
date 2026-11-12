@@ -32,7 +32,7 @@ use xone_primitives::limits::{BoundedQueue, Offence, Overflow, Push};
 use crate::bft_gossip::{Gossip, Receive};
 use crate::eth::status62::Local;
 use crate::eth::{self, codes, BftMessage, Framing, Message, Status62};
-use crate::rlpx::{peer_id, Cap, Conn, DisconnectReason, LocalHello, PeerId};
+use crate::rlpx::{peer_id, Cap, Conn, DisconnectReason, LocalHello, PeerId, Sub};
 use crate::NetError;
 use score::{Scoreboard, Verdict};
 use trusted::{admit, Admission, Trust};
@@ -51,6 +51,9 @@ pub struct Config {
     /// eth versions we offer, best first. Default `[101, 100]`; `[100]` is for talking to (or
     /// testing against) a legacy-only peer. Only 100 and 101 exist here.
     pub versions: Vec<u64>,
+    /// Capabilities offered next to eth. Default: all of [`Sub::ALL`] (every node serves snap/1
+    /// and xpre/1 from its retained state window).
+    pub subs: Vec<Sub>,
     /// ADR-007 section 8: 50.
     pub max_peers: usize,
     /// TCP connect. xOneGo `b437ca9a`: 1 to 5 s so a dial cannot hold up shutdown.
@@ -84,6 +87,7 @@ impl Config {
             head: genesis,
             td: U256::ZERO,
             versions: vec![eth::v101::VERSION, eth::v100::VERSION],
+            subs: Sub::ALL.to_vec(),
             max_peers: 50,
             dial_timeout: Duration::from_secs(5),
             handshake_timeout: Duration::from_secs(5),
@@ -110,6 +114,8 @@ pub enum Event {
         /// The head hash of the peer's Status.
         head: B256,
         inbound: bool,
+        /// The capabilities next to eth that both sides offer.
+        subs: Vec<Sub>,
     },
     /// Any message except Status. A BFT message arrives once, after dedup; call
     /// [`Peers::relay_bft`] after verifying it.
@@ -201,8 +207,13 @@ impl Peers {
         };
         let hello = LocalHello {
             name: cfg.name.clone(),
-            // 101 first, then 100 (`protocol.go:52-61`)
-            caps: cfg.versions.iter().map(|v| Cap::eth(*v)).collect(),
+            // 101 first, then 100 (`protocol.go:52-61`), then snap/1 and xpre/1
+            caps: cfg
+                .versions
+                .iter()
+                .map(|v| Cap::eth(*v))
+                .chain(cfg.subs.iter().map(|s| s.cap()))
+                .collect(),
         };
         let peers = Self {
             key,
@@ -273,6 +284,7 @@ impl Peers {
         drop(slot);
         let id = conn.remote;
         let version = conn.eth_version;
+        let subs = conn.subs.clone();
         let inbound = remote.is_none();
         let (tx, rx) = mpsc::channel(self.cfg.outbound_queue.max(1));
         let mut conn = Some(conn);
@@ -317,6 +329,7 @@ impl Peers {
                                     rank,
                                     head,
                                 },
+                                subs,
                                 rx,
                             ));
                             st.peers.insert(id, Entry { seq, tx, task });
@@ -550,6 +563,8 @@ fn class(m: &Message) -> Option<Class> {
             Class::Response
         }
         Message::Transactions(_) => Class::Tx,
+        Message::Sub { code, .. } if Sub::is_request(*code) => Class::Request,
+        Message::Sub { .. } => Class::Response,
         Message::Opaque { code, .. } => match *code {
             codes::POOLED_TXS => Class::Tx,
             codes::GET_NODE_DATA => Class::Request,
@@ -580,10 +595,23 @@ impl Peers {
     fn on_message(
         &self,
         s: &Session,
+        subs: &[(Sub, u64)],
         code: u64,
         body: &[u8],
         q: &mut Queues,
     ) -> Result<(), DisconnectReason> {
+        // snap/1 and xpre/1: carried as bytes, decoded by the application
+        if let Some((sub, base)) = subs
+            .iter()
+            .find(|(sub, base)| code >= *base && code < base + sub.codes())
+        {
+            let msg = Message::Sub {
+                sub: *sub,
+                code: code - base,
+                body: body.to_vec().into(),
+            };
+            return self.enqueue(&s.id, q, msg);
+        }
         if codes::is_bft(code) {
             // Strict decode, size cap and dedup: malformed and oversized BFT messages are scored
             // and dropped (geth drops them silently), the session goes on until the threshold.
@@ -606,8 +634,13 @@ impl Peers {
     }
 }
 
-async fn session<Io>(mut conn: Conn<Io>, p: Peers, s: Session, mut rx: mpsc::Receiver<Cmd>)
-where
+async fn session<Io>(
+    mut conn: Conn<Io>,
+    p: Peers,
+    s: Session,
+    subs: Vec<(Sub, u64)>,
+    mut rx: mpsc::Receiver<Cmd>,
+) where
     Io: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     let _ = p
@@ -618,6 +651,7 @@ where
             rank: s.rank,
             head: s.head,
             inbound: s.inbound,
+            subs: subs.iter().map(|(x, _)| *x).collect(),
         })
         .await;
     let f = framing(s.version);
@@ -628,6 +662,15 @@ where
         tokio::select! {
             biased;
             cmd = rx.recv() => match cmd {
+                Some(Cmd::Send(Message::Sub { sub, code, body })) => {
+                    // a capability the peer does not share is never sent
+                    if let Some((_, base)) = subs.iter().find(|(x, _)| *x == sub) {
+                        match timeout(p.cfg.write_timeout, conn.send(base + code, &body)).await {
+                            Ok(Ok(())) => {}
+                            _ => break (DisconnectReason::NetworkError, true),
+                        }
+                    }
+                }
                 Some(Cmd::Send(m)) => {
                     if let Ok((code, body)) = eth::encode(f, &m) {
                         match timeout(p.cfg.write_timeout, conn.send(code, &body)).await {
@@ -652,7 +695,7 @@ where
                 last_rx = Instant::now();
                 match frame {
                     Ok((code, body)) => {
-                        if let Err(r) = p.on_message(&s, code, &body, &mut q) {
+                        if let Err(r) = p.on_message(&s, &subs, code, &body, &mut q) {
                             break (r, false);
                         }
                     }

@@ -4870,6 +4870,7 @@ dependencies = [
  "xone-primitives",
  "xone-rpc",
  "xone-signer",
+ "xone-snap",
  "xone-state",
  "xone-sync",
 ]

@@ -212,6 +212,49 @@ pub fn sync<P: PeerSource>(
     s.verify()
 }
 
+/// Slot hash to value.
+pub type Slots = BTreeMap<B256, U256>;
+
+/// One account and its whole storage at `root`, every range proven: the account by the range
+/// proof of its single key (an absent account is `Ok(None)`, proven absent), then its slots
+/// against its storage root, and the root of the slots computed again at the end. Used for the
+/// 0x88 state at a gap block (`spec/snap/pivot.md`), where only one contract is needed.
+pub fn account_at<P: PeerSource>(
+    src: &mut P,
+    cfg: &Config,
+    root: B256,
+    hash: B256,
+) -> Result<Option<(Account, Slots)>, SyncError> {
+    let mut store = StateStore::new(root);
+    store.progress.next_account = None;
+    let mut s = Syncer {
+        store: &mut store,
+        src,
+        cfg,
+        id: 0,
+        healed: HashMap::new(),
+    };
+    let mut found = None;
+    s.retry(|s| {
+        found = s.one_account(hash)?;
+        Ok(())
+    })?;
+    let Some(acc) = found else { return Ok(None) };
+    s.store.accounts.insert(hash, acc.clone());
+    s.storage()?;
+    // no entry: the account has no storage; the root check below holds either way
+    let slots: Slots = store.storage.remove(&hash).into_iter().flatten().collect();
+    let got =
+        xone_state::trie::root_of_hashed(slots.iter().map(|(k, v)| (*k, alloy_rlp::encode(v))));
+    if got != acc.storage_root {
+        return Err(SyncError::Root {
+            got,
+            want: acc.storage_root,
+        });
+    }
+    Ok(Some((acc, slots)))
+}
+
 fn inc(h: B256) -> Option<B256> {
     U256::from_be_bytes(h.0)
         .checked_add(U256::from(1u8))
@@ -316,6 +359,42 @@ impl<P: PeerSource> Syncer<'_, P> {
         self.store.accounts.extend(accounts);
         self.store.progress.next_account = keys.last().filter(|_| more).and_then(|k| inc(*k));
         Ok(())
+    }
+
+    /// The account at `hash` alone: a range from `hash` to `hash`, proven.
+    fn one_account(&mut self, hash: B256) -> Result<Option<Account>, Fault> {
+        let (root, bytes) = (self.store.progress.root, self.cfg.request_bytes);
+        let Message::AccountRange(r) = self.ask(|id| {
+            Message::GetAccountRange(GetAccountRange {
+                id,
+                root,
+                origin: hash,
+                limit: hash,
+                bytes,
+            })
+        })?
+        else {
+            return Err(Fault::Bad("not an AccountRange"));
+        };
+        if r.accounts.is_empty() && r.proof.is_empty() {
+            return Err(PeerError::Unavailable.into());
+        }
+        if r.proof.len() > MAX_PROOF_NODES {
+            return Err(Fault::Bad("too many proof nodes"));
+        }
+        let mut accounts = Vec::with_capacity(r.accounts.len());
+        for a in &r.accounts {
+            let acc = Account::from_slim_rlp(&a.body).map_err(|_| Fault::Bad("slim account"))?;
+            accounts.push((a.hash, acc));
+        }
+        let keys: Vec<B256> = accounts.iter().map(|(h, _)| *h).collect();
+        let values: Vec<Bytes> = accounts.iter().map(|(_, a)| a.rlp().into()).collect();
+        verify_range(root, hash, &keys, &values, &r.proof)?;
+        Ok(accounts
+            .into_iter()
+            .next()
+            .filter(|(h, _)| *h == hash)
+            .map(|(_, a)| a))
     }
 
     // ---- storage

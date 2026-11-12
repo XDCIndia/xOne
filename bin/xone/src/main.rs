@@ -119,6 +119,14 @@ fn start(cfg: &Config) -> ExitCode {
     if let Err(e) = shutdown.install_signals() {
         return fail(e);
     }
+    match services::snap_sync(cfg, &spec, &genesis, stamp(), &shutdown) {
+        Ok(()) => {}
+        Err(services::snapsync::SnapSyncError::Stopped) => {
+            println!("stopped during snap sync; the datadir is still empty");
+            return ExitCode::SUCCESS;
+        }
+        Err(e) => return fail(format!("snap sync: {e}")),
+    }
     let mut node = match services::build(cfg, &marker, spec, &genesis, stamp()) {
         Ok(b) => b.node,
         Err(e) => return fail(e),

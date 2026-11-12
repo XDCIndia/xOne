@@ -26,15 +26,18 @@ use std::{
 use alloy_primitives::B256;
 use tokio::{
     runtime::Handle,
-    sync::{mpsc::Receiver, watch},
+    sync::{
+        mpsc::{self, Receiver},
+        watch,
+    },
     task::JoinHandle,
     time::{interval, timeout, Instant},
 };
 use xone_consensus::verify::Body;
 use xone_net::{
-    eth::{BftMessage, BlockBody, GetHeaders, Message, Origin},
+    eth::{BftMessage, BlockBody, GetHeaders, Message, Origin, Raw},
     peers::{Event, Peers},
-    rlpx::PeerId,
+    rlpx::{PeerId, Sub},
 };
 use xone_primitives::Header;
 use xone_sync::chain::insert::Outcome;
@@ -44,6 +47,7 @@ use super::{
     from_wire,
     net::NetHandle,
     pool::PoolShared,
+    snap::{Request, SnapServer},
     to_wire,
 };
 use crate::lifecycle::{Service, ServiceError};
@@ -129,6 +133,8 @@ struct Follower {
     banned: HashMap<PeerId, Instant>,
     next_id: u64,
     inflight: Option<Inflight>,
+    /// Requests of snap/1 and xpre/1, to the [`SnapServer`] task.
+    snap: mpsc::Sender<Request>,
     /// Votes, timeouts and SyncInfos for the producer's BFT machine (`--mine` only).
     bft: Option<Bft>,
 }
@@ -136,7 +142,14 @@ struct Follower {
 /// Where the follower hands the BFT messages of its peers: the producer verifies them, then relays them.
 pub type Bft = std::sync::mpsc::Sender<(PeerId, BftMessage)>;
 
-fn to_body(b: BlockBody) -> (Body, usize) {
+/// One block's receipts as eth carries them: a list whose items are the consensus encodings, a
+/// typed receipt wrapped in an RLP string (the same rule as a transaction, [`to_wire`]).
+pub(crate) fn receipts_wire(receipts: &[alloy_primitives::Bytes]) -> Raw {
+    let items: Vec<Raw> = receipts.iter().map(to_wire).collect();
+    Raw(alloy_rlp::encode(&items).into())
+}
+
+pub(crate) fn to_body(b: BlockBody) -> (Body, usize) {
     let n = b.transactions.len();
     (
         Body {
@@ -537,6 +550,23 @@ impl Follower {
                         .collect(),
                 }
             }
+            Message::GetReceipts { id, hashes, .. } => {
+                let found: Vec<_> = hashes
+                    .iter()
+                    .take(128)
+                    .filter_map(|x| Some((h.number_of(*x)?, *x)))
+                    .collect();
+                drop(h);
+                Message::Receipts {
+                    id: *id,
+                    last_incomplete: false,
+                    per_block: found
+                        .into_iter()
+                        .filter_map(|(n, x)| self.core.records(n, x))
+                        .map(|(_, r)| receipts_wire(&r))
+                        .collect(),
+                }
+            }
             _ => return,
         };
         // a full queue of the peer drops the answer; it asks again
@@ -611,8 +641,14 @@ impl Follower {
                         let _ = tx.send((peer, m));
                     }
                 }
-                m @ (Message::GetBlockHeaders { .. } | Message::GetBlockBodies { .. }) => {
+                m @ (Message::GetBlockHeaders { .. }
+                | Message::GetBlockBodies { .. }
+                | Message::GetReceipts { .. }) => {
                     self.serve(&peer, &m);
+                }
+                Message::Sub { sub, code, body } if Sub::is_request(code) => {
+                    // a full queue drops the request; the peer times out and asks again
+                    let _ = self.snap.try_send((peer, sub, code, body));
                 }
                 _ => {}
             },
@@ -697,7 +733,11 @@ impl Service for ChainService {
             .events
             .take()
             .ok_or_else(|| ServiceError("chain service restarted".into()))?;
+        let (snap, rx) = mpsc::channel(64);
+        self.rt
+            .spawn(SnapServer::new(self.core.clone(), self.net.peers.clone()).run(rx));
         let f = Follower {
+            snap,
             core: self.core.clone(),
             peers: self.net.peers.clone(),
             pool: self.pool.clone(),
