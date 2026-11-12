@@ -53,7 +53,7 @@ fn malformed_and_unsupported_inputs_are_typed() {
     ));
     assert!(matches!(
         m(&json.replace(r#""c":1000"#, r#""c":4000000000"#)),
-        KeystoreError::Malformed(_)
+        KeystoreError::ResourcePolicy(_)
     ));
     // Flip one ciphertext nibble: the MAC fails, reported as a wrong password.
     let ct = json.split(r#""ciphertext":""#).nth(1).unwrap();
@@ -70,7 +70,7 @@ fn malformed_and_unsupported_inputs_are_typed() {
         r#""kdf":"pbkdf2","kdfparams":{"c":1000,"#,
         r#""kdf":"scrypt","kdfparams":{"n":1073741824,"r":8,"p":1,"#,
     );
-    assert!(matches!(m(&scrypt), KeystoreError::Malformed(_)));
+    assert!(matches!(m(&scrypt), KeystoreError::ResourcePolicy(_)));
 }
 
 #[test]
@@ -213,5 +213,97 @@ fn remote_refuses_a_stale_fencing_token() {
             presented: FencingToken(5),
             current: FencingToken(6)
         }
+    );
+}
+
+/// Hostile keystore-v3 files (#61): each is refused with its typed error, quickly (no KDF runs for the
+/// shape and cost refusals) and without a signer.
+#[test]
+fn hostile_keystores_are_refused_before_any_derivation() {
+    let json = keystore_json(&random_key(), "p");
+    let p = pw("p");
+    let t = std::time::Instant::now();
+    let m = |s: &str| decrypt(s.as_bytes(), &p).unwrap_err();
+    // oversized file
+    let big = format!("{json}{}", " ".repeat(70_000));
+    assert!(matches!(m(&big), KeystoreError::ResourcePolicy(_)));
+    // absurd scrypt N, and a cost that overflows u64
+    let scrypt = |kp: &str| {
+        json.replace(
+            r#""kdf":"pbkdf2","kdfparams":{"c":1000,"#,
+            &format!(r#""kdf":"scrypt","kdfparams":{{{kp},"#),
+        )
+    };
+    assert!(matches!(
+        m(&scrypt(r#""n":1099511627776,"r":8,"p":1"#)),
+        KeystoreError::ResourcePolicy(_)
+    ));
+    assert!(matches!(
+        m(&scrypt(
+            r#""n":4611686018427387904,"r":4611686018427387904,"p":1"#
+        )),
+        KeystoreError::ResourcePolicy(_)
+    ));
+    assert!(matches!(
+        m(&scrypt(r#""n":3,"r":8,"p":1"#)),
+        KeystoreError::Malformed(_)
+    ));
+    // negative and fractional numbers
+    assert!(matches!(
+        m(&scrypt(r#""n":-262144,"r":8,"p":1"#)),
+        KeystoreError::Malformed(_)
+    ));
+    assert!(matches!(
+        m(&scrypt(r#""n":262144.5,"r":8,"p":1"#)),
+        KeystoreError::Malformed(_)
+    ));
+    // unknown cipher
+    assert!(matches!(
+        m(&json.replace("aes-128-ctr", "aes-256-gcm")),
+        KeystoreError::UnsupportedCipher(_)
+    ));
+    // IV, ciphertext and MAC lengths, before the KDF
+    let field = |name: &str| {
+        let tail = json.split(&format!(r#""{name}":""#)).nth(1).unwrap();
+        tail[..tail.find('"').unwrap()].to_owned()
+    };
+    for (name, cut) in [("iv", 2), ("ciphertext", 2), ("mac", 2)] {
+        let v = field(name);
+        let shorter = &v[..v.len() - cut];
+        let longer = format!("{v}00");
+        for bad in [shorter.to_owned(), longer] {
+            let j = json.replacen(
+                &format!(r#""{name}":"{v}""#),
+                &format!(r#""{name}":"{bad}""#),
+                1,
+            );
+            assert!(matches!(m(&j), KeystoreError::Malformed(_)), "{name}");
+        }
+        let empty = json.replacen(&format!(r#""{name}":"{v}""#), &format!(r#""{name}":"""#), 1);
+        assert!(
+            matches!(m(&empty), KeystoreError::Malformed(_)),
+            "{name} empty"
+        );
+    }
+    // duplicate required field
+    assert!(matches!(
+        m(&json.replacen(r#""version":3"#, r#""version":3,"version":3"#, 1)),
+        KeystoreError::Malformed(_)
+    ));
+    // a wrong MAC, and a MAC of the right length for another key
+    let mac = field("mac");
+    let other = format!(
+        "{}{}",
+        if mac.starts_with('0') { "1" } else { "0" },
+        &mac[1..]
+    );
+    assert_eq!(
+        m(&json.replacen(&mac, &other, 1)),
+        KeystoreError::WrongPassword
+    );
+    assert!(
+        t.elapsed() < std::time::Duration::from_secs(5),
+        "{:?}",
+        t.elapsed()
     );
 }

@@ -27,7 +27,10 @@ use tokio::{
     sync::{mpsc, Semaphore},
     task::JoinSet,
 };
-use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::tungstenite::{
+    handshake::server::{ErrorResponse, Request as WsRequest, Response as WsResponse},
+    Message,
+};
 
 struct HttpState {
     rpc: Arc<Rpc>,
@@ -56,6 +59,14 @@ async fn http_handle(
     req: Request<hyper::body::Incoming>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
     let limits = &st.rpc.limits;
+    let host = req.headers().get("host").and_then(|h| h.to_str().ok());
+    if let Err(e) = st.rpc.policy.check_host(host) {
+        return Ok(http_reply(
+            StatusCode::FORBIDDEN,
+            e.to_string().into_bytes(),
+            None,
+        ));
+    }
     if req.method() != Method::POST {
         return Ok(http_reply(StatusCode::METHOD_NOT_ALLOWED, vec![], None));
     }
@@ -213,7 +224,23 @@ pub async fn serve_ws(rpc: Arc<Rpc>, listener: TcpListener) {
         };
         let rpc = rpc.clone();
         tokio::spawn(async move {
-            let Ok(ws) = tokio_tungstenite::accept_async(stream).await else {
+            // geth `wsHandshakeValidator`: a refused origin never gets a WebSocket.
+            #[allow(
+                clippy::result_large_err,
+                reason = "the error type is tungstenite's callback contract"
+            )]
+            let check = |req: &WsRequest, resp: WsResponse| match rpc
+                .policy
+                .check_origin(req.headers().get("origin").and_then(|o| o.to_str().ok()))
+            {
+                Ok(()) => Ok(resp),
+                Err(e) => {
+                    let mut r = ErrorResponse::new(Some(e.to_string()));
+                    *r.status_mut() = StatusCode::FORBIDDEN;
+                    Err(r)
+                }
+            };
+            let Ok(ws) = tokio_tungstenite::accept_hdr_async(stream, check).await else {
                 return;
             };
             let (mut sink, mut stream) = ws.split();

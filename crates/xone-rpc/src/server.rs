@@ -193,6 +193,8 @@ pub struct Rpc {
     pub be: Backend,
     pub reg: Registry,
     pub limits: Limits,
+    /// `Host` and `Origin` checks of the transports (`policy.rs`).
+    pub policy: crate::policy::Policy,
     pub hub: Hub,
     class_sem: [Arc<Semaphore>; 4],
     global_bucket: Mutex<Bucket>,
@@ -236,6 +238,7 @@ impl Rpc {
             class_sem: [sem(0), sem(1), sem(2), sem(3)],
             global_bucket: Mutex::new(Bucket::new(limits.bucket_burst, limits.bucket_per_sec, 0)),
             limits,
+            policy: Default::default(),
             hub: Hub::default(),
             shed: AtomicBool::new(false),
             start: Instant::now(),
