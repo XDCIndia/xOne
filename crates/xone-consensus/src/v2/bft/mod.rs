@@ -287,6 +287,11 @@ impl<S: Scheme> Bft<S> {
     pub fn initialized(&self) -> bool {
         self.init
     }
+    /// The votes the machine holds for `round`, by signer (for a node's diagnostics).
+    pub fn votes_at(&self, round: u64) -> impl Iterator<Item = (&Address, &Vote)> {
+        self.votes.entries(round)
+    }
+
     /// Messages held in the vote pool and the timeout pool.
     pub fn pooled(&self) -> (usize, usize) {
         (self.votes.len(), self.timeouts.len())

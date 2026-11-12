@@ -1104,6 +1104,38 @@ impl Worker {
                     self.timeout_said = t.round;
                     let votes = self.votes_in.get(&t.round).copied().unwrap_or(0);
                     let head = self.core.head().0;
+                    // why the votes made no QC: what the machine holds for the round against the head's epoch
+                    let why = {
+                        let h = self.core.hist.read();
+                        let c = HistChain(&h);
+                        let held: Vec<String> = self
+                            .bft
+                            .votes_at(t.round)
+                            .map(|(a, v)| {
+                                format!(
+                                    "{}:{}@{}/gap{}",
+                                    &a.to_string()[..6],
+                                    v.proposed_block_info.number,
+                                    &v.proposed_block_info.hash.to_string()[..8],
+                                    v.gap_number
+                                )
+                            })
+                            .collect();
+                        let epoch = c.epoch(&h.tip().hash).map_or_else(
+                            |e| format!("epoch of the head: {e}"),
+                            |e| {
+                                format!(
+                                    "head {} epoch gap {} with {} masternodes, candidates {}",
+                                    &h.tip().hash.to_string()[..8],
+                                    e.gap,
+                                    e.masternodes.len(),
+                                    c.candidates(e.gap).map_or(0, |x| x.len())
+                                )
+                            },
+                        );
+                        format!("held [{}]; {epoch}", held.join(" "))
+                    };
+                    say(format!("timeout round {} detail: {why}", t.round));
                     say(format!(
                         "timeout for round {} sent (head {head}, {votes} peer votes received for round {}, highest QC round {})",
                         t.round,
