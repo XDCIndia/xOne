@@ -59,6 +59,38 @@ pub fn flat_root(flat: &impl FlatRead) -> B256 {
     }))
 }
 
+/// [`flat_root`] of rows sorted by key with no repeated key (accounts by hash, slots by account
+/// hash then slot hash): each account's storage root from its slots, zero slots absent, slots of
+/// an absent account ignored. Streamed through the builder in O(depth) memory, so a state of
+/// 100M+ slots is not copied to be hashed.
+pub fn root_of_sorted_rows(accounts: &[(B256, Account)], storage: &[(B256, B256, U256)]) -> B256 {
+    let mut state = HashBuilder::default();
+    let mut i = 0;
+    for (h, acc) in accounts {
+        while i < storage.len() && storage[i].0 < *h {
+            i += 1;
+        }
+        let mut slots = HashBuilder::default();
+        let mut any = false;
+        while i < storage.len() && storage[i].0 == *h {
+            let (_, k, v) = &storage[i];
+            if !v.is_zero() {
+                any = true;
+                slots.add_leaf(Nibbles::unpack(*k), &alloy_rlp::encode(v));
+            }
+            i += 1;
+        }
+        let mut acc = acc.clone();
+        acc.storage_root = if any { slots.root() } else { EMPTY_ROOT_HASH };
+        state.add_leaf(Nibbles::unpack(*h), &acc.rlp());
+    }
+    if accounts.is_empty() {
+        EMPTY_ROOT_HASH
+    } else {
+        state.root()
+    }
+}
+
 /// State root of `flat` with `diff` applied, without writing: what [`crate::StateDiff::apply`] followed
 /// by [`flat_root`] gives. A deleted account is dropped with its storage, a listed account takes the
 /// new record, and slots in `diff.storage` overlay the flat ones (zero removes).

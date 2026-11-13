@@ -128,3 +128,42 @@ proptest! {
         }
     }
 }
+
+/// The streamed root of sorted rows is `flat_root` of the same rows: slots of accounts with and
+/// without storage, a zero slot, and slots of an absent account.
+#[test]
+fn the_root_of_sorted_rows_equals_flat_root() {
+    use alloy_primitives::keccak256;
+    use xone_state::{trie::root_of_sorted_rows, FlatWrite};
+    let mut flat = MemFlat::default();
+    let (mut accounts, mut storage) = (Vec::new(), Vec::new());
+    for i in 0..300u32 {
+        let h = keccak256(i.to_be_bytes());
+        let a = Account {
+            nonce: u64::from(i),
+            ..Default::default()
+        };
+        flat.set_hashed_account(h, Some(a.clone()));
+        accounts.push((h, a));
+        if i % 3 == 0 {
+            for j in 0..(i % 40) {
+                let (k, v) = (
+                    keccak256([i.to_be_bytes(), j.to_be_bytes()].concat()),
+                    U256::from(j + 1),
+                );
+                flat.set_hashed_slot(h, k, v);
+                storage.push((h, k, v));
+            }
+        }
+    }
+    let orphan = keccak256(b"absent");
+    storage.push((orphan, keccak256(b"slot"), U256::from(9u8)));
+    storage.push((accounts[0].0, keccak256(b"zero"), U256::ZERO));
+    accounts.sort_by_key(|(h, _)| *h);
+    storage.sort_by_key(|(a, k, _)| (*a, *k));
+    assert_eq!(root_of_sorted_rows(&accounts, &storage), flat_root(&flat));
+    assert_eq!(
+        root_of_sorted_rows(&[], &[]),
+        flat_root(&MemFlat::default())
+    );
+}

@@ -896,3 +896,50 @@ fn preimages_of_hashed_rows_are_served() {
     let want: Vec<Bytes> = vec![a.0.to_vec().into(), s.0.to_vec().into()];
     assert_eq!(r.preimages, want);
 }
+
+/// Apothem, 2026-11-13, geth `5929639e`: a large contract's storage range proof carried a branch
+/// whose child right of the range is an embedded node (a leaf with a one-byte value 9 nibbles
+/// deep, 31 bytes of RLP, so inside its parent). The check answered `Shape` for it, from both geth
+/// peers, 28 minutes into the download. Geth accepts it, and so does a range that has the embedded
+/// leaf on its left.
+#[test]
+fn an_embedded_leaf_beside_the_range_is_part_of_its_parent() {
+    use alloy_primitives::keccak256;
+    use xone_snap::{mpt::Trie, proof::verify_range};
+    let at = |prefix: &str, nib: char, rest: &str| {
+        let mut s = format!("{prefix}{nib}{rest}");
+        s.truncate(64);
+        B256::from_slice(&alloy_primitives::hex::decode(s).unwrap())
+    };
+    let p = "27eea59d"; // 8 shared nibbles, then a branch whose children 4 and e are leaves of 55 nibbles
+    let rest = "f8ec01c2f235c80824dc64cee4311b24a4bfb06c47ae8dfeabb26c2";
+    let (small, other) = (at(p, '4', rest), at(p, 'e', rest));
+    let mut leaves = BTreeMap::new();
+    for i in 0..400u32 {
+        leaves.insert(keccak256(i.to_be_bytes()), vec![0x02]);
+    }
+    leaves.insert(small, vec![0x02]);
+    leaves.insert(other, vec![0x02]);
+    let t = Trie::build(&leaves);
+    let all: Vec<(B256, Bytes)> = leaves
+        .iter()
+        .map(|(k, v)| (*k, Bytes::from(v.clone())))
+        .collect();
+    let range = |lo: usize, hi: usize| {
+        let (k, v): (Vec<B256>, Vec<Bytes>) = all[lo..=hi].iter().cloned().unzip();
+        let mut proof = t.prove(k[0]);
+        for n in t.prove(*k.last().unwrap()) {
+            if !proof.contains(&n) {
+                proof.push(n);
+            }
+        }
+        verify_range(t.root, k[0], &k, &v, &proof)
+    };
+    let i = all.iter().position(|(k, _)| *k == small).unwrap();
+    assert_eq!(all[i + 1].0, other);
+    // the embedded leaf is right of the range, then left of it
+    assert_eq!(range(i - 20, i), Ok(true), "right of the range");
+    assert_eq!(range(i + 1, i + 20), Ok(true), "the leaf is the first key");
+    assert_eq!(range(i, i), Ok(true), "right of a one-key range");
+    assert_eq!(range(i + 2, i + 30), Ok(true), "left of the range");
+}

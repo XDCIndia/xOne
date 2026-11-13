@@ -94,6 +94,12 @@ pub struct Config {
     pub nodes: usize,
     /// Consecutive failures of one request after which the run stops.
     pub max_failures: u32,
+    /// Consecutive empty answers ("no data") after which the root is given up for a new pivot (two:
+    /// the serving peer and the next one, so a slower peer does not carry the download past the
+    /// window of a fast one, which a fresh pivot would use again). A
+    /// peer that has lost the root gets one request per try from each peer, not eight: some
+    /// servers (nethermind) drop a client that keeps asking for a root they no longer hold.
+    pub max_empty: u32,
     pub max_heal_rounds: usize,
 }
 
@@ -105,6 +111,7 @@ impl Default for Config {
             codes: 84,
             nodes: 1024,
             max_failures: 8,
+            max_empty: 2,
             max_heal_rounds: 128,
         }
     }
@@ -296,7 +303,7 @@ impl<P: PeerSource> Syncer<'_, P> {
         &mut self,
         mut step: impl FnMut(&mut Self) -> Result<(), Fault>,
     ) -> Result<(), SyncError> {
-        let mut failures = 0;
+        let (mut failures, mut empty) = (0, 0);
         loop {
             let fault = match step(self) {
                 Ok(()) => return Ok(()),
@@ -305,6 +312,14 @@ impl<P: PeerSource> Syncer<'_, P> {
             };
             self.src.report(&fault);
             failures += 1;
+            empty = if matches!(fault, Fault::Peer(PeerError::Unavailable)) {
+                empty + 1
+            } else {
+                0
+            };
+            if empty >= self.cfg.max_empty {
+                return Err(SyncError::Unavailable);
+            }
             if failures >= self.cfg.max_failures {
                 return Err(match fault {
                     Fault::Peer(PeerError::Unavailable) => SyncError::Unavailable,
@@ -556,8 +571,11 @@ impl<P: PeerSource> Syncer<'_, P> {
 
     // ---- heal
 
-    /// One walk of the account trie (and, with `storage`, of every storage trie) from the root,
-    /// over the nodes that can be built from the local data plus the nodes fetched so far.
+    /// One walk of the account trie (and, with `storage`, of the storage tries that differ from
+    /// the local slots) from the root, over the nodes that can be built from the local data plus the
+    /// nodes fetched so far. `Walked::storage` holds only the tries that were walked: a storage trie
+    /// whose root the local slots already hash to is left as it is, and no node of it is built (a
+    /// network's state does not fit in memory as nodes, `spec/snap/pivot.md`).
     fn walk_state(&self, storage: bool) -> Result<Walked, SyncError> {
         let mut known: HashMap<B256, Bytes> = self.healed.clone();
         let accounts = self
@@ -571,19 +589,6 @@ impl<P: PeerSource> Syncer<'_, P> {
                 .nodes_by_hash()
                 .map(|(h, n)| (h, n.clone())),
         );
-        if storage {
-            for slots in self.store.storage.values() {
-                let leaves = slots
-                    .iter()
-                    .map(|(k, v)| (*k, alloy_rlp::encode(v)))
-                    .collect();
-                known.extend(
-                    Trie::build(&leaves)
-                        .nodes_by_hash()
-                        .map(|(h, n)| (h, n.clone())),
-                );
-            }
-        }
         let w = mpt::walk(self.store.progress.root, &known)?;
         let mut out = Walked {
             missing: w.missing.into_iter().map(|(p, h)| (None, p, h)).collect(),
@@ -595,8 +600,24 @@ impl<P: PeerSource> Syncer<'_, P> {
             acc.balance
                 .check_legal()
                 .map_err(|e| SyncError::Fault(Fault::Balance(k, e)))?;
-            if storage && acc.storage_root != EMPTY_ROOT_HASH {
-                let sw = mpt::walk(acc.storage_root, &known)?;
+            let local = self.store.storage.get(&k);
+            let same = |s: &BTreeMap<B256, U256>| {
+                xone_state::trie::root_of_hashed(s.iter().map(|(h, v)| (*h, alloy_rlp::encode(v))))
+                    == acc.storage_root
+            };
+            if storage && acc.storage_root != EMPTY_ROOT_HASH && !local.is_some_and(same) {
+                let leaves = local
+                    .into_iter()
+                    .flatten()
+                    .map(|(s, v)| (*s, alloy_rlp::encode(v)))
+                    .collect();
+                let mut nodes = self.healed.clone();
+                nodes.extend(
+                    Trie::build(&leaves)
+                        .nodes_by_hash()
+                        .map(|(h, n)| (h, n.clone())),
+                );
+                let sw = mpt::walk(acc.storage_root, &nodes)?;
                 out.missing
                     .extend(sw.missing.into_iter().map(|(p, h)| (Some(k), p, h)));
                 let slots = sw
@@ -673,7 +694,14 @@ impl<P: PeerSource> Syncer<'_, P> {
             let w = self.walk_state(true)?;
             if w.missing.is_empty() {
                 self.store.accounts = w.accounts;
-                self.store.storage = w.storage;
+                self.store.storage.extend(w.storage);
+                // an account without storage at the root keeps none
+                let accounts = &self.store.accounts;
+                self.store.storage.retain(|h, _| {
+                    accounts
+                        .get(h)
+                        .is_some_and(|a| a.storage_root != EMPTY_ROOT_HASH)
+                });
                 self.finish_accounts();
                 return Ok(());
             }

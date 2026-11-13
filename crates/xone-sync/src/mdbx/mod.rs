@@ -42,8 +42,9 @@ use xone_db::{
 };
 use xone_primitives::Header;
 use xone_state::{
-    trie::flat_root, ChangeSet, CommitError, FlatRead, FlatWrite, MemFlat, Missing, StateDiff,
-    StateProvider, StateRead,
+    trie::{flat_root, root_of_sorted_rows},
+    ChangeSet, CommitError, FlatRead, FlatWrite, MemFlat, Missing, StateDiff, StateProvider,
+    StateRead,
 };
 
 use crate::store::{
@@ -1731,7 +1732,7 @@ impl<D: SegDir> Store for MdbxStore<D> {
         self.anchor.clone()
     }
 
-    fn install_snapshot(&mut self, s: Install) -> Result<(), StoreError> {
+    fn install_snapshot(&mut self, mut s: Install) -> Result<(), StoreError> {
         self.alive()?;
         if self.manifest.is_some() || self.generation != 0 || self.has_records() {
             return Err(StoreError::NotEmpty);
@@ -1763,7 +1764,19 @@ impl<D: SegDir> Store for MdbxStore<D> {
         for (a, k, v) in &s.state.storage {
             flat.set_hashed_slot(*a, *k, *v);
         }
-        if flat_root(&flat) != pivot.block.header.state_root {
+        // the root is streamed over the sorted rows: hashing `flat` would copy the whole state again
+        s.state.accounts.sort_unstable_by_key(|(h, _)| *h);
+        s.state.storage.sort_unstable_by_key(|(a, k, _)| (*a, *k));
+        if s.state.accounts.windows(2).any(|w| w[0].0 == w[1].0)
+            || s.state
+                .storage
+                .windows(2)
+                .any(|w| (w[0].0, w[0].1) == (w[1].0, w[1].1))
+        {
+            return Err(bad("duplicate state rows"));
+        }
+        if root_of_sorted_rows(&s.state.accounts, &s.state.storage) != pivot.block.header.state_root
+        {
             return Err(bad("the state does not give the pivot's state root"));
         }
         let (h_first, r_first) = (s.headers[0].number, s.records[0].block.number());

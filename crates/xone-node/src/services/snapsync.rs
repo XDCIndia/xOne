@@ -10,19 +10,22 @@
 //! 2. Pivot: the head of the best snap/1 peer minus 64 (geth `fsMinFullBlocks`,
 //!    `eth/downloader/downloader.go`), lowered to the first block whose anchor proof verifies
 //!    (`verify_anchor`: the epoch-switch header's masternodes certify the pivot by the 3-chain).
-//!    The switch header is pinned by the operator's pins file, or by two peers that serve the same
-//!    header for its number; any peer that serves another is [`SnapSyncError::Disputed`].
+//!    The switch header is pinned by the operator's pins file, or by the majority of at least two peers
+//!    that serve the same header for its number; a majority against it is [`SnapSyncError::Disputed`].
 //! 3. The header window and the records (bodies and receipts) of `plan_at(pivot)`, linked down from
 //!    the anchor and checked against their headers (`BodyVerifier`).
 //! 4. The candidate pool of every gap block of the plan, from the 0x88 account and storage at that
 //!    block's state root, each range proven (`xone_snap::client::account_at`).
 //! 5. The pivot state (`xone_snap::client::sync`: ranges with proofs, codes by hash, heal, root),
-//!    then the state root rebuilt from the hashed rows.
+//!    then the state root rebuilt from the hashed rows. When the peers' state window leaves the
+//!    pivot ("no data"), steps 2 to 5 run again for a fresh pivot over the downloaded state
+//!    ([`repivot`]).
 //! 6. `snapshot::install`: the state checkpoint, then `Store::install_snapshot` in one commit.
 //!
 //! ponytail: one source peer at a time, the downloaded state in memory, a stop or a crash before the
 //! install starts again from nothing (the datadir is still empty). Parallel peers and a persisted
-//! `StateStore` when a network's state outgrows memory.
+//! `StateStore` when a network's state outgrows memory. A move fetches the header window and the gap
+//! pools again; cache them when a network needs many moves.
 
 use std::{
     collections::{BTreeMap, HashMap},
@@ -51,9 +54,7 @@ use xone_snap::{
     codec::Message as Snap,
     preimage::{self, GetPreimages},
 };
-use xone_state::{
-    system_contracts::validator_0x88, trie::flat_root, Account, FlatWrite, MemFlat, StateRead,
-};
+use xone_state::{system_contracts::validator_0x88, Account, StateRead};
 use xone_sync::{
     bootstrap::{
         manifest::{build_anchor, parse_pins, Side, SignRow},
@@ -176,6 +177,10 @@ struct Drv<'a> {
     /// Faults per peer: the source is the snap/1 peer with the fewest.
     faults: HashMap<PeerId, u32>,
     n: Counts,
+    /// The last snap/1 request and its answer, shown with a proof fault.
+    last: Option<(Snap, Snap)>,
+    /// Where a proof fault writes that request and answer in full.
+    dump: std::path::PathBuf,
 }
 
 fn bad(peer: &PeerId, why: impl std::fmt::Display) -> SnapSyncError {
@@ -415,12 +420,23 @@ impl PeerSource for Src<'_, '_> {
             _ => {}
         }
         let (code, body) = d.sub(peer, Sub::Snap, req.code(), req.encode(), req.id())?;
-        Snap::decode(code, &body).map_err(|_| PeerError::Disconnected)
+        let reply = Snap::decode(code, &body).map_err(|_| PeerError::Disconnected)?;
+        d.last = Some((req, reply.clone()));
+        Ok(reply)
     }
 
     fn report(&mut self, fault: &Fault) {
         if let Some(p) = self.0.pick(self.1) {
             eprintln!("snap: peer {}: {fault}", short(&p));
+            if let (Fault::Proof(_), Some((q, a))) = (fault, &self.0.last) {
+                let clip = |x: String| x.chars().take(1500).collect::<String>();
+                let _ = std::fs::write(&self.0.dump, format!("{fault}\n{q:?}\n{a:?}\n"));
+                eprintln!(
+                    "snap:   request {}\nsnap:   answer {}",
+                    clip(format!("{q:?}")),
+                    clip(format!("{a:?}"))
+                );
+            }
             self.0.fault(&p);
         }
     }
@@ -573,13 +589,15 @@ pub fn run(
         stop,
         faults: HashMap::new(),
         n: Counts::default(),
+        last: None,
+        dump: cfg.datadir.join("snap-fault.txt"),
     };
-    let r = sync(&mut d, cfg, spec);
+    let r = sync(&mut d, cfg, spec, genesis);
     net.stop();
     r
 }
 
-fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
+fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec, genesis: &Genesis) -> R<()> {
     let t0 = Instant::now();
     let pins = match &cfg.sync.snap_pins {
         Some(p) => parse_pins(
@@ -592,6 +610,248 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
     eprintln!("snap: --syncmode snap on an empty datadir: state download at a pivot (snap/1)");
     d.wait_peers(if pins.is_empty() { 1 } else { 0 })?;
 
+    // ---- the head, the pivot, the window, the gap pools and the pivot state. A pivot that the peers'
+    // state window has left (every peer answers "no data": `SyncError::Unavailable`) is replaced by a
+    // fresh one and the download goes on over what it holds, as geth's syncer does when its pivot
+    // moves (`set_root`; the heal pass of `client::sync` repairs what the new root changed).
+    let scfg = client::Config::default();
+    let t1 = Instant::now();
+    let (
+        Pivoted {
+            anchor,
+            pin_source,
+            win,
+            records,
+            mut side,
+            now,
+        },
+        st,
+    ) = repivot(
+        d,
+        |d| {
+            let p = pivot_window(d, cfg, spec, &pins)?;
+            eprintln!(
+                "snap: state download at root {} from peer {}",
+                p.anchor.state_root,
+                short(&d.src()?)
+            );
+            let root = p.anchor.state_root;
+            Ok((p, root))
+        },
+        |st, d| client::sync(st, &mut Src(d, false), &scfg),
+    )?;
+    let pivot = anchor.number;
+    let pv = &anchor.provenance;
+    let slots: usize = st.storage.values().map(BTreeMap::len).sum();
+    let c = &d.n;
+    eprintln!(
+        "snap: state downloaded in {} s: {} accounts, {slots} slots, {} codes; requests: {} account ranges, {} storage ranges, {} bytecodes, {} trie nodes (heal); every range proven",
+        t1.elapsed().as_secs(),
+        st.accounts.len(),
+        st.codes.len(),
+        c.account_ranges,
+        c.storage_ranges,
+        c.byte_codes,
+        c.trie_nodes,
+    );
+    eprintln!(
+        "snap: heal: {} trie-node requests; state root {} verified at the pivot {pivot}",
+        c.trie_nodes, anchor.state_root
+    );
+
+    // ---- the rows, by hashed key as snap/1 gives them. The state root is checked from the hashed
+    // rows by the streaming builder (`hashed_root`, no copy of the state), then the rows are moved out
+    // of the store, not copied: a network's state is held once.
+    let got = xone_snap::server::hashed_root(&st.accounts, &st.storage);
+    if got != anchor.state_root || st.progress.verified != Some(anchor.state_root) {
+        return Err(SnapSyncError::Root {
+            got,
+            want: anchor.state_root,
+        });
+    }
+    let mut st = st;
+    let mut rows = StateRows {
+        accounts: std::mem::take(&mut st.accounts)
+            .into_iter()
+            .map(|(h, a)| {
+                (
+                    h,
+                    Account {
+                        nonce: a.nonce,
+                        balance: a.balance,
+                        code_hash: a.code_hash,
+                        ..Default::default()
+                    },
+                )
+            })
+            .collect(),
+        ..Default::default()
+    };
+    let storage = std::mem::take(&mut st.storage);
+    rows.storage
+        .reserve_exact(storage.values().map(BTreeMap::len).sum());
+    for (h, slots) in storage {
+        rows.storage
+            .extend(slots.into_iter().map(|(k, v)| (h, k, v)));
+    }
+    // An account above 2^256 is tracked by address by the executor. snap/1 gives only its hash, so
+    // its preimage (a handful of accounts at most) is asked of an xOne peer over xpre/1, checked by
+    // its hash, or found among the genesis accounts; no other account needs one.
+    let wide: Vec<B256> = rows
+        .accounts
+        .iter()
+        .filter(|(_, x)| x.balance.is_wide())
+        .map(|(h, _)| *h)
+        .collect();
+    let mut wide_pre = Vec::new();
+    for h in wide {
+        // an xOne peer knows it, or it is a genesis account (the funded accounts of the XDC networks
+        // are the ones above 2^256), checked by its hash either way
+        let p = wide_preimage(d, h)
+            .or_else(|| {
+                genesis
+                    .alloc
+                    .keys()
+                    .find(|a| keccak256(a) == h)
+                    .map(|a| Bytes::copy_from_slice(a.as_slice()))
+            })
+            .ok_or(SnapSyncError::WideAddress(h))?;
+        wide_pre.push((h, p));
+    }
+    eprintln!(
+        "snap: state root {got} rebuilt from {} hashed accounts and {} hashed slots; no preimages needed",
+        rows.accounts.len(),
+        rows.storage.len()
+    );
+
+    // ---- install
+    side.codes = st.codes.clone();
+    let dir = cfg.datadir.join("xone");
+    std::fs::create_dir_all(&dir).map_err(|e| SnapSyncError::Io(e.to_string()))?;
+    let mut store =
+        store::open(&dir, RETENTION, None).map_err(|e| SnapSyncError::Io(e.to_string()))?;
+    let install = Install {
+        anchor: Bytes::from(anchor.encode()),
+        headers: win,
+        records,
+        state: rows,
+        preimages: wide_pre,
+        retention: RETENTION,
+    };
+    crate::snapshot::install(&dir, &mut store, pivot, anchor.hash, &side, install)
+        .map_err(|e| SnapSyncError::Io(e.to_string()))?;
+    let record = format!(
+        "pivot {pivot} {}\nstate_root {}\nswitch {} {}\npin {pin_source}\nsynced_at {now}\n",
+        anchor.hash, anchor.state_root, pv.switch_number, pv.switch_hash
+    );
+    std::fs::write(dir.join("snap-pivot.txt"), record)
+        .map_err(|e| SnapSyncError::Io(e.to_string()))?;
+    eprintln!(
+        "snap: installed pivot {pivot} as an anchored datadir in {} s total ({} MB over snap/1); executing from {}",
+        t0.elapsed().as_secs(),
+        d.n.snap_bytes / 1_000_000,
+        pivot + 1
+    );
+    Ok(())
+}
+
+/// Source peers tried for one pivot.
+const PIVOT_TRIES: u32 = 6;
+/// Most re-pivots in one sync: each is a fresh pivot for a download the peers' state window outran.
+const MAX_REPIVOTS: u32 = 64;
+
+/// Downloads the state of a pivot with `run`; on `SyncError::Unavailable` asks `pivot` for a fresh one
+/// and runs again over the same store (`StateStore::set_root`), up to [`MAX_REPIVOTS`] times.
+fn repivot<C, T>(
+    c: &mut C,
+    mut pivot: impl FnMut(&mut C) -> R<(T, B256)>,
+    mut run: impl FnMut(&mut StateStore, &mut C) -> Result<(), SyncError>,
+) -> R<(T, StateStore)> {
+    let mut t = Instant::now();
+    let (mut p, root) = pivot(c)?;
+    let mut setup = t.elapsed().as_secs();
+    let mut st = StateStore::new(root);
+    let mut moves = 0;
+    loop {
+        t = Instant::now();
+        match run(&mut st, c) {
+            Ok(()) => return Ok((p, st)),
+            Err(SyncError::Unavailable) if moves < MAX_REPIVOTS => {
+                moves += 1;
+                let down = t.elapsed().as_secs();
+                t = Instant::now();
+                let (np, root) = pivot(c)?;
+                let next = t.elapsed().as_secs();
+                let slots: usize = st.storage.values().map(BTreeMap::len).sum();
+                eprintln!(
+                    "snap: no peer serves root {}: pivot moved to root {root} (move {moves}); kept {} accounts, {slots} slots, {} codes; last pivot: {setup} s to set up, {down} s of download; next: {next} s to set up",
+                    st.progress.root,
+                    st.accounts.len(),
+                    st.codes.len(),
+                );
+                setup = next;
+                p = np;
+                st.set_root(root);
+            }
+            Err(e) => return Err(e.into()),
+        }
+    }
+}
+
+/// Follows the chain from `head` to the tip of `src`: the headers after it, each linked to its parent.
+fn advance(d: &mut Drv<'_>, src: PeerId, mut head: Header) -> R<(Header, B256)> {
+    loop {
+        let more = d.headers_from(src, Origin::Number(head.number + 1), HEADERS)?;
+        for x in &more {
+            if x.number != head.number + 1 || x.parent_hash != head.hash() {
+                return Err(bad(&src, format!("header {} does not link", x.number)));
+            }
+            head = x.clone();
+        }
+        if more.len() < HEADERS as usize {
+            let h = head.hash();
+            return Ok((head, h));
+        }
+    }
+}
+
+/// What one pivot needs before its state is downloaded: the verified anchor and the window and gap
+/// pools below it.
+struct Pivoted {
+    anchor: Anchor,
+    pin_source: String,
+    win: Vec<Header>,
+    records: Vec<Record>,
+    side: Side,
+    now: u64,
+}
+
+/// The head of the source peer, the pivot `head - 64` (lowered to the first block whose anchor
+/// verifies), its window of headers, bodies and receipts, and the candidate pool of each gap block.
+fn pivot_window(
+    d: &mut Drv<'_>,
+    cfg: &Config,
+    spec: &ChainSpec,
+    pins: &[(u64, B256)],
+) -> R<Pivoted> {
+    // a peer that answered "no data" at the last pivot may serve the next one
+    d.faults.clear();
+    // a source that fails (a stranger that does not serve its own head) is replaced by the next
+    for _ in 1..PIVOT_TRIES {
+        match pivot_once(d, cfg, spec, pins) {
+            Err(e @ SnapSyncError::Peer { .. }) => {
+                eprintln!("snap: {e}; trying another source");
+                if let Ok(p) = d.src() {
+                    d.fault(&p);
+                }
+            }
+            r => return r,
+        }
+    }
+    pivot_once(d, cfg, spec, pins)
+}
+
+fn pivot_once(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec, pins: &[(u64, B256)]) -> R<Pivoted> {
     // ---- the head and the pivot
     let src = d.src()?;
     let head_hash = d
@@ -605,6 +865,9 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
         .next()
         .filter(|h| h.hash() == head_hash)
         .ok_or_else(|| bad(&src, "does not serve its own head"))?;
+    // the Status head is as old as the connection: go on to the peer's tip (a re-pivot, minutes
+    // later, would otherwise pick the same stale pivot)
+    let (head, head_hash) = advance(d, src, head)?;
     super::snapview::set_head(&head);
     let top = head.number;
     let first_try = top.checked_sub(PIVOT_DEPTH).ok_or(SnapSyncError::NoPivot {
@@ -673,7 +936,7 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
         let (pins_now, source) = if pins.is_empty() {
             witness(d, pv.switch_number, pv.switch_hash)?
         } else {
-            (pins.clone(), "operator pins file".to_owned())
+            (pins.to_vec(), "operator pins file".to_owned())
         };
         let ctx = Context {
             now,
@@ -801,114 +1064,14 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
         let pool = gap_pool(d, cfg, &scfg, root, g, k88)?;
         side.gaps.insert(g, pool);
     }
-
-    // ---- the pivot state
-    let t1 = Instant::now();
-    let mut st = StateStore::new(anchor.state_root);
-    eprintln!(
-        "snap: state download at root {} from peer {}",
-        anchor.state_root,
-        short(&d.src()?)
-    );
-    client::sync(&mut st, &mut Src(d, false), &scfg)?;
-    let slots: usize = st.storage.values().map(BTreeMap::len).sum();
-    let c = &d.n;
-    eprintln!(
-        "snap: state downloaded in {} s: {} accounts, {slots} slots, {} codes; requests: {} account ranges, {} storage ranges, {} bytecodes, {} trie nodes (heal); every range proven",
-        t1.elapsed().as_secs(),
-        st.accounts.len(),
-        st.codes.len(),
-        c.account_ranges,
-        c.storage_ranges,
-        c.byte_codes,
-        c.trie_nodes,
-    );
-    eprintln!(
-        "snap: heal: {} trie-node requests; state root {} verified at the pivot {pivot}",
-        c.trie_nodes, anchor.state_root
-    );
-
-    // ---- the rows, by hashed key as snap/1 gives them
-    let mut rows = StateRows::default();
-    for (h, a) in &st.accounts {
-        rows.accounts.push((
-            *h,
-            Account {
-                nonce: a.nonce,
-                balance: a.balance.clone(),
-                code_hash: a.code_hash,
-                ..Default::default()
-            },
-        ));
-    }
-    for (h, slots) in &st.storage {
-        for (k, v) in slots {
-            rows.storage.push((*h, *k, *v));
-        }
-    }
-    // An account above 2^256 is tracked by address by the executor. snap/1 gives only its hash, so
-    // its preimage (a handful of accounts at most) is asked of an xOne peer over xpre/1, checked by
-    // its hash; no other account needs one.
-    let wide: Vec<B256> = rows
-        .accounts
-        .iter()
-        .filter(|(_, x)| x.balance.is_wide())
-        .map(|(h, _)| *h)
-        .collect();
-    let mut wide_pre = Vec::new();
-    for h in wide {
-        let p = wide_preimage(d, h).ok_or(SnapSyncError::WideAddress(h))?;
-        wide_pre.push((h, p));
-    }
-    let mut flat = MemFlat::default();
-    for (h, x) in &rows.accounts {
-        flat.set_hashed_account(*h, Some(x.clone()));
-    }
-    for (h, k, v) in &rows.storage {
-        flat.set_hashed_slot(*h, *k, *v);
-    }
-    let got = flat_root(&flat);
-    if got != anchor.state_root {
-        return Err(SnapSyncError::Root {
-            got,
-            want: anchor.state_root,
-        });
-    }
-    eprintln!(
-        "snap: state root {got} rebuilt from {} hashed accounts and {} hashed slots; no preimages needed",
-        rows.accounts.len(),
-        rows.storage.len()
-    );
-
-    // ---- install
-    side.codes = st.codes.clone();
-    let dir = cfg.datadir.join("xone");
-    std::fs::create_dir_all(&dir).map_err(|e| SnapSyncError::Io(e.to_string()))?;
-    let mut store =
-        store::open(&dir, RETENTION, None).map_err(|e| SnapSyncError::Io(e.to_string()))?;
-    let install = Install {
-        anchor: Bytes::from(anchor.encode()),
-        headers: win,
+    Ok(Pivoted {
+        anchor,
+        pin_source,
+        win,
         records,
-        state: rows,
-        preimages: wide_pre,
-        retention: RETENTION,
-    };
-    crate::snapshot::install(&dir, &mut store, pivot, anchor.hash, &side, install)
-        .map_err(|e| SnapSyncError::Io(e.to_string()))?;
-    let record = format!(
-        "pivot {pivot} {}\nstate_root {}\nswitch {} {}\npin {pin_source}\nsynced_at {now}\n",
-        anchor.hash, anchor.state_root, pv.switch_number, pv.switch_hash
-    );
-    std::fs::write(dir.join("snap-pivot.txt"), record)
-        .map_err(|e| SnapSyncError::Io(e.to_string()))?;
-    eprintln!(
-        "snap: installed pivot {pivot} as an anchored datadir in {} s total ({} MB over snap/1); executing from {}",
-        t0.elapsed().as_secs(),
-        d.n.snap_bytes / 1_000_000,
-        pivot + 1
-    );
-    Ok(())
+        side,
+        now,
+    })
 }
 
 /// The address behind `hash` from an xOne peer (xpre/1), kept only if it hashes to `hash`.
@@ -982,29 +1145,53 @@ fn gap_pool(
     Ok(pool)
 }
 
-/// Two peers serve the same header for the switch number: the pin of the anchor (geth's trust in
-/// its peers' header chain). A peer that serves another hash stops the sync.
+/// The pin of the anchor (geth's trust in its peers' header chain): at least two peers serve the
+/// switch header `hash` and more peers serve it than serve any other hash. Peers on another chain
+/// (a stale release that forked off) are outvoted and reported, not fatal.
 fn witness(d: &mut Drv<'_>, number: u64, hash: B256) -> R<(Vec<(u64, B256)>, String)> {
-    const NEED: usize = 2;
-    let mut agree = Vec::new();
-    let ids: Vec<PeerId> = d.known.keys().copied().collect();
-    for p in ids {
-        let Ok(h) = d.headers_from(p, Origin::Number(number), 1) else {
-            continue;
-        };
-        match h.first().map(Header::hash) {
-            Some(x) if x == hash => agree.push(short(&p)),
-            Some(x) => {
-                return Err(SnapSyncError::Disputed {
-                    number,
-                    peer: short(&p),
-                    ours: hash,
-                    theirs: x,
-                })
+    // peers that connect late (the wait for the first snap peer returns as soon as two are there,
+    // and one may be a stranger) get a minute to join the vote
+    let give_up = Instant::now() + PEER_WAIT / 2;
+    loop {
+        let mut votes = Vec::new();
+        let ids: Vec<PeerId> = d.known.keys().copied().collect();
+        for p in ids {
+            let Ok(h) = d.headers_from(p, Origin::Number(number), 1) else {
+                continue;
+            };
+            if let Some(x) = h.first().map(Header::hash) {
+                votes.push((short(&p), x));
             }
-            None => {}
+        }
+        match tally(number, hash, &votes) {
+            Err(SnapSyncError::Witnesses { .. }) if Instant::now() < give_up => {
+                let pause = Instant::now() + Duration::from_secs(5);
+                while d.next(pause)?.is_some() {}
+            }
+            r => {
+                let agree = r?;
+                return Ok((
+                    vec![(number, hash)],
+                    format!("peers {} serve switch {number} {hash}", agree.join(",")),
+                ));
+            }
         }
     }
+}
+
+/// The peers of `votes` (peer, hash served) that serve `hash`, if they are at least two and outnumber
+/// the peers that serve another hash.
+fn tally(number: u64, hash: B256, votes: &[(String, B256)]) -> R<Vec<String>> {
+    const NEED: usize = 2;
+    let agree: Vec<String> = votes
+        .iter()
+        .filter(|(_, x)| *x == hash)
+        .map(|(p, _)| p.clone())
+        .collect();
+    for (p, x) in votes.iter().filter(|(_, x)| *x != hash) {
+        eprintln!("snap: peer {p} serves {x} for switch {number}, not {hash}; outvoted or refused");
+    }
+    let against = votes.len() - agree.len();
     if agree.len() < NEED {
         return Err(SnapSyncError::Witnesses {
             number,
@@ -1013,10 +1200,16 @@ fn witness(d: &mut Drv<'_>, number: u64, hash: B256) -> R<(Vec<(u64, B256)>, Str
             need: NEED,
         });
     }
-    Ok((
-        vec![(number, hash)],
-        format!("peers {} serve switch {number} {hash}", agree.join(",")),
-    ))
+    if agree.len() <= against {
+        let theirs = votes.iter().map(|(_, x)| *x).find(|x| *x != hash);
+        return Err(SnapSyncError::Disputed {
+            number,
+            peer: format!("{against} peer(s)"),
+            ours: hash,
+            theirs: theirs.unwrap_or_default(),
+        });
+    }
+    Ok(agree)
 }
 
 #[cfg(test)]
@@ -1082,5 +1275,77 @@ mod tests {
             let got = receipt_of(&Raw(item.into())).unwrap();
             assert_eq!(got.to_vec(), want.encode_consensus());
         }
+    }
+
+    #[test]
+    fn the_pin_is_the_majority_of_at_least_two() {
+        let (a, b) = (B256::repeat_byte(1), B256::repeat_byte(2));
+        let v = |x: &[(&str, B256)]| -> Vec<(String, B256)> {
+            x.iter().map(|(p, h)| ((*p).to_owned(), *h)).collect()
+        };
+        assert_eq!(
+            tally(900, a, &v(&[("p1", a), ("p2", a), ("p3", b)])).unwrap(),
+            ["p1", "p2"]
+        );
+        // a lone witness is not enough, and a tie is a dispute
+        assert!(matches!(
+            tally(900, a, &v(&[("p1", a), ("p2", b)])),
+            Err(SnapSyncError::Witnesses { have: 1, .. })
+        ));
+        assert!(matches!(
+            tally(900, a, &v(&[("p1", a), ("p2", a), ("p3", b), ("p4", b)])),
+            Err(SnapSyncError::Disputed { .. })
+        ));
+        // the peers that serve another hash win: our hash is the minority chain
+        assert!(tally(900, a, &v(&[("p1", a), ("p2", b), ("p3", b)])).is_err());
+    }
+
+    /// An `Unavailable` download takes a fresh pivot and continues over the same store; any other error
+    /// stops it, and the moves are bounded.
+    #[test]
+    fn unavailable_moves_the_pivot_and_keeps_the_store() {
+        let root = |n: u8| B256::repeat_byte(n);
+        let mut asked = vec![];
+        let (p, st) = repivot(
+            &mut 0u8,
+            |n| {
+                *n += 1;
+                Ok((*n, root(*n)))
+            },
+            |st, _| {
+                asked.push(st.progress.root);
+                if st.progress.root == root(3) {
+                    return Ok(());
+                }
+                // the data of this run stays through the move
+                st.accounts.insert(st.progress.root, Account::default());
+                Err(SyncError::Unavailable)
+            },
+        )
+        .unwrap();
+        assert_eq!((p, st.progress.root), (3, root(3)));
+        assert_eq!(asked, [root(1), root(2), root(3)]);
+        assert_eq!(st.accounts.len(), 2);
+        assert!(st.progress.stale);
+
+        let e = repivot(
+            &mut (),
+            |_| Ok(((), root(1))),
+            |_, _| Err(SyncError::Unavailable),
+        );
+        assert!(matches!(
+            e,
+            Err(SnapSyncError::State(SyncError::Unavailable))
+        ));
+        let mut n = 0;
+        let e = repivot(
+            &mut (),
+            |_| Ok(((), root(1))),
+            |_, _| {
+                n += 1;
+                Err(SyncError::Peer(xone_snap::client::PeerError::Timeout))
+            },
+        );
+        assert!(e.is_err() && n == 1);
     }
 }

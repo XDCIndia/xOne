@@ -107,12 +107,18 @@ pub fn verify_range(
     }
     let mut hb = HashBuilder::default();
     let mut prev: Option<Nibbles> = None;
+    fn out((p, o): &(Nibbles, Out)) -> (Nibbles, Option<B256>, Option<&[u8]>) {
+        match o {
+            Out::Hash(h) => (*p, Some(*h), None),
+            Out::Leaf(v) => (*p, None, Some(&v[..])),
+        }
+    }
     let items = e
         .left
         .iter()
-        .map(|(p, h)| (*p, Some(*h), None))
-        .chain(leaves.iter().map(|(k, v)| (*k, None, Some(*v))))
-        .chain(e.right.iter().map(|(p, h)| (*p, Some(*h), None)));
+        .map(out)
+        .chain(leaves.iter().map(|(k, v)| (*k, None, Some(&v[..]))))
+        .chain(e.right.iter().map(out));
     for (path, hash, leaf) in items {
         // the builder panics on an out-of-order key; the edges never produce one, but the input
         // is a peer's
@@ -142,8 +148,15 @@ struct Edges<'a> {
     lo: Nibbles,
     hi: Nibbles,
     /// Subtrees entirely below `lo` and entirely above `hi`: (path, hash), in key order.
-    left: Vec<(Nibbles, B256)>,
-    right: Vec<(Nibbles, B256)>,
+    left: Vec<(Nibbles, Out)>,
+    right: Vec<(Nibbles, Out)>,
+}
+
+/// A subtree outside the range as the builder takes it: by hash, or, for a node small enough to sit
+/// inside its parent's RLP (a leaf with a short value deep in a big trie), as its leaf.
+enum Out {
+    Hash(B256),
+    Leaf(Vec<u8>),
 }
 
 impl Edges<'_> {
@@ -197,7 +210,10 @@ impl Edges<'_> {
                     Side::Inside
                 };
                 if s != Side::Inside {
-                    self.outside(s, path, hash)?;
+                    match hash {
+                        Some(_) => self.outside(s, path, hash)?,
+                        None => self.push(s, full, Out::Leaf(l.value)),
+                    }
                 }
             }
         }
@@ -209,19 +225,32 @@ impl Edges<'_> {
         match self.side(&path) {
             Side::OnPath => self.on_path(path, r),
             Side::Inside => Ok(()),
-            s => self.outside(s, path, r.as_hash()),
+            s => match r.as_hash() {
+                Some(h) => self.outside(s, path, Some(h)),
+                None => match TrieNode::decode(&mut r.as_slice()).map_err(ProofError::BadNode)? {
+                    TrieNode::Leaf(l) if path.join(&l.key).len() == KEY_NIBBLES => {
+                        self.push(s, path.join(&l.key), Out::Leaf(l.value));
+                        Ok(())
+                    }
+                    _ => Err(ProofError::Shape),
+                },
+            },
+        }
+    }
+
+    fn push(&mut self, s: Side, path: Nibbles, o: Out) {
+        if s == Side::Left {
+            self.left.push((path, o));
+        } else {
+            self.right.push((path, o));
         }
     }
 
     fn outside(&mut self, s: Side, path: Nibbles, hash: Option<B256>) -> Result<(), ProofError> {
-        // an embedded node (under 32 bytes) has no hash to hand to the builder; with 32-byte keys
-        // such a node needs a shared prefix of about 40 nibbles, which keccak keys do not have
+        // an embedded node (under 32 bytes) has no hash to hand to the builder: a leaf is taken
+        // as a leaf (`child`, the leaf arm); an extension cannot be that short with 32-byte keys
         let h = hash.ok_or(ProofError::Shape)?;
-        if s == Side::Left {
-            self.left.push((path, h));
-        } else {
-            self.right.push((path, h));
-        }
+        self.push(s, path, Out::Hash(h));
         Ok(())
     }
 
