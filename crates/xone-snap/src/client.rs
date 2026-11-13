@@ -54,6 +54,26 @@ pub enum Fault {
     /// A proven leaf above the legal balance (a fatal error, not a retry).
     #[error("account {0} has an illegal balance: {1}")]
     Balance(B256, WideBalanceError),
+    /// The backend could not keep a row (a fatal error, not a retry).
+    #[error("store: {0}")]
+    Store(String),
+}
+
+/// A [`Backend`] that could not read or write.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("{0}")]
+pub struct StoreError(pub String);
+
+impl From<StoreError> for Fault {
+    fn from(e: StoreError) -> Self {
+        Fault::Store(e.0)
+    }
+}
+
+impl From<StoreError> for SyncError {
+    fn from(e: StoreError) -> Self {
+        SyncError::Fault(Fault::Store(e.0))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -177,6 +197,209 @@ impl StateStore {
     }
 }
 
+/// Where a download keeps its rows: [`StateStore`] (memory) or a table store that survives the
+/// process and holds a state that does not fit in memory. Every method that changes rows also moves the
+/// cursor it belongs to, as one write, so that a store that died between two calls resumes from rows
+/// and cursors that agree.
+pub trait Backend {
+    fn progress(&self) -> &Progress;
+    /// What the store holds, for the log.
+    fn summary(&self) -> String {
+        String::new()
+    }
+    /// Replaces the pivot (see [`StateStore::set_root`]).
+    fn set_root(&mut self, root: B256) -> Result<(), StoreError>;
+    /// Stores proven accounts and moves `next_account`.
+    fn put_accounts(
+        &mut self,
+        accounts: Vec<(B256, Account)>,
+        next: Option<B256>,
+    ) -> Result<(), StoreError>;
+    /// Stores proven slots of accounts and moves each account's storage cursor.
+    fn put_slots(&mut self, sets: Vec<SlotSet>) -> Result<(), StoreError>;
+    fn put_codes(&mut self, codes: Vec<(B256, Bytes)>) -> Result<(), StoreError>;
+    /// What the next storage request is about: the origin and up to `max` accounts (account hash and
+    /// storage root) whose storage is to download; one partly done account alone, with its origin.
+    fn storage_batch(&mut self, max: usize) -> Result<(B256, Vec<(B256, B256)>), StoreError>;
+    /// The code hashes some account needs that the store lacks.
+    fn missing_codes(&self) -> Result<Vec<B256>, StoreError>;
+    /// Which of `hashes` the store holds.
+    fn has_codes(&self, hashes: &[B256]) -> Result<Vec<bool>, StoreError>;
+    /// Every downloaded account.
+    fn accounts(&self) -> Result<BTreeMap<B256, Account>, StoreError>;
+    /// The root of the slots held for `account`; `None` when it has none.
+    fn slots_root(&self, account: &B256) -> Result<Option<B256>, StoreError>;
+    fn slots(&self, account: &B256) -> Result<BTreeMap<B256, U256>, StoreError>;
+    /// After a pivot move: the accounts become `new` (see `Syncer::reconcile`).
+    fn reconcile(&mut self, new: BTreeMap<B256, Account>) -> Result<(), StoreError>;
+    /// The healed leaves replace the held ones; an account without storage at the root keeps none;
+    /// every cursor is done.
+    fn heal(
+        &mut self,
+        accounts: BTreeMap<B256, Account>,
+        storage: BTreeMap<B256, BTreeMap<B256, U256>>,
+    ) -> Result<(), StoreError>;
+    /// Every cursor is done: the leaves are final.
+    fn finish_accounts(&mut self) -> Result<(), StoreError>;
+    /// The state root of the held rows.
+    fn root(&self) -> Result<B256, StoreError>;
+    /// The held rows hash to `root`.
+    fn set_verified(&mut self, root: B256) -> Result<(), StoreError>;
+}
+
+/// The slots of one account that a storage response gave, and the cursor after them.
+pub type SlotSet = (B256, Vec<(B256, U256)>, Option<B256>);
+
+impl Backend for StateStore {
+    fn progress(&self) -> &Progress {
+        &self.progress
+    }
+
+    fn summary(&self) -> String {
+        let slots: usize = self.storage.values().map(BTreeMap::len).sum();
+        format!(
+            "{} accounts, {slots} slots, {} codes",
+            self.accounts.len(),
+            self.codes.len()
+        )
+    }
+
+    fn set_root(&mut self, root: B256) -> Result<(), StoreError> {
+        StateStore::set_root(self, root);
+        Ok(())
+    }
+
+    fn put_accounts(
+        &mut self,
+        accounts: Vec<(B256, Account)>,
+        next: Option<B256>,
+    ) -> Result<(), StoreError> {
+        self.accounts.extend(accounts);
+        self.progress.next_account = next;
+        Ok(())
+    }
+
+    fn put_slots(&mut self, sets: Vec<SlotSet>) -> Result<(), StoreError> {
+        for (acct, slots, next) in sets {
+            self.storage.entry(acct).or_default().extend(slots);
+            self.progress.storage_next.insert(acct, next);
+        }
+        Ok(())
+    }
+
+    fn put_codes(&mut self, codes: Vec<(B256, Bytes)>) -> Result<(), StoreError> {
+        self.codes.extend(codes);
+        Ok(())
+    }
+
+    fn storage_batch(&mut self, max: usize) -> Result<(B256, Vec<(B256, B256)>), StoreError> {
+        let mut batch = Vec::new();
+        for (h, a) in &self.accounts {
+            if a.storage_root == EMPTY_ROOT_HASH {
+                continue;
+            }
+            match self.progress.storage_next.get(h) {
+                Some(None) => {}
+                Some(Some(o)) if batch.is_empty() => return Ok((*o, vec![(*h, a.storage_root)])),
+                Some(Some(_)) => {}
+                None => {
+                    batch.push((*h, a.storage_root));
+                    if batch.len() >= max {
+                        break;
+                    }
+                }
+            }
+        }
+        Ok((B256::ZERO, batch))
+    }
+
+    fn missing_codes(&self) -> Result<Vec<B256>, StoreError> {
+        let mut seen = HashSet::new();
+        Ok(self
+            .accounts
+            .values()
+            .map(|a| a.code_hash)
+            .filter(|h| *h != KECCAK256_EMPTY && !self.codes.contains_key(h) && seen.insert(*h))
+            .collect())
+    }
+
+    fn has_codes(&self, hashes: &[B256]) -> Result<Vec<bool>, StoreError> {
+        Ok(hashes.iter().map(|h| self.codes.contains_key(h)).collect())
+    }
+
+    fn accounts(&self) -> Result<BTreeMap<B256, Account>, StoreError> {
+        Ok(self.accounts.clone())
+    }
+
+    fn slots_root(&self, account: &B256) -> Result<Option<B256>, StoreError> {
+        Ok(self.storage.get(account).map(|s| {
+            xone_state::trie::root_of_hashed(s.iter().map(|(h, v)| (*h, alloy_rlp::encode(v))))
+        }))
+    }
+
+    fn slots(&self, account: &B256) -> Result<BTreeMap<B256, U256>, StoreError> {
+        Ok(self.storage.get(account).cloned().unwrap_or_default())
+    }
+
+    fn reconcile(&mut self, new: BTreeMap<B256, Account>) -> Result<(), StoreError> {
+        for (h, a) in &new {
+            if self
+                .accounts
+                .get(h)
+                .is_some_and(|o| o.storage_root != a.storage_root)
+            {
+                self.storage.remove(h);
+                self.progress.storage_next.remove(h);
+            }
+        }
+        self.storage.retain(|h, _| new.contains_key(h));
+        self.progress
+            .storage_next
+            .retain(|h, _| new.contains_key(h));
+        self.accounts = new;
+        self.progress.stale = false;
+        Ok(())
+    }
+
+    fn heal(
+        &mut self,
+        accounts: BTreeMap<B256, Account>,
+        storage: BTreeMap<B256, BTreeMap<B256, U256>>,
+    ) -> Result<(), StoreError> {
+        self.accounts = accounts;
+        self.storage.extend(storage);
+        // an account without storage at the root keeps none
+        let accounts = &self.accounts;
+        self.storage.retain(|h, _| {
+            accounts
+                .get(h)
+                .is_some_and(|a| a.storage_root != EMPTY_ROOT_HASH)
+        });
+        self.finish_accounts()
+    }
+
+    fn finish_accounts(&mut self) -> Result<(), StoreError> {
+        let p = &mut self.progress;
+        p.next_account = None;
+        p.storage_next = self
+            .accounts
+            .iter()
+            .filter(|(_, a)| a.storage_root != EMPTY_ROOT_HASH)
+            .map(|(h, _)| (*h, None))
+            .collect();
+        Ok(())
+    }
+
+    fn root(&self) -> Result<B256, StoreError> {
+        Ok(hashed_root(&self.accounts, &self.storage))
+    }
+
+    fn set_verified(&mut self, root: B256) -> Result<(), StoreError> {
+        self.progress.verified = Some(root);
+        Ok(())
+    }
+}
+
 /// The result of one walk of the tries.
 struct Walked {
     accounts: BTreeMap<B256, Account>,
@@ -186,8 +409,8 @@ struct Walked {
     missing: Vec<(Option<B256>, Nibbles, B256)>,
 }
 
-struct Syncer<'a, P> {
-    store: &'a mut StateStore,
+struct Syncer<'a, P, B> {
+    store: &'a mut B,
     src: &'a mut P,
     cfg: &'a Config,
     id: u64,
@@ -198,8 +421,8 @@ struct Syncer<'a, P> {
 /// Downloads the state at `store.progress.root` from `src`, heals it, and checks the root.
 /// Returns once `store.progress.verified` is the root. Run it again after any error: it
 /// continues from the store.
-pub fn sync<P: PeerSource>(
-    store: &mut StateStore,
+pub fn sync<P: PeerSource, B: Backend>(
+    store: &mut B,
     src: &mut P,
     cfg: &Config,
 ) -> Result<(), SyncError> {
@@ -286,7 +509,7 @@ fn full_account(leaf: &[u8]) -> Result<Account, Fault> {
     Ok(a)
 }
 
-impl<P: PeerSource> Syncer<'_, P> {
+impl<P: PeerSource, B: Backend> Syncer<'_, P, B> {
     fn ask(&mut self, mk: impl FnOnce(u64) -> Message) -> Result<Message, Fault> {
         self.id += 1;
         let req = mk(self.id);
@@ -307,7 +530,7 @@ impl<P: PeerSource> Syncer<'_, P> {
         loop {
             let fault = match step(self) {
                 Ok(()) => return Ok(()),
-                Err(f @ Fault::Balance(..)) => return Err(SyncError::Fault(f)),
+                Err(f @ (Fault::Balance(..) | Fault::Store(_))) => return Err(SyncError::Fault(f)),
                 Err(f) => f,
             };
             self.src.report(&fault);
@@ -333,7 +556,7 @@ impl<P: PeerSource> Syncer<'_, P> {
     // ---- accounts
 
     fn accounts(&mut self) -> Result<(), SyncError> {
-        while let Some(origin) = self.store.progress.next_account {
+        while let Some(origin) = self.store.progress().next_account {
             self.retry(|s| s.account_step(origin))?;
         }
         Ok(())
@@ -341,7 +564,7 @@ impl<P: PeerSource> Syncer<'_, P> {
 
     /// `OnAccounts`, `sync.go:2516-2620` (the proof check at 2586-2589).
     fn account_step(&mut self, origin: B256) -> Result<(), Fault> {
-        let (root, bytes) = (self.store.progress.root, self.cfg.request_bytes);
+        let (root, bytes) = (self.store.progress().root, self.cfg.request_bytes);
         let Message::AccountRange(r) = self.ask(|id| {
             Message::GetAccountRange(GetAccountRange {
                 id,
@@ -371,14 +594,14 @@ impl<P: PeerSource> Syncer<'_, P> {
         for (h, a) in &accounts {
             a.balance.check_legal().map_err(|e| Fault::Balance(*h, e))?;
         }
-        self.store.accounts.extend(accounts);
-        self.store.progress.next_account = keys.last().filter(|_| more).and_then(|k| inc(*k));
+        let next = keys.last().filter(|_| more).and_then(|k| inc(*k));
+        self.store.put_accounts(accounts, next)?;
         Ok(())
     }
 
     /// The account at `hash` alone: a range from `hash` to `hash`, proven.
     fn one_account(&mut self, hash: B256) -> Result<Option<Account>, Fault> {
-        let (root, bytes) = (self.store.progress.root, self.cfg.request_bytes);
+        let (root, bytes) = (self.store.progress().root, self.cfg.request_bytes);
         let Message::AccountRange(r) = self.ask(|id| {
             Message::GetAccountRange(GetAccountRange {
                 id,
@@ -414,32 +637,9 @@ impl<P: PeerSource> Syncer<'_, P> {
 
     // ---- storage
 
-    /// The accounts whose storage is still to download: one that is partly done (alone, with its
-    /// origin), or up to `storage_accounts` that have not started.
-    fn storage_batch(&self) -> (B256, Vec<(B256, B256)>) {
-        let mut batch = Vec::new();
-        for (h, a) in &self.store.accounts {
-            if a.storage_root == EMPTY_ROOT_HASH {
-                continue;
-            }
-            match self.store.progress.storage_next.get(h) {
-                Some(None) => {}
-                Some(Some(o)) if batch.is_empty() => return (*o, vec![(*h, a.storage_root)]),
-                Some(Some(_)) => {}
-                None => {
-                    batch.push((*h, a.storage_root));
-                    if batch.len() >= self.cfg.storage_accounts {
-                        break;
-                    }
-                }
-            }
-        }
-        (B256::ZERO, batch)
-    }
-
     fn storage(&mut self) -> Result<(), SyncError> {
         loop {
-            let (origin, batch) = self.storage_batch();
+            let (origin, batch) = self.store.storage_batch(self.cfg.storage_accounts)?;
             if batch.is_empty() {
                 return Ok(());
             }
@@ -449,7 +649,7 @@ impl<P: PeerSource> Syncer<'_, P> {
 
     /// `OnStorage`, `sync.go:2735-2885`.
     fn storage_step(&mut self, origin: B256, batch: &[(B256, B256)]) -> Result<(), Fault> {
-        let (root, bytes) = (self.store.progress.root, self.cfg.request_bytes);
+        let (root, bytes) = (self.store.progress().root, self.cfg.request_bytes);
         let late = origin != B256::ZERO;
         let Message::StorageRanges(r) = self.ask(|id| {
             Message::GetStorageRanges(GetStorageRanges {
@@ -506,33 +706,23 @@ impl<P: PeerSource> Syncer<'_, P> {
                 more.then(|| keys.last().and_then(|k| inc(*k))).flatten(),
             ));
         }
-        for (acct, slots, next) in done {
-            self.store.storage.entry(acct).or_default().extend(slots);
-            self.store.progress.storage_next.insert(acct, next);
-        }
+        self.store.put_slots(done)?;
         Ok(())
     }
 
     // ---- code
 
     fn codes(&mut self) -> Result<(), SyncError> {
-        loop {
-            let mut need = Vec::new();
-            let mut seen = HashSet::new();
-            for a in self.store.accounts.values() {
-                let h = a.code_hash;
-                if h != KECCAK256_EMPTY && !self.store.codes.contains_key(&h) && seen.insert(h) {
-                    need.push(h);
-                    if need.len() >= self.cfg.codes {
-                        break;
-                    }
-                }
-            }
-            if need.is_empty() {
-                return Ok(());
-            }
-            self.retry(|s| s.code_step(&need))?;
+        let mut need = self.store.missing_codes()?;
+        while !need.is_empty() {
+            let chunk: Vec<B256> = need.iter().take(self.cfg.codes).copied().collect();
+            self.retry(|s| s.code_step(&chunk))?;
+            // what the answers gave is held now; the rest is asked for again
+            let have = self.store.has_codes(&need)?;
+            let mut have = have.into_iter();
+            need.retain(|_| !have.next().unwrap_or(false));
         }
+        Ok(())
     }
 
     /// `onByteCodes`, `sync.go:2635-2735` (matching at 2698): the answer skips what the peer lacks, so each code is
@@ -565,7 +755,7 @@ impl<P: PeerSource> Syncer<'_, P> {
             got.push((h, c));
             j += 1;
         }
-        self.store.codes.extend(got);
+        self.store.put_codes(got)?;
         Ok(())
     }
 
@@ -580,7 +770,7 @@ impl<P: PeerSource> Syncer<'_, P> {
         let mut known: HashMap<B256, Bytes> = self.healed.clone();
         let accounts = self
             .store
-            .accounts
+            .accounts()?
             .iter()
             .map(|(h, a)| (*h, a.rlp()))
             .collect();
@@ -589,7 +779,7 @@ impl<P: PeerSource> Syncer<'_, P> {
                 .nodes_by_hash()
                 .map(|(h, n)| (h, n.clone())),
         );
-        let w = mpt::walk(self.store.progress.root, &known)?;
+        let w = mpt::walk(self.store.progress().root, &known)?;
         let mut out = Walked {
             missing: w.missing.into_iter().map(|(p, h)| (None, p, h)).collect(),
             accounts: BTreeMap::new(),
@@ -600,16 +790,15 @@ impl<P: PeerSource> Syncer<'_, P> {
             acc.balance
                 .check_legal()
                 .map_err(|e| SyncError::Fault(Fault::Balance(k, e)))?;
-            let local = self.store.storage.get(&k);
-            let same = |s: &BTreeMap<B256, U256>| {
-                xone_state::trie::root_of_hashed(s.iter().map(|(h, v)| (*h, alloy_rlp::encode(v))))
-                    == acc.storage_root
-            };
-            if storage && acc.storage_root != EMPTY_ROOT_HASH && !local.is_some_and(same) {
-                let leaves = local
+            if storage
+                && acc.storage_root != EMPTY_ROOT_HASH
+                && self.store.slots_root(&k)? != Some(acc.storage_root)
+            {
+                let leaves = self
+                    .store
+                    .slots(&k)?
                     .into_iter()
-                    .flatten()
-                    .map(|(s, v)| (*s, alloy_rlp::encode(v)))
+                    .map(|(s, v)| (s, alloy_rlp::encode(v)))
                     .collect();
                 let mut nodes = self.healed.clone();
                 nodes.extend(
@@ -646,30 +835,13 @@ impl<P: PeerSource> Syncer<'_, P> {
     /// its storage over. Without this, a storage request would name an account the new state
     /// does not have, and be answered empty.
     fn reconcile(&mut self) -> Result<(), SyncError> {
-        if !self.store.progress.stale {
+        if !self.store.progress().stale {
             return Ok(());
         }
         for _ in 0..self.cfg.max_heal_rounds {
             let w = self.walk_state(false)?;
             if w.missing.is_empty() {
-                let (store, new) = (&mut *self.store, w.accounts);
-                for (h, a) in &new {
-                    if store
-                        .accounts
-                        .get(h)
-                        .is_some_and(|o| o.storage_root != a.storage_root)
-                    {
-                        store.storage.remove(h);
-                        store.progress.storage_next.remove(h);
-                    }
-                }
-                store.storage.retain(|h, _| new.contains_key(h));
-                store
-                    .progress
-                    .storage_next
-                    .retain(|h, _| new.contains_key(h));
-                store.accounts = new;
-                store.progress.stale = false;
+                self.store.reconcile(w.accounts)?;
                 return Ok(());
             }
             self.fetch_nodes(&w.missing)?;
@@ -686,41 +858,19 @@ impl<P: PeerSource> Syncer<'_, P> {
     /// ponytail: each round walks and rebuilds from the whole store; geth keeps a persistent
     /// frontier of paths (`trie/sync.go`). Fetched nodes are not kept across runs.
     fn heal(&mut self) -> Result<(), SyncError> {
-        if hashed_root(&self.store.accounts, &self.store.storage) == self.store.progress.root {
-            self.finish_accounts();
+        if self.store.root()? == self.store.progress().root {
+            self.store.finish_accounts()?;
             return Ok(());
         }
         for _ in 0..self.cfg.max_heal_rounds {
             let w = self.walk_state(true)?;
             if w.missing.is_empty() {
-                self.store.accounts = w.accounts;
-                self.store.storage.extend(w.storage);
-                // an account without storage at the root keeps none
-                let accounts = &self.store.accounts;
-                self.store.storage.retain(|h, _| {
-                    accounts
-                        .get(h)
-                        .is_some_and(|a| a.storage_root != EMPTY_ROOT_HASH)
-                });
-                self.finish_accounts();
+                self.store.heal(w.accounts, w.storage)?;
                 return Ok(());
             }
             self.fetch_nodes(&w.missing)?;
         }
         Err(SyncError::Fault(Fault::Bad("heal did not converge")))
-    }
-
-    /// Every cursor is done: the leaves are final.
-    fn finish_accounts(&mut self) {
-        let p = &mut self.store.progress;
-        p.next_account = None;
-        p.storage_next = self
-            .store
-            .accounts
-            .iter()
-            .filter(|(_, a)| a.storage_root != EMPTY_ROOT_HASH)
-            .map(|(h, _)| (*h, None))
-            .collect();
     }
 
     /// `OnTrieNodes`, `sync.go:2886-2990` (matching at 2951).
@@ -740,7 +890,7 @@ impl<P: PeerSource> Syncer<'_, P> {
             last = *acct;
         }
         let want: Vec<B256> = chunk.iter().map(|(_, _, h)| *h).collect();
-        let (root, bytes) = (self.store.progress.root, self.cfg.request_bytes);
+        let (root, bytes) = (self.store.progress().root, self.cfg.request_bytes);
         let Message::TrieNodes(r) = self.ask(|id| {
             Message::GetTrieNodes(GetTrieNodes {
                 id,
@@ -779,12 +929,12 @@ impl<P: PeerSource> Syncer<'_, P> {
     }
 
     fn verify(&mut self) -> Result<(), SyncError> {
-        let want = self.store.progress.root;
-        let got = hashed_root(&self.store.accounts, &self.store.storage);
+        let want = self.store.progress().root;
+        let got = self.store.root()?;
         if got != want {
             return Err(SyncError::Root { got, want });
         }
-        self.store.progress.verified = Some(want);
+        self.store.set_verified(want)?;
         Ok(())
     }
 }
@@ -837,11 +987,11 @@ impl std::fmt::Display for Incomplete {
     }
 }
 
-fn gaps(needs: &[Need], store: &StateStore, state_root: B256, h: &impl History) -> Vec<Need> {
+fn gaps(needs: &[Need], store: &impl Backend, state_root: B256, h: &impl History) -> Vec<Need> {
     let mut out = Vec::new();
     for n in needs {
         if n.kind == Kind::State {
-            if store.progress.verified != Some(state_root) {
+            if store.progress().verified != Some(state_root) {
                 out.push(*n);
             }
             continue;
@@ -876,7 +1026,7 @@ fn gaps(needs: &[Need], store: &StateStore, state_root: B256, h: &impl History) 
 /// against `state_root` (the state root of the pivot header) and every other range present. A
 /// missing range is fetched first; what is still missing afterwards is [`SyncError::Incomplete`].
 pub fn finish(
-    store: &StateStore,
+    store: &impl Backend,
     state_root: B256,
     needs: &[Need],
     history: &mut impl History,

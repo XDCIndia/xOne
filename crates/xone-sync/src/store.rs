@@ -273,6 +273,10 @@ pub struct Install {
     pub preimages: Vec<(B256, Bytes)>,
     /// Blocks above the pivot whose state stays openable (the store's `retention`).
     pub retention: u64,
+    /// `state` is empty: the rows were downloaded straight into the store's state tables
+    /// (`mdbx::snapstate::SnapState`, `--state.disk`). The install checks their root by streaming
+    /// them and writes everything else.
+    pub rows_in_tables: bool,
 }
 
 /// What start-up reads from the datadir before `xone_db::reconcile` decides.

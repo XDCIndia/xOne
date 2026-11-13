@@ -167,3 +167,36 @@ fn the_root_of_sorted_rows_equals_flat_root() {
         flat_root(&MemFlat::default())
     );
 }
+
+#[test]
+fn the_streamed_roots_equal_the_row_roots() {
+    use xone_state::trie::{root_of_sorted_rows, state_root_sorted, storage_root_sorted};
+    let mut accounts = Vec::new();
+    let mut storage = Vec::new();
+    for i in 0..40u8 {
+        let ha = B256::repeat_byte(i.wrapping_mul(7).wrapping_add(1));
+        accounts.push((ha, Account::default()));
+        for j in 0..(i % 5) {
+            storage.push((
+                ha,
+                B256::repeat_byte(j + 1),
+                alloy_primitives::U256::from(u64::from(j) + 1),
+            ));
+        }
+    }
+    accounts.sort_by_key(|(h, _)| *h);
+    accounts.dedup_by_key(|(h, _)| *h);
+    storage.sort_by_key(|(a, k, _)| (*a, *k));
+    assert_eq!(
+        state_root_sorted(accounts.clone(), storage.clone()),
+        root_of_sorted_rows(&accounts, &storage)
+    );
+    assert_eq!(state_root_sorted([], []), alloy_trie::EMPTY_ROOT_HASH);
+    let slots: Vec<_> = (1..6u8)
+        .map(|j| (B256::repeat_byte(j), alloy_primitives::U256::from(j)))
+        .collect();
+    assert_eq!(
+        storage_root_sorted(slots.clone()),
+        xone_state::trie::storage_root_hashed(slots)
+    );
+}

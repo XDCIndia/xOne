@@ -91,6 +91,57 @@ pub fn root_of_sorted_rows(accounts: &[(B256, Account)], storage: &[(B256, B256,
     }
 }
 
+/// The storage root of slots in ascending key order (keys already hashed, a zero value is absent),
+/// streamed: no copy of the slots is held.
+pub fn storage_root_sorted(slots: impl IntoIterator<Item = (B256, U256)>) -> B256 {
+    let mut hb = HashBuilder::default();
+    let mut any = false;
+    for (k, v) in slots {
+        if v.is_zero() {
+            continue;
+        }
+        any = true;
+        hb.add_leaf(Nibbles::unpack(k), &alloy_rlp::encode(v));
+    }
+    if any {
+        hb.root()
+    } else {
+        EMPTY_ROOT_HASH
+    }
+}
+
+/// [`root_of_sorted_rows`] over iterators (accounts by hash, slots by account hash then slot hash,
+/// both ascending with no repeated key): the whole state is never held, only one account's slot
+/// builder and the account builder, so a state of 100M+ slots is hashed in O(depth) memory. Slots of
+/// an absent account are skipped.
+pub fn state_root_sorted(
+    accounts: impl IntoIterator<Item = (B256, Account)>,
+    storage: impl IntoIterator<Item = (B256, B256, U256)>,
+) -> B256 {
+    let mut storage = storage.into_iter().peekable();
+    let mut state = HashBuilder::default();
+    let mut any = false;
+    for (h, mut acc) in accounts {
+        while storage.next_if(|(a, _, _)| *a < h).is_some() {}
+        let mut slots = HashBuilder::default();
+        let mut have = false;
+        while let Some((_, k, v)) = storage.next_if(|(a, _, _)| *a == h) {
+            if !v.is_zero() {
+                have = true;
+                slots.add_leaf(Nibbles::unpack(k), &alloy_rlp::encode(v));
+            }
+        }
+        acc.storage_root = if have { slots.root() } else { EMPTY_ROOT_HASH };
+        state.add_leaf(Nibbles::unpack(h), &acc.rlp());
+        any = true;
+    }
+    if any {
+        state.root()
+    } else {
+        EMPTY_ROOT_HASH
+    }
+}
+
 /// State root of `flat` with `diff` applied, without writing: what [`crate::StateDiff::apply`] followed
 /// by [`flat_root`] gives. A deleted account is dropped with its storage, a listed account takes the
 /// new record, and slots in `diff.storage` overlay the flat ones (zero removes).

@@ -5042,6 +5042,7 @@ dependencies = [
  "xone-db",
  "xone-executor",
  "xone-primitives",
+ "xone-snap",
  "xone-state",
 ]
 

@@ -22,6 +22,7 @@ xone-consensus.workspace = true
 xone-db.workspace = true
 xone-executor.workspace = true
 xone-primitives.workspace = true
+xone-snap.workspace = true
 xone-state.workspace = true
 # The snapshot container compresses each chunk (XB-18); already in the lock for the node and the harness.
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }

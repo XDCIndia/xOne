@@ -171,6 +171,18 @@ impl<F: FlatWrite> StateProvider<F> {
         retention: u64,
     ) -> Self {
         let trie = StateTrie::from_flat(&flat);
+        Self::from_head_with(flat, base, chain, retention, trie)
+    }
+
+    /// [`Self::from_head`] with a trie that is already built (a persisted one: nothing is read
+    /// from the flat state).
+    pub fn from_head_with(
+        flat: F,
+        base: (u64, B256),
+        chain: Vec<(u64, B256, ChangeSet)>,
+        retention: u64,
+        trie: StateTrie,
+    ) -> Self {
         let by_hash = std::iter::once((base.1, base.0))
             .chain(chain.iter().map(|(n, h, _)| (*h, *n)))
             .collect();
@@ -186,22 +198,6 @@ impl<F: FlatWrite> StateProvider<F> {
             by_hash,
             side: HashMap::new(),
         }
-    }
-
-    /// [`Self::from_head`] with a trie that is already built (a persisted one).
-    pub fn from_head_with(
-        flat: F,
-        base: (u64, B256),
-        chain: Vec<(u64, B256, ChangeSet)>,
-        retention: u64,
-        trie: StateTrie,
-    ) -> Self {
-        let mut p = Self::from_head(flat, base, chain, retention);
-        *p.head.get_mut().unwrap_or_else(PoisonError::into_inner) = Head {
-            trie,
-            pending: None,
-        };
-        p
     }
 
     /// The state root after `diff` on top of the head, and the trie rows that go with it (a
