@@ -592,12 +592,12 @@ pub fn run(
         last: None,
         dump: cfg.datadir.join("snap-fault.txt"),
     };
-    let r = sync(&mut d, cfg, spec);
+    let r = sync(&mut d, cfg, spec, genesis);
     net.stop();
     r
 }
 
-fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
+fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec, genesis: &Genesis) -> R<()> {
     let t0 = Instant::now();
     let pins = match &cfg.sync.snap_pins {
         Some(p) => parse_pins(
@@ -696,7 +696,7 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
     }
     // An account above 2^256 is tracked by address by the executor. snap/1 gives only its hash, so
     // its preimage (a handful of accounts at most) is asked of an xOne peer over xpre/1, checked by
-    // its hash; no other account needs one.
+    // its hash, or found among the genesis accounts; no other account needs one.
     let wide: Vec<B256> = rows
         .accounts
         .iter()
@@ -705,7 +705,17 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
         .collect();
     let mut wide_pre = Vec::new();
     for h in wide {
-        let p = wide_preimage(d, h).ok_or(SnapSyncError::WideAddress(h))?;
+        // an xOne peer knows it, or it is a genesis account (the funded accounts of the XDC networks
+        // are the ones above 2^256), checked by its hash either way
+        let p = wide_preimage(d, h)
+            .or_else(|| {
+                genesis
+                    .alloc
+                    .keys()
+                    .find(|a| keccak256(a) == h)
+                    .map(|a| Bytes::copy_from_slice(a.as_slice()))
+            })
+            .ok_or(SnapSyncError::WideAddress(h))?;
         wide_pre.push((h, p));
     }
     eprintln!(
