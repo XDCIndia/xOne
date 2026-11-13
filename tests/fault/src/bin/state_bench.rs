@@ -80,7 +80,10 @@ fn run() -> Result<(), String> {
         for _ in 0..PER_BLOCK_SLOTS.min(slots.saturating_sub(ns)) {
             ns += 1;
             diff.storage.insert(
-                (addr(1_000_000_000 + ns % CONTRACTS), B256::from(U256::from(ns))),
+                (
+                    addr(1_000_000_000 + ns % CONTRACTS),
+                    B256::from(U256::from(ns)),
+                ),
                 U256::from(ns),
             );
         }
