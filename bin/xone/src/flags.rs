@@ -363,7 +363,7 @@ pub const FLAGS: &[Flag] = &[
         P,
         "unset",
         "/d/ks.json",
-        "Keystore file of the validator key. Block production (--mine) needs it with --password, and is refused on chain ids 50 and 51 in this build.",
+        "Keystore file of the validator key. Block production (--mine) needs it with --password, and is refused on chain id 50 in this build.",
         "flags.go:124 ; xone",
     ),
     f(
