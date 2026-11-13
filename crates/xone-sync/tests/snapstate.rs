@@ -186,3 +186,22 @@ fn a_moved_pivot_is_healed_in_the_tables() {
         let _ = std::fs::remove_dir_all(&d);
     }
 }
+
+/// Responses that answer fewer accounts than were asked (a byte budget of 2 KB): the accounts they
+/// leave out are asked for again, and the download ends with every storage range done.
+#[test]
+fn short_storage_answers_leave_no_account_behind() {
+    let (flat, codes) = flat_state(3_000);
+    let want = flat_root(&flat);
+    let tiny = Config {
+        request_bytes: 2 * 1024,
+        storage_accounts: 64,
+        ..Config::default()
+    };
+    let d = dir("short");
+    let mut s = SnapState::open(env(&d), want).unwrap();
+    sync(&mut s, &mut Loopback::new(server(&flat, &codes)), &tiny).unwrap();
+    assert_eq!(s.root().unwrap(), want);
+    assert!(s.settled().unwrap());
+    let _ = std::fs::remove_dir_all(&d);
+}

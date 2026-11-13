@@ -756,6 +756,14 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec, genesis: &Genesis) -> R
                     .find(|a| keccak256(a) == h)
                     .map(|a| Bytes::copy_from_slice(a.as_slice()))
             })
+            .or_else(|| {
+                // the archive RPC of --snap.gap-rpc knows it (checked by its hash)
+                let url = cfg.sync.snap_gap_rpc.as_ref()?;
+                let mut rpc = gaprpc::Rpc::new(url, pivot).ok()?;
+                rpc.preimage(h)
+                    .ok()
+                    .map(|a| Bytes::copy_from_slice(a.as_slice()))
+            })
             .ok_or(SnapSyncError::WideAddress(h))?;
         wide_pre.push((h, p));
     }

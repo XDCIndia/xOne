@@ -207,6 +207,8 @@ pub trait Backend {
     fn summary(&self) -> String {
         String::new()
     }
+    /// A phase of the run begins (for the log of a store that takes minutes over one).
+    fn phase(&mut self, _name: &str) {}
     /// Replaces the pivot (see [`StateStore::set_root`]).
     fn set_root(&mut self, root: B256) -> Result<(), StoreError>;
     /// Stores proven accounts and moves `next_account`.
@@ -243,6 +245,12 @@ pub trait Backend {
     fn finish_accounts(&mut self) -> Result<(), StoreError>;
     /// The state root of the held rows.
     fn root(&self) -> Result<B256, StoreError>;
+    /// The held rows are already the state at the pivot root, without hashing every row: the
+    /// accounts hash to the root with the storage roots their proofs gave, and every storage range
+    /// that was proven (each against its account's storage root) is done. Memory stores hash the rows.
+    fn settled(&self) -> Result<bool, StoreError> {
+        Ok(self.root()? == self.progress().root)
+    }
     /// The held rows hash to `root`.
     fn set_verified(&mut self, root: B256) -> Result<(), StoreError>;
 }
@@ -339,7 +347,11 @@ impl Backend for StateStore {
 
     fn slots(&self, account: &B256) -> Result<BTreeMap<B256, U256>, StoreError> {
         // no slots held is an empty map (a typed absence would make the caller test twice)
-        Ok(self.storage.get(account).cloned().unwrap_or_else(BTreeMap::new))
+        Ok(self
+            .storage
+            .get(account)
+            .cloned()
+            .unwrap_or_else(BTreeMap::new))
     }
 
     fn reconcile(&mut self, new: BTreeMap<B256, Account>) -> Result<(), StoreError> {
@@ -434,12 +446,19 @@ pub fn sync<P: PeerSource, B: Backend>(
         id: 0,
         healed: HashMap::new(),
     };
+    s.store.phase("accounts");
     s.accounts()?;
+    s.store.phase("reconcile");
     s.reconcile()?;
+    s.store.phase("storage");
     s.storage()?;
+    s.store.phase("codes");
     s.codes()?;
+    s.store.phase("heal");
     s.heal()?;
+    s.store.phase("codes after heal");
     s.codes()?;
+    s.store.phase("verify");
     s.verify()
 }
 
@@ -859,7 +878,7 @@ impl<P: PeerSource, B: Backend> Syncer<'_, P, B> {
     /// ponytail: each round walks and rebuilds from the whole store; geth keeps a persistent
     /// frontier of paths (`trie/sync.go`). Fetched nodes are not kept across runs.
     fn heal(&mut self) -> Result<(), SyncError> {
-        if self.store.root()? == self.store.progress().root {
+        if self.store.settled()? {
             self.store.finish_accounts()?;
             return Ok(());
         }

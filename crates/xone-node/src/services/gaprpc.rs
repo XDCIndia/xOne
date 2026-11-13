@@ -128,6 +128,23 @@ impl Rpc {
         })
     }
 
+    /// The address behind `hash` from the archive node's preimage table (`debug_preimage`), checked
+    /// by its hash: the source is not trusted. For an account above 2^256, whose address the
+    /// executor needs and snap/1 does not carry.
+    pub fn preimage(&mut self, hash: B256) -> Result<Address, String> {
+        let v = self.call("debug_preimage", json!([format!("{hash:#x}")]))?;
+        let b = hex::decode(v.as_str().ok_or("not a string")?).map_err(|e| e.to_string())?;
+        let a: [u8; 20] = b
+            .as_slice()
+            .try_into()
+            .map_err(|_| "not 20 bytes".to_string())?;
+        let a = Address::from(a);
+        if alloy_primitives::keccak256(a) != hash {
+            return Err("the preimage does not hash to the key".into());
+        }
+        Ok(a)
+    }
+
     fn call(&mut self, method: &str, params: Value) -> Result<Value, String> {
         if let Some(t) = self.last {
             if let Some(w) = GAP.checked_sub(t.elapsed()) {

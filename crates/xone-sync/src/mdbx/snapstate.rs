@@ -359,6 +359,10 @@ impl Backend for SnapState {
         &self.progress
     }
 
+    fn phase(&mut self, name: &str) {
+        eprintln!("snap: phase {name}");
+    }
+
     fn summary(&self) -> String {
         match self.counts() {
             Ok((a, s, c)) => format!("{a} accounts, {s} slots, {c} codes"),
@@ -481,10 +485,12 @@ impl Backend for SnapState {
         if failed.get() {
             return Err(StoreError("a read of the accounts failed".into()));
         }
-        if batch.len() >= max {
-            if let Some(l) = last {
-                self.cursor = l;
-            }
+        // The next scan starts at the first account of this batch: a response that answers fewer
+        // accounts than were asked leaves the rest unstarted, and they are at or after it.
+        if let Some((first, _)) = batch.first() {
+            self.cursor = *first;
+        } else if let Some(l) = last {
+            self.cursor = l;
         }
         Ok((B256::ZERO, batch))
     }
@@ -666,6 +672,25 @@ impl Backend for SnapState {
 
     fn root(&self) -> R<B256> {
         Self::state_root_of(&self.env)
+    }
+
+    fn settled(&self) -> R<bool> {
+        let t0 = std::time::Instant::now();
+        let accounts = self.accounts()?;
+        let pending = accounts
+            .iter()
+            .filter(|(h, a)| {
+                a.storage_root != EMPTY_ROOT_HASH
+                    && self.progress.storage_next.get(*h) != Some(&None)
+            })
+            .count();
+        let root = xone_state::trie::state_root_hashed(accounts);
+        eprintln!(
+            "snap: settled? {pending} accounts with storage not done, accounts hash to the pivot root: {} ({} ms)",
+            root == self.progress.root,
+            t0.elapsed().as_millis()
+        );
+        Ok(pending == 0 && root == self.progress.root)
     }
 
     fn set_verified(&mut self, root: B256) -> R<()> {
