@@ -1154,6 +1154,7 @@ impl<D: SegDir> MdbxStore<D> {
         let Some(m) = self.manifest.clone() else {
             return Ok(());
         };
+        let t0 = std::time::Instant::now();
         let (head_n, head_h) = (m.head_number, m.head_hash);
         let bad = |what: &str| StoreError::Damaged(format!("state tables: {what}"));
         let db = |e: MdbxError| StoreError::Damaged(e.to_string());
@@ -1237,6 +1238,12 @@ impl<D: SegDir> MdbxStore<D> {
             }
             state
         };
+        eprintln!(
+            "state: head {head_n} loaded from the tables in {} ms ({}, {} blocks of changesets)",
+            t0.elapsed().as_millis(),
+            if self.cfg.disk_state { "disk" } else { "memory" },
+            head_n - base
+        );
         let mut side = HashMap::new();
         for (_, v) in rd.range(T::SideBlocks, &[], None).map_err(db)? {
             let r = dec_record(&v).ok_or_else(|| bad("a side block"))?;

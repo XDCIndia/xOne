@@ -29,7 +29,7 @@ use std::{
 };
 
 use alloy_primitives::{B256, U256};
-use xone_db::mdbx::{Env, T};
+use xone_db::mdbx::{prefix_end, Env, T};
 use xone_state::{Account, ChangeSet, FlatRead, FlatWrite, HashedDiff, MemFlat};
 
 use super::codec::dec_account;
@@ -231,18 +231,6 @@ impl FlatRead for DiskFlat {
             }),
         )
     }
-}
-
-/// The smallest key above every key that starts with `prefix`; `None` when there is none.
-fn prefix_end(prefix: &[u8]) -> Option<Vec<u8>> {
-    let mut e = prefix.to_vec();
-    while let Some(last) = e.pop() {
-        if last != 0xff {
-            e.push(last + 1);
-            return Some(e);
-        }
-    }
-    None
 }
 
 /// Rows of `t` from `next` up to `end`, one page per read transaction.
@@ -572,12 +560,5 @@ mod tests {
         assert_eq!(disk.hashed_slots(keys[n / 2 + 1]).count(), 1);
         assert_eq!(disk.hashed_slots(keys[0]).count(), 0);
         assert!(!disk.failed());
-    }
-
-    #[test]
-    fn prefix_end_carries() {
-        assert_eq!(prefix_end(&[1, 2]), Some(vec![1, 3]));
-        assert_eq!(prefix_end(&[1, 0xff]), Some(vec![2]));
-        assert_eq!(prefix_end(&[0xff, 0xff]), None);
     }
 }

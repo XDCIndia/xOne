@@ -206,6 +206,18 @@ impl Env {
     }
 }
 
+/// The smallest key above every key that starts with `prefix`; `None` when there is none.
+pub fn prefix_end(prefix: &[u8]) -> Option<Vec<u8>> {
+    let mut e = prefix.to_vec();
+    while let Some(last) = e.pop() {
+        if last != 0xff {
+            e.push(last + 1);
+            return Some(e);
+        }
+    }
+    None
+}
+
 impl<K: TransactionKind> Tx<'_, K> {
     fn table(&self, name: &str) -> R<Table<'_>> {
         Ok(self.tx.open_table(Some(name))?)
@@ -251,10 +263,12 @@ impl<K: TransactionKind> Tx<'_, K> {
         Ok(out)
     }
 
-    /// Rows whose key starts with `prefix`.
+    /// Rows whose key starts with `prefix`. The scan stops at the end of the prefix: it does not read
+    /// (and copy) the rest of the table.
     pub fn prefix(&self, t: T, prefix: &[u8]) -> R<Vec<(Vec<u8>, Vec<u8>)>> {
+        let to = prefix_end(prefix);
         Ok(self
-            .range(t, prefix, None)?
+            .range(t, prefix, to.as_deref())?
             .into_iter()
             .take_while(|(k, _)| k.starts_with(prefix))
             .collect())
@@ -418,6 +432,10 @@ mod tests {
         let r = env.read().unwrap();
         assert_eq!(r.range(T::SegIdx, &[1, 1], Some(&[1, 4])).unwrap().len(), 3);
         assert_eq!(r.prefix(T::SegIdx, &[1]).unwrap().len(), 5);
+        assert_eq!(r.prefix(T::SegIdx, &[1, 3]).unwrap().len(), 1);
+        assert!(r.prefix(T::SegIdx, &[2]).unwrap().is_empty());
+        assert_eq!(prefix_end(&[1, 0xff]), Some(vec![2]));
+        assert_eq!(prefix_end(&[0xff]), None);
         // a start above the last key holds no row (it must not answer the last one)
         assert!(r.range(T::SegIdx, &[1, 9], None).unwrap().is_empty());
         assert!(r.range(T::SegIdx, &[2], Some(&[3])).unwrap().is_empty());
