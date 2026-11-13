@@ -157,10 +157,19 @@ fn kind(to: TxKind) -> Option<Address> {
     }
 }
 
-fn recover(hash: B256, y: u8, r: U256, s: U256) -> Result<Address, TxError> {
+fn recover(
+    hash: B256,
+    y: u8,
+    r: U256,
+    s: U256,
+    known: Option<Address>,
+) -> Result<Address, TxError> {
     // Homestead rules: r and s in [1, N/2], parity 0 or 1 (geth `ValidateSignatureValues`).
     if r.is_zero() || s.is_zero() || s > HALF_N || y > 1 {
         return Err(TxError::Signature);
+    }
+    if let Some(a) = known {
+        return Ok(a);
     }
     let mut sig = [0u8; 65];
     sig[..32].copy_from_slice(&r.to_be_bytes::<32>());
@@ -186,8 +195,14 @@ fn check_chain(have: u64, want: u64) -> Result<(), TxError> {
 /// Decode a consensus-encoded transaction (legacy: the RLP list; typed: type byte and payload)
 /// and recover its sender. `chain_id` is the chain's; a signature for another one is refused.
 pub fn decode(raw: &[u8], chain_id: u64) -> Result<Tx, TxError> {
+    decode_from(raw, chain_id, None)
+}
+
+/// [`decode`] with the sender that `decode` recovered from these same bytes earlier (geth
+/// `SenderCacher`, `core/sender_cacher.go`): every check runs, only the recovery is skipped.
+pub fn decode_from(raw: &[u8], chain_id: u64, sender: Option<Address>) -> Result<Tx, TxError> {
     match raw.first() {
-        Some(0xc0..) => legacy(raw, chain_id),
+        Some(0xc0..) => legacy(raw, chain_id, sender),
         Some(1) => {
             let t = T1::decode(&mut &raw[1..]).map_err(rlp)?;
             check_chain(t.chain_id, chain_id)?;
@@ -213,7 +228,7 @@ pub fn decode(raw: &[u8], chain_id: u64) -> Result<Tx, TxError> {
                 gas: t.gas,
                 to: kind(t.to),
                 value: t.value,
-                from: recover(hash, t.y, t.r, t.s)?,
+                from: recover(hash, t.y, t.r, t.s, sender)?,
                 data: t.data,
                 access_list: t.access_list,
             })
@@ -244,7 +259,7 @@ pub fn decode(raw: &[u8], chain_id: u64) -> Result<Tx, TxError> {
                 gas: t.gas,
                 to: kind(t.to),
                 value: t.value,
-                from: recover(hash, t.y, t.r, t.s)?,
+                from: recover(hash, t.y, t.r, t.s, sender)?,
                 data: t.data,
                 access_list: t.access_list,
             })
@@ -254,7 +269,7 @@ pub fn decode(raw: &[u8], chain_id: u64) -> Result<Tx, TxError> {
     }
 }
 
-fn legacy(raw: &[u8], chain_id: u64) -> Result<Tx, TxError> {
+fn legacy(raw: &[u8], chain_id: u64, sender: Option<Address>) -> Result<Tx, TxError> {
     let mut buf = raw;
     let t = Legacy::decode(&mut buf).map_err(rlp)?;
     if !buf.is_empty() {
@@ -307,7 +322,7 @@ fn legacy(raw: &[u8], chain_id: u64) -> Result<Tx, TxError> {
         gas: t.gas,
         to: kind(t.to),
         value: t.value,
-        from: recover(hash, y, t.r, t.s)?,
+        from: recover(hash, y, t.r, t.s, sender)?,
         data: t.data,
         access_list: vec![],
     })

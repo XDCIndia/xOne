@@ -23,7 +23,7 @@ use std::{
     time::Duration,
 };
 
-use alloy_primitives::B256;
+use alloy_primitives::{Bytes, B256};
 use tokio::{
     runtime::Handle,
     sync::{
@@ -453,6 +453,8 @@ impl Follower {
 
     async fn import(&mut self, blocks: Vec<(Header, Body)>) -> Result<usize, String> {
         let core = self.core.clone();
+        let txs: usize = blocks.iter().map(|(_, b)| b.transactions.len()).sum();
+        let t0 = std::time::Instant::now();
         let r = tokio::task::spawn_blocking(move || {
             let mut n = 0;
             for (h, b) in blocks {
@@ -478,7 +480,11 @@ impl Follower {
             };
             self.peers.set_head(h, td);
             self.progress.confirmed.store(false, Ordering::Relaxed);
-            eprintln!("chain: imported {} blocks, head {head}", r.0);
+            eprintln!(
+                "chain: imported {} blocks ({txs} transactions) in {} ms, head {head}",
+                r.0,
+                t0.elapsed().as_millis()
+            );
         }
         match r.1 {
             None => Ok(r.0),
@@ -590,6 +596,10 @@ impl Follower {
                     deadline: Instant::now() + REQUEST_TIMEOUT,
                 });
             }
+        } else if let Some(last) = headers.last().map(Header::hash) {
+            // the last bodies of the batch: the next headers travel while they import (geth
+            // `eth/sync_xdc.go:2763-2829` fetches the next ranges while range 0 imports)
+            self.ask(peer, Origin::Hash(last), Stage::Headers(last));
         }
         let blocks: Vec<_> = headers
             .into_iter()
@@ -814,8 +824,24 @@ impl Service for ChainService {
             serving: Arc::new(Semaphore::new(SERVING)),
         };
         let (fwd, rest) = mpsc::channel(1024);
+        let senders = self.core.senders.clone();
         self.rt.spawn(async move {
             while let Some(ev) = events.recv().await {
+                // the senders of a block are recovered as it arrives, while the follower imports the
+                // blocks before it (geth `SenderCacher`)
+                if let Event::Message { msg, .. } = &ev {
+                    let txs: Vec<Bytes> = match msg {
+                        Message::BlockBodies { bodies, .. } => bodies
+                            .iter()
+                            .flat_map(|b| b.transactions.iter().map(from_wire))
+                            .collect(),
+                        Message::NewBlock(nb) => {
+                            nb.block.transactions.iter().map(from_wire).collect()
+                        }
+                        _ => vec![],
+                    };
+                    senders.warm(txs);
+                }
                 match ev {
                     Event::Message {
                         peer,

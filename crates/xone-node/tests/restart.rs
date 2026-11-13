@@ -189,10 +189,11 @@ fn memory_follows_the_window() {
             .unwrap();
     }
     check(&core);
+    // the import writes its checkpoints in the background; the close waits for the last one
+    drop(core);
     // a full node keeps the newest two checkpoints: an older one is outside the unwind window
     let ck = |n: u64| dir.join(format!("xone/state/ckpt-{n:08}.json.gz")).exists();
     assert!(!ck(100) && ck(200) && ck(300));
-    drop(core);
     check(&open(&dir, Network::Apothem, 100).unwrap());
     let _ = std::fs::remove_dir_all(&dir);
 }
