@@ -8,6 +8,7 @@ pub mod pool;
 pub mod producer;
 pub mod rpc;
 pub mod safety_file;
+pub mod senders;
 pub mod snap;
 pub mod snapsync;
 pub mod stats;
@@ -30,7 +31,7 @@ pub fn to_wire(tx: &Bytes) -> Raw {
 pub fn from_wire(r: &Raw) -> Bytes {
     let mut b = &r.0[..];
     match alloy_rlp::Header::decode(&mut b) {
-        Ok(h) if !h.list => Bytes::copy_from_slice(b),
+        Ok(h) if !h.list => r.0.slice(r.0.len() - b.len()..),
         _ => r.0.clone(),
     }
 }

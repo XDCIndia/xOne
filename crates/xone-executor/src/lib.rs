@@ -141,7 +141,9 @@ pub struct BlockOutcome {
     pub bal_hash: Option<B256>,
     /// geth `ValidateBody` and the receipt checks of `ValidateState`, run with the receipts and
     /// roots computed above. `Err` is a block geth would refuse; the caller reports the first
-    /// differing field before it reports this.
+    /// differing field before it reports this. Run by [`execute_block`] only: the callers of
+    /// [`execute_verified`] and [`execute_unsealed`] check the body themselves or have no roots
+    /// yet, and get `Ok(())`.
     pub body_check: Result<(), BodyError>,
 }
 
@@ -169,7 +171,52 @@ pub fn execute_block<V: StateRead, E: Env>(
     }
     basefee::verify(spec, header.number, header.base_fee)?;
     let author = block_author(spec, header)?;
-    run_block(spec, parent_view, header, author, body, ctx.parent, ctx.env)
+    let mut out = run_block(
+        spec,
+        parent_view,
+        header,
+        author,
+        body,
+        None,
+        ctx.parent,
+        ctx.env,
+    )?;
+    out.body_check = BodyVerifier::new(spec).verify(header, body, &out.receipt_encodings);
+    Ok(out)
+}
+
+/// [`execute_block`] for a header the caller has already verified against `parent` with
+/// `HeaderVerifier::verify` (the node's `Chain::insert` does it once per block, geth
+/// `insertChain` once per header), with the senders of `body.transactions` recovered ahead of
+/// execution (geth `SenderCacher`, `core/blockchain.go:2526`): `senders[i]` is the sender
+/// `tx::decode` recovers from transaction `i`; `None` recovers them here. Every other check of
+/// `execute_block` runs.
+pub fn execute_verified<V: StateRead, E: Env>(
+    spec: &ChainSpec,
+    parent_view: &V,
+    header: &Header,
+    body: &Body,
+    senders: Option<&[Address]>,
+    parent: &Header,
+    env: &E,
+) -> Result<BlockOutcome, ExecError> {
+    if senders.is_some_and(|s| s.len() != body.transactions.len()) {
+        return Err(ExecError::Unsupported(
+            "the senders do not match the transactions",
+        ));
+    }
+    basefee::verify(spec, header.number, header.base_fee)?;
+    let author = block_author(spec, header)?;
+    run_block(
+        spec,
+        parent_view,
+        header,
+        author,
+        body,
+        senders,
+        parent,
+        env,
+    )
 }
 
 /// The producer's execution of a block it is building (XB-23): everything `execute_block` does after the
@@ -186,22 +233,36 @@ pub fn execute_unsealed<V: StateRead, E: Env>(
     env: &E,
 ) -> Result<BlockOutcome, ExecError> {
     basefee::verify(spec, header.number, header.base_fee)?;
-    run_block(spec, parent_view, header, author, body, parent, env)
+    run_block(spec, parent_view, header, author, body, None, parent, env)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_block<V: StateRead, E: Env>(
     spec: &ChainSpec,
     parent_view: &V,
     header: &Header,
     author: Address,
     body: &Body,
+    senders: Option<&[Address]>,
     parent: &Header,
     env: &E,
 ) -> Result<BlockOutcome, ExecError> {
     let number = header.number;
     let r = rules(spec, number)?;
     let eip158 = spec.eip158.is_active(number);
-    let txs = decode_all(&body.transactions, spec.chain_id)?;
+    let txs = match senders {
+        Some(from) => body
+            .transactions
+            .iter()
+            .zip(from)
+            .enumerate()
+            .map(|(index, (raw, a))| {
+                tx::decode_from(raw, spec.chain_id, Some(*a))
+                    .map_err(|error| ExecError::Tx { index, error })
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+        None => decode_all(&body.transactions, spec.chain_id)?,
+    };
 
     let mut overlay = Overlay::new(parent_view, env);
     // `ApplyTIPSigningHardFork`, `core/state_processor.go:152`, `:321-327`: before the first transaction.
@@ -423,7 +484,6 @@ fn run_block<V: StateRead, E: Env>(
     let receipt_root = ordered_trie_root_encoded(&receipt_encodings);
     let bloom = receipts.iter().fold(Bloom::ZERO, |b, x| b | x.bloom);
     let state_root = StateRead::root_with(parent_view, &diff)?;
-    let body_check = BodyVerifier::new(spec).verify(header, body, &receipt_encodings);
     Ok(BlockOutcome {
         hash: header.hash(),
         diff,
@@ -441,7 +501,7 @@ fn run_block<V: StateRead, E: Env>(
         receipt_root,
         tx_root,
         bal_hash: bal.map(|b| b.hash()),
-        body_check,
+        body_check: Ok(()),
     })
 }
 

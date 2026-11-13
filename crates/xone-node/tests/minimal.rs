@@ -269,14 +269,15 @@ fn a_minimal_node_prunes_to_its_floor_restarts_and_answers_for_the_rest_with_the
         assert!(h.at(0).is_none() && h.at(1).is_some());
         assert!(h.at(1).unwrap().body.transactions.is_empty());
     }
+    let want = (1800, blocks[1800].header.hash());
+    // the import writes its checkpoints in the background; the close waits for the last one
+    drop(core);
     // only the newest state checkpoint is kept
     let ckpts: Vec<_> = std::fs::read_dir(dir.join("state"))
         .unwrap()
         .filter_map(Result::ok)
         .collect();
     assert_eq!(ckpts.len(), 1, "{ckpts:?}");
-    let want = (1800, blocks[1800].header.hash());
-    drop(core);
 
     // restart: the files are the pruned generation, the checkpoint is block 1800
     let core = Core::open_with(spec, &genesis, &dir, 100, true, false).unwrap();

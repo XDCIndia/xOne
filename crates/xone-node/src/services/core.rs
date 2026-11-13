@@ -1,5 +1,5 @@
 //! The chain as the node runs it: `xone_sync::chain::Chain` over the [`NodeStore`] (MDBX and the
-//! segment files, ADR-005), the executor adapter (`xone_executor::execute_block`) and the header
+//! segment files, ADR-005), the executor adapter (`xone_executor::execute_verified`) and the header
 //! check adapter (`HeaderVerifier`), both reading the node's own [`History`]. A restart reconciles
 //! the store, unwinds it to the newest state checkpoint and replays every block above it through the
 //! same `Chain::insert`, so nothing that was stored is trusted without being verified and executed
@@ -22,7 +22,7 @@ use xone_consensus::{
     verify::{Body, HeaderError, HeaderVerifier},
 };
 use xone_db::mdbx::T;
-use xone_executor::{execute_block, ExecCtx};
+use xone_executor::execute_verified;
 use xone_primitives::{Header, WideBalance};
 use xone_state::{
     trie::flat_root, Account, FlatRead, FlatWrite, MemFlat, Missing, StateDiff, StateRead,
@@ -45,6 +45,7 @@ use super::{
     hist::{
         gap_row, reseed, switch_of_row, switch_row, window_of, HistInner, Stored, MEMORY_WINDOW,
     },
+    senders::Senders,
     store::{self, Ckpt, FileError, NodeStore},
 };
 
@@ -129,10 +130,14 @@ impl History {
     }
 }
 
-/// `BlockExecutor` over `execute_block`: the block must extend the tip of the node's history.
+/// `BlockExecutor` over `execute_verified`: the block must extend the tip of the node's history.
+/// `Chain::insert` runs [`NodeCheck`] on the header (with its QC) before it executes the block, so
+/// the header is verified once per block, as geth's `insertChain` does; the senders come from the
+/// node's [`Senders`] workers.
 pub struct NodeExec {
     spec: ChainSpec,
     hist: std::sync::Arc<History>,
+    senders: std::sync::Arc<Senders>,
 }
 
 impl BlockExecutor for NodeExec {
@@ -143,6 +148,7 @@ impl BlockExecutor for NodeExec {
         body: &Body,
     ) -> Result<Execution, ExecError> {
         let fail = |e: String| ExecError::Failed(e);
+        let senders = self.senders.of(&body.transactions);
         let h = self.hist.read();
         let tip = h.tip();
         if header.parent_hash != tip.hash || header.number != h.tip_number() + 1 {
@@ -153,20 +159,14 @@ impl BlockExecutor for NodeExec {
             )));
         }
         let snap = h.snaps.get(&tip.header.number);
-        let verify = h
-            .context(header, &tip.header, snap)
-            .map_err(|e| fail(e.to_string()))?;
-        let out = execute_block(
+        let out = execute_verified(
             &self.spec,
             &Dyn(parent),
             header,
             body,
-            &ExecCtx {
-                parent: &tip.header,
-                verify: &verify,
-                env: &*h,
-                derive: None,
-            },
+            senders.as_deref(),
+            &tip.header,
+            &*h,
         )
         .map_err(|e| fail(e.to_string()))?;
         let v1 = self
@@ -253,6 +253,10 @@ pub struct Core {
     pub minimal: bool,
     /// Blocks the retention floor moves before the store is rewritten ([`PRUNE_SLACK`]; a test sets 0).
     pub prune_slack: u64,
+    /// Recovers the senders of bodies as they arrive, ahead of their import.
+    pub senders: std::sync::Arc<Senders>,
+    /// The state checkpoint being written ([`Self::checkpoint_in_background`]).
+    saving: Mutex<Option<std::thread::JoinHandle<Result<(), FileError>>>>,
 }
 
 pub fn now() -> u64 {
@@ -316,8 +320,18 @@ pub(crate) fn miner_of(spec: &ChainSpec, h: &Header) -> Result<Address, CoreErro
         .map_err(|e| CoreError::Inconsistent(format!("block {}: {e}", h.number)))
 }
 
+/// Writes `c`, then removes the checkpoints below `keep_from`.
+fn save(dir: &Path, c: &Ckpt, keep_from: u64) -> Result<(), FileError> {
+    store::save_ckpt(dir, c)?;
+    store::drop_ckpts_below(dir, keep_from);
+    Ok(())
+}
+
 impl Drop for Core {
     fn drop(&mut self) {
+        if let Err(e) = self.join_save() {
+            eprintln!("chain: {e}");
+        }
         if let Err(e) = self.chain.with_store_mut(NodeStore::steady) {
             eprintln!("store: the last blocks are not steady on close: {e}");
         }
@@ -554,9 +568,11 @@ impl Core {
                 "the store at block {start} is not the checkpoint's state"
             )));
         }
+        let senders = std::sync::Arc::new(Senders::new(spec.chain_id));
         let exec = NodeExec {
             spec: spec.clone(),
             hist: hist.clone(),
+            senders: senders.clone(),
         };
         let check = NodeCheck {
             spec: spec.clone(),
@@ -576,6 +592,8 @@ impl Core {
             head,
             minimal,
             prune_slack: PRUNE_SLACK,
+            senders,
+            saving: Mutex::new(None),
         };
         if minimal {
             core.check_start()?;
@@ -687,7 +705,7 @@ impl Core {
         }
         self.head.send_replace((number, hash));
         if self.ckpt_every != 0 && number % self.ckpt_every == 0 {
-            self.checkpoint()?;
+            self.checkpoint_in_background()?;
         }
         if self.minimal {
             self.prune()?;
@@ -775,6 +793,55 @@ impl Core {
     /// Writes a state checkpoint of the head. A snapshot with votes in flight is not saved: the
     /// checkpoint would lose them (the harness's rule). Returns the number saved.
     pub fn checkpoint(&self) -> Result<Option<u64>, CoreError> {
+        let Some((c, keep_from)) = self.head_ckpt()? else {
+            return Ok(None);
+        };
+        self.join_save()?;
+        save(&self.dir, &c, keep_from)?;
+        Ok(Some(c.number))
+    }
+
+    /// [`Self::checkpoint`] with the write (gzip JSON, sync, rename) on a thread of its own: the
+    /// import takes the state and goes on (geth writes its state outside `insertChain` too,
+    /// `core/blockchain.go:2335-2370`). The next checkpoint and the close wait for it; its error is
+    /// that of the next checkpoint.
+    fn checkpoint_in_background(&self) -> Result<Option<u64>, CoreError> {
+        let Some((c, keep_from)) = self.head_ckpt()? else {
+            return Ok(None);
+        };
+        self.join_save()?;
+        let (dir, n) = (self.dir.clone(), c.number);
+        *self.saving() = Some(std::thread::spawn(move || {
+            let t0 = std::time::Instant::now();
+            save(&dir, &c, keep_from)?;
+            eprintln!(
+                "chain: state checkpoint of block {n} written in {} ms",
+                t0.elapsed().as_millis()
+            );
+            Ok(())
+        }));
+        Ok(Some(n))
+    }
+
+    fn saving(
+        &self,
+    ) -> std::sync::MutexGuard<'_, Option<std::thread::JoinHandle<Result<(), FileError>>>> {
+        self.saving.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Waits for the checkpoint being written, if any.
+    fn join_save(&self) -> Result<(), CoreError> {
+        match self.saving().take().map(std::thread::JoinHandle::join) {
+            None | Some(Ok(Ok(()))) => Ok(()),
+            Some(Ok(Err(e))) => Err(e.into()),
+            Some(Err(_)) => Err(CoreError::Inconsistent(
+                "the state checkpoint writer panicked".into(),
+            )),
+        }
+    }
+
+    /// The checkpoint of the head and the lowest checkpoint number to keep once it is written.
+    fn head_ckpt(&self) -> Result<Option<(Ckpt, u64)>, CoreError> {
         let h = self.hist.read();
         let n = h.tip_number();
         let snap = h.snaps.get(&n);
@@ -812,7 +879,6 @@ impl Core {
             .map(|(n, g)| (*n, g.candidates.clone()))
             .collect();
         drop(h);
-        store::save_ckpt(&self.dir, &c)?;
         // A restart replays from the newest checkpoint at or below the head and within the unwind
         // window, so an older one is never read: a minimal node keeps the newest only, a full node
         // also the one before it (the newest may be above a head that a crash took back).
@@ -821,8 +887,7 @@ impl Core {
         } else {
             n.saturating_sub(self.ckpt_every)
         };
-        store::drop_ckpts_below(&self.dir, keep_from);
-        Ok(Some(n))
+        Ok(Some((c, keep_from)))
     }
 
     pub fn head(&self) -> (u64, B256) {
