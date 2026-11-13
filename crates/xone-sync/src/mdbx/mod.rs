@@ -1241,7 +1241,11 @@ impl<D: SegDir> MdbxStore<D> {
         eprintln!(
             "state: head {head_n} loaded from the tables in {} ms ({}, {} blocks of changesets)",
             t0.elapsed().as_millis(),
-            if self.cfg.disk_state { "disk" } else { "memory" },
+            if self.cfg.disk_state {
+                "disk"
+            } else {
+                "memory"
+            },
             head_n - base
         );
         let mut side = HashMap::new();
