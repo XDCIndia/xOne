@@ -22,7 +22,9 @@ same peer; every peer may be a witness for the pin.
 
 ## The pivot
 
-1. **Head**: the header of the source peer's Status head, fetched by hash and checked to hash to it.
+1. **Head**: the header of the source peer's Status head, fetched by hash and checked to hash to it, then the
+   headers after it up to the peer's tip, each linked to its parent (the Status head is as old as the
+   connection; after a move the pivot must come from the tip of now).
 2. **Candidate**: `head - 64`. geth's rule is the same distance (`fsMinFullBlocks`,
    `eth/downloader/downloader.go`; geth-XDC keeps 64 for XDPoS, `eth/downloader/a89_dynamic_anchor_test.go:102`
    "returns fsMinFullBlocks (64), NOT 2×Epoch"). The distance keeps the pivot committed (V2 commits a block
@@ -37,8 +39,10 @@ same peer; every peer may be a witness for the pin.
    - `--snap.pins <file>` (one `<number> <0x hash>` per line, the `snapshot import --pins` form): the
      operator's pin. **Recommended for anything beyond a test network.**
    - Without it: every connected peer is asked for the header at the switch number; at least two must serve
-     the switch hash and none another (`Witnesses`, `Disputed`). This is geth's trust model (the header chain of
-     its peers); acceptable for net2040.
+     the switch hash, and more peers must serve it than serve any other hash (`Witnesses`, `Disputed`). A peer on
+     another chain (a stale release) is outvoted and logged, not fatal. This is geth's trust model (the header
+     chain of its peers); no `--snap.pins` file is needed, and a fresh pivot after a move gets its own switch
+     header the same way. Acceptable for net2040 and Apothem.
    The pin source (the file, or the peer ids and the hash they served) is in the log line of the pivot and in
    `<datadir>/xone/snap-pivot.txt`.
 5. A V1 pivot or a V1 gap pool (the first V2 epoch) is refused (`SnapSyncError::V1`).
@@ -63,6 +67,23 @@ Request sizes stay inside the server's ADR-007 budgets: one request in flight, 5
 (`client::Config::default`, under geth's 2 MiB soft limit), and a server that answers over its Q15 bounds
 (4 sessions, 1 per peer, 16 MiB/s) answers empty, which the client retries.
 
+## A moving pivot (re-pivot)
+
+A peer serves state only for its recent roots (a geth path-scheme node: the last ~128 blocks, about 4 minutes
+on a 2 s chain), so a state download that outlasts them is answered "no data" by every peer
+(`SyncError::Unavailable`, after `max_failures` empty answers). The driver does what geth's snap syncer does:
+
+1. pick a fresh pivot by the rules above (new tip, `head - 64`, anchor verified, switch header pinned again);
+   the window of headers, bodies, receipts and the gap pools are fetched again for it; the fault counts of
+   the peers are cleared;
+2. `StateStore::set_root(new root)`: the downloaded accounts, storage and codes stay and the cursors go on;
+3. `client::sync` runs again: it reconciles the downloaded accounts with the new root (`GetTrieNodes`), downloads
+   the rest at the new root, heals, and checks the root. A later `Unavailable` repeats from 1.
+
+Nothing is installed until the root of the whole download equals the state root of the last pivot, so the
+anchor, the window and the state of the installed datadir are all of one pivot. At most 64 moves (the log
+names each: `pivot moved to root ... (move n); k accounts kept`), then the sync fails with the last error.
+
 ## After the install
 
 The node opens the anchored datadir as a minimal node (`--syncmode snap` implies it) and imports `P + 1`
@@ -73,5 +94,5 @@ onwards through `Chain::insert`: every block verified and executed against the i
 
 | item | what removes it |
 | --- | --- |
-| a moving pivot | the client re-pivots on `Unavailable` (`StateStore::set_root`, heal); the node's driver instead fails and the restart loop starts again from an empty datadir. |
 | resume of an interrupted download | a persisted `StateStore`; today a stop or crash before the install leaves the datadir empty. |
+| memory | the `StateStore` is in memory (also across moves); a network whose state outgrows RAM needs the persisted store. |
