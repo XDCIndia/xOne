@@ -11,9 +11,11 @@ pub mod safety_file;
 pub mod senders;
 pub mod snap;
 pub mod snapsync;
+pub mod snapview;
 pub mod stats;
 pub mod store;
 
+use crate::lifecycle::Service;
 use alloy_primitives::Bytes;
 use xone_net::eth::Raw;
 
@@ -62,7 +64,29 @@ pub fn snap_sync(
         eprintln!("snap: the datadir holds a chain: continuing it (snap sync fills an empty datadir only)");
         return Ok(());
     }
-    snapsync::run(cfg, spec, genesis, stamp, stop)
+    // the board sees the node from the start, not from the first imported block
+    let mut board = cfg.ethstats.as_ref().map(|url| {
+        crate::observe::ethstats::Ethstats::new(
+            crate::observe::ethstats::EthstatsCfg {
+                url: url.clone(),
+                allow_plaintext: false,
+                identity: identity(cfg, spec.chain_id, stamp, true),
+            },
+            std::sync::Arc::new(snapview::Snap),
+            std::sync::Arc::new(snapview::Snap),
+        )
+    });
+    if let Some(b) = board.as_mut() {
+        if let Err(e) = b.start() {
+            eprintln!("snap: ethstats: {e}");
+            board = None;
+        }
+    }
+    let r = snapsync::run(cfg, spec, genesis, stamp, stop);
+    if let Some(mut b) = board {
+        b.stop();
+    }
+    r
 }
 
 /// The node of the config: net, chain, pool, producer (with `--mine`) and rpc, in that order (stopped in reverse, each with
@@ -190,7 +214,7 @@ pub fn build(
             crate::observe::ethstats::EthstatsCfg {
                 url: url.clone(),
                 allow_plaintext: false,
-                identity: identity(cfg, marker, stamp, core.minimal),
+                identity: identity(cfg, marker.chain_id, stamp, core.minimal),
             },
             stats.clone(),
             stats,
@@ -206,7 +230,7 @@ pub fn build(
 /// The hello frame's static facts. `node` and `client` are the build's one stamp.
 fn identity(
     cfg: &crate::Config,
-    marker: &crate::datadir::Marker,
+    chain_id: u64,
     stamp: &str,
     anchored: bool,
 ) -> crate::observe::ethstats::Identity {
@@ -214,7 +238,7 @@ fn identity(
         node: stamp.to_owned(),
         client: stamp.to_owned(),
         port: cfg.p2p.port,
-        net: cfg.network_id.unwrap_or(marker.chain_id).to_string(),
+        net: cfg.network_id.unwrap_or(chain_id).to_string(),
         protocol: "eth/63, xdpos/100".into(),
         os: std::env::consts::OS.into(),
         os_v: std::env::consts::ARCH.into(),

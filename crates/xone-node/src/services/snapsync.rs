@@ -560,6 +560,7 @@ pub fn run(
     pc.head = g.hash();
     pc.td = g.difficulty;
     let (peers, events) = Peers::new(pc.clone(), key);
+    super::snapview::set_peers(&peers);
     let mut net = NetService::new(cfg, rt, peers.clone(), key, &pc).map_err(io)?;
     net.start().map_err(|e| io(e.to_string()))?;
     let h = net.handle().runtime();
@@ -604,6 +605,7 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
         .next()
         .filter(|h| h.hash() == head_hash)
         .ok_or_else(|| bad(&src, "does not serve its own head"))?;
+    super::snapview::set_head(&head);
     let top = head.number;
     let first_try = top.checked_sub(PIVOT_DEPTH).ok_or(SnapSyncError::NoPivot {
         from: top,
