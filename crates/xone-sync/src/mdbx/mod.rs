@@ -17,6 +17,7 @@
 //! (`SegDir::probe`). Only the in-memory disk of the fault harness ever answers yes.
 
 mod codec;
+pub mod diskflat;
 
 use std::{
     collections::{BTreeMap, HashMap},
@@ -30,6 +31,7 @@ use codec::{
     block_rlp, body_rlp, dec_account, dec_block, dec_body, dec_diff, dec_header, dec_link,
     dec_receipts, dec_record, enc_block, enc_diff, enc_link, enc_record, header_rlp, receipts_rlp,
 };
+use diskflat::{DiskFlat, Flat};
 use xone_consensus::{v2::commit::Link, verify::Body};
 use xone_db::{
     mdbx::{Env, MdbxError, Rd, Wr, T},
@@ -78,6 +80,10 @@ pub struct Config {
     /// before it, and the restart cuts the frames above it (ADR-005 section 7) and fetches those
     /// blocks again. [`Store::durability`] is not `Durable` while blocks are deferred.
     pub group_commit: Option<std::time::Duration>,
+    /// `--state.disk`: the head state is read from the `HashedAccounts` and `HashedStorages` tables
+    /// behind bounded caches ([`DiskFlat`]) instead of a copy of every row in memory. The rows, the
+    /// roots and the commit order are the same.
+    pub disk_state: bool,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -321,7 +327,7 @@ pub struct MdbxStore<D: SegDir> {
     anchor: Option<Bytes>,
     /// Oldest openable block: rows of blocks at or below it have no changeset.
     base: u64,
-    state: StateProvider<MemFlat>,
+    state: StateProvider<Flat>,
     side: HashMap<B256, Record>,
     stateless: HashMap<B256, Block>,
     degraded: Option<Cause>,
@@ -351,7 +357,7 @@ impl<D: SegDir> MdbxStore<D> {
         let mut s = Self {
             env: Arc::new(env),
             segs: Segs::new(dir, cfg.per_file),
-            state: StateProvider::new(MemFlat::default(), 0, B256::ZERO, cfg.retention),
+            state: StateProvider::new(Flat::Mem(MemFlat::default()), 0, B256::ZERO, cfg.retention),
             cfg,
             path: path.to_owned(),
             generation: 0,
@@ -699,8 +705,63 @@ impl<D: SegDir> MdbxStore<D> {
     }
 
     /// The flat tables of the head, for a node that writes its own state checkpoints.
+    ///
+    /// # Panics
+    /// With `disk_state`: the rows are in the tables, not in a `MemFlat` (use [`Self::wide_accounts`]
+    /// or [`Self::state_root`]).
     pub fn head_flat(&self) -> &MemFlat {
-        self.state.flat()
+        match self.state.flat() {
+            Flat::Mem(f) => f,
+            Flat::Disk(_) => panic!("head_flat: the head state is on disk (--state.disk)"),
+        }
+    }
+
+    /// `--state.disk` is on.
+    pub fn disk_state(&self) -> bool {
+        self.cfg.disk_state
+    }
+
+    /// Cache counters of the disk flat state; `None` for the in-memory one.
+    pub fn disk_stats(&self) -> Option<diskflat::Stats> {
+        match self.state.flat() {
+            Flat::Disk(f) => Some(f.stats()),
+            Flat::Mem(_) => None,
+        }
+    }
+
+    /// The state root of the head, from the incremental trie (not a pass over every row).
+    pub fn state_root(&self) -> B256 {
+        self.state.root()
+    }
+
+    /// The accounts of the head state whose balance is above 2^256, by key.
+    pub fn wide_accounts(&self) -> Vec<(B256, xone_state::Account)> {
+        self.state
+            .flat()
+            .hashed_accounts()
+            .filter(|(_, a)| a.balance.is_wide())
+            .collect()
+    }
+
+    /// A read of the disk flat state failed while it was being loaded: the datadir cannot be used.
+    fn flat_ok(&self, state: &StateProvider<Flat>) -> Result<(), StoreError> {
+        match state.flat() {
+            Flat::Disk(f) if f.failed() => Err(StoreError::Damaged(
+                "state tables: a read failed while loading".into(),
+            )),
+            _ => Ok(()),
+        }
+    }
+
+    /// A read of the disk flat state failed: stop before a block is committed on a wrong answer.
+    fn flat_failed(&mut self) -> Result<(), StoreError> {
+        if matches!(self.state.flat(), Flat::Disk(f) if f.failed()) {
+            // stop; the tables are not at fault, so the next start may go on (no fsync guard)
+            eprintln!("xone-db: a read of the disk state failed (fail-stop)");
+            self.dead = Some(Dead::Failed(Cause::Io));
+            return Err(StoreError::Degraded(Cause::Io));
+        }
+        Ok(())
     }
 
     /// State root over the whole flat state (for tests: equals the head's `state_root`).
@@ -968,6 +1029,7 @@ impl<D: SegDir> MdbxStore<D> {
         } else {
             self.base.max(n.saturating_sub(self.cfg.retention))
         };
+        self.flat_failed()?;
         let env = self.env.clone();
         let tx = env.write().map_err(|e| self.db_failed(&e))?;
         self.commit_rows(
@@ -1029,15 +1091,38 @@ impl<D: SegDir> MdbxStore<D> {
         self.base = new_base;
         match anchor {
             Some(f) => {
-                self.state =
-                    StateProvider::new(f.clone(), b.number(), b.hash(), self.cfg.retention);
+                self.state = if self.cfg.disk_state {
+                    // the tables hold the anchor rows: the state reads them
+                    StateProvider::from_head(
+                        Flat::Disk(DiskFlat::new(self.env.clone())),
+                        (b.number(), b.hash()),
+                        Vec::new(),
+                        self.cfg.retention,
+                    )
+                } else {
+                    StateProvider::new(
+                        Flat::Mem(f.clone()),
+                        b.number(),
+                        b.hash(),
+                        self.cfg.retention,
+                    )
+                };
             }
             None => {
-                if let Err(e) = self.state.commit_block(b.hash(), b.parent(), &rec.diff) {
+                let r = if self.cfg.disk_state {
+                    // the rows and the changeset are in the tables: the model takes what they hold
+                    let cs = self.rd().and_then(|rd| changeset_of(&rd, b.number()))?;
+                    self.state
+                        .commit_written(b.hash(), b.parent(), &rec.diff, cs)
+                } else {
+                    self.state.commit_block(b.hash(), b.parent(), &rec.diff)
+                };
+                if let Err(e) = r {
                     // The tables hold the block and the model could not take it: stop, a restart reloads.
                     self.fail_stop(Cause::Io);
                     return Err(e.into());
                 }
+                self.flat_failed()?;
             }
         }
         Ok(())
@@ -1069,27 +1154,14 @@ impl<D: SegDir> MdbxStore<D> {
         let Some(m) = self.manifest.clone() else {
             return Ok(());
         };
+        let t0 = std::time::Instant::now();
         let (head_n, head_h) = (m.head_number, m.head_hash);
         let bad = |what: &str| StoreError::Damaged(format!("state tables: {what}"));
         let db = |e: MdbxError| StoreError::Damaged(e.to_string());
         let rd = self.rd()?;
-        let mut flat = MemFlat::default();
-        for (k, v) in rd.range(T::HashedAccounts, &[], None).map_err(db)? {
-            flat.set_hashed_account(
-                B256::from_slice(k.get(..32).ok_or_else(|| bad("account key"))?),
-                Some(dec_account(&v).ok_or_else(|| bad("account row"))?),
-            );
-        }
-        for (k, v) in rd.range(T::HashedStorages, &[], None).map_err(db)? {
-            flat.set_hashed_slot(
-                B256::from_slice(k.get(..32).ok_or_else(|| bad("slot key"))?),
-                B256::from_slice(k.get(32..64).ok_or_else(|| bad("slot key"))?),
-                U256::from_be_slice(&v),
-            );
-        }
         let head_header = self.header_at(&rd, head_n)?;
-        if head_header.hash() != head_h || flat_root(&flat) != head_header.state_root {
-            return Err(bad("the flat state does not give the head's state root"));
+        if head_header.hash() != head_h {
+            return Err(bad("the head header is not the head of the manifest"));
         }
         let base = match rd.first(T::BlockDiffs).map_err(db)? {
             Some((k, _)) => be_u64(&k).ok_or_else(|| bad("diff key"))?.saturating_sub(1),
@@ -1102,27 +1174,80 @@ impl<D: SegDir> MdbxStore<D> {
                 B256::from_slice(&v),
             );
         }
-        for k in (base + 1..=head_n).rev() {
-            changeset_of(&rd, k)?.revert(&mut flat);
-        }
         let base_hash = *hashes
             .get(&base)
             .ok_or_else(|| bad("no canonical hash at the base"))?;
-        let mut state = StateProvider::new(flat, base, base_hash, self.cfg.retention);
-        for k in base + 1..=head_n {
-            let diff = rd
-                .get(T::BlockDiffs, &be(k))
-                .map_err(db)?
-                .and_then(|b| dec_diff(&b))
-                .ok_or_else(|| bad("a block diff"))?;
-            let (hash, parent) = (hashes.get(&k), hashes.get(&(k - 1)));
-            let (Some(hash), Some(parent)) = (hash, parent) else {
-                return Err(bad("a hole in the canonical index"));
-            };
+        let state = if self.cfg.disk_state {
+            // The tables hold the head; the retained changesets are rows. Nothing is loaded or
+            // replayed: the trie is built from one paged scan and its root is the check.
+            let mut chain = Vec::new();
+            for k in base + 1..=head_n {
+                let hash = *hashes
+                    .get(&k)
+                    .ok_or_else(|| bad("a hole in the canonical index"))?;
+                chain.push((k, hash, changeset_of(&rd, k)?));
+            }
+            let flat = DiskFlat::new(self.env.clone());
+            let state = StateProvider::from_head(
+                Flat::Disk(flat),
+                (base, base_hash),
+                chain,
+                self.cfg.retention,
+            );
+            self.flat_ok(&state)?;
+            if state.root() != head_header.state_root {
+                return Err(bad("the state tables do not give the head's state root"));
+            }
             state
-                .commit_block(*hash, *parent, &diff)
-                .map_err(StoreError::State)?;
-        }
+        } else {
+            let mut flat = MemFlat::default();
+            for (k, v) in rd.range(T::HashedAccounts, &[], None).map_err(db)? {
+                flat.set_hashed_account(
+                    B256::from_slice(k.get(..32).ok_or_else(|| bad("account key"))?),
+                    Some(dec_account(&v).ok_or_else(|| bad("account row"))?),
+                );
+            }
+            for (k, v) in rd.range(T::HashedStorages, &[], None).map_err(db)? {
+                flat.set_hashed_slot(
+                    B256::from_slice(k.get(..32).ok_or_else(|| bad("slot key"))?),
+                    B256::from_slice(k.get(32..64).ok_or_else(|| bad("slot key"))?),
+                    U256::from_be_slice(&v),
+                );
+            }
+            if flat_root(&flat) != head_header.state_root {
+                return Err(bad("the flat state does not give the head's state root"));
+            }
+            for k in (base + 1..=head_n).rev() {
+                changeset_of(&rd, k)?.revert(&mut flat);
+            }
+            let mut state =
+                StateProvider::new(Flat::Mem(flat), base, base_hash, self.cfg.retention);
+            for k in base + 1..=head_n {
+                let diff = rd
+                    .get(T::BlockDiffs, &be(k))
+                    .map_err(db)?
+                    .and_then(|b| dec_diff(&b))
+                    .ok_or_else(|| bad("a block diff"))?;
+                let (hash, parent) = (hashes.get(&k), hashes.get(&(k - 1)));
+                let (Some(hash), Some(parent)) = (hash, parent) else {
+                    return Err(bad("a hole in the canonical index"));
+                };
+                state
+                    .commit_block(*hash, *parent, &diff)
+                    .map_err(StoreError::State)?;
+            }
+            state
+        };
+        eprintln!(
+            "state: head {head_n} loaded from the tables in {} ms ({}, {} blocks of changesets)",
+            t0.elapsed().as_millis(),
+            if self.cfg.disk_state {
+                "disk"
+            } else {
+                "memory"
+            },
+            head_n - base
+        );
         let mut side = HashMap::new();
         for (_, v) in rd.range(T::SideBlocks, &[], None).map_err(db)? {
             let r = dec_record(&v).ok_or_else(|| bad("a side block"))?;
@@ -1719,6 +1844,10 @@ impl<D: SegDir> Store for MdbxStore<D> {
     }
 
     fn state_rows(&self, hash: B256) -> Result<StateRows, Missing> {
+        if self.cfg.disk_state {
+            // the whole state would be copied to memory: a node on disk state serves no snapshot
+            return Err(Missing::Block(hash));
+        }
         let (accounts, storage) = self.state.rows_at(hash)?;
         Ok(StateRows { accounts, storage })
     }
@@ -1759,10 +1888,14 @@ impl<D: SegDir> Store for MdbxStore<D> {
         let mut flat = MemFlat::default();
         for (a, x) in &s.state.accounts {
             x.balance.check_legal().map_err(CommitError::from)?;
-            flat.set_hashed_account(*a, Some(x.clone()));
+            if !self.cfg.disk_state {
+                flat.set_hashed_account(*a, Some(x.clone()));
+            }
         }
-        for (a, k, v) in &s.state.storage {
-            flat.set_hashed_slot(*a, *k, *v);
+        if !self.cfg.disk_state {
+            for (a, k, v) in &s.state.storage {
+                flat.set_hashed_slot(*a, *k, *v);
+            }
         }
         // the root is streamed over the sorted rows: hashing `flat` would copy the whole state again
         s.state.accounts.sort_unstable_by_key(|(h, _)| *h);
@@ -1869,7 +2002,16 @@ impl<D: SegDir> Store for MdbxStore<D> {
         self.manifest = Some(manifest.clone());
         self.head = (number, hash);
         self.base = number;
-        self.state = StateProvider::new(flat, number, hash, s.retention);
+        self.state = if self.cfg.disk_state {
+            StateProvider::from_head(
+                Flat::Disk(DiskFlat::new(self.env.clone())),
+                (number, hash),
+                Vec::new(),
+                s.retention,
+            )
+        } else {
+            StateProvider::new(Flat::Mem(flat), number, hash, s.retention)
+        };
         self.anchor = (!s.anchor.is_empty()).then_some(s.anchor);
         self.segs.publish(&manifest);
         self.reconciling = false;

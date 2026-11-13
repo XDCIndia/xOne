@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 51c393fb597c7e2cad433618e2d2fbfcf8a6690e6ac5ac5adf61d60d87d428d8 # shrinks to ops = [Block([(0, None)], [(1, 0, 1)])]

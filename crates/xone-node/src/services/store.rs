@@ -46,6 +46,7 @@ pub fn open(
     dir: &Path,
     retention: u64,
     group_commit: Option<std::time::Duration>,
+    disk_state: bool,
 ) -> Result<NodeStore, FileError> {
     if dir.join("head.json").exists() {
         return Err(FileError(format!(
@@ -61,6 +62,7 @@ pub fn open(
             retention,
             per_file: BLOCKS_PER_FILE,
             group_commit,
+            disk_state,
         },
     )
     .map_err(|e| FileError(format!("{}: {e}", dir.display())))
@@ -180,6 +182,11 @@ impl Ckpt {
             f.set_hashed_slot(*h, *k, *v);
         }
         f
+    }
+
+    /// A checkpoint without state rows: the node's own, with `--state.disk` (the rows are in the store).
+    pub fn without_state(number: u64, hash: B256) -> Self {
+        Self::of_flat(number, hash, &MemFlat::default())
     }
 
     /// The tables of `flat`, with the parts the caller owns left empty.

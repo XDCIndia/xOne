@@ -96,6 +96,9 @@ pub struct SyncCfg {
     /// peers reads the 0x88 state of the gap blocks below the pivot from it; every proof is verified
     /// against the header, so the RPC is not trusted (`spec/snap/pivot.md`).
     pub snap_gap_rpc: Option<String>,
+    /// `--state.disk`: read the head state from the MDBX tables behind bounded caches instead of
+    /// holding every row in memory (`docs/ops/disk-state.md`). Off by default.
+    pub state_disk: bool,
     /// full; archive is refused (`gc_mode`).
     pub gcmode: String,
     pub from_block: Option<u64>,
@@ -239,6 +242,7 @@ defaults!(SyncCfg {
     mode: "full".into(),
     snap_pins: None,
     snap_gap_rpc: None,
+    state_disk: false,
     gcmode: "full".into(),
     from_block: None,
     minimal: false,
@@ -423,6 +427,7 @@ impl Config {
             "syncfromblock" => self.sync.from_block = Some(num(key, v)?),
             "snap.pins" => self.sync.snap_pins = Some(v.into()),
             "snap.gap-rpc" => self.sync.snap_gap_rpc = Some(v.to_owned()),
+            "state.disk" => self.sync.state_disk = flag(key, v)?,
             "minimal" => self.sync.minimal = flag(key, v)?,
             "cache" => self.sync.cache_mb = num(key, v)?,
             "history.transactions" | "txlookuplimit" => self.sync.tx_history = num(key, v)?,
