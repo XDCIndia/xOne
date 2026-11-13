@@ -179,6 +179,8 @@ struct Drv<'a> {
     /// Faults per peer: the source is the snap/1 peer with the fewest.
     faults: HashMap<PeerId, u32>,
     n: Counts,
+    /// The last snap/1 request and its answer, shown with a proof fault.
+    last: Option<(Snap, Snap)>,
 }
 
 fn bad(peer: &PeerId, why: impl std::fmt::Display) -> SnapSyncError {
@@ -418,12 +420,22 @@ impl PeerSource for Src<'_, '_> {
             _ => {}
         }
         let (code, body) = d.sub(peer, Sub::Snap, req.code(), req.encode(), req.id())?;
-        Snap::decode(code, &body).map_err(|_| PeerError::Disconnected)
+        let reply = Snap::decode(code, &body).map_err(|_| PeerError::Disconnected)?;
+        d.last = Some((req, reply.clone()));
+        Ok(reply)
     }
 
     fn report(&mut self, fault: &Fault) {
         if let Some(p) = self.0.pick(self.1) {
             eprintln!("snap: peer {}: {fault}", short(&p));
+            if let (Fault::Proof(_), Some((q, a))) = (fault, &self.0.last) {
+                let clip = |x: String| x.chars().take(1500).collect::<String>();
+                eprintln!(
+                    "snap:   request {}\nsnap:   answer {}",
+                    clip(format!("{q:?}")),
+                    clip(format!("{a:?}"))
+                );
+            }
             self.0.fault(&p);
         }
     }
@@ -575,6 +587,7 @@ pub fn run(
         stop,
         faults: HashMap::new(),
         n: Counts::default(),
+        last: None,
     };
     let r = sync(&mut d, cfg, spec);
     net.stop();

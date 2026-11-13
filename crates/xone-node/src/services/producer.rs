@@ -1335,8 +1335,8 @@ impl ProducerService {
         // ponytail: a private chain has no second signer by construction, so the quiet window is 0; a
         // public chain (Apothem) takes the ADR-010 window W = 120 s (mainnet is refused in `plan`).
         let quiet = if core.spec.chain_id == 51 { 120 } else { 0 };
-        let unit =
-            SafetyUnit::open_or_init(store, signer, quiet).map_err(|e| format!("safety unit: {e}"))?;
+        let unit = SafetyUnit::open_or_init(store, signer, quiet)
+            .map_err(|e| format!("safety unit: {e}"))?;
         let spec = core.spec.clone();
         let v2 = spec.xdpos.v2.clone().ok_or("the chain has no V2 section")?;
         let bft = Bft::new(
