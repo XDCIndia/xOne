@@ -386,6 +386,42 @@ impl HistInner {
         masternodes_of(&h.extra_data).map_err(|e| e.to_string())
     }
 
+    /// The list a V1 checkpoint must carry: the snapshot's signers minus the penalties of this
+    /// epoch and of the previous `LIMIT_PENALTY_EPOCH` checkpoints (geth `checkSignersOnCheckpoint`,
+    /// `consensus/XDPoS/xdpos.go:1014-1062`; canonical `engine_v1/engine.go:300-345`). A penalised
+    /// masternode is a signer of the snapshot but not of the list (mainnet 469,800 drops
+    /// 0xa0caec45...3b74).
+    ///
+    /// ponytail: this epoch's penalties are read from the header, which is geth's own fallback when
+    /// it cannot compute them (`ErrPenaltyDataUnavailable`, `xdpos.go:1029-1037`); computing them
+    /// before TIPSigning needs the 0x89 state, which this context does not hold. Compute and compare
+    /// them when the executor feeds the V1 sign counts to the verifier.
+    fn checkpoint_signers(&self, header: &Header, snap: &Snapshot) -> Result<Vec<Address>, String> {
+        let (n, epoch) = (header.number, self.spec.xdpos.epoch);
+        if n % epoch != 0 {
+            return Ok(snap.get_signers()); // not read: only a checkpoint is checked against it
+        }
+        // geth skips a checkpoint it cannot find (`removePenaltiesFromBlock`, `xdpos.go:2543-2550`)
+        let earlier = (1..=checkpoint::LIMIT_PENALTY_EPOCH)
+            .filter_map(|i| n.checked_sub(epoch * i).filter(|k| *k > 0))
+            .map(|k| {
+                (
+                    k,
+                    self.header_at(k)
+                        .map_or(vec![], |h| addresses(&h.penalties)),
+                )
+            })
+            .collect();
+        checkpoint::checkpoint_signers(
+            &snap.get_signers(),
+            n,
+            epoch,
+            &addresses(&header.penalties),
+            &earlier,
+        )
+        .map_err(|e| e.to_string())
+    }
+
     /// The header verifier's V1 inputs for `header`, whose parent is the tip.
     fn v1_context(&self, header: &Header, snap: &Snapshot) -> Result<Context, String> {
         let n = header.number;
@@ -408,7 +444,7 @@ impl HistInner {
             checkpoint_signers: if self.spec.chain_id == 51 {
                 vec![]
             } else {
-                snap.get_signers()
+                self.checkpoint_signers(header, snap)?
             },
         })))
     }
