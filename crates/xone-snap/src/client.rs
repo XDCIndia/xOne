@@ -338,7 +338,8 @@ impl Backend for StateStore {
     }
 
     fn slots(&self, account: &B256) -> Result<BTreeMap<B256, U256>, StoreError> {
-        Ok(self.storage.get(account).cloned().unwrap_or_default())
+        // no slots held is an empty map (a typed absence would make the caller test twice)
+        Ok(self.storage.get(account).cloned().unwrap_or_else(BTreeMap::new))
     }
 
     fn reconcile(&mut self, new: BTreeMap<B256, Account>) -> Result<(), StoreError> {

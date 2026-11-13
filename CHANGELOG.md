@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **`--state.disk`, part 3 of 3 (issue #145).** With `--syncmode snap` the proven ranges are written straight
+  into the store's state tables with their cursors (a crash resumes the download), the root is
+  streamed from the tables, and the install writes the rest and builds the trie rows: no state in
+  memory, no state in the checkpoint.
+
 - **`--state.disk`, part 2 of 3 (issue #145).** The account and storage tries are rows of a new table
   `TrieNodes` (by position), loaded on demand and flushed in the block's transaction with a `trieroot`
   marker; a start rebuilds them from the flat tables when the marker is not the head's root.

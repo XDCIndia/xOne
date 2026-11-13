@@ -22,8 +22,7 @@ fine for net2040 and too much for Apothem (327,356 accounts, about 158 M slots: 
   written with the flag must be started with it (its checkpoints have no rows; the node says so).
 - A read that fails (a damaged page) sets a flag that stops the store before the next commit.
 
-Still in memory after part 2 (see below): the snap download and its install hold the whole state
-(part 3). `Store::state_rows` (snap/1 serving and `snapshot export`) is refused, so a node on disk
+`Store::state_rows` (snap/1 serving and `snapshot export`) is refused, so a node on disk
 state serves no snapshot.
 
 ## Part 2: trie nodes on disk
@@ -69,3 +68,28 @@ hold what the run wrote). Part 2 (trie nodes) and part 3 (snap download) are wha
 Start-up on net2040 (4,096 blocks of changesets): the state is loaded in 0.2 to 0.6 s with the
 disk state at blocks 20,888 and 31,996, and in 21 s with the memory state at block 46,075 (which
 holds the rows, and rebuilds the trie from them).
+
+## Part 3: the snap download into the tables
+
+With `--syncmode snap --state.disk` the download holds no state in memory.
+
+- `xone_snap::client::sync` works over a `Backend` (the in-memory `StateStore` as before, or
+  `xone_sync::mdbx::snapstate::SnapState`). `SnapState` writes every proven range straight into
+  `HashedAccounts`, `HashedStorages` and `Bytecodes` of the store's own `chain.mdbx`, in one
+  transaction with the cursor it belongs to (`SnapProgress`: the pivot root, the account cursor,
+  the storage cursor of each account). The root of the held rows (for the heal and the final check)
+  is streamed from the tables (`state_root_sorted`), a heal walk holds the accounts (they are
+  hashed into a trie there) and the slots of one account whose storage trie differs.
+- A run that dies resumes: `SnapState::open` reads the cursors, a stored range is not asked for
+  again, and a pivot that differs from the stored one goes through `set_root` as a pivot that
+  moved does (what came from the old root stays; the heal pass repairs the rest).
+- The install is not a copy: `Install::rows_in_tables` says the rows are where they belong.
+  `install_snapshot` streams their root and compares it with the pivot header, writes the headers,
+  the bodies, the manifest and the anchor in one transaction (and empties `SnapProgress`), then
+  builds the trie rows from the tables in one streamed pass (part 2). The checkpoint of the pivot
+  carries no state rows.
+- A datadir with rows of an unfinished download is not a new datadir: opening it as one
+  (`init_anchor`) is refused, with the way out (resume with `--syncmode snap --state.disk`).
+- Tests: `tests/snapstate.rs` (store): the same download as the memory store row for row, a kill at
+  several requests resumed from the tables (no finished range asked for again), a pivot that moves.
+  `state_root_sorted` and `storage_root_sorted` equal `root_of_sorted_rows` and the row roots.
