@@ -91,6 +91,14 @@ pub const FLAGS: &[Flag] = &[
         "xone; spec/snap/pivot.md",
     ),
     f(
+        "state.disk",
+        B,
+        "false",
+        "true",
+        "Read the head state from the MDBX tables behind bounded caches instead of holding every row in memory; checkpoints and the snap install carry no state rows. A memory-state datadir starts with it; one written with it must be started with it. A node on disk state serves no snap/1 or snapshot export (docs/ops/disk-state.md).",
+        "xone; issue #145",
+    ),
+    f(
         "gcmode",
         Some("full"),
         "full",

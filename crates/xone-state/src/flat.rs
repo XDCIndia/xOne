@@ -3,7 +3,10 @@
 //! address-taking methods hash on access. Reads here never touch a trie; the trie is only ever built
 //! from these tables (`crate::trie`).
 
-use crate::Account;
+use crate::{
+    changeset::{ChangeSet, HashedDiff},
+    Account,
+};
 use alloy_primitives::{keccak256, Address, B256, U256};
 use std::collections::BTreeMap;
 
@@ -37,6 +40,11 @@ pub trait FlatWrite: FlatRead {
     fn set_slot(&mut self, address: Address, slot: B256, value: U256) {
         self.set_hashed_slot(keccak256(address), keccak256(slot), value);
     }
+
+    /// `diff` is already in the tables behind this flat state (a store wrote it, together with the
+    /// changeset `cs` of the same block): bring this view in line. A flat state that owns its rows
+    /// writes them; one that reads tables only updates its caches.
+    fn commit_written(&mut self, diff: &HashedDiff, cs: &ChangeSet);
 }
 
 /// The addresses and slots behind the hashes of a [`MemFlat`], kept only by a recording one.
@@ -140,6 +148,24 @@ impl FlatWrite for MemFlat {
             p.slots.insert(hs, slot);
         }
         self.set_hashed_slot(ha, hs, value);
+    }
+    fn commit_written(&mut self, diff: &HashedDiff, _cs: &ChangeSet) {
+        for (ha, new) in &diff.accounts {
+            if new.is_none() {
+                let old: Vec<_> = self.hashed_slots(*ha).map(|(hs, _)| hs).collect();
+                for hs in old {
+                    self.set_hashed_slot(*ha, hs, U256::ZERO);
+                }
+            }
+        }
+        for (&(ha, hs), &v) in &diff.storage {
+            if !matches!(diff.accounts.get(&ha), Some(None)) {
+                self.set_hashed_slot(ha, hs, v);
+            }
+        }
+        for (ha, new) in &diff.accounts {
+            self.set_hashed_account(*ha, new.clone());
+        }
     }
     fn set_hashed_account(&mut self, ha: B256, account: Option<Account>) {
         match account {

@@ -55,6 +55,8 @@ pub fn cfg(retention: u64, per_file: u64) -> Config {
         retention,
         per_file,
         group_commit: None,
+        // XONE_DISK_STATE=1 runs every suite over the disk flat state (`--state.disk`)
+        disk_state: std::env::var_os("XONE_DISK_STATE").is_some(),
     }
 }
 

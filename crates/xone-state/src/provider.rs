@@ -161,6 +161,44 @@ impl<F: FlatWrite> StateProvider<F> {
         h.trie.root()
     }
 
+    /// The state of a datadir whose tables hold the head: `flat` reads them, `chain` lists the
+    /// blocks above `base` (oldest first) with the changeset each one wrote. No replay: the
+    /// changesets are the ones the store persisted.
+    pub fn from_head(
+        flat: F,
+        base: (u64, B256),
+        chain: Vec<(u64, B256, ChangeSet)>,
+        retention: u64,
+    ) -> Self {
+        let trie = StateTrie::from_flat(&flat);
+        let by_hash = std::iter::once((base.1, base.0))
+            .chain(chain.iter().map(|(n, h, _)| (*h, *n)))
+            .collect();
+        Self {
+            flat,
+            head: Mutex::new(Head {
+                trie,
+                pending: None,
+            }),
+            retention,
+            base,
+            chain: chain.into_iter().map(|(n, h, cs)| (n, (h, cs))).collect(),
+            by_hash,
+            side: HashMap::new(),
+        }
+    }
+
+    fn can_extend(&self, hash: B256, parent: B256) -> Result<u64, CommitError> {
+        let (number, head) = self.head();
+        if parent != head {
+            return Err(CommitError::NotExtending { head, parent });
+        }
+        if self.at(hash).is_ok() {
+            return Err(CommitError::Known(hash));
+        }
+        Ok(number)
+    }
+
     /// The root after `diff` on top of the head, without committing it.
     /// Writes the next canonical block and keeps its changeset (one commit).
     pub fn commit_block(
@@ -169,14 +207,32 @@ impl<F: FlatWrite> StateProvider<F> {
         parent: B256,
         diff: &StateDiff,
     ) -> Result<(), CommitError> {
-        let (number, head) = self.head();
-        if parent != head {
-            return Err(CommitError::NotExtending { head, parent });
-        }
-        if self.at(hash).is_ok() {
-            return Err(CommitError::Known(hash));
-        }
+        let number = self.can_extend(hash, parent)?;
         let cs = diff.apply(&mut self.flat)?;
+        self.advance(number, hash, diff, cs);
+        Ok(())
+    }
+
+    /// [`Self::commit_block`] for a block whose rows and changeset `cs` are already in the tables
+    /// behind the flat state (the store commits first): the flat state is brought in line, nothing
+    /// is read from it. Fails, before any change, on a balance above the legal bound.
+    pub fn commit_written(
+        &mut self,
+        hash: B256,
+        parent: B256,
+        diff: &StateDiff,
+        cs: ChangeSet,
+    ) -> Result<(), CommitError> {
+        let number = self.can_extend(hash, parent)?;
+        for a in diff.accounts.values().flatten() {
+            a.balance.check_legal()?;
+        }
+        self.flat.commit_written(&diff.hashed(), &cs);
+        self.advance(number, hash, diff, cs);
+        Ok(())
+    }
+
+    fn advance(&mut self, number: u64, hash: B256, diff: &StateDiff, cs: ChangeSet) {
         let h = self.head.get_mut().unwrap_or_else(PoisonError::into_inner);
         match h.pending.take() {
             Some((d, _, _)) if d == *diff => {}
@@ -196,7 +252,6 @@ impl<F: FlatWrite> StateProvider<F> {
                 self.base = (n, h);
             }
         }
-        Ok(())
     }
 
     /// Reverts every block above `number`. The head moves to `number`.

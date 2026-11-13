@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **`--state.disk`, part 1 of 3 (issue #145).** The head state is read from the MDBX tables behind
+  bounded caches instead of a copy of every row in memory; checkpoints and the snap install write no
+  state rows with the flag. Off by default. `docs/ops/disk-state.md`.
+
 ## v0.1.0 - 2026-11-12
 
 First release of xOne, the Rust client for XDC Network. The workspace version is 0.1.0.

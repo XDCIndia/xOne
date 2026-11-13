@@ -364,9 +364,29 @@ impl Core {
         minimal: bool,
         group_commit: bool,
     ) -> Result<Self, CoreError> {
+        Self::open_full(spec, genesis, dir, ckpt_every, minimal, group_commit, false)
+    }
+
+    /// [`Core::open_with`], and with `disk_state` (`--state.disk`) the head state is read from the
+    /// store's tables behind bounded caches: no checkpoint carries state rows, and a start reads the
+    /// tables instead of a checkpoint's copy (`docs/ops/disk-state.md`).
+    pub fn open_full(
+        spec: ChainSpec,
+        genesis: &Genesis,
+        dir: &Path,
+        ckpt_every: u64,
+        minimal: bool,
+        group_commit: bool,
+        disk_state: bool,
+    ) -> Result<Self, CoreError> {
         let (flat0, codes0, g) = genesis_state(genesis, &spec)?;
         std::fs::create_dir_all(dir).map_err(|e| FileError(format!("{}: {e}", dir.display())))?;
-        let mut node_store = store::open(dir, RETENTION, group_commit.then_some(GROUP_COMMIT))?;
+        let mut node_store = store::open(
+            dir,
+            RETENTION,
+            group_commit.then_some(GROUP_COMMIT),
+            disk_state,
+        )?;
         let resumed = resume(&mut node_store)?;
         let loaded = store::load(&node_store)?;
         let anchored = loaded.as_ref().is_some_and(|l| l.anchor.is_some());
@@ -484,7 +504,17 @@ impl Core {
                 }
                 switches.append(&mut inner.switches);
                 inner.switches = switches;
-                let flat = c.flat();
+                // with disk state the rows are the store's, not the checkpoint's
+                let flat = if disk_state {
+                    MemFlat::default()
+                } else if c.haccounts.is_empty() && c.accounts.is_empty() {
+                    return Err(CoreError::Inconsistent(format!(
+                        "the state checkpoint of block {} holds no state rows (written with --state.disk): start with --state.disk",
+                        c.number
+                    )));
+                } else {
+                    c.flat()
+                };
                 (c.number, flat, inner)
             }
             _ => {
@@ -513,29 +543,52 @@ impl Core {
                     switches: vec![],
                     td: g.difficulty,
                 };
-                (0, flat0, inner)
+                (
+                    0,
+                    if disk_state {
+                        MemFlat::default()
+                    } else {
+                        flat0
+                    },
+                    inner,
+                )
             }
         };
         // Accounts above 2^256 are tracked by address (`Env::wide_balances`); the flat state holds only
         // hashes, so each address comes from the preimage table (filled by execution, genesis and
         // installs). An unknown one is an error, never a silently narrowed balance.
-        for (ha, a) in flat.hashed_accounts().filter(|(_, a)| a.balance.is_wide()) {
-            let addr = node_store
-                .preimage(ha)
-                .filter(|p| p.len() == 20)
-                .map(|p| Address::from_slice(&p))
-                .ok_or_else(|| {
-                    CoreError::Inconsistent(format!(
-                        "the account with key {ha} holds more than 2^256 and its address is not in this datadir"
-                    ))
-                })?;
-            inner.wide.insert(addr, a.balance);
-        }
+        let track_wide = |inner: &mut HistInner,
+                          node_store: &store::NodeStore,
+                          wide: Vec<(B256, Account)>|
+         -> Result<(), CoreError> {
+            for (ha, a) in wide {
+                let addr = node_store
+                    .preimage(ha)
+                    .filter(|p| p.len() == 20)
+                    .map(|p| Address::from_slice(&p))
+                    .ok_or_else(|| {
+                        CoreError::Inconsistent(format!(
+                            "the account with key {ha} holds more than 2^256 and its address is not in this datadir"
+                        ))
+                    })?;
+                inner.wide.insert(addr, a.balance);
+            }
+            Ok(())
+        };
         let anchor = inner.tip().header.clone();
-        if flat_root(&flat) != anchor.state_root {
-            return Err(CoreError::Inconsistent(format!(
-                "the state checkpoint of block {start} does not give its state root"
-            )));
+        if !disk_state {
+            track_wide(
+                &mut inner,
+                &node_store,
+                flat.hashed_accounts()
+                    .filter(|(_, a)| a.balance.is_wide())
+                    .collect(),
+            )?;
+            if flat_root(&flat) != anchor.state_root {
+                return Err(CoreError::Inconsistent(format!(
+                    "the state checkpoint of block {start} does not give its state root"
+                )));
+            }
         }
         if anchored && ck.is_none() {
             return Err(CoreError::Inconsistent(
@@ -561,9 +614,18 @@ impl Core {
                 ))
             })?;
         }
-        if node_store.head() != (start, anchor.hash())
-            || node_store.flat_root() != anchor.state_root
-        {
+        if disk_state {
+            // the state of `start` is the store's: its trie root is the check, the wide accounts
+            // are read from the tables
+            let wide = node_store.wide_accounts();
+            track_wide(&mut hist.write(), &node_store, wide)?;
+        }
+        let root = if disk_state {
+            node_store.state_root()
+        } else {
+            node_store.flat_root()
+        };
+        if node_store.head() != (start, anchor.hash()) || root != anchor.state_root {
             return Err(CoreError::Inconsistent(format!(
                 "the store at block {start} is not the checkpoint's state"
             )));
@@ -851,7 +913,15 @@ impl Core {
         let hash = h.tip().hash;
         let mut c = self
             .chain
-            .with_store(|s| (s.head() == (n, hash)).then(|| Ckpt::of_flat(n, hash, s.head_flat())))
+            .with_store(|s| {
+                (s.head() == (n, hash)).then(|| {
+                    if s.disk_state() {
+                        Ckpt::without_state(n, hash)
+                    } else {
+                        Ckpt::of_flat(n, hash, s.head_flat())
+                    }
+                })
+            })
             .ok_or_else(|| {
                 CoreError::Inconsistent("the store head is not the history tip".into())
             })?;

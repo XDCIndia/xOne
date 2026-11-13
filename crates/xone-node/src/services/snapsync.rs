@@ -542,7 +542,7 @@ pub fn is_fresh(datadir: &Path) -> Result<bool, String> {
     if !dir.join("head.json").exists() && !dir.exists() {
         return Ok(true);
     }
-    let s = store::open(&dir, RETENTION, None).map_err(|e| e.to_string())?;
+    let s = store::open(&dir, RETENTION, None, false).map_err(|e| e.to_string())?;
     Ok(store::load(&s).map_err(|e| e.to_string())?.is_none())
 }
 
@@ -728,8 +728,8 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec, genesis: &Genesis) -> R
     side.codes = st.codes.clone();
     let dir = cfg.datadir.join("xone");
     std::fs::create_dir_all(&dir).map_err(|e| SnapSyncError::Io(e.to_string()))?;
-    let mut store =
-        store::open(&dir, RETENTION, None).map_err(|e| SnapSyncError::Io(e.to_string()))?;
+    let mut store = store::open(&dir, RETENTION, None, cfg.sync.state_disk)
+        .map_err(|e| SnapSyncError::Io(e.to_string()))?;
     let install = Install {
         anchor: Bytes::from(anchor.encode()),
         headers: win,

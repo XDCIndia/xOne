@@ -196,8 +196,8 @@ pub fn import_datadir(
     };
     fs::create_dir_all(&dir)
         .map_err(|e| ImportDatadirError::Io(format!("{}: {e}", dir.display())))?;
-    let mut store =
-        store::open(&dir, RETENTION, None).map_err(|e| ImportDatadirError::Io(e.to_string()))?;
+    let mut store = store::open(&dir, RETENTION, None, false)
+        .map_err(|e| ImportDatadirError::Io(e.to_string()))?;
     if load(&store)
         .map_err(|e| ImportDatadirError::Io(e.to_string()))?
         .is_some()
@@ -259,6 +259,8 @@ pub fn install(
     install: xone_sync::store::Install,
 ) -> Result<(), InstallError> {
     let flat = &install.state;
+    // with disk state the rows go to the tables only: the checkpoint holds the rest
+    let rows = !store.disk_state();
     let mut ck = Ckpt {
         number,
         hash,
@@ -267,6 +269,7 @@ pub fn install(
         haccounts: flat
             .accounts
             .iter()
+            .filter(|_| rows)
             .map(|(a, x)| {
                 (
                     *a,
@@ -276,7 +279,7 @@ pub fn install(
                 )
             })
             .collect(),
-        hstorage: flat.storage.clone(),
+        hstorage: if rows { flat.storage.clone() } else { vec![] },
         codes: side.codes.clone(),
         signers: side.signers.clone(),
         recents: side.recents.clone(),
