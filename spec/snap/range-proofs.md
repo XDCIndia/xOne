@@ -29,9 +29,9 @@ A leaf that is missing, added, changed or moved changes the hash, so it is `Mism
 | one leaf, whether or not `origin` equals its key | no special case: the same walk | `:531-546` |
 | the nodes on the edges are in the proof | `MissingNode(hash)` | `proofToPath` `:142` |
 | the rebuilt root is the root | `Mismatch` | `:590` |
-| a node shape that a trie of 32-byte keys cannot have (a leaf not at depth 64, a branch at depth 64, an embedded node beside the range) | `Shape` | n/a |
+| a node shape that a trie of 32-byte keys cannot have (a leaf not at depth 64, a branch at depth 64, an embedded node beside the range that is not a leaf) | `Shape` | n/a |
 
-`Shape` for an embedded node beside the range: a child node shorter than 32 bytes is embedded in its parent and has no hash to give the builder. With keccak keys that needs about 40 nibbles of shared prefix, which does not occur in the account trie or in a storage trie. Such a proof is refused, not mis-verified.
+An embedded node beside the range (a child shorter than 32 bytes, held inside its parent, with no hash to give the builder) is a **leaf** and is given to the builder as that leaf (its full key and value). It is not rare: a leaf with a one-byte value 9 nibbles deep is 31 bytes of RLP, and a storage trie of 12M slots has them (Apothem, 2026-11-13, geth `5929639e`: `Shape` from both geth peers 136M slots into a download, until this was fixed; regression test `an_embedded_leaf_beside_the_range_is_part_of_its_parent`). An embedded extension or branch would need about 56 shared nibbles and is refused as `Shape`.
 
 The check never panics on a proof it is given: the builder's ordering assertions are guarded and the tests flip one bit in a node of a valid proof 2,000 times (`hostile::verify_range_never_panics_on_a_mutated_proof`).
 

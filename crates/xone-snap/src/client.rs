@@ -94,6 +94,10 @@ pub struct Config {
     pub nodes: usize,
     /// Consecutive failures of one request after which the run stops.
     pub max_failures: u32,
+    /// Consecutive empty answers ("no data") after which the root is given up for a new pivot. A
+    /// peer that has lost the root gets one request per try from each peer, not eight: some
+    /// servers (nethermind) drop a client that keeps asking for a root they no longer hold.
+    pub max_empty: u32,
     pub max_heal_rounds: usize,
 }
 
@@ -105,6 +109,7 @@ impl Default for Config {
             codes: 84,
             nodes: 1024,
             max_failures: 8,
+            max_empty: 4,
             max_heal_rounds: 128,
         }
     }
@@ -296,7 +301,7 @@ impl<P: PeerSource> Syncer<'_, P> {
         &mut self,
         mut step: impl FnMut(&mut Self) -> Result<(), Fault>,
     ) -> Result<(), SyncError> {
-        let mut failures = 0;
+        let (mut failures, mut empty) = (0, 0);
         loop {
             let fault = match step(self) {
                 Ok(()) => return Ok(()),
@@ -305,6 +310,14 @@ impl<P: PeerSource> Syncer<'_, P> {
             };
             self.src.report(&fault);
             failures += 1;
+            empty = if matches!(fault, Fault::Peer(PeerError::Unavailable)) {
+                empty + 1
+            } else {
+                0
+            };
+            if empty >= self.cfg.max_empty {
+                return Err(SyncError::Unavailable);
+            }
             if failures >= self.cfg.max_failures {
                 return Err(match fault {
                     Fault::Peer(PeerError::Unavailable) => SyncError::Unavailable,

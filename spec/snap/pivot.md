@@ -95,4 +95,4 @@ onwards through `Chain::insert`: every block verified and executed against the i
 | item | what removes it |
 | --- | --- |
 | resume of an interrupted download | a persisted `StateStore`; today a stop or crash before the install leaves the datadir empty. |
-| memory | the `StateStore` is in memory (also across moves); a network whose state outgrows RAM needs the persisted store. |
+| memory | the `StateStore` is in memory (also across moves, about 150 bytes a slot): the heal builds nodes only for the storage tries that differ from the root, one at a time, and the install moves the rows out of the store; a network whose state outgrows RAM still needs the persisted store (and a crash restarts from empty). |

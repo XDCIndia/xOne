@@ -745,6 +745,8 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
     Ok(())
 }
 
+/// Source peers tried for one pivot.
+const PIVOT_TRIES: u32 = 6;
 /// Most re-pivots in one sync: each is a fresh pivot for a download the peers' state window outran.
 const MAX_REPIVOTS: u32 = 64;
 
@@ -824,6 +826,22 @@ fn pivot_window(
 ) -> R<Pivoted> {
     // a peer that answered "no data" at the last pivot may serve the next one
     d.faults.clear();
+    // a source that fails (a stranger that does not serve its own head) is replaced by the next
+    for _ in 1..PIVOT_TRIES {
+        match pivot_once(d, cfg, spec, pins) {
+            Err(e @ SnapSyncError::Peer { .. }) => {
+                eprintln!("snap: {e}; trying another source");
+                if let Ok(p) = d.src() {
+                    d.fault(&p);
+                }
+            }
+            r => return r,
+        }
+    }
+    pivot_once(d, cfg, spec, pins)
+}
+
+fn pivot_once(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec, pins: &[(u64, B256)]) -> R<Pivoted> {
     // ---- the head and the pivot
     let src = d.src()?;
     let head_hash = d
