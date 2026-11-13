@@ -181,6 +181,8 @@ struct Drv<'a> {
     n: Counts,
     /// The last snap/1 request and its answer, shown with a proof fault.
     last: Option<(Snap, Snap)>,
+    /// Where a proof fault writes that request and answer in full.
+    dump: std::path::PathBuf,
 }
 
 fn bad(peer: &PeerId, why: impl std::fmt::Display) -> SnapSyncError {
@@ -430,6 +432,7 @@ impl PeerSource for Src<'_, '_> {
             eprintln!("snap: peer {}: {fault}", short(&p));
             if let (Fault::Proof(_), Some((q, a))) = (fault, &self.0.last) {
                 let clip = |x: String| x.chars().take(1500).collect::<String>();
+                let _ = std::fs::write(&self.0.dump, format!("{fault}\n{q:?}\n{a:?}\n"));
                 eprintln!(
                     "snap:   request {}\nsnap:   answer {}",
                     clip(format!("{q:?}")),
@@ -588,6 +591,7 @@ pub fn run(
         faults: HashMap::new(),
         n: Counts::default(),
         last: None,
+        dump: cfg.datadir.join("snap-fault.txt"),
     };
     let r = sync(&mut d, cfg, spec);
     net.stop();
