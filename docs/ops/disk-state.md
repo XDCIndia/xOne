@@ -32,3 +32,14 @@ the snap download and its install still hold the whole state (part 3), `Store::s
 suites over the disk state. The unit test `disk_flat_equals_mem_flat` drives a `DiskFlat` like the
 store does (rows first, then the cache) against a `MemFlat` over random blocks, unwinds and
 restarts, with caches of one entry and of many.
+
+## Numbers (part 1)
+
+Synthetic state through the real store (`xone-state-bench`, retention 8, 5,000 accounts and 20,000
+slots per block, the trie still in memory). Anonymous memory after the run: 500,000 accounts and
+2 M slots, memory state 1,329 MB, disk state 1,157 MB (13% less: the flat rows only; the caches
+hold what the run wrote). Part 2 (trie nodes) and part 3 (snap download) are what bound memory.
+
+Start-up on net2040 (4,096 blocks of changesets): the state is loaded in 0.2 to 0.6 s with the
+disk state at blocks 20,888 and 31,996, and in 21 s with the memory state at block 46,075 (which
+holds the rows, and rebuilds the trie from them).

@@ -29,3 +29,7 @@ serde.workspace = true
 [[bin]]
 name = "xone-db-stress"
 path = "src/bin/stress.rs"
+
+[[bin]]
+name = "xone-state-bench"
+path = "src/bin/state_bench.rs"
