@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "test code")]
-//! `--mine` is refused unless a keystore and a password file are named, and always on chain ids 50 and 51 in
-//! this build (temporary, until Gate D). The refusal is typed and comes before anything is opened.
+//! `--mine` is refused unless a keystore and a password file are named, and always on chain id 50 in
+//! this build (temporary, until Gate D); Apothem (51) is allowed. The refusal is typed and comes before anything is opened.
 
 use xone_node::{
     services::producer::{plan, ProducerError},
@@ -20,13 +20,16 @@ fn cfg(keystore: bool, password: bool) -> Config {
 }
 
 #[test]
-fn public_networks_are_refused_whatever_the_files() {
-    for id in [50, 51] {
-        assert_eq!(
-            plan(&cfg(true, true), id),
-            Err(ProducerError::PublicNetwork(id))
-        );
-    }
+fn mainnet_is_refused_whatever_the_files() {
+    assert_eq!(
+        plan(&cfg(true, true), 50),
+        Err(ProducerError::PublicNetwork(50))
+    );
+}
+
+#[test]
+fn apothem_is_allowed_with_its_files() {
+    assert!(plan(&cfg(true, true), 51).is_ok());
 }
 
 #[test]

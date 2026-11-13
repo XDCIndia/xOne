@@ -1,6 +1,6 @@
 //! The `producer` service (XB-23): builds, seals and sends the blocks of one validator, and drives the V2
 //! BFT step machine for it. It runs only with `--mine`, an explicit keystore and password file, and never on
-//! chain ids 50 and 51 in this build (a typed refusal, temporary until Gate D).
+//! chain id 50 (mainnet) in this build (a typed refusal, temporary until Gate D). Apothem (51) is allowed, with the ADR-010 quiet window.
 //!
 //! One std thread polls the chain head every 50 ms. Everything that signs goes through the safety unit
 //! (`xone_consensus::unit`): the validator key is moved into it at start. The pure rules are in
@@ -107,7 +107,7 @@ pub struct Plan {
 
 /// The checks of `--mine`, in order: the network, then the two files that must be named.
 pub fn plan(cfg: &Config, chain_id: u64) -> Result<Plan, ProducerError> {
-    if matches!(chain_id, 50 | 51) {
+    if chain_id == 50 {
         return Err(ProducerError::PublicNetwork(chain_id));
     }
     let keystore = cfg
@@ -1333,9 +1333,10 @@ impl ProducerService {
         let store = FileSafety::open(&cfg.datadir.join("xone").join("safety"))
             .map_err(|e| format!("safety store: {e}"))?;
         // ponytail: a private chain has no second signer by construction, so the quiet window is 0; a
-        // public chain is refused above and takes the ADR-010 window when it is allowed.
+        // public chain (Apothem) takes the ADR-010 window W = 120 s (mainnet is refused in `plan`).
+        let quiet = if core.spec.chain_id == 51 { 120 } else { 0 };
         let unit =
-            SafetyUnit::open_or_init(store, signer, 0).map_err(|e| format!("safety unit: {e}"))?;
+            SafetyUnit::open_or_init(store, signer, quiet).map_err(|e| format!("safety unit: {e}"))?;
         let spec = core.spec.clone();
         let v2 = spec.xdpos.v2.clone().ok_or("the chain has no V2 section")?;
         let bft = Bft::new(
