@@ -22,9 +22,35 @@ fine for net2040 and too much for Apothem (327,356 accounts, about 158 M slots: 
   written with the flag must be started with it (its checkpoints have no rows; the node says so).
 - A read that fails (a damaged page) sets a flag that stops the store before the next commit.
 
-Not in part 1 (memory is still large; numbers in the PR): the trie is still in memory (part 2),
-the snap download and its install still hold the whole state (part 3), `Store::state_rows`
-(snap/1 serving and `snapshot export`) is refused, so a node on disk state serves no snapshot.
+Still in memory after part 2 (see below): the snap download and its install hold the whole state
+(part 3). `Store::state_rows` (snap/1 serving and `snapshot export`) is refused, so a node on disk
+state serves no snapshot.
+
+## Part 2: trie nodes on disk
+
+With `--state.disk` the account trie and the storage tries are not in memory either.
+
+- Table `TrieNodes`: a node whose RLP is 32 bytes or more is a row, keyed by position (geth's pathdb
+  layout, one byte per nibble): `0 || nibbles` for the account trie, `1 || keccak(address) || nibbles`
+  for a storage trie. A node below 32 bytes is inside its parent's row.
+- A child that is on disk is a stub (its hash) until a walk loads it. The row must hash to the stub's
+  reference, else the trie is marked failed and the store stops before the next commit.
+- The store writes the rows a block changed, the rows of the nodes that went away and the rows of
+  the storage tries of deleted accounts in the block's own transaction, with the `Meta` row
+  `trieroot` (the state root those rows are). An unwind writes the rows of the older state in its own
+  transaction. After the commit, clean nodes at depth 5 or below go back to stubs and the storage
+  tries are dropped; the account trie keeps its top levels.
+- A start uses the rows as they are when `trieroot` is the head header's state root; otherwise
+  (a datadir from part 1, a damaged row after a manual edit) it clears `TrieNodes`, rebuilds it from
+  the flat tables in one streamed pass (written and pruned every 100,000 accounts and every 200,000
+  slots of one account), and checks the root against the head header before it writes the marker.
+- Tests: `tests/persisted.rs` (xone-state, proptest): the persisted trie against the in-memory trie
+  and `flat_root` over random writes, deletes, unwinds and restarts, with every node but the root a
+  stub after each flush, and the row set equal after every step to that of a trie built from the
+  final state in one go (no stale row, none missing); a damaged row is refused. `trie_rows.rs`
+  (store): rows after blocks and an unwind equal a rebuild's; a missing or wrong marker or a damaged
+  row is rebuilt.
+
 
 ## Check
 

@@ -63,10 +63,14 @@ pub enum T {
     StagedBodies,
     /// transaction hash to `block u64 BE || index u32 BE`, for every canonical block's transactions.
     TxLookup,
+    /// `--state.disk`: the nodes of the state tries of 32 bytes or more, by position: `0 ||
+    /// nibbles` for the account trie, `1 || keccak(address) || nibbles` for a storage trie (one byte
+    /// per nibble), to the node's RLP. The `Meta` row `trieroot` says which state root they are.
+    TrieNodes,
 }
 
 impl T {
-    pub const ALL: [T; 22] = [
+    pub const ALL: [T; 23] = [
         T::Meta,
         T::CanonicalHeaders,
         T::HeaderNumbers,
@@ -89,6 +93,7 @@ impl T {
         T::StagedHeaders,
         T::StagedBodies,
         T::TxLookup,
+        T::TrieNodes,
     ];
 
     pub fn name(self) -> &'static str {
@@ -115,6 +120,7 @@ impl T {
             T::StagedHeaders => "StagedHeaders",
             T::StagedBodies => "StagedBodies",
             T::TxLookup => "TxLookup",
+            T::TrieNodes => "TrieNodes",
         }
     }
 }
@@ -310,6 +316,13 @@ impl Tx<'_, RW> {
     pub fn del(&self, t: T, key: &[u8]) -> R<()> {
         let tb = self.table(t.name())?;
         self.tx.del(&tb, key, None)?;
+        Ok(())
+    }
+
+    /// Empties a table (fast: its pages are freed, no row is visited).
+    pub fn clear(&self, t: T) -> R<()> {
+        let tb = self.table(t.name())?;
+        self.tx.clear_table(&tb)?;
         Ok(())
     }
 
