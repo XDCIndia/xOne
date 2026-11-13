@@ -556,8 +556,11 @@ impl<P: PeerSource> Syncer<'_, P> {
 
     // ---- heal
 
-    /// One walk of the account trie (and, with `storage`, of every storage trie) from the root,
-    /// over the nodes that can be built from the local data plus the nodes fetched so far.
+    /// One walk of the account trie (and, with `storage`, of the storage tries that differ from
+    /// the local slots) from the root, over the nodes that can be built from the local data plus the
+    /// nodes fetched so far. `Walked::storage` holds only the tries that were walked: a storage trie
+    /// whose root the local slots already hash to is left as it is, and no node of it is built (a
+    /// network's state does not fit in memory as nodes, `spec/snap/pivot.md`).
     fn walk_state(&self, storage: bool) -> Result<Walked, SyncError> {
         let mut known: HashMap<B256, Bytes> = self.healed.clone();
         let accounts = self
@@ -571,19 +574,6 @@ impl<P: PeerSource> Syncer<'_, P> {
                 .nodes_by_hash()
                 .map(|(h, n)| (h, n.clone())),
         );
-        if storage {
-            for slots in self.store.storage.values() {
-                let leaves = slots
-                    .iter()
-                    .map(|(k, v)| (*k, alloy_rlp::encode(v)))
-                    .collect();
-                known.extend(
-                    Trie::build(&leaves)
-                        .nodes_by_hash()
-                        .map(|(h, n)| (h, n.clone())),
-                );
-            }
-        }
         let w = mpt::walk(self.store.progress.root, &known)?;
         let mut out = Walked {
             missing: w.missing.into_iter().map(|(p, h)| (None, p, h)).collect(),
@@ -595,8 +585,24 @@ impl<P: PeerSource> Syncer<'_, P> {
             acc.balance
                 .check_legal()
                 .map_err(|e| SyncError::Fault(Fault::Balance(k, e)))?;
-            if storage && acc.storage_root != EMPTY_ROOT_HASH {
-                let sw = mpt::walk(acc.storage_root, &known)?;
+            let local = self.store.storage.get(&k);
+            let same = |s: &BTreeMap<B256, U256>| {
+                xone_state::trie::root_of_hashed(s.iter().map(|(h, v)| (*h, alloy_rlp::encode(v))))
+                    == acc.storage_root
+            };
+            if storage && acc.storage_root != EMPTY_ROOT_HASH && !local.is_some_and(same) {
+                let leaves = local
+                    .into_iter()
+                    .flatten()
+                    .map(|(s, v)| (*s, alloy_rlp::encode(v)))
+                    .collect();
+                let mut nodes = self.healed.clone();
+                nodes.extend(
+                    Trie::build(&leaves)
+                        .nodes_by_hash()
+                        .map(|(h, n)| (h, n.clone())),
+                );
+                let sw = mpt::walk(acc.storage_root, &nodes)?;
                 out.missing
                     .extend(sw.missing.into_iter().map(|(p, h)| (Some(k), p, h)));
                 let slots = sw
@@ -673,7 +679,14 @@ impl<P: PeerSource> Syncer<'_, P> {
             let w = self.walk_state(true)?;
             if w.missing.is_empty() {
                 self.store.accounts = w.accounts;
-                self.store.storage = w.storage;
+                self.store.storage.extend(w.storage);
+                // an account without storage at the root keeps none
+                let accounts = &self.store.accounts;
+                self.store.storage.retain(|h, _| {
+                    accounts
+                        .get(h)
+                        .is_some_and(|a| a.storage_root != EMPTY_ROOT_HASH)
+                });
                 self.finish_accounts();
                 return Ok(());
             }

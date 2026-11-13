@@ -54,9 +54,7 @@ use xone_snap::{
     codec::Message as Snap,
     preimage::{self, GetPreimages},
 };
-use xone_state::{
-    system_contracts::validator_0x88, trie::flat_root, Account, FlatWrite, MemFlat, StateRead,
-};
+use xone_state::{system_contracts::validator_0x88, Account, StateRead};
 use xone_sync::{
     bootstrap::{
         manifest::{build_anchor, parse_pins, Side, SignRow},
@@ -661,23 +659,40 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
         c.trie_nodes, anchor.state_root
     );
 
-    // ---- the rows, by hashed key as snap/1 gives them
-    let mut rows = StateRows::default();
-    for (h, a) in &st.accounts {
-        rows.accounts.push((
-            *h,
-            Account {
-                nonce: a.nonce,
-                balance: a.balance.clone(),
-                code_hash: a.code_hash,
-                ..Default::default()
-            },
-        ));
+    // ---- the rows, by hashed key as snap/1 gives them. The state root is checked from the hashed
+    // rows by the streaming builder (`hashed_root`, no copy of the state), then the rows are moved out
+    // of the store, not copied: a network's state is held once.
+    let got = xone_snap::server::hashed_root(&st.accounts, &st.storage);
+    if got != anchor.state_root || st.progress.verified != Some(anchor.state_root) {
+        return Err(SnapSyncError::Root {
+            got,
+            want: anchor.state_root,
+        });
     }
-    for (h, slots) in &st.storage {
-        for (k, v) in slots {
-            rows.storage.push((*h, *k, *v));
-        }
+    let mut st = st;
+    let mut rows = StateRows {
+        accounts: std::mem::take(&mut st.accounts)
+            .into_iter()
+            .map(|(h, a)| {
+                (
+                    h,
+                    Account {
+                        nonce: a.nonce,
+                        balance: a.balance,
+                        code_hash: a.code_hash,
+                        ..Default::default()
+                    },
+                )
+            })
+            .collect(),
+        ..Default::default()
+    };
+    let storage = std::mem::take(&mut st.storage);
+    rows.storage
+        .reserve_exact(storage.values().map(BTreeMap::len).sum());
+    for (h, slots) in storage {
+        rows.storage
+            .extend(slots.into_iter().map(|(k, v)| (h, k, v)));
     }
     // An account above 2^256 is tracked by address by the executor. snap/1 gives only its hash, so
     // its preimage (a handful of accounts at most) is asked of an xOne peer over xpre/1, checked by
@@ -692,20 +707,6 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec) -> R<()> {
     for h in wide {
         let p = wide_preimage(d, h).ok_or(SnapSyncError::WideAddress(h))?;
         wide_pre.push((h, p));
-    }
-    let mut flat = MemFlat::default();
-    for (h, x) in &rows.accounts {
-        flat.set_hashed_account(*h, Some(x.clone()));
-    }
-    for (h, k, v) in &rows.storage {
-        flat.set_hashed_slot(*h, *k, *v);
-    }
-    let got = flat_root(&flat);
-    if got != anchor.state_root {
-        return Err(SnapSyncError::Root {
-            got,
-            want: anchor.state_root,
-        });
     }
     eprintln!(
         "snap: state root {got} rebuilt from {} hashed accounts and {} hashed slots; no preimages needed",
