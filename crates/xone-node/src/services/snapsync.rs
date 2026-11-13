@@ -578,6 +578,7 @@ pub fn run(
     pc.head = g.hash();
     pc.td = g.difficulty;
     let (peers, events) = Peers::new(pc.clone(), key);
+    super::snapview::set_peers(&peers);
     let mut net = NetService::new(cfg, rt, peers.clone(), key, &pc).map_err(io)?;
     net.start().map_err(|e| io(e.to_string()))?;
     let h = net.handle().runtime();
@@ -838,6 +839,7 @@ fn pivot_window(
     // the Status head is as old as the connection: go on to the peer's tip (a re-pivot, minutes
     // later, would otherwise pick the same stale pivot)
     let (head, head_hash) = advance(d, src, head)?;
+    super::snapview::set_head(&head);
     let top = head.number;
     let first_try = top.checked_sub(PIVOT_DEPTH).ok_or(SnapSyncError::NoPivot {
         from: top,
