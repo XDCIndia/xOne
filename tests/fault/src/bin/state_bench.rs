@@ -113,6 +113,10 @@ fn run() -> Result<(), String> {
         };
         parent = rec.block.hash();
         store.commit_block(&rec, None).map_err(|e| e.to_string())?;
+        if n % 5 == 0 {
+            // a steady commit frees the pages of the blocks before it (the file does not grow with them)
+            store.steady().map_err(|e| e.to_string())?;
+        }
     }
     store.steady().map_err(|e| e.to_string())?;
     if disk {
