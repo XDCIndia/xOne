@@ -591,6 +591,66 @@ pub fn normalise(args: impl IntoIterator<Item = OsString>) -> (Vec<OsString>, Ve
     (out, warns)
 }
 
+/// `xone account` (geth `cmd/geth/accountcmd.go`). Passwords come from files only: there is no
+/// prompt.
+fn account() -> Command {
+    let common = |c: Command| {
+        c.arg(Arg::new("datadir").long("datadir").value_name("dir"))
+            .arg(
+                Arg::new("keydir")
+                    .long("keydir")
+                    .value_name("dir")
+                    .help("Keystore directory (default <datadir>/keystore)."),
+            )
+    };
+    let pw = || {
+        Arg::new("password")
+            .long("password")
+            .value_name("file")
+            .required(true)
+            .help("File whose first line is the password (mode 0600).")
+    };
+    let light = || {
+        Arg::new("lightkdf")
+            .long("lightkdf")
+            .action(ArgAction::SetTrue)
+            .help("Light scrypt (N=4096, p=6) instead of geth's standard (N=262144, p=1).")
+    };
+    Command::new("account")
+        .about("Manage keystore accounts: new, import, list, update.")
+        .subcommand_required(true)
+        .subcommand(common(
+            Command::new("list").about("Print the accounts of the keystore directory."),
+        ))
+        .subcommand(common(
+            Command::new("new")
+                .about("Create a new key and store it encrypted.")
+                .arg(pw())
+                .arg(light()),
+        ))
+        .subcommand(common(
+            Command::new("import")
+                .about("Encrypt a hex private key file into the keystore.")
+                .arg(Arg::new("keyfile").value_name("keyfile").required(true))
+                .arg(pw())
+                .arg(light()),
+        ))
+        .subcommand(common(
+            Command::new("update")
+                .about("Re-encrypt an account with a new password.")
+                .arg(Arg::new("address").value_name("address").required(true))
+                .arg(pw())
+                .arg(
+                    Arg::new("new-password")
+                        .long("new-password")
+                        .value_name("file")
+                        .required(true)
+                        .help("File whose first line is the new password (mode 0600)."),
+                )
+                .arg(light()),
+        ))
+}
+
 fn snapshot() -> Command {
     let net =
         || {
@@ -670,6 +730,7 @@ pub fn command() -> Command {
                 )),
         )
         .subcommand(snapshot())
+        .subcommand(account())
         .subcommand(
             Command::new("genesis-hash")
                 .about("Print the genesis block hash of a built-in network.")

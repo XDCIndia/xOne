@@ -8,15 +8,16 @@ publish.workspace = true
 build = "build.rs"
 
 [dependencies]
+alloy-primitives.workspace = true
 clap.workspace = true
 tracing.workspace = true
 xone-chainspec.workspace = true
 xone-consensus.workspace = true
 xone-node.workspace = true
 xone-primitives.workspace = true
+xone-signer.workspace = true
 xone-sync.workspace = true
 
 [dev-dependencies]
-alloy-primitives.workspace = true
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 serde_json.workspace = true

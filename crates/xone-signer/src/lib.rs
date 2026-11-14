@@ -8,6 +8,7 @@
 #[cfg(not(unix))]
 compile_error!("xone-signer checks Unix file modes; it builds on Unix only");
 
+pub mod keystore_dir;
 pub mod local_keystore;
 pub mod nodekey;
 pub mod remote;
