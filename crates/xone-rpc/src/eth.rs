@@ -8,7 +8,7 @@ use crate::{
     },
     server::{Cost, Ctx, Registry},
     subscriptions::LogFilter,
-    types::{parse_address, parse_tag, BlockRef, Params, RpcError, R},
+    types::{not_canonical, parse_address, parse_tag, BlockRef, Params, RpcError, R},
 };
 use alloy_primitives::{keccak256, Address, Bytes, B256, U256};
 use serde_json::{json, Value};
@@ -89,6 +89,15 @@ fn no_header() -> RpcError {
 pub fn block_of(c: &Ctx, r: BlockRef) -> Result<Option<BlockView>, RpcError> {
     let hash = match r {
         BlockRef::Hash(h) => h,
+        BlockRef::CanonicalHash(h) => {
+            let Some(b) = c.be.chain.block(h) else {
+                return Ok(None);
+            };
+            if c.be.chain.hash_by_number(b.header.number) != Some(h) {
+                return Err(not_canonical());
+            }
+            return Ok(Some(b));
+        }
         BlockRef::Number(n) => {
             if n > c.be.chain.head().0 {
                 return Ok(None);
@@ -107,10 +116,14 @@ pub fn block_of(c: &Ctx, r: BlockRef) -> Result<Option<BlockView>, RpcError> {
 fn state_at(c: &Ctx, p: &Params, i: usize) -> Result<(u64, B256), RpcError> {
     let r = p.block_ref_or_latest(i)?;
     let hash = match r {
-        BlockRef::Hash(h) => h,
+        BlockRef::Hash(h) | BlockRef::CanonicalHash(h) => h,
         BlockRef::Number(n) => c.be.chain.hash_by_number(n).ok_or_else(no_header)?,
     };
     let h = c.be.chain.header(hash).ok_or_else(no_header)?;
+    if matches!(r, BlockRef::CanonicalHash(_)) && c.be.chain.hash_by_number(h.number) != Some(hash)
+    {
+        return Err(not_canonical());
+    }
     c.be.chain.history(Class::State, h.number)?;
     Ok((h.number, hash))
 }

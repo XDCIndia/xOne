@@ -50,6 +50,12 @@ impl StateRead for Dyn<'_> {
 fn resolve(c: &Ctx, r: BlockRef) -> Result<Option<B256>, RpcError> {
     Ok(match r {
         BlockRef::Hash(h) => c.be.chain.block(h).map(|b| b.hash),
+        BlockRef::CanonicalHash(h) => match c.be.chain.block(h) {
+            Some(b) if c.be.chain.hash_by_number(b.header.number) != Some(h) => {
+                return Err(crate::types::not_canonical())
+            }
+            b => b.map(|b| b.hash),
+        },
         BlockRef::Number(n) => {
             if n > c.be.chain.head().0 {
                 return Ok(None);

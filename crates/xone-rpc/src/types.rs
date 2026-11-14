@@ -84,6 +84,14 @@ impl From<Missing> for RpcError {
 pub enum BlockRef {
     Number(u64),
     Hash(B256),
+    /// EIP-1898 `{"blockHash": h, "requireCanonical": true}`: the block must be the canonical
+    /// block at its height (geth `HeaderByNumberOrHash`, error `hash is not currently canonical`).
+    CanonicalHash(B256),
+}
+
+/// geth's error for a `requireCanonical` hash that is not the canonical block at its height.
+pub fn not_canonical() -> RpcError {
+    RpcError::server("hash is not currently canonical")
 }
 
 /// geth `rpc.BlockNumber` tags that this node maps to the head: `latest`, `pending`, `safe`,
@@ -204,11 +212,32 @@ impl Params<'_> {
                 parse_hash(s).map(BlockRef::Hash)
             }
             Value::String(s) => parse_tag(s, self.head).map(BlockRef::Number),
-            Value::Object(o) => match (o.get("blockHash"), o.get("blockNumber")) {
-                (Some(Value::String(h)), _) => parse_hash(h).map(BlockRef::Hash),
-                (_, Some(Value::String(n))) => parse_tag(n, self.head).map(BlockRef::Number),
-                _ => Err(RpcError::invalid_params("invalid block selector")),
-            },
+            // EIP-1898 (geth `BlockNumberOrHash.UnmarshalJSON`): one of the two fields, and an
+            // optional boolean `requireCanonical`.
+            Value::Object(o) => {
+                let canonical = match o.get("requireCanonical") {
+                    None | Some(Value::Null) => false,
+                    Some(Value::Bool(b)) => *b,
+                    Some(_) => {
+                        return Err(RpcError::invalid_params(
+                            "invalid requireCanonical: expected bool",
+                        ))
+                    }
+                };
+                let field = |k: &str| o.get(k).filter(|v| !v.is_null());
+                match (field("blockHash"), field("blockNumber")) {
+                    (Some(_), Some(_)) => Err(RpcError::invalid_params(
+                        "cannot specify both BlockHash and BlockNumber, choose one or the other",
+                    )),
+                    (Some(Value::String(h)), None) => parse_hash(h).map(if canonical {
+                        BlockRef::CanonicalHash
+                    } else {
+                        BlockRef::Hash
+                    }),
+                    (None, Some(Value::String(n))) => parse_tag(n, self.head).map(BlockRef::Number),
+                    _ => Err(RpcError::invalid_params("invalid block selector")),
+                }
+            }
             _ => Err(RpcError::invalid_params("invalid block selector")),
         }
     }
