@@ -351,6 +351,9 @@ fn limits(l: &NodeLimits) -> Limits {
         body_bytes: usize::try_from(l.rpc_body_bytes).unwrap_or(d.body_bytes),
         batch_items: l.rpc_batch_items as usize,
         response_bytes: usize::try_from(l.rpc_response_bytes).unwrap_or(d.response_bytes),
+        call_gas_cap: l.rpc_gas_cap,
+        tx_fee_cap: l.rpc_tx_fee_cap,
+        evm_timeout: std::time::Duration::from_millis(l.rpc_evm_timeout_ms),
         ..d
     }
 }

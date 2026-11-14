@@ -324,6 +324,8 @@ fn call_request(o: &serde_json::Map<String, Value>, cap: u64) -> Result<CallRequ
             .map(parse_address)
             .transpose()
     };
+    // geth `TransactionArgs.ToMessage`: a cap of 0 is no cap, the default then `MaxUint64 / 2`
+    let cap = if cap == 0 { u64::MAX / 2 } else { cap };
     let gas = match o.get("gas").and_then(Value::as_str) {
         Some(s) => parse_tag(s, 0)?.min(cap),
         None => cap,
@@ -377,7 +379,30 @@ fn send_raw(c: &Ctx, p: &Params) -> R {
     let raw = alloy_primitives::hex::decode(s).map_err(|_| {
         RpcError::invalid_params("invalid argument 0: json: cannot unmarshal hex string")
     })?;
+    // geth `SubmitTransaction` checks the fee before the pool sees the transaction. Bytes that do
+    // not decode go on to the pool, which reports why. The sender is not needed: no recovery.
+    if let Ok(t) =
+        xone_executor::tx::decode_from(&raw, c.be.chain.spec().chain_id, Some(Address::ZERO))
+    {
+        check_tx_fee(t.gas_price, t.gas, c.limits.tx_fee_cap)?;
+    }
     c.be.pool.add_raw(&raw).map(h256).map_err(RpcError::server)
+}
+
+/// geth `internal/ethapi/api.go` `checkTxFee`: `gasPrice * gas` in ether (the fee cap for a type 2
+/// transaction) above `cap` is refused; a `cap` of 0 is no cap.
+pub(crate) fn check_tx_fee(gas_price: u128, gas: u64, cap: f64) -> Result<(), RpcError> {
+    if cap == 0.0 {
+        return Ok(());
+    }
+    let wei = U256::from(gas_price) * U256::from(gas);
+    let fee = wei.to_string().parse::<f64>().unwrap_or(f64::INFINITY) / 1e18;
+    if fee > cap {
+        return Err(RpcError::server(format!(
+            "tx fee ({fee:.2} ether) exceeds the configured cap ({cap:.2} ether)"
+        )));
+    }
+    Ok(())
 }
 
 fn get_logs(c: &Ctx, p: &Params) -> R {
@@ -519,4 +544,20 @@ fn fee_history(c: &Ctx, p: &Params) -> R {
         m["reward"] = Value::Array(rewards);
     }
     Ok(m)
+}
+
+#[cfg(test)]
+mod fee_tests {
+    #[test]
+    fn tx_fee_cap_matches_geth() {
+        // 1 XDC cap: 21000 gas at 50 gwei is fine, 1e6 gas at 2000 gwei (2 XDC) is not
+        assert!(super::check_tx_fee(50_000_000_000, 21_000, 1.0).is_ok());
+        let e = super::check_tx_fee(2_000_000_000_000, 1_000_000, 1.0).unwrap_err();
+        assert_eq!(
+            e.to_value()["message"],
+            "tx fee (2.00 ether) exceeds the configured cap (1.00 ether)"
+        );
+        assert!(super::check_tx_fee(2_000_000_000_000, 1_000_000, 0.0).is_ok());
+        assert!(super::check_tx_fee(u128::MAX, u64::MAX, 1e9).is_err());
+    }
 }
