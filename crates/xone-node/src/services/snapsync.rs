@@ -30,7 +30,7 @@
 use std::{
     collections::{BTreeMap, HashMap},
     path::Path,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant},
 };
 
 use super::gaprpc;
@@ -65,10 +65,10 @@ use xone_sync::{
 
 use super::{
     chain::to_body,
-    core::RETENTION,
+    core::{now, RETENTION},
     from_wire,
     net::{load_or_create_key, NetService},
-    store,
+    short, store,
 };
 use crate::{
     config::Config,
@@ -141,16 +141,6 @@ pub enum SnapSyncError {
 }
 
 type R<T> = Result<T, SnapSyncError>;
-
-fn short(p: &PeerId) -> String {
-    alloy_primitives::hex::encode(&p[..4])
-}
-
-fn now_secs() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs())
-}
 
 struct Peer {
     version: u64,
@@ -998,7 +988,7 @@ fn pivot_once(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec, pins: &[(u64, B25
         headers.len()
     );
     let get = |n: u64| headers.get(&n).cloned();
-    let now = now_secs();
+    let now = now();
     let mut last = String::new();
     let mut chosen: Option<(Anchor, String)> = None;
     for p in (lowest..=first_try).rev() {

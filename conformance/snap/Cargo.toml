@@ -10,7 +10,7 @@ description = "Test-only: xone-snap against xone-sync's pivot plan and against a
 [dependencies]
 alloy-primitives.workspace = true
 xone-net = { path = "../../crates/xone-net" }
-xone-snap.workspace = true
+xone-snap = { workspace = true, features = ["testkit"] }
 xone-state.workspace = true
 xone-sync.workspace = true
 xone-primitives.workspace = true

@@ -176,6 +176,31 @@ pub struct Mining {
 pub struct Logging {
     /// 0 silent .. 5 detail.
     pub verbosity: u8,
+    /// `text` or `json` (one object per line).
+    pub format: String,
+    /// Per-target verbosity, `xone_net=4,xone_sync::snap=5`.
+    pub vmodule: String,
+}
+
+impl Logging {
+    /// The logger's level table and format; `Config::set` and `from_toml` have checked both.
+    pub fn levels(
+        &self,
+    ) -> Result<(crate::observe::logs::LevelCfg, crate::observe::logs::Format), ConfigError> {
+        let modules = crate::observe::logs::parse_vmodule(&self.vmodule)
+            .map_err(|w| invalid("log.vmodule", &self.vmodule, w))?;
+        let format = self
+            .format
+            .parse()
+            .map_err(|w| invalid("log.format", &self.format, w))?;
+        Ok((
+            crate::observe::logs::LevelCfg {
+                verbosity: self.verbosity,
+                modules,
+            },
+            format,
+        ))
+    }
 }
 
 /// A side listener (metrics, pprof).
@@ -294,7 +319,11 @@ defaults!(Mining {
     keystore: None,
     unlock: vec![]
 });
-defaults!(Logging { verbosity: 3 });
+defaults!(Logging {
+    verbosity: 3,
+    format: "text".into(),
+    vmodule: String::new()
+});
 defaults!(Limits {
     stop_timeout_ms: 5_000,
     service_stop_timeout_ms: 2_000,
@@ -373,6 +402,7 @@ impl Config {
         let mut c = c;
         c.sync.mode = sync_mode("sync.mode", &c.sync.mode)?;
         gc_mode("sync.gcmode", &c.sync.gcmode)?;
+        c.logging.levels()?;
         Ok(c)
     }
 
@@ -466,6 +496,14 @@ impl Config {
                 }
                 self.logging.verbosity = n;
             }
+            "log.format" => {
+                self.logging.format = v.to_owned();
+                self.logging.levels()?;
+            }
+            "log.vmodule" | "vmodule" => {
+                self.logging.vmodule = v.to_owned();
+                self.logging.levels()?;
+            }
             "metrics" => self.metrics.enabled = flag(key, v)?,
             "metrics.addr" => self.metrics.addr = v.to_owned(),
             "metrics.port" => self.metrics.port = num(key, v)?,
@@ -534,6 +572,13 @@ mod tests {
             c.set("verbosity", "6"),
             Err(ConfigError::Invalid { .. })
         ));
+        for (k, v) in [("log.format", "xml"), ("log.vmodule", "xone_net=9")] {
+            assert!(
+                matches!(c.set(k, v), Err(ConfigError::Invalid { .. })),
+                "{k}"
+            );
+        }
+        assert!(Config::from_toml("[logging]\nformat = \"xml\"\n").is_err());
         assert!(Config::from_toml("bogus = 1").is_err());
     }
 

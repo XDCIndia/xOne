@@ -63,3 +63,100 @@ Checkpoint after each decisive result and external write. On a rate limit, retai
 Keep Gate A feasibility, Gate B foundational correctness, Gate C sync/resources and follower qualification, Gate D isolated producer safety, and Gate E packaged release/public rollout. Evidence for a prerequisite deliverable permits dependent engineering work; it does not bypass a final gate.
 
 Before public producer qualification, complete the required B/C/D evidence, exact-artifact checks and the authorized host/run decisions in [#47](https://github.com/XDCIndia/xOne/issues/47). Keep the mainnet follower's full own-state replay and 14-day soak in [#48](https://github.com/XDCIndia/xOne/issues/48). Mainnet signing and protocol activation remain separate decisions. Track Q research cannot substitute for those client gates.
+
+## Estimates and schedule
+
+Added for issue #204. Every estimate below is a rough figure in calendar days, multiplied by 1.5 (the factor of the Lambda engineering philosophy, principle 12; change it in the weekly table below when the actuals say so). Start date of the chart: 2026-11-16, no work item runs before its dependencies. Dates are plan dates, not promises.
+
+Basis, from the merged history of `main` (72 pull requests between 2026-11-10 and 2026-11-14; `gh pr list --state merged`): a bounded work item with a clear spec took 0.5 to 1 day (for example #75 keys, #76 special transactions, #84 txpool, all merged 2026-11-11); an item that needs a live run on a public network took 1 to 3 days per run (net2040 sync-mode runs of 2026-11-12, PR #110, #124, #127, #131); a soak or an owner decision is calendar time and does not shrink with more workers. Open items are the issues of #5 and #51 that are open on 2026-11-14 or whose evidence is not yet qualified (merged is not qualified, see #57).
+
+Closed issues are not listed: #35, #38, #43 (producer code; its 72 h soak is item d72 below) and #46.
+
+| Item | Issue | Gate | Work | Raw days | x1.5 | Start | End | After |
+| --- | --- | --- | --- | ---: | ---: | --- | --- | --- |
+| a6 | #6 | A | Fork table drift qualified with the oracle key (owner supplies key) | 1 | 2 | 2026-11-16 | 2026-11-18 | - |
+| a7 | #7 | A | Wide-balance and revm proof across the revert matrix | 2 | 3 | 2026-11-16 | 2026-11-19 | - |
+| a8 | #8 | A | ADR-002 integration decision (owner) | 0.5 | 1 | 2026-11-16 | 2026-11-17 | - |
+| a23 | #23 | A | ADR-009 XDCx scope (owner) | 0.5 | 1 | 2026-11-16 | 2026-11-17 | - |
+| a50 | #50 | A | xOneGo lessons and carry-forward review | 1 | 2 | 2026-11-16 | 2026-11-18 | - |
+| b9 | #9 | B | Exact validation on every accepting node, negative corpus | 2 | 3 | 2026-11-19 | 2026-11-22 | a7 |
+| b10 | #10 | B | Replay at 0 mismatches over every fork row and boundary | 5 | 8 | 2026-11-18 | 2026-11-26 | a6 |
+| b11 | #11 | B | Storage crash, restart and unwind gates (proof part) | 4 | 6 | 2026-11-19 | 2026-11-25 | a7 |
+| b15 | #15 | B | Assurance: lint fixtures, unsafe audit, non-shipping mutants | 3 | 5 | 2026-11-16 | 2026-11-21 | - |
+| b44 | #44 | B | CertiK and Hacken findings, one regression each (verification items) | 3 | 5 | 2026-11-22 | 2026-11-27 | b9 |
+| b58 | #58 | B | Amsterdam two-dimensional gas and recomputed BAL hash | 3 | 5 | 2026-11-22 | 2026-11-27 | b9 |
+| b59 | #59 | B | Prague system-contract installation and block lifecycle | 3 | 5 | 2026-11-22 | 2026-11-27 | b9 |
+| b0 | #24-#34 | B | Close-out of merged items: evidence per issue, tick the tracker | 2 | 3 | 2026-11-22 | 2026-11-25 | b9 |
+| c13 | #13 | C | Perf measurement contract and eligible-turn accounting | 3 | 5 | 2026-11-16 | 2026-11-21 | - |
+| c14 | #14 | C | Bootstrap anchor and retention windows for every rule | 2 | 3 | 2026-11-25 | 2026-11-28 | b11 |
+| c16 | #16 | C | Ops budgets: bounded queues, RPC and peer budgets, log and disk limits | 4 | 6 | 2026-11-16 | 2026-11-22 | - |
+| c36 | #36 | C | Txpool bounds and propagation | 2 | 3 | 2026-11-16 | 2026-11-19 | - |
+| c42 | #42 | C | RPC parity subset against geth-XDC | 3 | 5 | 2026-11-22 | 2026-11-27 | b9 |
+| c45 | #45 | C | Live follower qualification, net2040 and Apothem, restarts | 5 | 8 | 2026-11-28 | 2026-12-06 | b10, c14 |
+| d12 | #12 | D | Signer anti-equivocation: rollback, restore, failover, adversarial devnet | 4 | 6 | 2026-11-25 | 2026-12-01 | b11 |
+| d40 | #40 | D | Keys: node calls keystore, remote signer, custody | 2 | 3 | 2026-11-16 | 2026-11-19 | - |
+| d72 | Gate D | D | 72 h devnet soak with fault cases (3 days at least) | 3 | 5 | 2026-12-01 | 2026-12-06 | d12, d40 |
+| e47 | #47 | E | net2040 borrowed-seat mint by eligible turns (owner approval) | 3 | 5 | 2026-12-06 | 2026-12-11 | c45, d72 |
+| e47b | #47 | E | Apothem producer qualification (owner approval) | 7 | 11 | 2026-12-11 | 2026-12-22 | e47 |
+| e48 | #48 | E | Mainnet follower from genesis and 14-day soak at tip | 21 | 32 | 2026-12-06 | 2027-01-07 | c45 |
+| e49 | #49 | E | Transition: xOneGo wedge-fix-only, seat move, retirement | 3 | 5 | 2026-12-22 | 2026-12-27 | e47b |
+| q17 | #17 | Q | Crypto inventory, threat model, versioned interfaces | 2 | 3 | 2026-11-16 | 2026-11-19 | - |
+| q18 | #18 | Q | Pinned standards, assurance register, cost lab (close-out) | 2 | 3 | 2026-11-16 | 2026-11-19 | - |
+| q19 | #19 | Q | PQ research: account and validator signatures | 5 | 8 | 2026-11-16 | 2026-11-24 | - |
+| q20 | #20 | Q | PQ research: transport, history, release signing | 5 | 8 | 2026-11-16 | 2026-11-24 | - |
+
+Gate close dates (latest end of its items): A 2026-11-19, B 2026-11-27, C 2026-12-06, D 2026-12-06, E 2027-01-07, Q 2026-11-24. Gate E depends on the owner approving each public mint test, and on the 14-day soak, so its date moves with those decisions.
+
+```mermaid
+gantt
+    title xOneRS gate plan (estimates x1.5, calendar days)
+    dateFormat YYYY-MM-DD
+    axisFormat %m-%d
+    section Gate A feasibility
+    6 Fork table drift qualified with the oracle :a6, 2026-11-16, 2d
+    7 Wide-balance and revm proof across the rev :a7, 2026-11-16, 3d
+    8 ADR-002 integration decision (owner) :a8, 2026-11-16, 1d
+    23 ADR-009 XDCx scope (owner) :a23, 2026-11-16, 1d
+    50 xOneGo lessons and carry-forward review :a50, 2026-11-16, 2d
+    section Gate B correctness
+    9 Exact validation on every accepting node  :b9, after a7, 3d
+    10 Replay at 0 mismatches over every fork row :b10, after a6, 8d
+    11 Storage crash restart and unwind gates (p :b11, after a7, 6d
+    15 Assurance :b15, 2026-11-16, 5d
+    44 CertiK and Hacken findings one regression :b44, after b9, 5d
+    58 Amsterdam two-dimensional gas and recomput :b58, after b9, 5d
+    59 Prague system-contract installation and bl :b59, after b9, 5d
+    24-34 Close-out of merged items :b0, after b9, 3d
+    section Gate C sync and follower
+    13 Perf measurement contract and eligible-tur :c13, 2026-11-16, 5d
+    14 Bootstrap anchor and retention windows for :c14, after b11, 3d
+    16 Ops budgets :c16, 2026-11-16, 6d
+    36 Txpool bounds and propagation :c36, 2026-11-16, 3d
+    42 RPC parity subset against geth-XDC :c42, after b9, 5d
+    45 Live follower qualification net2040 and A :c45, after b10 c14, 8d
+    section Gate D isolated producer
+    12 Signer anti-equivocation :d12, after b11, 6d
+    40 Keys :d40, 2026-11-16, 3d
+    Gate D 72 h devnet soak with fault cases (3 days  :d72, after d12 d40, 5d
+    section Gate E public rollout
+    47 net2040 borrowed-seat mint by eligible tur :e47, after c45 d72, 5d
+    47 Apothem producer qualification (owner appr :e47b, after e47, 11d
+    48 Mainnet follower from genesis and 14-day s :e48, after c45, 32d
+    49 Transition :e49, after e47b, 5d
+    section Track Q post-quantum readiness
+    17 Crypto inventory threat model versioned  :q17, 2026-11-16, 3d
+    18 Pinned standards assurance register cost :q18, 2026-11-16, 3d
+    19 PQ research :q19, 2026-11-16, 8d
+    20 PQ research :q20, 2026-11-16, 8d
+```
+
+Edges of the chart are the dependencies in the table: A items feed the B proofs (#7 feeds #9 and #11, #6 feeds #10), B feeds the live follower (#45) and the signer gates, and C and D feed Gate E. Update the chart and the table when a gate item closes.
+
+### Weekly estimate against actual
+
+Add one line per week. Factor = actual days divided by raw estimate days for the items closed that week; change the 1.5 above when three weeks in a row differ.
+
+| Week | Estimated (raw days, items) | Actual | Factor | Note |
+| --- | --- | --- | ---: | --- |
+| 2026-11-09 | none (no estimate existed) | 72 PRs merged 2026-11-10..14: gate A set, most of B and C code, producer, release, net2040 and Apothem follow | n/a | baseline week; merged is not qualified, so no item is counted closed |
+| 2026-11-16 | first estimates above | | | |

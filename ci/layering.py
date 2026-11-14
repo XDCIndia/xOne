@@ -18,7 +18,7 @@ RANK = {
     "xone-executor": 4,  # block execution: composes primitives, chainspec, state, evm and consensus
     "xone-db": 5,
     "xone-net": 6,
-    "xone-snap": 6,
+    "xone-snap": 5,  # below xone-sync: sync implements snap's Backend (mdbx/snapstate.rs)
     "xone-sync": 6,
     "xone-builder": 7,
     "xone-rpc": 7,
@@ -67,7 +67,7 @@ def check(meta):
             errs.append(f"{p['name']} ({rel}): not in the crate allow-list")
     for p in members.values():
         for d in p["dependencies"]:
-            if d["name"] not in by_name or kind[p["name"]] == "unknown":
+            if d["name"] not in by_name or d["name"] == p["name"] or kind[p["name"]] == "unknown":
                 continue
             src, dst = p["name"], d["name"]
             dk = d["kind"] or "normal"

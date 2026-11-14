@@ -86,6 +86,71 @@ pub struct Limiter {
     alarm: TokenBucket,
     suppressed: [(u64, u64); 7], // (lines, bytes) since the last summary
     last_summary: [u64; 7],
+    format: Format,
+}
+
+/// `--log.format`: geth's `text` (logfmt-like) or `json` (one object per line).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Format {
+    #[default]
+    Text,
+    Json,
+}
+
+impl Format {
+    fn summary(self, lines: u64, bytes: u64, sub: Sub) -> String {
+        match self {
+            Format::Text => {
+                format!(
+                    "suppressed lines={lines} bytes={bytes} subsystem={}\n",
+                    sub.name()
+                )
+            }
+            Format::Json => format!(
+                "{}\n",
+                serde_json::json!({
+                    "t": wall_ms(), "lvl": "WARN", "target": "xone_node::observe::logs",
+                    "msg": "suppressed", "lines": lines, "bytes": bytes, "subsystem": sub.name(),
+                })
+            ),
+        }
+    }
+}
+
+impl std::str::FromStr for Format {
+    type Err = &'static str;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "text" | "terminal" | "logfmt" => Ok(Format::Text),
+            "json" => Ok(Format::Json),
+            _ => Err("text or json"),
+        }
+    }
+}
+
+/// `--log.vmodule`: `target=level` pairs, comma separated, e.g. `xone_net=4,xone_sync::snap=5`.
+/// A target is a tracing target prefix (a crate or module path), not geth's file pattern.
+pub fn parse_vmodule(s: &str) -> Result<Vec<(String, u8)>, &'static str> {
+    const WHY: &str = "target=level pairs, level 0 to 5, e.g. xone_net=4,xone_sync::snap=5";
+    s.split(',')
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .map(|p| {
+            let (t, v) = p.split_once('=').ok_or(WHY)?;
+            let v: u8 = v.trim().parse().map_err(|_| WHY)?;
+            let t = t.trim();
+            if v > 5 || t.is_empty() {
+                return Err(WHY);
+            }
+            Ok((t.to_owned(), v))
+        })
+        .collect()
+}
+
+fn wall_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
 }
 
 impl Limiter {
@@ -99,6 +164,7 @@ impl Limiter {
             alarm: TokenBucket::new(16 * KIB, 4 * KIB, now_ms),
             suppressed: [(0, 0); 7],
             last_summary: [now_ms; 7],
+            format: Format::Text,
         }
     }
 
@@ -120,10 +186,7 @@ impl Limiter {
         }
         let (lines, bytes) = self.suppressed[i];
         if lines > 0 && now_ms.saturating_sub(self.last_summary[i]) >= SUMMARY_EVERY_MS {
-            let s = format!(
-                "suppressed lines={lines} bytes={bytes} subsystem={}\n",
-                sub.name()
-            );
+            let s = self.format.summary(lines, bytes, sub);
             if self.alarm.try_take(now_ms, s.len() as u64) {
                 self.suppressed[i] = (0, 0);
                 self.last_summary[i] = now_ms;
@@ -139,10 +202,7 @@ impl Limiter {
         for s in SUBS {
             let (l, b) = std::mem::take(&mut self.suppressed[s.idx()]);
             if l > 0 {
-                v.push(format!(
-                    "suppressed lines={l} bytes={b} subsystem={}\n",
-                    s.name()
-                ));
+                v.push(self.format.summary(l, b, s));
             }
         }
         v
@@ -296,6 +356,7 @@ type Clock = Box<dyn Fn() -> u64 + Send + Sync>;
 
 struct Inner {
     levels: LevelCfg,
+    format: Format,
     limiter: Mutex<Limiter>,
     tx: SyncSender<Msg>,
     clock: Clock,
@@ -328,6 +389,37 @@ impl Visit for Fields {
     }
 }
 
+/// The JSON line's fields: numbers and booleans stay typed, everything else is its text.
+#[derive(Default)]
+struct JsonFields(serde_json::Map<String, serde_json::Value>);
+impl JsonFields {
+    fn put(&mut self, f: &tracing::field::Field, v: serde_json::Value) {
+        let k = if f.name() == "message" {
+            "msg"
+        } else {
+            f.name()
+        };
+        self.0.insert(k.to_owned(), v);
+    }
+}
+impl Visit for JsonFields {
+    fn record_u64(&mut self, f: &tracing::field::Field, v: u64) {
+        self.put(f, v.into());
+    }
+    fn record_i64(&mut self, f: &tracing::field::Field, v: i64) {
+        self.put(f, v.into());
+    }
+    fn record_bool(&mut self, f: &tracing::field::Field, v: bool) {
+        self.put(f, v.into());
+    }
+    fn record_str(&mut self, f: &tracing::field::Field, v: &str) {
+        self.put(f, v.into());
+    }
+    fn record_debug(&mut self, f: &tracing::field::Field, v: &dyn fmt::Debug) {
+        self.put(f, format!("{v:?}").into());
+    }
+}
+
 impl LogLayer {
     fn send(&self, line: String) {
         match self.0.tx.try_send(Msg::Line(line)) {
@@ -347,18 +439,30 @@ impl<S: Subscriber> Layer<S> for LogLayer {
 
     fn on_event(&self, ev: &Event<'_>, _: Context<'_, S>) {
         let m = ev.metadata();
-        let mut f = Fields::default();
-        ev.record(&mut f);
-        let wall = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_or(0, |d| d.as_millis());
-        let line = format!(
-            "{wall} {:<5} {} {}{}\n",
-            m.level(),
-            m.target(),
-            f.msg,
-            f.rest
-        );
+        let wall = wall_ms();
+        let line = match self.0.format {
+            Format::Text => {
+                let mut f = Fields::default();
+                ev.record(&mut f);
+                format!(
+                    "{wall} {:<5} {} {}{}\n",
+                    m.level(),
+                    m.target(),
+                    f.msg,
+                    f.rest
+                )
+            }
+            Format::Json => {
+                let mut f = JsonFields::default();
+                ev.record(&mut f);
+                // ponytail: the envelope wins over a field of the same name (none today).
+                f.0.insert("t".into(), wall.into());
+                f.0.insert("lvl".into(), m.level().as_str().into());
+                f.0.insert("target".into(), m.target().into());
+                f.0.entry("msg").or_insert_with(|| "".into());
+                format!("{}\n", serde_json::Value::Object(f.0))
+            }
+        };
         let now = (self.0.clock)();
         let (pass, summary) = {
             let mut l = self.0.limiter.lock().unwrap_or_else(|e| e.into_inner());
@@ -391,18 +495,27 @@ pub struct Logs {
 
 impl Logs {
     /// Opens the sink. `install` false builds the layer only (tests).
-    pub fn new(levels: LevelCfg, sink: &SinkCfg) -> io::Result<Self> {
+    pub fn new(levels: LevelCfg, format: Format, sink: &SinkCfg) -> io::Result<Self> {
         let t0 = Instant::now();
         let clock = Box::new(move || u64::try_from(t0.elapsed().as_millis()).unwrap_or(u64::MAX));
-        Ok(Self::with(levels, sink.open()?, clock, true))
+        Ok(Self::with(levels, format, sink.open()?, clock, true))
     }
 
-    fn with(levels: LevelCfg, sink: Box<dyn Write + Send>, clock: Clock, install: bool) -> Self {
+    fn with(
+        levels: LevelCfg,
+        format: Format,
+        sink: Box<dyn Write + Send>,
+        clock: Clock,
+        install: bool,
+    ) -> Self {
         let (tx, rx) = sync_channel(QUEUE_LINES);
         let now = clock();
+        let mut limiter = Limiter::new(now);
+        limiter.format = format;
         let layer = LogLayer(Arc::new(Inner {
             levels,
-            limiter: Mutex::new(Limiter::new(now)),
+            format,
+            limiter: Mutex::new(limiter),
             tx,
             clock,
             suppressed: AtomicU64::new(0),
@@ -562,10 +675,20 @@ mod tests {
     }
 
     fn run(levels: LevelCfg, clock: &Arc<AtomicU64>, f: impl FnOnce()) -> (String, (u64, u64)) {
+        run_as(Format::Text, levels, clock, f)
+    }
+
+    fn run_as(
+        format: Format,
+        levels: LevelCfg,
+        clock: &Arc<AtomicU64>,
+        f: impl FnOnce(),
+    ) -> (String, (u64, u64)) {
         let mem = Mem::default();
         let c = clock.clone();
         let mut logs = Logs::with(
             levels,
+            format,
             Box::new(mem.clone()),
             Box::new(move || c.load(SeqCst)),
             false,
@@ -602,6 +725,71 @@ mod tests {
         );
         assert!(out.contains("later"));
         assert!(suppressed > 9_000 && dropped == 0);
+    }
+
+    /// Every line parses, including the suppression summaries; the budgets bound JSON as they
+    /// bound text; a secret's redacting Debug is what reaches the line, in both formats.
+    #[test]
+    fn json_lines_parse_obey_budgets_and_redact() {
+        let pw = xone_signer::Password::new(b"hunter2-secret".to_vec());
+        for format in [Format::Text, Format::Json] {
+            let clock = Arc::new(AtomicU64::new(0));
+            let c2 = clock.clone();
+            let (out, (suppressed, _)) = run_as(format, lv(3), &clock, || {
+                tracing::info!(target: "xone_sync::x", n = 7u64, ok = true, s = "a\"b\nc", pw = ?pw, "hello");
+                for i in 0..10_000 {
+                    tracing::info!(target: "xone_net::peer", i, "peer message");
+                }
+                c2.store(10_000, SeqCst);
+                tracing::warn!(target: "xone_net::peer", "later");
+            });
+            assert!(!out.contains("hunter2"), "{format:?}: {out}");
+            assert!(out.contains("<redacted>"), "{format:?}");
+            assert!(suppressed > 9_000);
+            let flood: usize = out
+                .lines()
+                .filter(|l| l.contains("peer message"))
+                .map(|l| l.len() + 1)
+                .sum();
+            assert!(flood <= 16 * 1024, "{flood}");
+            if format == Format::Text {
+                assert!(out.contains("suppressed lines="));
+                continue;
+            }
+            let v: Vec<serde_json::Value> = out
+                .lines()
+                .map(|l| serde_json::from_str(l).unwrap_or_else(|e| panic!("{e}: {l}")))
+                .collect();
+            assert_eq!(v[0]["msg"], "hello");
+            assert_eq!(v[0]["lvl"], "INFO");
+            assert_eq!(v[0]["target"], "xone_sync::x");
+            assert_eq!(v[0]["n"], 7);
+            assert_eq!(v[0]["ok"], true);
+            assert_eq!(v[0]["s"], "a\"b\nc");
+            assert!(v[0]["t"].as_u64().unwrap() > 1_600_000_000_000);
+            assert!(v
+                .iter()
+                .any(|x| x["msg"] == "suppressed" && x["subsystem"] == "net"));
+            assert!(v.iter().any(|x| x["msg"] == "later" && x["lvl"] == "WARN"));
+        }
+    }
+
+    #[test]
+    fn vmodule_and_format_parse() {
+        assert_eq!(
+            parse_vmodule(" xone_net=4, xone_sync::snap=5 ,").unwrap(),
+            [
+                ("xone_net".to_owned(), 4),
+                ("xone_sync::snap".to_owned(), 5)
+            ]
+        );
+        assert_eq!(parse_vmodule("").unwrap(), []);
+        for bad in ["xone_net", "xone_net=6", "=3", "xone_net=x"] {
+            assert!(parse_vmodule(bad).is_err(), "{bad}");
+        }
+        assert_eq!("json".parse(), Ok(Format::Json));
+        assert_eq!("text".parse(), Ok(Format::Text));
+        assert!("xml".parse::<Format>().is_err());
     }
 
     #[test]

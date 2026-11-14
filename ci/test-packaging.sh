@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 fail() { echo "FAIL: $*" >&2; exit 1; }
 ok() { echo "ok   $*"; }
 
-shellcheck ops/run-xone.sh ci/release.sh ci/test-release.sh ci/test-packaging.sh && ok "shellcheck: ops/run-xone.sh ci/release.sh ci/test-release.sh ci/test-packaging.sh"
+shellcheck ops/run-xone.sh ci/release.sh ci/test-release.sh ci/test-packaging.sh ci/package.sh ops/packaging/postinst && ok "shellcheck: ops/run-xone.sh ci/release.sh ci/test-release.sh ci/test-packaging.sh"
 
 R=$(mktemp -d); trap 'rm -rf "$R"' EXIT
 mkdir -p "$R/opt/xone" "$R/etc/systemd/system" "$R/usr/lib/systemd"
@@ -45,4 +45,48 @@ out=$(launch NETWORK=apothem); case "$out" in *--ethstats*) fail "ethstats witho
 ok "ethstats: default host stats.xdcindia.com:443; no secret default (no --ethstats, warning on stderr)"
 ! grep -rIE '(^|[^A-Za-z_$])ETHSTATS_SECRET=\"?[A-Za-z0-9]{8,}|BEGIN (PGP|RSA|EC|OPENSSH) PRIVATE' ops Dockerfile Makefile ci/release.sh >/dev/null || fail "secret-like text in ops"
 ok "no secret default in ops/, Dockerfile, Makefile, ci/release.sh"
+
+# --- OS packages (issue #228), built from a fake musl tarball (/bin/true is the "binary") ---
+P=$(mktemp -d); trap 'rm -rf "$R" "$D" "$P"' EXIT
+n=xone-9.9.9-linux-x86_64-musl; mkdir -p "$P/dist" "$P/t/$n"
+install -m755 /bin/true "$P/t/$n/xone"; install -m755 ops/run-xone.sh "$P/t/$n/run-xone.sh"
+install -m644 ops/xone@.service "$P/t/$n/xone@.service"; cp -r ops/bootnodes "$P/t/$n/bootnodes"; install -m644 LICENSE "$P/t/$n/LICENSE"
+tar -C "$P/t" -czf "$P/dist/$n.tar.gz" "$n"
+XONE_DIST="$P/dist" SOURCE_DATE_EPOCH=1700000000 ci/package.sh >"$P/out" 2>&1 || fail "package.sh: $(cat "$P/out")"
+deb=$P/dist/xone_9.9.9_amd64.deb; [ -f "$deb" ] || fail "no .deb"
+mkdir "$P/x"; dpkg-deb -x "$deb" "$P/x"
+cmp "$P/x/usr/bin/xone" "$P/t/$n/xone" || fail "packaged binary differs from the tarball binary"
+ok "deb: binary is byte-equal to the tarball binary"
+for f in usr/lib/xone/run-xone.sh usr/lib/systemd/system/xone@.service usr/share/xone/bootnodes/apothem.txt usr/share/xone/apothem.env.example; do
+  [ -f "$P/x/$f" ] || fail "deb lacks $f"
+done
+# shellcheck disable=SC2016
+[ "$(dpkg-deb -W --showformat='${Package} ${Version} ${Architecture}' "$deb")" = "xone 9.9.9 amd64" ] || fail "deb control"
+dpkg-deb -I "$deb" | grep -q postinst || fail "deb has no postinst"
+dpkg-deb -I "$deb" | grep -qE 'prerm|postrm|preinst' && fail "deb has a stop-capable script"
+! grep -v '^#' ops/packaging/postinst | grep -qE 'systemctl|service |invoke-rc|start|stop|restart' || fail "postinst touches a unit"
+ok "deb: layout, control, one script (postinst) with no systemctl, start, stop or restart"
+mkdir -p "$P/root/usr/lib/systemd" "$P/root/etc/systemd/system"; cp -r /usr/lib/systemd/system "$P/root/usr/lib/systemd/"
+install -d "$P/root/usr/bin" "$P/root/usr/lib/xone"; cp "$P/x/usr/bin/xone" "$P/root/usr/bin/"; cp "$P/x/usr/lib/xone/run-xone.sh" "$P/root/usr/lib/xone/"
+cp "$P/x/usr/lib/systemd/system/xone@.service" "$P/root/etc/systemd/system/"
+out=$(systemd-analyze verify --root="$P/root" /etc/systemd/system/xone@apothem.service 2>&1) || fail "verify packaged unit: $out"
+[ -z "$out" ] || fail "verify packaged unit printed: $out"
+grep -q '^ExecStart=/usr/lib/xone/run-xone.sh' "$P/x/usr/lib/systemd/system/xone@.service" || fail "unit ExecStart"
+ok "packaged unit: systemd-analyze verify clean, paths under /usr"
+grep -q 'xone_9.9.9_amd64.deb' "$P/dist/repo/apt/dists/stable/main/binary-amd64/Packages" || fail "apt Packages"
+grep -q 'main/binary-amd64/Packages' "$P/dist/repo/apt/dists/stable/Release" || fail "apt Release"
+ok "apt repository layout: pool, Packages, Release"
+if [ "${XONE_PKG_CONTAINERS:-0}" = 1 ]; then
+  for img in debian:12-slim ubuntu:24.04; do
+    docker run --rm -v "$P/dist:/d:ro" "$img" sh -ec '
+      apt-get update -qq >/dev/null && apt-get install -y -qq /d/xone_9.9.9_amd64.deb >/dev/null
+      getent passwd xone >/dev/null; test -d /var/lib/xone; test -d /etc/xone
+      touch /etc/xone/keep.env; apt-get install -y -qq --reinstall /d/xone_9.9.9_amd64.deb >/dev/null; test -f /etc/xone/keep.env
+      apt-get remove -y -qq xone >/dev/null; test ! -e /usr/bin/xone; test -d /var/lib/xone' || fail "container $img"
+    ok "container $img: install, upgrade (reinstall) keeps /etc/xone, remove keeps the datadir"
+  done
+  ls "$P"/dist/*.rpm >/dev/null 2>&1 && docker run --rm -v "$P/dist:/d:ro" rockylinux:9 sh -ec '
+    dnf install -y -q /d/xone-9.9.9.x86_64.rpm; getent passwd xone >/dev/null; test -d /var/lib/xone
+    dnf remove -y -q xone; test ! -e /usr/bin/xone' && ok "container rockylinux:9: install and remove"
+fi
 echo "test-packaging: PASS"

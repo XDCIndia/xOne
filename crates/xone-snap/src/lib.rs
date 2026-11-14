@@ -4,7 +4,7 @@
 //! pre-pivot completeness check ([`client`]), and xpre/1, xOne's preimage extension ([`preimage`]). Specification: `spec/snap/`.
 //!
 //! No I/O, no clock, no global state: the transport and the peer set are behind
-//! [`client::PeerSource`], the time is an argument of [`server::Server::handle`]. [`testkit`]
+//! [`client::PeerSource`], the time is an argument of [`server::Server::handle`]. `testkit` (feature `testkit`)
 //! has an in-memory peer and a state generator for tests.
 #![forbid(unsafe_code)]
 
@@ -15,4 +15,5 @@ pub mod preimage;
 pub mod proof;
 pub mod rpcproof;
 pub mod server;
+#[cfg(feature = "testkit")]
 pub mod testkit;

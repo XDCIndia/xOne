@@ -4668,6 +4668,7 @@ dependencies = [
  "clap",
  "flate2",
  "serde_json",
+ "tracing",
  "xone-chainspec",
  "xone-consensus",
  "xone-node",
@@ -4972,6 +4973,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "xone-primitives",
+ "xone-snap",
  "xone-state",
 ]
 

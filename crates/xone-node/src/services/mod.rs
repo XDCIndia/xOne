@@ -19,6 +19,10 @@ use crate::lifecycle::Service;
 use alloy_primitives::Bytes;
 use xone_net::eth::Raw;
 
+pub(crate) fn short(p: &xone_net::rlpx::PeerId) -> String {
+    alloy_primitives::hex::encode(&p[..4])
+}
+
 /// A transaction as the wire carries it in a list (a typed one is an RLP string around its encoding,
 /// a legacy one is the list itself) from its consensus encoding.
 pub fn to_wire(tx: &Bytes) -> Raw {
