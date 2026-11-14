@@ -15,7 +15,7 @@ use std::{
     sync::Arc,
 };
 
-use alloy_primitives::{keccak256, B256};
+use alloy_primitives::{keccak256, Keccak256, B256};
 
 use crate::{
     manifest::{Manifest, Segment, SegmentEntry, FORMAT_VERSION},
@@ -29,6 +29,11 @@ const FRAME_HEAD: usize = 12;
 const FRAME_TAIL: usize = 4;
 /// A length field above this is damage, not a block: it is never allocated.
 const MAX_PAYLOAD: usize = 256 << 20;
+/// The largest frame `stage` can write.
+const MAX_FRAME: u64 = (FRAME_HEAD + MAX_PAYLOAD + FRAME_TAIL) as u64;
+/// Recovery and quarantine read files through one buffer of this size, whatever the length of
+/// the tail they examine (#328).
+pub const RECOVERY_BUF: usize = 64 << 10;
 const ENOSPC: i32 = 28;
 
 const fn crc_table() -> [u32; 256] {
@@ -54,7 +59,12 @@ static CRC: [u32; 256] = crc_table();
 
 /// CRC-32C (Castagnoli), the checksum of frames, file headers and the journal (ADR-005 section 6.2).
 pub fn crc32c(data: &[u8]) -> u32 {
-    !data.iter().fold(!0u32, |c, b| {
+    !crc32c_update(!0u32, data)
+}
+
+/// Raw (un-inverted) CRC-32C state after `data`: start from `!0`, invert the result.
+fn crc32c_update(state: u32, data: &[u8]) -> u32 {
+    data.iter().fold(state, |c, b| {
         CRC[((c ^ u32::from(*b)) & 0xff) as usize] ^ (c >> 8)
     })
 }
@@ -182,7 +192,9 @@ fn le_u64(b: &[u8]) -> u64 {
     u64::from_le_bytes(b.try_into().unwrap_or([0; 8]))
 }
 
-/// How many complete, CRC-valid frames `b` starts with.
+/// How many complete, CRC-valid frames `b` starts with. The reference decoder for
+/// [`count_frames_in`].
+#[cfg(test)]
 fn count_frames(mut b: &[u8]) -> u64 {
     let mut n = 0;
     while b.len() >= FRAME_HEAD {
@@ -193,6 +205,74 @@ fn count_frames(mut b: &[u8]) -> u64 {
         }
         n += 1;
         b = &b[end..];
+    }
+    n
+}
+
+/// Streams `len` bytes of `f` from `off` through a [`RECOVERY_BUF`] buffer.
+fn stream(
+    f: &impl SegFile,
+    off: u64,
+    len: u64,
+    buf: &mut [u8],
+    mut each: impl FnMut(&[u8]) -> io::Result<()>,
+) -> io::Result<()> {
+    let mut done = 0u64;
+    while done < len {
+        let n = usize::try_from(len - done).map_or(buf.len(), |r| r.min(buf.len()));
+        let at = off.checked_add(done).ok_or(io::ErrorKind::InvalidData)?;
+        f.read_at(at, &mut buf[..n])?;
+        each(&buf[..n])?;
+        done += n as u64;
+    }
+    Ok(())
+}
+
+/// keccak256 of `len` bytes of `f` from `off`, read with a bounded buffer.
+fn digest_range(f: &impl SegFile, off: u64, len: u64, buf: &mut [u8]) -> io::Result<B256> {
+    let mut h = Keccak256::new();
+    stream(f, off, len, buf, |b| {
+        h.update(b);
+        Ok(())
+    })?;
+    Ok(h.finalize())
+}
+
+/// [`count_frames`] over the bytes of `f` from `from` to `end`, with a bounded buffer: each frame
+/// length is checked against [`MAX_PAYLOAD`] and the remaining length before any payload is read.
+fn count_frames_in(f: &impl SegFile, from: u64, end: u64, buf: &mut [u8]) -> u64 {
+    let mut n = 0;
+    let mut at = from;
+    loop {
+        let left = end.saturating_sub(at);
+        if left < FRAME_HEAD as u64 {
+            break;
+        }
+        let mut head = [0u8; FRAME_HEAD];
+        if f.read_at(at, &mut head).is_err() {
+            break;
+        }
+        let len = le_u32(&head[..4]) as usize;
+        let size = (FRAME_HEAD + len + FRAME_TAIL) as u64;
+        if len > MAX_PAYLOAD || left < size {
+            break;
+        }
+        let mut crc = crc32c_update(!0u32, &head);
+        let body = at + FRAME_HEAD as u64;
+        if stream(f, body, len as u64, buf, |b| {
+            crc = crc32c_update(crc, b);
+            Ok(())
+        })
+        .is_err()
+        {
+            break;
+        }
+        let mut tail = [0u8; FRAME_TAIL];
+        if f.read_at(body + len as u64, &mut tail).is_err() || le_u32(&tail) != !crc {
+            break;
+        }
+        n += 1;
+        at += size;
     }
     n
 }
@@ -391,11 +471,23 @@ impl<D: SegDir> Segs<D> {
         let Some(f) = self.dir.open(&chunk_path(s, chunk))? else {
             return Ok(());
         };
-        let mut buf = vec![0u8; usize::try_from(f.size()?.saturating_sub(from)).unwrap_or(0)];
-        f.read_at(from, &mut buf)?;
+        let len = f.size()?.saturating_sub(from);
         let name = format!("quarantine/{}-{chunk:010}-{tag}.bin", s as u8);
         let mut q = self.dir.create(&name)?;
-        q.write_at(0, &buf)?;
+        let mut buf = vec![0u8; RECOVERY_BUF];
+        let mut at = 0u64;
+        // Any read or write error (short read, ENOSPC) returns before the copy is synced; the
+        // caller truncates the source only after this returns Ok.
+        stream(&f, from, len, &mut buf, |b| {
+            q.write_at(at, b)?;
+            at += b.len() as u64;
+            Ok(())
+        })?;
+        if q.size()? != len {
+            return Err(
+                io::Error::new(io::ErrorKind::WriteZero, "quarantine copy is short").into(),
+            );
+        }
         q.sync_all()?;
         self.dir.sync("quarantine")?;
         Ok(())
@@ -411,6 +503,7 @@ impl<D: SegDir> Segs<D> {
     ) -> Result<Scanned, SegError> {
         let mut header_version = None;
         let mut tails = Vec::new();
+        let mut buf = vec![0u8; RECOVERY_BUF];
         for s in Segment::ALL {
             let none = |present| SegmentTail {
                 segment: s,
@@ -439,17 +532,16 @@ impl<D: SegDir> Segs<D> {
             let ok = head_ok
                 && file_len >= e.len
                 && start_of(s, e.last_block).is_some_and(|start| {
-                    start >= HEADER_LEN && start < e.len && {
-                        let mut tail = vec![0u8; usize::try_from(e.len - start).unwrap_or(0)];
-                        f.read_at(start, &mut tail).is_ok() && keccak256(&tail) == e.tail_digest
-                    }
+                    // The committed tail is one frame: a longer span cannot match its digest.
+                    start >= HEADER_LEN
+                        && start < e.len
+                        && e.len - start <= MAX_FRAME
+                        && digest_range(&f, start, e.len - start, &mut buf)
+                            .is_ok_and(|d| d == e.tail_digest)
                 });
             let mut ahead = 0;
             if ok && file_len > e.len {
-                let mut extra = vec![0u8; usize::try_from(file_len - e.len).unwrap_or(0)];
-                if f.read_at(e.len, &mut extra).is_ok() {
-                    ahead = count_frames(&extra);
-                }
+                ahead = count_frames_in(&f, e.len, file_len, &mut buf);
             }
             tails.push(SegmentTail {
                 segment: s,
@@ -658,6 +750,97 @@ impl SegDir for OsDir {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A file that reports `len` bytes, all zero, and records the largest read.
+    struct Huge {
+        len: u64,
+        max_read: std::cell::Cell<usize>,
+    }
+
+    impl SegFile for Huge {
+        fn write_at(&mut self, _: u64, _: &[u8]) -> io::Result<()> {
+            Ok(())
+        }
+        fn read_at(&self, off: u64, buf: &mut [u8]) -> io::Result<()> {
+            self.max_read.set(self.max_read.get().max(buf.len()));
+            if off + buf.len() as u64 > self.len {
+                return Err(io::ErrorKind::UnexpectedEof.into());
+            }
+            buf.fill(0);
+            Ok(())
+        }
+        fn size(&self) -> io::Result<u64> {
+            Ok(self.len)
+        }
+        fn set_len(&mut self, _: u64) -> io::Result<()> {
+            Ok(())
+        }
+        fn sync_all(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn streamed_scan_matches_the_slice_decoder() {
+        struct Mem(Vec<u8>);
+        impl SegFile for Mem {
+            fn write_at(&mut self, _: u64, _: &[u8]) -> io::Result<()> {
+                Ok(())
+            }
+            fn read_at(&self, off: u64, buf: &mut [u8]) -> io::Result<()> {
+                let o = off as usize;
+                let src = self
+                    .0
+                    .get(o..o + buf.len())
+                    .ok_or(io::ErrorKind::UnexpectedEof)?;
+                buf.copy_from_slice(src);
+                Ok(())
+            }
+            fn size(&self) -> io::Result<u64> {
+                Ok(self.0.len() as u64)
+            }
+            fn set_len(&mut self, _: u64) -> io::Result<()> {
+                Ok(())
+            }
+            fn sync_all(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+        let mut b = frame(1, &[7u8; 100_000]);
+        b.extend(frame(2, b"bbb"));
+        b.extend_from_slice(&frame(3, b"c")[..5]);
+        let mut buf = vec![0u8; 1000];
+        for v in [b.clone(), {
+            let mut c = b.clone();
+            c[6] ^= 1;
+            c
+        }] {
+            let f = Mem(v.clone());
+            assert_eq!(
+                count_frames_in(&f, 0, v.len() as u64, &mut buf),
+                count_frames(&v)
+            );
+        }
+        let f = Mem(b.clone());
+        assert_eq!(
+            digest_range(&f, 0, 1234, &mut buf).unwrap(),
+            keccak256(&b[..1234])
+        );
+    }
+
+    #[test]
+    fn huge_suffix_reads_with_a_bounded_buffer() {
+        let f = Huge {
+            len: 1 << 40,
+            max_read: 0.into(),
+        };
+        // A zero header names an empty payload; its CRC does not match zero, so nothing counts.
+        let mut buf = vec![0u8; RECOVERY_BUF];
+        assert_eq!(count_frames_in(&f, HEADER_LEN, f.len, &mut buf), 0);
+        assert!(f.max_read.get() <= RECOVERY_BUF);
+        assert!(digest_range(&f, 0, 1 << 22, &mut buf).is_ok());
+        assert!(f.max_read.get() <= RECOVERY_BUF);
+    }
 
     #[test]
     fn crc32c_check_value() {
