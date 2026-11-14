@@ -1,0 +1,591 @@
+{
+  "generated": "2026-11-14",
+  "scoring": "feature overlap with product-profile capabilities (50; XDC-specific capabilities weigh most), activity (commit in last 6 months 20, 6-18 months 10, older 0), adoption by stars (>5k 15, 1k-5k 12, 500-1k 9, 100-500 6, <100 3), code access (OSI licence, public 15; unclear 5; private 0). Select >= 60, minus forks that add nothing over a selected parent.",
+  "candidates": [
+    {
+      "repo": "XinFinOrg/XDPoSChain",
+      "url": "https://github.com/XinFinOrg/XDPoSChain",
+      "found_via": "gh search 'XDPoS' / topic xinfin; owner brief",
+      "stars": 60,
+      "last_commit": "2026-10-27",
+      "license": "LGPL-3.0",
+      "overlap_score": 86,
+      "score_breakdown": {
+        "feature_overlap_50": 48,
+        "activity_20": 20,
+        "adoption_15": 3,
+        "code_access_15": 15
+      },
+      "status": "selected",
+      "reason": "Canonical public XDC client (XDPoS V1/V2, XDC RPC extensions). GitHub fork of go-ethereum that adds the whole XDC protocol, so the fork rule does not apply."
+    },
+    {
+      "repo": "ethereum/go-ethereum",
+      "url": "https://github.com/ethereum/go-ethereum",
+      "found_via": "gh search 'ethereum client go'; snowball from XDPoSChain parent",
+      "stars": 51479,
+      "last_commit": "2026-11-13",
+      "license": "LGPL-3.0/GPL-3.0",
+      "overlap_score": 80,
+      "score_breakdown": {
+        "feature_overlap_50": 30,
+        "activity_20": 20,
+        "adoption_15": 15,
+        "code_access_15": 15
+      },
+      "status": "selected",
+      "reason": "Upstream of geth-XDC and XDPoSChain; reference for RPC, tracing, CLI and operator tooling."
+    },
+    {
+      "repo": "bnb-chain/bsc",
+      "url": "https://github.com/bnb-chain/bsc",
+      "found_via": "web search 'DPoS EVM client'; snowball",
+      "stars": 3316,
+      "last_commit": "2026-11-03",
+      "license": "LGPL-3.0",
+      "overlap_score": 79,
+      "score_breakdown": {
+        "feature_overlap_50": 32,
+        "activity_20": 20,
+        "adoption_15": 12,
+        "code_access_15": 15
+      },
+      "status": "selected",
+      "reason": "geth fork with PoSA (Parlia) and fast-finality votes: the closest DPoS/BFT analogue to XDPoS; adds block pruning and vote tooling over geth."
+    },
+    {
+      "repo": "paradigmxyz/reth",
+      "url": "https://github.com/paradigmxyz/reth",
+      "found_via": "seed (owner brief)",
+      "stars": 5858,
+      "last_commit": "2026-11-13",
+      "license": "Apache-2.0/MIT",
+      "overlap_score": 78,
+      "score_breakdown": {
+        "feature_overlap_50": 28,
+        "activity_20": 20,
+        "adoption_15": 15,
+        "code_access_15": 15
+      },
+      "status": "selected",
+      "reason": "Rust execution client; same language and storage engine (MDBX) as xOneRS."
+    },
+    {
+      "repo": "0xPolygon/bor",
+      "url": "https://github.com/0xPolygon/bor",
+      "found_via": "web search 'proof of stake evm client'; snowball",
+      "stars": 1109,
+      "last_commit": "2026-11-13",
+      "license": "LGPL-3.0",
+      "overlap_score": 78,
+      "score_breakdown": {
+        "feature_overlap_50": 31,
+        "activity_20": 20,
+        "adoption_15": 12,
+        "code_access_15": 15
+      },
+      "status": "selected",
+      "reason": "geth fork for a validator-set PoS chain; adds history pruning and sequencer tooling over geth."
+    },
+    {
+      "repo": "besu-eth/besu",
+      "url": "https://github.com/besu-eth/besu",
+      "found_via": "gh topic ethereum-client",
+      "stars": 1870,
+      "last_commit": "2026-11-13",
+      "license": "Apache-2.0",
+      "overlap_score": 77,
+      "score_breakdown": {
+        "feature_overlap_50": 30,
+        "activity_20": 20,
+        "adoption_15": 12,
+        "code_access_15": 15
+      },
+      "status": "selected",
+      "reason": "Java client with IBFT2/QBFT BFT engines (round-based BFT like XDPoS V2), storage subcommands, OTel."
+    },
+    {
+      "repo": "erigontech/erigon",
+      "url": "https://github.com/erigontech/erigon",
+      "found_via": "gh search 'ethereum full node'; owner brief hint",
+      "stars": 3625,
+      "last_commit": "2026-11-14",
+      "license": "LGPL-3.0",
+      "overlap_score": 75,
+      "score_breakdown": {
+        "feature_overlap_50": 28,
+        "activity_20": 20,
+        "adoption_15": 12,
+        "code_access_15": 15
+      },
+      "status": "selected",
+      "reason": "Staged-sync client on MDBX; trace_ and ots_ namespaces, prune modes."
+    },
+    {
+      "repo": "NethermindEth/nethermind",
+      "url": "https://github.com/NethermindEth/nethermind",
+      "found_via": "gh topic ethereum-client",
+      "stars": 1628,
+      "last_commit": "2026-11-14",
+      "license": "GPL-3.0/LGPL-3.0",
+      "overlap_score": 75,
+      "score_breakdown": {
+        "feature_overlap_50": 28,
+        "activity_20": 20,
+        "adoption_15": 12,
+        "code_access_15": 15
+      },
+      "status": "selected",
+      "reason": ".NET client with AuRa/Clique PoA, trace/ots modules, snapshot download."
+    },
+    {
+      "repo": "lambdaclass/ethrex",
+      "url": "https://github.com/lambdaclass/ethrex",
+      "found_via": "seed (owner brief)",
+      "stars": 915,
+      "last_commit": "2026-11-14",
+      "license": "Apache-2.0/MIT",
+      "overlap_score": 69,
+      "score_breakdown": {
+        "feature_overlap_50": 25,
+        "activity_20": 20,
+        "adoption_15": 9,
+        "code_access_15": 15
+      },
+      "status": "selected",
+      "reason": "Minimal Rust client; L1 RPC, debug and admin surface comparable to ours."
+    },
+    {
+      "repo": "status-im/nimbus-eth1",
+      "url": "https://github.com/status-im/nimbus-eth1",
+      "found_via": "gh search 'ethereum execution client'",
+      "stars": 637,
+      "last_commit": "2026-11-14",
+      "license": "Apache-2.0/MIT",
+      "overlap_score": 68,
+      "score_breakdown": {
+        "feature_overlap_50": 24,
+        "activity_20": 20,
+        "adoption_15": 9,
+        "code_access_15": 15
+      },
+      "status": "selected",
+      "reason": "Resource-restricted execution client; filters, GraphQL, minimal-hardware focus."
+    },
+    {
+      "repo": "XinFinOrg/XDC-Subnet",
+      "url": "https://github.com/XinFinOrg/XDC-Subnet",
+      "found_via": "gh topic xdc",
+      "stars": 9,
+      "last_commit": "2026-07-08",
+      "license": "LGPL-3.0",
+      "overlap_score": 83,
+      "score_breakdown": {
+        "feature_overlap_50": 45,
+        "activity_20": 20,
+        "adoption_15": 3,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Derived from XDPoSChain for XDC subnets; adds subnet-only features and nothing operator-facing for mainnet/Apothem nodes over its selected parent."
+    },
+    {
+      "repo": "bnb-chain/reth-bsc",
+      "url": "https://github.com/bnb-chain/reth-bsc",
+      "found_via": "gh search 'revm node'",
+      "stars": 90,
+      "last_commit": "2026-11-13",
+      "license": "MIT",
+      "overlap_score": 68,
+      "score_breakdown": {
+        "feature_overlap_50": 30,
+        "activity_20": 20,
+        "adoption_15": 3,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "reth SDK extension that adds Parlia only; its operator surface is reth's (selected); Parlia features skipped (SKIP-13)."
+    },
+    {
+      "repo": "ethereumjs/ethereumjs-monorepo",
+      "url": "https://github.com/ethereumjs/ethereumjs-monorepo",
+      "found_via": "gh topic ethereum-client",
+      "stars": 2761,
+      "last_commit": "2026-11-12",
+      "license": "MPL-2.0 (per package)",
+      "overlap_score": 57,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 20,
+        "adoption_15": 12,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Score 57: libraries only; the client package is no longer in packages/ (block, blockchain, evm, vm, devp2p, ...)."
+    },
+    {
+      "repo": "ronin-chain/ronin",
+      "url": "https://github.com/ronin-chain/ronin",
+      "found_via": "web search 'DPoS EVM client'",
+      "stars": 18,
+      "last_commit": "2026-04-17",
+      "license": "LGPL-3.0",
+      "overlap_score": 56,
+      "score_breakdown": {
+        "feature_overlap_50": 28,
+        "activity_20": 10,
+        "adoption_15": 3,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Score 56: DPoS geth fork, last commit 7 months ago, low adoption."
+    },
+    {
+      "repo": "gnosischain/reth_gnosis",
+      "url": "https://github.com/gnosischain/reth_gnosis",
+      "found_via": "gh search 'revm node'",
+      "stars": 50,
+      "last_commit": "2026-11-12",
+      "license": "none",
+      "overlap_score": 56,
+      "score_breakdown": {
+        "feature_overlap_50": 28,
+        "activity_20": 20,
+        "adoption_15": 3,
+        "code_access_15": 5
+      },
+      "status": "rejected",
+      "reason": "Score 56: reth extension (AuRa); no licence file; adds nothing operator-facing over reth."
+    },
+    {
+      "repo": "loocapro/reth-bsc",
+      "url": "https://github.com/loocapro/reth-bsc",
+      "found_via": "gh search 'revm node'",
+      "stars": 88,
+      "last_commit": "2025-09-09",
+      "license": "MIT",
+      "overlap_score": 58,
+      "score_breakdown": {
+        "feature_overlap_50": 30,
+        "activity_20": 10,
+        "adoption_15": 3,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Score 58: predecessor of bnb-chain/reth-bsc; superseded."
+    },
+    {
+      "repo": "alt-research/eth2030",
+      "url": "https://github.com/alt-research/eth2030",
+      "found_via": "gh search 'ethereum execution client'",
+      "stars": 99,
+      "last_commit": "2026-11-13",
+      "license": "NOASSERTION",
+      "overlap_score": 50,
+      "score_breakdown": {
+        "feature_overlap_50": 22,
+        "activity_20": 20,
+        "adoption_15": 3,
+        "code_access_15": 5
+      },
+      "status": "rejected",
+      "reason": "Score 50: research client for the 2030 roadmap; licence unclear."
+    },
+    {
+      "repo": "erigontech/silkworm",
+      "url": "https://github.com/erigontech/silkworm",
+      "found_via": "snowball from erigon",
+      "stars": 321,
+      "last_commit": "2025-05-21",
+      "license": "Apache-2.0",
+      "overlap_score": 46,
+      "score_breakdown": {
+        "feature_overlap_50": 15,
+        "activity_20": 10,
+        "adoption_15": 6,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Score 46: C++ execution library, partial node, last commit 18 months ago."
+    },
+    {
+      "repo": "akula-bft/akula",
+      "url": "https://github.com/akula-bft/akula",
+      "found_via": "gh topic ethereum-node",
+      "stars": 787,
+      "last_commit": "2022-11-30",
+      "license": "AGPL-3.0",
+      "overlap_score": 44,
+      "score_breakdown": {
+        "feature_overlap_50": 20,
+        "activity_20": 0,
+        "adoption_15": 9,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Score 44: archived Rust client."
+    },
+    {
+      "repo": "ethereum/aleth",
+      "url": "https://github.com/ethereum/aleth",
+      "found_via": "gh topic ethereum-client",
+      "stars": 3963,
+      "last_commit": "2024-03-05",
+      "license": "GPL-3.0",
+      "overlap_score": 42,
+      "score_breakdown": {
+        "feature_overlap_50": 15,
+        "activity_20": 0,
+        "adoption_15": 12,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Score 42: archived C++ client."
+    },
+    {
+      "repo": "PegaSysEng/pantheon",
+      "url": "https://github.com/PegaSysEng/pantheon",
+      "found_via": "gh topic ethereum-client",
+      "stars": 380,
+      "last_commit": "2019-09-17",
+      "license": "none",
+      "overlap_score": 26,
+      "score_breakdown": {
+        "feature_overlap_50": 15,
+        "activity_20": 0,
+        "adoption_15": 6,
+        "code_access_15": 5
+      },
+      "status": "rejected",
+      "reason": "Score 26: archived predecessor of Besu."
+    },
+    {
+      "repo": "XinFinOrg/XinFin-Node",
+      "url": "https://github.com/XinFinOrg/XinFin-Node",
+      "found_via": "gh topic xinfin",
+      "stars": 66,
+      "last_commit": "2026-10-27",
+      "license": "none",
+      "overlap_score": 36,
+      "score_breakdown": {
+        "feature_overlap_50": 8,
+        "activity_20": 20,
+        "adoption_15": 3,
+        "code_access_15": 5
+      },
+      "status": "rejected",
+      "reason": "Score 36: Docker set-up scripts for the XDC client, not a client. Docs-only reference for operator set-up."
+    },
+    {
+      "repo": "evmts/xvi",
+      "url": "https://github.com/evmts/xvi",
+      "found_via": "gh search 'ethereum execution client'",
+      "stars": 17,
+      "last_commit": "2026-02-25",
+      "license": "MIT",
+      "overlap_score": 43,
+      "score_breakdown": {
+        "feature_overlap_50": 15,
+        "activity_20": 10,
+        "adoption_15": 3,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Score 43: early-stage client."
+    },
+    {
+      "repo": "mana-ethereum/mana",
+      "url": "https://github.com/mana-ethereum/mana",
+      "found_via": "gh search 'ethereum full node'",
+      "stars": 275,
+      "last_commit": "2024-08-11",
+      "license": "NOASSERTION",
+      "overlap_score": 23,
+      "score_breakdown": {
+        "feature_overlap_50": 12,
+        "activity_20": 0,
+        "adoption_15": 6,
+        "code_access_15": 5
+      },
+      "status": "rejected",
+      "reason": "Score 23: unmaintained Elixir node."
+    },
+    {
+      "repo": "stateless-consensus/phant",
+      "url": "https://github.com/stateless-consensus/phant",
+      "found_via": "gh search 'ethereum execution client'",
+      "stars": 34,
+      "last_commit": "2026-02-13",
+      "license": "MIT",
+      "overlap_score": 38,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 10,
+        "adoption_15": 3,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Score 38: stateless research client."
+    },
+    {
+      "repo": "weiihann/chibi",
+      "url": "https://github.com/weiihann/chibi",
+      "found_via": "gh search 'devp2p'",
+      "stars": 17,
+      "last_commit": "2026-11-05",
+      "license": "Apache-2.0",
+      "overlap_score": 48,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 20,
+        "adoption_15": 3,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Score 48: partial-state node, narrow scope."
+    },
+    {
+      "repo": "vicnaum/shinode",
+      "url": "https://github.com/vicnaum/shinode",
+      "found_via": "gh search 'devp2p'",
+      "stars": 66,
+      "last_commit": "2026-03-11",
+      "license": "Apache-2.0",
+      "overlap_score": 36,
+      "score_breakdown": {
+        "feature_overlap_50": 8,
+        "activity_20": 10,
+        "adoption_15": 3,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Score 36: history-only node."
+    },
+    {
+      "repo": "mmsaki/zeth",
+      "url": "https://github.com/mmsaki/zeth",
+      "found_via": "gh search 'ethereum execution client'",
+      "stars": 3,
+      "last_commit": "2026-06-20",
+      "license": "none",
+      "overlap_score": 36,
+      "score_breakdown": {
+        "feature_overlap_50": 8,
+        "activity_20": 20,
+        "adoption_15": 3,
+        "code_access_15": 5
+      },
+      "status": "rejected",
+      "reason": "Score 36: toy Zig client."
+    },
+    {
+      "repo": "circlefin/malaketh-layered",
+      "url": "https://github.com/circlefin/malaketh-layered",
+      "found_via": "gh search 'ethereum execution client'",
+      "stars": 25,
+      "last_commit": "2026-06-18",
+      "license": "Apache-2.0",
+      "overlap_score": 46,
+      "score_breakdown": {
+        "feature_overlap_50": 8,
+        "activity_20": 20,
+        "adoption_15": 3,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Score 46: consensus engine driving an EL over Engine API; not a client."
+    },
+    {
+      "repo": "Nethereum/Nethereum",
+      "url": "https://github.com/Nethereum/Nethereum",
+      "found_via": "gh topic ethereum-client",
+      "stars": 2258,
+      "last_commit": "2026-11-05",
+      "license": "MIT",
+      "overlap_score": 50,
+      "score_breakdown": {
+        "feature_overlap_50": 3,
+        "activity_20": 20,
+        "adoption_15": 12,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Score 50: client library, not a node."
+    },
+    {
+      "repo": "ethpandaops/benchmarkoor",
+      "url": "https://github.com/ethpandaops/benchmarkoor",
+      "found_via": "gh search 'ethereum execution client'",
+      "stars": 12,
+      "last_commit": "2026-11-04",
+      "license": "GPL-3.0",
+      "overlap_score": 41,
+      "score_breakdown": {
+        "feature_overlap_50": 3,
+        "activity_20": 20,
+        "adoption_15": 3,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Score 41: benchmarking tool, not a client."
+    },
+    {
+      "repo": "XDCIndia/besu-xdc",
+      "url": "https://github.com/XDCIndia/besu-xdc",
+      "found_via": "gh org listing XDCIndia",
+      "stars": 0,
+      "last_commit": "2026-03-24",
+      "license": "Apache-2.0",
+      "overlap_score": 68,
+      "score_breakdown": {
+        "feature_overlap_50": 40,
+        "activity_20": 10,
+        "adoption_15": 3,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Score 68 but excluded by the fork rule: GitHub fork of besu-eth/besu (selected) for XDC; XDC behaviour is taken from XDPoSChain and the geth-XDC oracle; same owner as xOneRS."
+    },
+    {
+      "repo": "XDCIndia/go-ethereum",
+      "url": "https://github.com/XDCIndia/go-ethereum",
+      "found_via": "README.md",
+      "stars": 1,
+      "last_commit": "2026-11-10",
+      "license": "LGPL-3.0",
+      "overlap_score": 73,
+      "score_breakdown": {
+        "feature_overlap_50": 50,
+        "activity_20": 20,
+        "adoption_15": 3,
+        "code_access_15": 0
+      },
+      "status": "rejected",
+      "reason": "Our conformance oracle (conformance/PIN), private, same owner: used as the parity reference, not as a competitor. Its XDC-only RPC methods are cited in GAP xdcext."
+    },
+    {
+      "repo": "XDCIndia in-house XDC forks of erigon, reth and nethermind, and xOneGo/xOneTS/xOneC/xOnePy",
+      "url": "",
+      "found_via": "gh org listing XDCIndia",
+      "stars": 0,
+      "last_commit": "2026-11",
+      "license": "various",
+      "overlap_score": 0,
+      "score_breakdown": {},
+      "status": "rejected",
+      "reason": "Same-owner sibling clients (private). Their parents are selected; the xOne family shares this repository's specs. Not competitors."
+    },
+    {
+      "repo": "(commercial) hosted RPC providers: Alchemy, QuickNode, Ankr, Infura",
+      "url": "",
+      "found_via": "web search 'XDC RPC provider'",
+      "stars": 0,
+      "last_commit": "",
+      "license": "closed",
+      "overlap_score": 0,
+      "score_breakdown": {},
+      "status": "rejected",
+      "reason": "Docs-only references: they host the open clients above; no closed-source XDC or Ethereum execution client leads the category, so no separate closed feature set was scored."
+    }
+  ]
+}
