@@ -1,9 +1,4 @@
-use std::{
-    fs::{self, File},
-    io::{BufWriter, Write},
-    path::Path,
-    process::ExitCode,
-};
+use std::{fs, path::Path, process::ExitCode};
 
 use clap::ArgMatches;
 use xone_sync::export::export as write;
@@ -28,8 +23,10 @@ pub fn export(m: &ArgMatches) -> ExitCode {
         }
         let path = m.get_one::<String>("file").map_or("", String::as_str);
         let tmp = temp_path(path);
-        let file = File::create(&tmp).map_err(|e| format!("{tmp}: {e}"))?;
-        let mut w = BufWriter::new(file);
+        // `.gz`: a gzip archive, as geth writes it
+        let gz = xone_sync::archive::is_gz_name(Path::new(path));
+        let mut w = xone_sync::archive::create_block_file_as(Path::new(&tmp), gz)
+            .map_err(|e| format!("{tmp}: {e}"))?;
         let n = match chain.with_store(|s| write(s, first, last, &mut w)) {
             Ok(n) => n,
             Err(e) => {
@@ -38,7 +35,7 @@ pub fn export(m: &ArgMatches) -> ExitCode {
                 return Err(e.to_string());
             }
         };
-        if let Err(e) = finish(w) {
+        if let Err(e) = w.finish() {
             let _ = fs::remove_file(&tmp);
             return Err(format!("{path}: {e}"));
         }
@@ -69,15 +66,6 @@ fn temp_path(path: &str) -> String {
     }
 }
 
-/// Flushes every buffered byte and syncs the file. A write error that `BufWriter` would
-/// otherwise discard in `Drop` is returned here, so no success message follows a
-/// truncated export.
-fn finish(mut w: BufWriter<File>) -> std::io::Result<()> {
-    w.flush()?;
-    let file = w.into_inner().map_err(|e| e.into_error())?;
-    file.sync_all()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -89,17 +77,5 @@ mod tests {
             temp_path("/tmp/out/chain.rlp"),
             "/tmp/out/.chain.rlp.partial"
         );
-    }
-
-    #[test]
-    fn finish_flushes_buffered_bytes() {
-        let dir = std::env::temp_dir().join(format!("xone-export-{}", std::process::id()));
-        fs::create_dir_all(&dir).unwrap();
-        let p = dir.join("out.rlp");
-        let mut w = BufWriter::new(File::create(&p).unwrap());
-        w.write_all(&[1, 2, 3]).unwrap();
-        finish(w).unwrap();
-        assert_eq!(fs::read(&p).unwrap(), vec![1, 2, 3]);
-        let _ = fs::remove_dir_all(&dir);
     }
 }

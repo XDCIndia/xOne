@@ -526,6 +526,68 @@ fn a_malformed_required_block_is_refused() {
     }
 }
 
+#[test]
+fn gzip_block_archives_import_like_plain_files_and_export_as_gzip() {
+    use std::io::{Read, Write};
+    let dir = scratch("blockfile-gz");
+    std::fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("{e}"));
+    let blocks = vector_blocks(200);
+    let gzip = |b: &[u8]| {
+        let mut e = flate2::write::GzEncoder::new(vec![], flate2::Compression::default());
+        e.write_all(b).unwrap_or_else(|e| panic!("{e}"));
+        e.finish().unwrap_or_else(|e| panic!("{e}"))
+    };
+    let plain = dir.join("in.rlp");
+    std::fs::write(&plain, blocks.concat()).unwrap_or_else(|e| panic!("{e}"));
+    let packed = gzip(&blocks.concat());
+    let gz = dir.join("in.rlp.gz");
+    std::fs::write(&gz, &packed).unwrap_or_else(|e| panic!("{e}"));
+    let (plain, gz) = (
+        plain.to_str().unwrap_or_default(),
+        gz.to_str().unwrap_or_default(),
+    );
+
+    // the archive imports to the same head as its plain equivalent
+    let head = |o: &Output| out(o).split("head ").nth(1).map(str::to_owned);
+    let a = xone(&["import", plain]);
+    let b = xone(&["import", gz]);
+    assert!(b.status.success(), "{}", String::from_utf8_lossy(&b.stderr));
+    assert!(out(&b).starts_with("imported 200 blocks"), "{}", out(&b));
+    assert_eq!(
+        head(&a).map(|h| h.split_whitespace().next().map(str::to_owned)),
+        head(&b).map(|h| h.split_whitespace().next().map(str::to_owned))
+    );
+
+    // `export x.rlp.gz`: a gzip archive of the same bytes
+    let out_gz = dir.join("part.rlp.gz");
+    let out_gz = out_gz.to_str().unwrap_or_default();
+    let o = xone(&["export", out_gz, "50", "99", "--input", gz]);
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    let mut back = vec![];
+    flate2::read::MultiGzDecoder::new(
+        std::fs::File::open(out_gz).unwrap_or_else(|e| panic!("{e}")),
+    )
+    .read_to_end(&mut back)
+    .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(back, blocks[50..100].concat());
+
+    // truncated and corrupt-CRC archives exit 1 without reporting an import
+    let cut = dir.join("cut.rlp.gz");
+    std::fs::write(&cut, &packed[..packed.len() / 2]).unwrap_or_else(|e| panic!("{e}"));
+    let mut bad = packed.clone();
+    let at = bad.len() - 8;
+    if let Some(b) = bad.get_mut(at) {
+        *b ^= 0xff;
+    }
+    let crc = dir.join("crc.rlp.gz");
+    std::fs::write(&crc, &bad).unwrap_or_else(|e| panic!("{e}"));
+    for f in [cut, crc] {
+        let o = xone(&["import", f.to_str().unwrap_or_default()]);
+        assert_eq!(o.status.code(), Some(1), "{}", out(&o));
+        assert!(!out(&o).contains("imported"), "{}", out(&o));
+    }
+}
+
 /// #227: `XONE_<FLAG>` and `GETH_<FLAG>` configure the node; a flag wins over both.
 #[test]
 fn environment_variables_configure_and_flags_win() {

@@ -18,6 +18,7 @@
 //! (specification: `spec/bootstrap-anchor.md`, `spec/retention.md`).
 #![forbid(unsafe_code)]
 
+pub mod archive;
 pub mod bootstrap;
 pub mod chain;
 pub mod executor;
