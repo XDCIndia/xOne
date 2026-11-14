@@ -229,6 +229,16 @@ pub struct Limits {
     pub rpc_batch_items: u32,
     pub rpc_response_bytes: u64,
     pub log_queue_lines: u32,
+    /// Disk watermark (ADR-007 section 7): the larger of the percent of the datadir filesystem and the
+    /// byte floor wins. Import stops below `stop`, resumes above `resume`, the node exits below `exit`.
+    pub disk_stop_pct: u8,
+    pub disk_stop_min_bytes: u64,
+    pub disk_resume_pct: u8,
+    pub disk_resume_min_bytes: u64,
+    pub disk_exit_pct: u8,
+    pub disk_exit_min_bytes: u64,
+    /// Seconds between two samples of free space. At least 1.
+    pub disk_sample_secs: u32,
 }
 
 macro_rules! defaults {
@@ -336,6 +346,15 @@ defaults!(Limits {
     rpc_batch_items: 100,
     rpc_response_bytes: 20 << 20,
     log_queue_lines: 8_192,
+    // Safer than the ADR-007 proposals (10% or 20 GiB, 15% or 30 GiB, 2% or 4 GiB), which would halt
+    // import on a host that has 40 GB free of 420 GB: the owner raises these per fleet.
+    disk_stop_pct: 2,
+    disk_stop_min_bytes: 2 << 30,
+    disk_resume_pct: 3,
+    disk_resume_min_bytes: 3 << 30,
+    disk_exit_pct: 1,
+    disk_exit_min_bytes: 1 << 30,
+    disk_sample_secs: 5,
 });
 
 fn invalid(key: &str, value: &str, why: &'static str) -> ConfigError {
@@ -628,6 +647,21 @@ mod tests {
             }
         }
         assert_eq!(Profile::of(Network::Net2040), Some(Profile::Net2040));
+    }
+
+    #[test]
+    fn disk_watermark_defaults_are_ordered_and_misorder_is_refused() {
+        let l = Limits::default();
+        assert_eq!(
+            (l.disk_stop_pct, l.disk_resume_pct, l.disk_exit_pct),
+            (2, 3, 1)
+        );
+        assert_eq!(l.disk_exit_min_bytes, 1 << 30);
+        assert!(crate::DiskWatermark::from_limits(400 << 30, &l).is_some());
+        let bad = "[limits]\ndisk_stop_pct = 1\n";
+        let c = Config::from_toml(bad).unwrap();
+        assert!(crate::DiskWatermark::from_limits(1 << 40, &c.limits).is_none());
+        assert!(Config::from_toml("[limits]\ndisk_nope = 1\n").is_err());
     }
 
     #[test]
