@@ -95,6 +95,8 @@ struct Ctx {
     wide: BTreeMap<Address, WideBalance>,
     /// The snapshot after the tip of `blocks`.
     snap: Snapshot,
+    /// Analysed bytecode across blocks.
+    code_cache: xone_executor::code_cache::CodeCache,
 }
 
 struct Pending {
@@ -146,6 +148,9 @@ impl Env for Ctx {
     }
     fn burn(&self, _number: u64) -> Option<alloy_primitives::U256> {
         None
+    }
+    fn code_cache(&self) -> Option<&xone_executor::code_cache::CodeCache> {
+        Some(&self.code_cache)
     }
 }
 
@@ -362,6 +367,7 @@ impl XdcExecutor {
                 codes,
                 wide: BTreeMap::new(),
                 snap,
+                code_cache: xone_executor::code_cache::CodeCache::default(),
             },
         ))
     }

@@ -39,6 +39,68 @@ struct HttpState {
     waiting: AtomicUsize,
 }
 
+/// Responses shorter than this go out plain: gzip framing would cost more than it saves.
+pub const GZIP_MIN_BYTES: usize = 1024;
+/// Above this the compression runs on a blocking thread, off the runtime.
+const GZIP_INLINE_MAX: usize = 64 << 10;
+
+/// Whether an `Accept-Encoding` value admits gzip (RFC 9110 12.5.3): `gzip` or `*` with a
+/// non-zero quality; an explicit `gzip;q=0` refuses it, whatever `*` says.
+pub fn accepts_gzip(header: Option<&str>) -> bool {
+    let Some(h) = header else {
+        return false;
+    };
+    let (mut gzip, mut star) = (None, None);
+    for item in h.split(',') {
+        let mut parts = item.split(';');
+        let name = parts.next().unwrap_or("").trim().to_ascii_lowercase();
+        let mut q = true;
+        for p in parts {
+            if let Some((k, v)) = p.split_once('=') {
+                if k.trim().eq_ignore_ascii_case("q") {
+                    q = v.trim().parse::<f64>().is_ok_and(|x| x > 0.0);
+                }
+            }
+        }
+        match name.as_str() {
+            "gzip" | "x-gzip" => gzip = Some(q),
+            "*" => star = Some(q),
+            _ => {}
+        }
+    }
+    gzip.or(star).unwrap_or(false)
+}
+
+fn gzip(body: &[u8]) -> Option<Vec<u8>> {
+    use std::io::Write;
+    let mut z = flate2::write::GzEncoder::new(
+        Vec::with_capacity(body.len() / 4),
+        flate2::Compression::fast(),
+    );
+    z.write_all(body).ok()?;
+    z.finish().ok()
+}
+
+/// The body to send and whether it is gzip-encoded. The response limits apply before this, to the
+/// JSON itself; compression only shrinks it.
+async fn encode(body: Vec<u8>, gz: bool) -> (Vec<u8>, bool) {
+    if !gz || body.len() < GZIP_MIN_BYTES {
+        return (body, false);
+    }
+    let z = if body.len() <= GZIP_INLINE_MAX {
+        gzip(&body)
+    } else {
+        let b = body.clone();
+        tokio::task::spawn_blocking(move || gzip(&b))
+            .await
+            .unwrap_or(None)
+    };
+    match z {
+        Some(z) => (z, true),
+        None => (body, false),
+    }
+}
+
 fn http_reply(status: StatusCode, body: Vec<u8>, retry: Option<u64>) -> Response<Full<Bytes>> {
     let mut r = Response::new(Full::new(Bytes::from(body)));
     *r.status_mut() = status;
@@ -112,6 +174,11 @@ async fn http_handle(
             None,
         ));
     }
+    let gz = accepts_gzip(
+        req.headers()
+            .get("accept-encoding")
+            .and_then(|h| h.to_str().ok()),
+    );
     // ADR-007 Q12: at most `http_waiting` requests wait for one of `http_in_flight` slots.
     let permit = match st.in_flight.clone().try_acquire_owned() {
         Ok(p) => p,
@@ -147,11 +214,20 @@ async fn http_handle(
     } else {
         StatusCode::OK
     };
-    Ok(http_reply(
-        status,
-        reply.body.unwrap_or_else(Vec::new),
-        reply.retry_after,
-    ))
+    let (body, zipped) = encode(reply.body.unwrap_or_else(Vec::new), gz).await;
+    let mut r = http_reply(status, body, reply.retry_after);
+    // the representation depends on Accept-Encoding: caches must key on it
+    r.headers_mut().insert(
+        "vary",
+        hyper::header::HeaderValue::from_static("Accept-Encoding"),
+    );
+    if zipped {
+        r.headers_mut().insert(
+            "content-encoding",
+            hyper::header::HeaderValue::from_static("gzip"),
+        );
+    }
+    Ok(r)
 }
 
 /// Serves HTTP on `listener` until the future is dropped. Beyond `http_connections` open
@@ -324,14 +400,67 @@ pub async fn serve_ws(rpc: Arc<Rpc>, listener: TcpListener) {
     }
 }
 
+/// Binds the IPC socket at `path`, owner-only (0600) from the moment it is reachable there.
+///
+/// geth `rpc/ipc_unix.go`: the socket is the owner's only; IPC serves every namespace. The socket
+/// is bound inside a fresh 0700 directory next to `path`, set to 0600 and then renamed into place,
+/// so there is no window in which another user can connect between bind and chmod. A stale socket
+/// left by a killed node is replaced; a live one (something answers on it) or a path that is not a
+/// socket is refused, and nothing is removed. Must run inside a Tokio runtime.
+pub fn bind_ipc(path: &Path) -> std::io::Result<UnixListener> {
+    use std::os::unix::fs::{DirBuilderExt, FileTypeExt, PermissionsExt};
+    use std::{fs, io};
+    match fs::symlink_metadata(path) {
+        Ok(m) if m.file_type().is_socket() => {
+            if std::os::unix::net::UnixStream::connect(path).is_ok() {
+                return Err(io::Error::new(
+                    io::ErrorKind::AddrInUse,
+                    format!("{}: another process is listening", path.display()),
+                ));
+            }
+            fs::remove_file(path)?;
+        }
+        Ok(_) => {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                format!("{}: exists and is not a socket", path.display()),
+            ))
+        }
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e),
+    }
+    let parent = path
+        .parent()
+        .filter(|d| !d.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let name = path
+        .file_name()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "IPC path has no file name"))?;
+    let tmp = parent.join(format!(
+        ".{}.{}.bind",
+        name.to_string_lossy(),
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&tmp);
+    fs::DirBuilder::new().mode(0o700).create(&tmp)?;
+    let inner = tmp.join("s");
+    let bound = (|| {
+        let l = UnixListener::bind(&inner)?;
+        fs::set_permissions(&inner, fs::Permissions::from_mode(0o600))?;
+        fs::rename(&inner, path)?;
+        Ok(l)
+    })();
+    let _ = fs::remove_dir_all(&tmp);
+    bound
+}
+
 /// IPC: a Unix socket carrying a stream of JSON values, no framing (geth `rpc/ipc.go`).
 pub async fn serve_ipc(rpc: Arc<Rpc>, path: &Path) -> std::io::Result<()> {
-    let listener = UnixListener::bind(path)?;
-    // geth `rpc/ipc_unix.go`: the socket is the owner's only (0600); IPC serves every namespace.
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
-    }
+    serve_ipc_on(rpc, bind_ipc(path)?).await
+}
+
+/// [`serve_ipc`] on a listener from [`bind_ipc`], so the caller reports a bind failure at start.
+pub async fn serve_ipc_on(rpc: Arc<Rpc>, listener: UnixListener) -> std::io::Result<()> {
     let conns = Arc::new(Semaphore::new(rpc.limits.ipc_connections));
     loop {
         let (stream, _) = listener.accept().await?;
@@ -376,5 +505,37 @@ pub async fn serve_ipc(rpc: Arc<Rpc>, path: &Path) -> std::io::Result<()> {
             writer.abort();
             drop(slot);
         });
+    }
+}
+
+#[cfg(test)]
+mod gzip_tests {
+    use super::*;
+
+    #[test]
+    fn accept_encoding_is_negotiated_as_rfc_9110_says() {
+        assert!(!accepts_gzip(None));
+        assert!(!accepts_gzip(Some("")));
+        assert!(!accepts_gzip(Some("identity, br")));
+        assert!(accepts_gzip(Some("gzip")));
+        assert!(accepts_gzip(Some("deflate, GZIP;q=0.5")));
+        assert!(accepts_gzip(Some("*")));
+        assert!(!accepts_gzip(Some("gzip;q=0")));
+        assert!(!accepts_gzip(Some("*, gzip;q=0")));
+        assert!(!accepts_gzip(Some("gzip;q=0.000, *;q=1")));
+        assert!(!accepts_gzip(Some("*;q=0")));
+    }
+
+    #[tokio::test]
+    async fn small_or_refused_bodies_go_out_plain() {
+        let small = vec![b'x'; GZIP_MIN_BYTES - 1];
+        assert_eq!(encode(small.clone(), true).await, (small, false));
+        let big = vec![b'x'; 200 << 10];
+        assert_eq!(encode(big.clone(), false).await, (big.clone(), false));
+        let (z, zipped) = encode(big.clone(), true).await;
+        assert!(zipped && z.len() < big.len() / 10);
+        let mut out = vec![];
+        std::io::Read::read_to_end(&mut flate2::read::GzDecoder::new(&z[..]), &mut out).unwrap();
+        assert_eq!(out, big);
     }
 }

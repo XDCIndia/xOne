@@ -111,7 +111,13 @@ pub struct Limits {
     pub bucket_per_sec: u64,
     pub logs_blocks: u64,
     pub logs_results: usize,
+    /// `eth_call`/`eth_estimateGas` gas cap (geth `--rpc.gascap`); 0 is no cap.
     pub call_gas_cap: u64,
+    /// Fee cap in ether for a sent transaction (geth `--rpc.txfeecap`); 0 is no cap.
+    pub tx_fee_cap: f64,
+    /// Deadline of a message holding `eth_call` (geth `--rpc.evmtimeout`); zero keeps the class
+    /// deadline.
+    pub evm_timeout: Duration,
 }
 
 impl Default for Limits {
@@ -140,6 +146,8 @@ impl Default for Limits {
             logs_blocks: 5_000,
             logs_results: 10_000,
             call_gas_cap: 50_000_000,
+            tx_fee_cap: 1.0,
+            evm_timeout: Duration::from_secs(5),
         }
     }
 }
@@ -272,6 +280,16 @@ impl Rpc {
         }
     }
 
+    /// The time budget of one method: the class deadline, or `evm_timeout` for `eth_call` when
+    /// set (geth applies `RPCEVMTimeout` to `eth_call` only). A batch gets the largest.
+    fn deadline_of(&self, method: &str, cost: Cost) -> Duration {
+        if method == "eth_call" && !self.limits.evm_timeout.is_zero() {
+            self.limits.evm_timeout
+        } else {
+            self.limits.deadline[cost.index()]
+        }
+    }
+
     fn cost_of(&self, method: &str) -> Cost {
         // ADR-007: default C1 for an unknown method.
         self.reg.get(method).map_or(Cost::C1, |(c, _)| *c)
@@ -330,6 +348,7 @@ impl Rpc {
             &Params {
                 v,
                 head: self.be.chain.head().0,
+                finalized: self.be.chain.finalized(),
             },
         )
     }
@@ -348,7 +367,13 @@ impl Rpc {
                         json!({"jsonrpc": "2.0", "id": null, "error": RpcError::invalid_request("batch too large").to_value()}),
                     );
                 }
-                let out: Vec<Value> = items.iter().filter_map(|r| self.one(r, cancel)).collect();
+                // Cancellation (deadline or dropped request) is checked between members, so a
+                // timed-out batch stops starting new work.
+                let out: Vec<Value> = items
+                    .iter()
+                    .take_while(|_| !cancel.load(Ordering::Relaxed))
+                    .filter_map(|r| self.one(r, cancel))
+                    .collect();
                 (!out.is_empty()).then_some(Value::Array(out))
             }
             other => self.one(other, cancel),
@@ -387,6 +412,9 @@ impl Rpc {
         };
         let mut cost = Cost::C0;
         let mut units = 0u64;
+        // Every class the message runs, so a mixed batch counts against each class bound and not
+        // only its most expensive one (ADR-007 section 4).
+        let mut classes = [false; 4];
         let methods: Vec<&str> = match &msg {
             Value::Array(a) => a
                 .iter()
@@ -397,10 +425,13 @@ impl Rpc {
         if methods.len() > self.limits.batch_items {
             return self.rejected(RpcError::invalid_request("batch too large"), None);
         }
+        let mut deadline = Duration::ZERO;
         for m in &methods {
             let c = self.cost_of(m);
             cost = cost.max(c);
             units += c.units();
+            deadline = deadline.max(self.deadline_of(m, c));
+            classes[c.index()] = true;
         }
         // The batch counts as the sum of its parts (ADR-007 section 4).
         let now = self.now_ms();
@@ -410,20 +441,33 @@ impl Rpc {
         if let Err(secs) = taken {
             return self.rejected(RpcError::limit(json!(secs)), Some(secs));
         }
-        let _permit = if cost == Cost::C0 {
-            None
-        } else {
-            match self.class_sem[cost.index()].clone().try_acquire_owned() {
-                Ok(p) => Some(p),
+        // One permit per class in use (C0 is unbounded), taken in ascending class order so two
+        // batches cannot deadlock; all or none.
+        let mut permits = Vec::new();
+        for (sem, _) in self
+            .class_sem
+            .iter()
+            .zip(classes)
+            .skip(1)
+            .filter(|(_, used)| *used)
+        {
+            match sem.clone().try_acquire_owned() {
+                Ok(p) => permits.push(p),
                 Err(_) => return self.rejected(RpcError::limit(json!(1)), Some(1)),
             }
-        };
+        }
         let cancel = Arc::new(AtomicBool::new(false));
         let _guard = CancelOnDrop(cancel.clone());
         let me = self.clone();
         let flag = cancel.clone();
-        let job = tokio::task::spawn_blocking(move || me.handle_value(&msg, &flag));
-        let out = match tokio::time::timeout(self.limits.deadline[cost.index()], job).await {
+        // The permits move into the blocking worker: a deadline or a dropped request stops the
+        // wait, not the thread, so the capacity is released only when the worker returns.
+        let job = tokio::task::spawn_blocking(move || {
+            let out = me.handle_value(&msg, &flag);
+            drop(permits);
+            out
+        });
+        let out = match tokio::time::timeout(deadline, job).await {
             Ok(Ok(v)) => v,
             Ok(Err(_)) => Some(
                 json!({"jsonrpc": "2.0", "id": null, "error": RpcError::internal("handler panicked").to_value()}),

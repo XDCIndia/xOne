@@ -274,6 +274,41 @@ impl<K: TransactionKind> Tx<'_, K> {
         Ok(out)
     }
 
+    /// Visits the rows with `from <= key < to` in pages of at most `page` rows: one page is copied
+    /// at a time, so `f` may delete the rows it is given (the next page starts above the last key).
+    pub fn scan_pages(
+        &self,
+        t: T,
+        from: &[u8],
+        to: Option<&[u8]>,
+        page: usize,
+        mut f: impl FnMut(&[u8], &[u8]) -> R<()>,
+    ) -> R<()> {
+        let page = page.max(1);
+        let mut at = from.to_vec();
+        loop {
+            let rows = self.range_limit(t, &at, to, page)?;
+            for (k, v) in &rows {
+                f(k, v)?;
+            }
+            match rows.last() {
+                Some((k, _)) if rows.len() == page => at = [k.as_slice(), &[0]].concat(),
+                _ => return Ok(()),
+            }
+        }
+    }
+
+    /// [`Self::scan_pages`] over the rows whose key starts with `prefix`.
+    pub fn scan_prefix(
+        &self,
+        t: T,
+        prefix: &[u8],
+        page: usize,
+        f: impl FnMut(&[u8], &[u8]) -> R<()>,
+    ) -> R<()> {
+        self.scan_pages(t, prefix, prefix_end(prefix).as_deref(), page, f)
+    }
+
     /// Rows whose key starts with `prefix`. The scan stops at the end of the prefix: it does not read
     /// (and copy) the rest of the table.
     pub fn prefix(&self, t: T, prefix: &[u8]) -> R<Vec<(Vec<u8>, Vec<u8>)>> {
@@ -337,10 +372,20 @@ impl Tx<'_, RW> {
         Ok(())
     }
 
-    /// Deletes rows with `from <= key < to`.
+    /// Deletes rows with `from <= key < to` through one cursor: only the current key is copied,
+    /// so the temporary memory does not grow with the range. After each delete the cursor seeks
+    /// again from the deleted key (`set_range`), which does not depend on where MDBX leaves a
+    /// cursor after `mdbx_cursor_del` at the end of a page or of the table.
     pub fn del_range(&self, t: T, from: &[u8], to: Option<&[u8]>) -> R<()> {
-        for (k, _) in self.range(t, from, to)? {
-            self.del(t, &k)?;
+        let tb = self.table(t.name())?;
+        let mut cur = self.tx.cursor(&tb)?;
+        let mut at: Vec<u8> = from.to_vec();
+        while let Some((k, ())) = cur.set_range::<Cow<'_, [u8]>, ()>(&at)? {
+            if &*k < from || to.is_some_and(|to| &*k >= to) {
+                break;
+            }
+            at = k.into_owned();
+            cur.del(WriteFlags::empty())?;
         }
         Ok(())
     }
@@ -452,6 +497,36 @@ mod tests {
             let w = env.write().unwrap();
             w.del_range(T::SegIdx, &[1, 2], None).unwrap();
             // dropped: aborted
+        }
+        {
+            // deletion and paged scans over many rows, with a bound inside and at the end
+            let w = env.write().unwrap();
+            for i in 0u16..3000 {
+                w.put(T::Aux, &i.to_be_bytes(), &[0; 64]).unwrap();
+            }
+            w.del_range(T::Aux, &100u16.to_be_bytes(), Some(&2900u16.to_be_bytes()))
+                .unwrap();
+            assert_eq!(w.range(T::Aux, &[], None).unwrap().len(), 200);
+            let mut seen = 0;
+            w.scan_pages(T::Aux, &[], None, 7, |k, _| {
+                seen += 1;
+                w.del(T::Aux, k)
+            })
+            .unwrap();
+            assert_eq!(seen, 200);
+            assert!(w.first(T::Aux).unwrap().is_none());
+            w.put(T::Aux, &[9, 1], &[1]).unwrap();
+            w.put(T::Aux, &[9, 2], &[1]).unwrap();
+            w.put(T::Aux, &[10], &[1]).unwrap();
+            let mut n = 0;
+            w.scan_prefix(T::Aux, &[9], 1, |_, _| {
+                n += 1;
+                Ok(())
+            })
+            .unwrap();
+            assert_eq!(n, 2);
+            w.del_range(T::Aux, &[], None).unwrap();
+            assert!(w.first(T::Aux).unwrap().is_none());
         }
         let r = env.read().unwrap();
         assert_eq!(r.range(T::SegIdx, &[1, 1], Some(&[1, 4])).unwrap().len(), 3);

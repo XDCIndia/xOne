@@ -160,3 +160,19 @@ something this rehearsal measured. Following new blocks after a restart is the l
 (`crates/xone-node/tests/live/run.sh`); this geth stops mining after one burst, so it was not repeated here.
 `net2040` (chain 2040): `ops/run-xone.sh` handles the preset, but xone refuses chain id 2040 until
 `xone-chainspec` has a net2040 entry (`DatadirError::NoSpec`); the node was not started on net2040.
+
+## 7. Two independent builders (issue #22, 2026-11-14)
+
+Commit `d1d6c3f59c0b56c1c609f7a1f763b85dcf87829d` (clean clone from a `git bundle`, stamp date from the commit),
+two hosts, two users' worth of paths: each host has its own `RUSTUP_HOME`, `CARGO_HOME`, checkout and target
+directory, all under a different prefix. Same flags as `ci/release.sh`: `SOURCE_DATE_EPOCH` = commit time,
+`--remap-path-prefix` for checkout, `CARGO_HOME` and sysroot, `-Wl,--build-id=none`.
+Command: `cargo build --release --locked -p xone` (glibc target; the musl/zig path of `ci/release.sh` is not set up on host B).
+
+| Builder | Host | gcc | Build time | SHA-256 of `target/release/xone` |
+|---|---|---|---|---|
+| A | build host (Ubuntu 24.04.4) | 13.3.0 | 22 min (load above 100) | `2f3f11ef05c416f4a3a50f248a44c66d5b0eed96203a0a8d4f2751d1639d9f38` |
+| B | h213 (Ubuntu 24.04.4, other machine) | 13.3.0 | 2 min 42 s | `2f3f11ef05c416f4a3a50f248a44c66d5b0eed96203a0a8d4f2751d1639d9f38` |
+
+Both print `xOneRS/v0.1.0-d1d6c3f5-14112026/linux-x86_64/rustc1.94.0`. The two hashes are equal.
+Limits: same OS release and gcc version on both hosts, glibc target only, no signing. A different distro or gcc is not tested.

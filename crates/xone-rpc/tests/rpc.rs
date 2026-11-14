@@ -671,6 +671,59 @@ async fn raw_http_host(addr: std::net::SocketAddr, host: &str, body: &str) -> St
     out
 }
 
+/// The status line and headers (lower case) and the raw body of one HTTP/1.1 exchange.
+async fn raw_http_bytes(addr: std::net::SocketAddr, extra: &str, body: &str) -> (String, Vec<u8>) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let mut s = tokio::net::TcpStream::connect(addr).await.expect("connect");
+    let msg = format!("POST / HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\n{extra}Content-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+    s.write_all(msg.as_bytes()).await.expect("write");
+    let mut out = vec![];
+    s.read_to_end(&mut out).await.expect("read");
+    let at = out.windows(4).position(|w| w == b"\r\n\r\n").expect("head");
+    (
+        String::from_utf8_lossy(&out[..at]).to_lowercase(),
+        out[at + 4..].to_vec(),
+    )
+}
+
+#[tokio::test]
+async fn http_gzips_large_responses_for_clients_that_ask() {
+    use std::io::Read;
+    let r = rpc();
+    let ls = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
+    let addr = ls.local_addr().expect("addr");
+    let h = tokio::spawn(xone_rpc::transport::serve_http(r, ls));
+    let batch =
+        serde_json::Value::Array((0..60).map(|i| req(i, "eth_chainId", json!([]))).collect())
+            .to_string();
+    let (head, plain) = raw_http_bytes(addr, "", &batch).await;
+    assert!(head.starts_with("http/1.1 200"), "{head}");
+    assert!(!head.contains("content-encoding"), "{head}");
+    assert!(head.contains("vary: accept-encoding"), "{head}");
+    assert!(plain.len() >= xone_rpc::transport::GZIP_MIN_BYTES);
+    let (head, zipped) = raw_http_bytes(addr, "Accept-Encoding: gzip, deflate\r\n", &batch).await;
+    assert!(head.contains("content-encoding: gzip"), "{head}");
+    assert!(zipped.len() < plain.len());
+    let mut out = vec![];
+    flate2::read::GzDecoder::new(&zipped[..])
+        .read_to_end(&mut out)
+        .expect("gunzip");
+    assert_eq!(
+        out, plain,
+        "the decompressed body is the plain one, byte for byte"
+    );
+    // q=0 refuses gzip; a small response stays plain
+    let (head, body) = raw_http_bytes(addr, "Accept-Encoding: gzip;q=0\r\n", &batch).await;
+    assert!(!head.contains("content-encoding"), "{head}");
+    assert_eq!(body, plain);
+    let one = req(1, "eth_chainId", json!([])).to_string();
+    let (head, _) = raw_http_bytes(addr, "Accept-Encoding: gzip\r\n", &one).await;
+    assert!(!head.contains("content-encoding"), "{head}");
+    h.abort();
+}
+
 #[tokio::test]
 async fn http_serves_requests_and_429s_on_rejection() {
     let l = Limits {
@@ -1391,4 +1444,30 @@ async fn a_plain_http_request_to_the_websocket_port_is_not_dispatched() {
     assert!(!out.contains("result"), "{out}");
     assert!(out.is_empty() || out.starts_with("HTTP/1.1 4"), "{out}");
     h.abort();
+}
+
+#[tokio::test]
+async fn ipc_bind_is_private_refuses_non_sockets_and_live_sockets() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = std::env::temp_dir().join(format!("xone-rpc-ipcbind-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("dir");
+    let path = dir.join("n.ipc");
+    let _ = std::fs::remove_file(&path);
+    let l = xone_rpc::transport::bind_ipc(&path).expect("bind");
+    let mode = std::fs::metadata(&path)
+        .expect("socket")
+        .permissions()
+        .mode();
+    assert_eq!(mode & 0o777, 0o600);
+    // a live socket is not taken over
+    assert!(xone_rpc::transport::bind_ipc(&path).is_err());
+    drop(l);
+    // a stale socket is replaced
+    xone_rpc::transport::bind_ipc(&path).expect("rebind stale");
+    // a regular file is never removed
+    let f = dir.join("file.ipc");
+    std::fs::write(&f, b"keep").expect("write");
+    assert!(xone_rpc::transport::bind_ipc(&f).is_err());
+    assert_eq!(std::fs::read(&f).expect("kept"), b"keep");
+    let _ = std::fs::remove_dir_all(&dir);
 }

@@ -8,6 +8,7 @@
 
 pub mod config;
 pub mod datadir;
+pub mod dev;
 mod disk;
 pub mod diskguard;
 pub mod enode;

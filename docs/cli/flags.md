@@ -66,9 +66,16 @@ Source column: file:line in geth-XDC (`XDCIndia/go-ethereum` at `6fc8e8c2`; `fla
 | `--metrics` |  | false | Enable the metrics endpoint. | flags.go:1074 |
 | `--metrics.addr <string>` |  | 127.0.0.1 | Metrics listen address. | flags.go:1083 |
 | `--metrics.port <n>` |  | 6060 | Metrics listen port. | flags.go:1088 |
+| `--dev` |  | false | Developer chain: chain id 1337 with one validator whose key is made in memory at start and never written, sealing alone, and a funded developer account (the public test key of the test-junk mnemonic, printed at start). Implies --mine, --http and --nodiscover; the datadir is a new temp dir unless --datadir names an empty one. Refused with a network flag, --networkid, --override.genesis, --chainspec, --keystore or --password. V1 until block 2700, then V2. | flags.go:500 ; xone |
+| `--dev.period <n>` |  | 2 | Seconds between blocks of the --dev chain (1 to 60). | flags.go:504 |
 | `--pprof` |  | false | Enable the profiling endpoint. | internal/debug/flags.go:106 |
 | `--pprof.addr <string>` |  | 127.0.0.1 | Profiling listen address. | internal/debug/flags.go:117 |
 | `--pprof.port <n>` |  | 6060 | Profiling listen port. | internal/debug/flags.go:111 |
+| `--rpc.gascap <n>` |  | 50000000 | Gas cap of eth_call and eth_estimateGas (0 = no cap). Config: [limits] rpc_gas_cap. | flags.go:711 |
+| `--rpc.txfeecap <ether>` |  | 1 | Fee cap in XDC (gas price, or fee cap, times gas) of a transaction sent via eth_sendRawTransaction (0 = no cap). Config: [limits] rpc_tx_fee_cap. | flags.go:723 |
+| `--rpc.evmtimeout <duration>` |  | 5s | Deadline of eth_call, such as 5s or 1m30s (0 = the RPC class deadline). Config: [limits] rpc_evm_timeout_ms. | flags.go:717 |
+| `--rpc.batch-request-limit <n>` |  | 100 | Maximum requests in one batch. Config: [limits] rpc_batch_items. | flags.go:936 |
+| `--rpc.batch-response-max-size <n>` |  | 20971520 | Maximum bytes of one response, batch or single. Config: [limits] rpc_response_bytes. | flags.go:942 |
 | `--version` | `-V` | false | Print the version stamp and exit; never opens the datadir. Short form -V. | join.sh:481 (xOneGo lesson) |
 
 Subcommands: `init <genesis.json>`, `version`, `dumpconfig`, `genesis-hash --network <name>`, `import <file>`, `export <file> [from] [to] --input <blockfile>`, `snapshot export --datadir <dir> --out <file> [--at <block>]`, `snapshot import --datadir <dir> --in <file> --pins <file>`.

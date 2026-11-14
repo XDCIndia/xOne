@@ -251,6 +251,7 @@ impl Pool {
     ) -> Result<(), Error> {
         self.now = now;
         self.head = super::Head::new(&self.spec, number, gas_limit)?;
+        self.trc21 = super::Trc21Fees::read(&self.spec, state, number);
         self.nonces = Default::default();
         self.forward_events(state);
         let all = self.queue.addresses();
@@ -317,7 +318,7 @@ impl Pool {
                 continue;
             };
             let olds = list.forward(nonce);
-            let (drops, invalids) = list.filter(bal, gas_limit);
+            let (drops, invalids) = list.filter(bal, gas_limit, &self.trc21);
             let gapped = if !list.is_empty() && !list.contains(nonce) {
                 list.cap(0)
             } else {

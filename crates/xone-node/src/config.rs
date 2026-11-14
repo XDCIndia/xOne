@@ -81,6 +81,16 @@ pub struct Config {
     pub metrics: Listen,
     pub pprof: Listen,
     pub limits: Limits,
+    pub dev: Dev,
+}
+
+/// `--dev`: a one-validator chain made at start (`crate::dev`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Dev {
+    pub enabled: bool,
+    /// Seconds between blocks.
+    pub period: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -222,7 +232,10 @@ pub struct Listen {
     pub port: u16,
 }
 
-/// ADR-007 proposals. TOML only: none of these has a geth flag.
+/// ADR-007 proposals. TOML only, except the RPC caps that geth also has as flags:
+/// `rpc_gas_cap` (`--rpc.gascap`), `rpc_tx_fee_cap` (`--rpc.txfeecap`), `rpc_evm_timeout_ms`
+/// (`--rpc.evmtimeout`), `rpc_batch_items` (`--rpc.batch-request-limit`) and
+/// `rpc_response_bytes` (`--rpc.batch-response-max-size`). A flag wins over the file.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Limits {
@@ -238,6 +251,12 @@ pub struct Limits {
     pub rpc_body_bytes: u64,
     pub rpc_batch_items: u32,
     pub rpc_response_bytes: u64,
+    /// Gas cap of `eth_call` and `eth_estimateGas`; 0 is no cap.
+    pub rpc_gas_cap: u64,
+    /// Fee cap in ether of a transaction sent over RPC; 0 is no cap.
+    pub rpc_tx_fee_cap: f64,
+    /// Deadline of `eth_call`; 0 keeps the RPC class deadline.
+    pub rpc_evm_timeout_ms: u64,
     pub log_queue_lines: u32,
     /// Disk watermark (ADR-007 section 7): the larger of the percent of the datadir filesystem and the
     /// byte floor wins. Import stops below `stop`, resumes above `resume`, the node exits below `exit`.
@@ -282,6 +301,11 @@ defaults!(Config {
     metrics: Listen::default(),
     pprof: Listen::default(),
     limits: Limits::default(),
+    dev: Dev::default(),
+});
+defaults!(Dev {
+    enabled: false,
+    period: 2
 });
 defaults!(SyncCfg {
     mode: "full".into(),
@@ -359,6 +383,9 @@ defaults!(Limits {
     rpc_body_bytes: 5 << 20,
     rpc_batch_items: 100,
     rpc_response_bytes: 20 << 20,
+    rpc_gas_cap: 50_000_000,
+    rpc_tx_fee_cap: 1.0,
+    rpc_evm_timeout_ms: 5_000,
     log_queue_lines: 8_192,
     // Safer than the ADR-007 proposals (10% or 20 GiB, 15% or 30 GiB, 2% or 4 GiB), which would halt
     // import on a host that has 40 GB free of 420 GB: the owner raises these per fleet.
@@ -382,6 +409,45 @@ fn invalid(key: &str, value: &str, why: &'static str) -> ConfigError {
 fn num<T: std::str::FromStr>(key: &str, v: &str) -> Result<T, ConfigError> {
     v.parse()
         .map_err(|_| invalid(key, v, "not a number in range"))
+}
+
+/// A Go `time.ParseDuration` value (`5s`, `1m30s`, `250ms`, `0`) in whole milliseconds.
+fn go_duration_ms(v: &str) -> Option<u64> {
+    if v == "0" {
+        return Some(0);
+    }
+    let mut rest = v;
+    let mut ns: u128 = 0;
+    if rest.is_empty() {
+        return None;
+    }
+    while !rest.is_empty() {
+        let digits = rest
+            .find(|c: char| !(c.is_ascii_digit() || c == '.'))
+            .unwrap_or(rest.len());
+        let (n, tail) = rest.split_at(digits);
+        let unit_len = tail
+            .find(|c: char| c.is_ascii_digit() || c == '.')
+            .unwrap_or(tail.len());
+        let (unit, next) = tail.split_at(unit_len);
+        let scale: f64 = match unit {
+            "ns" => 1.0,
+            "us" | "µs" => 1e3,
+            "ms" => 1e6,
+            "s" => 1e9,
+            "m" => 60e9,
+            "h" => 3600e9,
+            _ => return None,
+        };
+        let n: f64 = n.parse().ok()?;
+        let part = n * scale;
+        if !part.is_finite() || part > 1e30 {
+            return None;
+        }
+        ns += format!("{part:.0}").parse::<u128>().ok()?;
+        rest = next;
+    }
+    u64::try_from(ns / 1_000_000).ok()
 }
 
 /// geth bool flags: `-http`, `-http=true`, `-http=false`.
@@ -618,9 +684,31 @@ impl Config {
             "metrics" => self.metrics.enabled = flag(key, v)?,
             "metrics.addr" => self.metrics.addr = v.to_owned(),
             "metrics.port" => self.metrics.port = num(key, v)?,
+            "dev" => self.dev.enabled = flag(key, v)?,
+            "dev.period" => {
+                let n: u64 = num(key, v)?;
+                if n == 0 || n > 60 {
+                    return Err(invalid(key, v, "1 to 60 seconds"));
+                }
+                self.dev.period = n;
+            }
             "pprof" => self.pprof.enabled = flag(key, v)?,
             "pprof.addr" => self.pprof.addr = v.to_owned(),
             "pprof.port" => self.pprof.port = num(key, v)?,
+            "rpc.gascap" => self.limits.rpc_gas_cap = num(key, v)?,
+            "rpc.txfeecap" => {
+                let cap: f64 = num(key, v)?;
+                if !cap.is_finite() || cap < 0.0 {
+                    return Err(invalid(key, v, "a fee in ether, 0 or more"));
+                }
+                self.limits.rpc_tx_fee_cap = cap;
+            }
+            "rpc.evmtimeout" => {
+                self.limits.rpc_evm_timeout_ms =
+                    go_duration_ms(v).ok_or_else(|| invalid(key, v, "a duration such as 5s"))?;
+            }
+            "rpc.batch-request-limit" => self.limits.rpc_batch_items = num(key, v)?,
+            "rpc.batch-response-max-size" => self.limits.rpc_response_bytes = num(key, v)?,
             _ => return Err(ConfigError::UnknownKey(key.to_owned())),
         }
         Ok(())
@@ -774,6 +862,51 @@ mod tests {
         let c = Config::from_toml(bad).unwrap();
         assert!(crate::DiskWatermark::from_limits(1 << 40, &c.limits).is_none());
         assert!(Config::from_toml("[limits]\ndisk_nope = 1\n").is_err());
+    }
+
+    #[test]
+    fn rpc_cap_flags_set_limits() {
+        let mut c = Config::from_toml(
+            "[limits]\nrpc_gas_cap = 7\nrpc_tx_fee_cap = 0.5\nrpc_evm_timeout_ms = 9\n",
+        )
+        .unwrap();
+        assert_eq!(
+            (
+                c.limits.rpc_gas_cap,
+                c.limits.rpc_tx_fee_cap,
+                c.limits.rpc_evm_timeout_ms
+            ),
+            (7, 0.5, 9)
+        );
+        // a flag wins over the file
+        for (k, v) in [
+            ("rpc.gascap", "0"),
+            ("rpc.txfeecap", "2.5"),
+            ("rpc.evmtimeout", "1m30s"),
+            ("rpc.batch-request-limit", "10"),
+            ("rpc.batch-response-max-size", "1024"),
+        ] {
+            c.set(k, v).unwrap_or_else(|e| panic!("{k}: {e}"));
+        }
+        let l = &c.limits;
+        assert_eq!((l.rpc_gas_cap, l.rpc_tx_fee_cap), (0, 2.5));
+        assert_eq!(l.rpc_evm_timeout_ms, 90_000);
+        assert_eq!((l.rpc_batch_items, l.rpc_response_bytes), (10, 1024));
+        for bad in ["-1", "nan", "inf", "x"] {
+            assert!(c.set("rpc.txfeecap", bad).is_err(), "{bad}");
+        }
+        for (d, ms) in [
+            ("0", 0),
+            ("5s", 5000),
+            ("250ms", 250),
+            ("1.5s", 1500),
+            ("1h", 3_600_000),
+        ] {
+            assert_eq!(go_duration_ms(d), Some(ms), "{d}");
+        }
+        for bad in ["", "5", "5x", "s"] {
+            assert_eq!(go_duration_ms(bad), None, "{bad}");
+        }
     }
 
     #[test]
