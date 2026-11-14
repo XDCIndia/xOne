@@ -890,6 +890,7 @@ fn start_refuses_a_datadir_that_holds_less_than_the_rules_need() {
                 },
                 preimages: vec![],
                 retention: 64,
+                rows_in_tables: false,
             })
             .unwrap();
         store

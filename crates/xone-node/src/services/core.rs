@@ -607,6 +607,13 @@ impl Core {
                 .collect::<Result<Vec<_>, CoreError>>()?,
             None => vec![],
         };
+        // A minimal node holds what its head needs: the head the datadir stopped at, not the
+        // checkpoint the store goes back to for the replay (that one is up to a checkpoint interval
+        // behind, and needs a longer history than a snapshot of a later pivot holds).
+        if minimal {
+            minimal::check_start(&spec, &node_store)
+                .map_err(|e| CoreError::Minimal(e.to_string()))?;
+        }
         if loaded.as_ref().is_some_and(|l| start < l.number) {
             node_store.unwind_to(start, Unwound::Drop).map_err(|e| {
                 CoreError::Inconsistent(format!(
@@ -657,9 +664,6 @@ impl Core {
             senders,
             saving: Mutex::new(None),
         };
-        if minimal {
-            core.check_start()?;
-        }
         for (header, body) in replay {
             let number = header.number;
             match core.import(header, body, now())? {
@@ -1008,12 +1012,6 @@ impl Core {
         self.hist.read().number_of(hash)
     }
 
-    fn check_start(&self) -> Result<(), CoreError> {
-        self.chain
-            .with_store(|s| minimal::check_start(&self.spec, s))
-            .map_err(|e| CoreError::Minimal(e.to_string()))
-    }
-
     /// What a minimal node holds, for the RPC; `None` on a node that followed from genesis.
     pub fn held(&self) -> Option<Held> {
         self.minimal
@@ -1029,9 +1027,15 @@ impl Core {
     /// (`minimal::prune`; the committed block is a ceiling).
     fn prune(&self) -> Result<(), CoreError> {
         let committed = self.chain.committed().map(|l| l.number);
+        // a restart goes back to the newest state checkpoint and needs the history of that block
+        let every = self.ckpt_every;
         let kept = self
             .chain
-            .with_store_mut(|s| minimal::prune(&self.spec, s, committed, self.prune_slack))
+            .with_store_mut(|s| {
+                let head = s.head().0;
+                let restart = (every != 0).then(|| head - head % every);
+                minimal::prune_with(&self.spec, s, committed, restart, self.prune_slack)
+            })
             .map_err(|e| CoreError::Minimal(e.to_string()))?;
         if let Some(k) = kept {
             let (head, _) = self.chain.head();

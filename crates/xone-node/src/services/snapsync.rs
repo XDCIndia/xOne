@@ -50,7 +50,7 @@ use xone_net::{
 };
 use xone_primitives::Header;
 use xone_snap::{
-    client::{self, Fault, PeerError, PeerSource, StateStore, SyncError},
+    client::{self, Backend, Fault, PeerError, PeerSource, StateStore, SyncError},
     codec::Message as Snap,
     preimage::{self, GetPreimages},
 };
@@ -616,93 +616,134 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec, genesis: &Genesis) -> R
     // moves (`set_root`; the heal pass of `client::sync` repairs what the new root changed).
     let scfg = client::Config::default();
     let t1 = Instant::now();
-    let (
-        Pivoted {
-            anchor,
-            pin_source,
-            win,
-            records,
-            mut side,
-            now,
-        },
-        st,
-    ) = repivot(
-        d,
-        |d| {
-            let p = pivot_window(d, cfg, spec, &pins)?;
-            eprintln!(
-                "snap: state download at root {} from peer {}",
-                p.anchor.state_root,
-                short(&d.src()?)
-            );
-            let root = p.anchor.state_root;
-            Ok((p, root))
-        },
-        |st, d| client::sync(st, &mut Src(d, false), &scfg),
-    )?;
+    let disk = cfg.sync.state_disk;
+    let dir = cfg.datadir.join("xone");
+    std::fs::create_dir_all(&dir).map_err(|e| SnapSyncError::Io(e.to_string()))?;
+    let mut pivot_fn = |d: &mut Drv<'_>| -> R<(Pivoted, B256)> {
+        let p = pivot_window(d, cfg, spec, &pins)?;
+        eprintln!(
+            "snap: state download at root {} from peer {}",
+            p.anchor.state_root,
+            short(&d.src()?)
+        );
+        let root = p.anchor.state_root;
+        Ok((p, root))
+    };
+    // With `--state.disk` the rows are proven straight into the state tables of the store
+    // (`SnapState`), with their cursors, so that the download holds no state in memory and a crash
+    // resumes it; the install then writes the rest. Otherwise the state is held in memory.
+    let (pivoted, rows, rows_in_tables, wide, codes, mut store, got) = if disk {
+        let store = store::open(&dir, RETENTION, None, true)
+            .map_err(|e| SnapSyncError::Io(e.to_string()))?;
+        let (pivoted, st) = repivot_with(
+            d,
+            &mut pivot_fn,
+            |root| {
+                store
+                    .snap_state(root)
+                    .map_err(|e| SnapSyncError::Io(e.to_string()))
+            },
+            |st, d| client::sync(st, &mut Src(d, false), &scfg),
+        )?;
+        let want = pivoted.anchor.state_root;
+        let io = |e: xone_snap::client::StoreError| SnapSyncError::Io(e.to_string());
+        let got = st.root().map_err(io)?;
+        if got != want || st.progress().verified != Some(want) {
+            return Err(SnapSyncError::Root { got, want });
+        }
+        eprintln!(
+            "snap: state downloaded in {} s: {}; requests: {} account ranges, {} storage ranges, {} bytecodes, {} trie nodes (heal); every range proven; state root {got} streamed from the tables",
+            t1.elapsed().as_secs(),
+            st.summary(),
+            d.n.account_ranges,
+            d.n.storage_ranges,
+            d.n.byte_codes,
+            d.n.trie_nodes,
+        );
+        let wide = st.wide_accounts().map_err(io)?;
+        let codes = st.codes().map_err(io)?;
+        (pivoted, StateRows::default(), true, wide, codes, store, got)
+    } else {
+        let (pivoted, mut st) = repivot(d, &mut pivot_fn, |st, d| {
+            client::sync(st, &mut Src(d, false), &scfg)
+        })?;
+        let slots: usize = st.storage.values().map(BTreeMap::len).sum();
+        let c = &d.n;
+        eprintln!(
+            "snap: state downloaded in {} s: {} accounts, {slots} slots, {} codes; requests: {} account ranges, {} storage ranges, {} bytecodes, {} trie nodes (heal); every range proven",
+            t1.elapsed().as_secs(),
+            st.accounts.len(),
+            st.codes.len(),
+            c.account_ranges,
+            c.storage_ranges,
+            c.byte_codes,
+            c.trie_nodes,
+        );
+        // ---- the rows, by hashed key as snap/1 gives them. The state root is checked from the hashed
+        // rows by the streaming builder (`hashed_root`, no copy of the state), then the rows are moved
+        // out of the store, not copied: a network's state is held once.
+        let got = xone_snap::server::hashed_root(&st.accounts, &st.storage);
+        if got != pivoted.anchor.state_root
+            || st.progress.verified != Some(pivoted.anchor.state_root)
+        {
+            return Err(SnapSyncError::Root {
+                got,
+                want: pivoted.anchor.state_root,
+            });
+        }
+        let mut rows = StateRows {
+            accounts: std::mem::take(&mut st.accounts)
+                .into_iter()
+                .map(|(h, a)| {
+                    (
+                        h,
+                        Account {
+                            nonce: a.nonce,
+                            balance: a.balance,
+                            code_hash: a.code_hash,
+                            ..Default::default()
+                        },
+                    )
+                })
+                .collect(),
+            ..Default::default()
+        };
+        let storage = std::mem::take(&mut st.storage);
+        rows.storage
+            .reserve_exact(storage.values().map(BTreeMap::len).sum());
+        for (h, slots) in storage {
+            rows.storage
+                .extend(slots.into_iter().map(|(k, v)| (h, k, v)));
+        }
+        let wide: Vec<B256> = rows
+            .accounts
+            .iter()
+            .filter(|(_, x)| x.balance.is_wide())
+            .map(|(h, _)| *h)
+            .collect();
+        let store = store::open(&dir, RETENTION, None, false)
+            .map_err(|e| SnapSyncError::Io(e.to_string()))?;
+        let codes = st.codes.clone();
+        (pivoted, rows, false, wide, codes, store, got)
+    };
+    let Pivoted {
+        anchor,
+        pin_source,
+        win,
+        records,
+        mut side,
+        now,
+    } = pivoted;
     let pivot = anchor.number;
     let pv = &anchor.provenance;
-    let slots: usize = st.storage.values().map(BTreeMap::len).sum();
     let c = &d.n;
-    eprintln!(
-        "snap: state downloaded in {} s: {} accounts, {slots} slots, {} codes; requests: {} account ranges, {} storage ranges, {} bytecodes, {} trie nodes (heal); every range proven",
-        t1.elapsed().as_secs(),
-        st.accounts.len(),
-        st.codes.len(),
-        c.account_ranges,
-        c.storage_ranges,
-        c.byte_codes,
-        c.trie_nodes,
-    );
     eprintln!(
         "snap: heal: {} trie-node requests; state root {} verified at the pivot {pivot}",
         c.trie_nodes, anchor.state_root
     );
-
-    // ---- the rows, by hashed key as snap/1 gives them. The state root is checked from the hashed
-    // rows by the streaming builder (`hashed_root`, no copy of the state), then the rows are moved out
-    // of the store, not copied: a network's state is held once.
-    let got = xone_snap::server::hashed_root(&st.accounts, &st.storage);
-    if got != anchor.state_root || st.progress.verified != Some(anchor.state_root) {
-        return Err(SnapSyncError::Root {
-            got,
-            want: anchor.state_root,
-        });
-    }
-    let mut st = st;
-    let mut rows = StateRows {
-        accounts: std::mem::take(&mut st.accounts)
-            .into_iter()
-            .map(|(h, a)| {
-                (
-                    h,
-                    Account {
-                        nonce: a.nonce,
-                        balance: a.balance,
-                        code_hash: a.code_hash,
-                        ..Default::default()
-                    },
-                )
-            })
-            .collect(),
-        ..Default::default()
-    };
-    let storage = std::mem::take(&mut st.storage);
-    rows.storage
-        .reserve_exact(storage.values().map(BTreeMap::len).sum());
-    for (h, slots) in storage {
-        rows.storage
-            .extend(slots.into_iter().map(|(k, v)| (h, k, v)));
-    }
     // An account above 2^256 is tracked by address by the executor. snap/1 gives only its hash, so
     // its preimage (a handful of accounts at most) is asked of an xOne peer over xpre/1, checked by
     // its hash, or found among the genesis accounts; no other account needs one.
-    let wide: Vec<B256> = rows
-        .accounts
-        .iter()
-        .filter(|(_, x)| x.balance.is_wide())
-        .map(|(h, _)| *h)
-        .collect();
     let mut wide_pre = Vec::new();
     for h in wide {
         // an xOne peer knows it, or it is a genesis account (the funded accounts of the XDC networks
@@ -715,21 +756,25 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec, genesis: &Genesis) -> R
                     .find(|a| keccak256(a) == h)
                     .map(|a| Bytes::copy_from_slice(a.as_slice()))
             })
+            .or_else(|| {
+                // the archive RPC of --snap.gap-rpc knows it (checked by its hash)
+                let url = cfg.sync.snap_gap_rpc.as_ref()?;
+                let mut rpc = gaprpc::Rpc::new(url, pivot).ok()?;
+                rpc.preimage(h)
+                    .ok()
+                    .map(|a| Bytes::copy_from_slice(a.as_slice()))
+            })
             .ok_or(SnapSyncError::WideAddress(h))?;
         wide_pre.push((h, p));
     }
     eprintln!(
         "snap: state root {got} rebuilt from {} hashed accounts and {} hashed slots; no preimages needed",
-        rows.accounts.len(),
-        rows.storage.len()
+        if rows_in_tables { "the".to_string() } else { rows.accounts.len().to_string() },
+        if rows_in_tables { "stored".to_string() } else { rows.storage.len().to_string() }
     );
 
     // ---- install
-    side.codes = st.codes.clone();
-    let dir = cfg.datadir.join("xone");
-    std::fs::create_dir_all(&dir).map_err(|e| SnapSyncError::Io(e.to_string()))?;
-    let mut store = store::open(&dir, RETENTION, None, cfg.sync.state_disk)
-        .map_err(|e| SnapSyncError::Io(e.to_string()))?;
+    side.codes = codes;
     let install = Install {
         anchor: Bytes::from(anchor.encode()),
         headers: win,
@@ -737,6 +782,7 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec, genesis: &Genesis) -> R
         state: rows,
         preimages: wide_pre,
         retention: RETENTION,
+        rows_in_tables,
     };
     crate::snapshot::install(&dir, &mut store, pivot, anchor.hash, &side, install)
         .map_err(|e| SnapSyncError::Io(e.to_string()))?;
@@ -764,13 +810,24 @@ const MAX_REPIVOTS: u32 = 64;
 /// and runs again over the same store (`StateStore::set_root`), up to [`MAX_REPIVOTS`] times.
 fn repivot<C, T>(
     c: &mut C,
-    mut pivot: impl FnMut(&mut C) -> R<(T, B256)>,
-    mut run: impl FnMut(&mut StateStore, &mut C) -> Result<(), SyncError>,
+    pivot: impl FnMut(&mut C) -> R<(T, B256)>,
+    run: impl FnMut(&mut StateStore, &mut C) -> Result<(), SyncError>,
 ) -> R<(T, StateStore)> {
+    repivot_with(c, pivot, |root| Ok(StateStore::new(root)), run)
+}
+
+/// [`repivot`] over any [`Backend`]: `mk` opens it at the first pivot's root (a store on disk resumes
+/// the cursors of an earlier run there).
+fn repivot_with<C, T, B: Backend>(
+    c: &mut C,
+    mut pivot: impl FnMut(&mut C) -> R<(T, B256)>,
+    mk: impl FnOnce(B256) -> R<B>,
+    mut run: impl FnMut(&mut B, &mut C) -> Result<(), SyncError>,
+) -> R<(T, B)> {
     let mut t = Instant::now();
     let (mut p, root) = pivot(c)?;
     let mut setup = t.elapsed().as_secs();
-    let mut st = StateStore::new(root);
+    let mut st = mk(root)?;
     let mut moves = 0;
     loop {
         t = Instant::now();
@@ -782,16 +839,15 @@ fn repivot<C, T>(
                 t = Instant::now();
                 let (np, root) = pivot(c)?;
                 let next = t.elapsed().as_secs();
-                let slots: usize = st.storage.values().map(BTreeMap::len).sum();
                 eprintln!(
-                    "snap: no peer serves root {}: pivot moved to root {root} (move {moves}); kept {} accounts, {slots} slots, {} codes; last pivot: {setup} s to set up, {down} s of download; next: {next} s to set up",
-                    st.progress.root,
-                    st.accounts.len(),
-                    st.codes.len(),
+                    "snap: no peer serves root {}: pivot moved to root {root} (move {moves}); kept {}; last pivot: {setup} s to set up, {down} s of download; next: {next} s to set up",
+                    st.progress().root,
+                    st.summary(),
                 );
                 setup = next;
                 p = np;
-                st.set_root(root);
+                st.set_root(root)
+                    .map_err(|e| SnapSyncError::Io(e.to_string()))?;
             }
             Err(e) => return Err(e.into()),
         }

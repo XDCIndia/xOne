@@ -67,10 +67,13 @@ pub enum T {
     /// nibbles` for the account trie, `1 || keccak(address) || nibbles` for a storage trie (one byte
     /// per nibble), to the node's RLP. The `Meta` row `trieroot` says which state root they are.
     TrieNodes,
+    /// A snap download in progress: `p` to the pivot root and the cursors, `1 || keccak(address)` to
+    /// the storage cursor of that account (see `xone_sync::mdbx::snapstate`). Emptied by the install.
+    SnapProgress,
 }
 
 impl T {
-    pub const ALL: [T; 23] = [
+    pub const ALL: [T; 24] = [
         T::Meta,
         T::CanonicalHeaders,
         T::HeaderNumbers,
@@ -94,6 +97,7 @@ impl T {
         T::StagedBodies,
         T::TxLookup,
         T::TrieNodes,
+        T::SnapProgress,
     ];
 
     pub fn name(self) -> &'static str {
@@ -121,6 +125,7 @@ impl T {
             T::StagedBodies => "StagedBodies",
             T::TxLookup => "TxLookup",
             T::TrieNodes => "TrieNodes",
+            T::SnapProgress => "SnapProgress",
         }
     }
 }
@@ -294,6 +299,12 @@ impl<K: TransactionKind> Tx<'_, K> {
         Ok(cur
             .last::<Cow<'_, [u8]>, Cow<'_, [u8]>>()?
             .map(|(k, v)| (k.into_owned(), v.into_owned())))
+    }
+
+    /// The number of rows of a table (from its metadata, no row is visited).
+    pub fn entries(&self, t: T) -> R<usize> {
+        let tb = self.table(t.name())?;
+        Ok(self.tx.table_stat(&tb)?.entries())
     }
 
     pub fn is_empty(&self, t: T) -> R<bool> {

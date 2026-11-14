@@ -18,6 +18,7 @@
 
 mod codec;
 pub mod diskflat;
+pub mod snapstate;
 pub mod trierows;
 
 use std::{
@@ -731,6 +732,12 @@ impl<D: SegDir> MdbxStore<D> {
         ))
     }
 
+    /// The snap download at `root` over this store's state tables (`--state.disk`): resumes the
+    /// cursors of an earlier run. See [`snapstate::SnapState`].
+    pub fn snap_state(&self, root: B256) -> Result<snapstate::SnapState, StoreError> {
+        snapstate::SnapState::open(self.env.clone(), root).map_err(|e| StoreError::Damaged(e.0))
+    }
+
     /// `--state.disk` is on.
     pub fn disk_state(&self) -> bool {
         self.cfg.disk_state
@@ -1162,6 +1169,16 @@ impl<D: SegDir> MdbxStore<D> {
         self.alive()?;
         if self.manifest.is_some() || self.generation != 0 {
             return Err(StoreError::Damaged("the datadir is not new".into()));
+        }
+        // rows of a snap download that died: opening the datadir as a new one would write over them
+        let held = self
+            .rd()?
+            .is_empty(T::HashedAccounts)
+            .map_err(|e| StoreError::Damaged(e.to_string()))?;
+        if !held {
+            return Err(StoreError::Damaged(
+                "the state tables hold rows of an unfinished snap download: resume it with --syncmode snap --state.disk, or remove the datadir".into(),
+            ));
         }
         let rec = Record {
             block: Block::new(header, Body::default()),
@@ -1969,6 +1986,9 @@ impl<D: SegDir> Store for MdbxStore<D> {
             return Err(bad("blocks are not consecutive and linked"));
         }
         let (number, hash) = (pivot.block.number(), pivot.block.hash());
+        if s.rows_in_tables && !self.cfg.disk_state {
+            return Err(bad("rows in the tables need the disk state"));
+        }
         let mut flat = MemFlat::default();
         for (a, x) in &s.state.accounts {
             x.balance.check_legal().map_err(CommitError::from)?;
@@ -1992,8 +2012,13 @@ impl<D: SegDir> Store for MdbxStore<D> {
         {
             return Err(bad("duplicate state rows"));
         }
-        if root_of_sorted_rows(&s.state.accounts, &s.state.storage) != pivot.block.header.state_root
-        {
+        let got = if s.rows_in_tables {
+            // the rows are in the tables already: their root is streamed from them
+            snapstate::SnapState::state_root_of(&self.env).map_err(|e| StoreError::Damaged(e.0))?
+        } else {
+            root_of_sorted_rows(&s.state.accounts, &s.state.storage)
+        };
+        if got != pivot.block.header.state_root {
             return Err(bad("the state does not give the pivot's state root"));
         }
         let (h_first, r_first) = (s.headers[0].number, s.records[0].block.number());
@@ -2075,6 +2100,8 @@ impl<D: SegDir> Store for MdbxStore<D> {
                 put_tx_lookup(&tx, n, &r.block.body)?;
             }
             tx.put(T::Meta, HISTORY_KEY, &[1])?;
+            // a download's cursors are done with
+            tx.clear(T::SnapProgress)?;
             if !s.anchor.is_empty() {
                 tx.put(T::Meta, ANCHOR_KEY, &s.anchor)?;
             }

@@ -281,6 +281,7 @@ pub fn verify<R: Read + Seek, St: Staging>(
             state: content.state,
             preimages: content.preimages,
             retention: cfg.retention,
+            rows_in_tables: false,
         },
         side: content.side,
         anchor,
