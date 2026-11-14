@@ -228,6 +228,7 @@ mod tests {
     ];
 
     #[test]
+    #[cfg_attr(miri, ignore = "libsecp256k1 is C, which miri cannot run")]
     fn sign_then_recover_is_domain_independent_and_matches_ecrecover() {
         let key = SigningKey::from_slice(&[7u8; 32]).unwrap();
         let want = Address::from_slice(
@@ -272,6 +273,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "libsecp256k1 is C, which miri cannot run")]
     fn malformed_signatures_fail_like_ecrecover() {
         let digest = B256::ZERO;
         for bytes in [vec![], vec![0u8; 64], vec![0u8; 65], vec![1u8; 66]] {
