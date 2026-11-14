@@ -65,40 +65,6 @@ pub enum DbError {
 
 pub type Result<T> = core::result::Result<T, DbError>;
 
-// Reads never return data above the published head (the committed manifest).
-pub trait HeaderProvider {
-    fn header(&self, number: u64) -> Result<Option<Header>>;
-    fn canonical_hash(&self, number: u64) -> Result<Option<B256>>;
-}
-
-pub trait BodyProvider {
-    fn body_rlp(&self, number: u64) -> Result<Option<Vec<u8>>>;
-}
-
-pub trait ReceiptProvider {
-    fn receipts_rlp(&self, number: u64) -> Result<Option<Vec<u8>>>;
-}
-
-pub trait StateProvider {
-    fn account_rlp(&self, address: Address) -> Result<Option<Vec<u8>>>;
-    fn storage(&self, address: Address, slot: B256) -> Result<B256>;
-}
-
-/// The only write path. One call is one generation.
-pub trait BlockWriter {
-    /// Journal, execute, stage, sync, one MDBX commit, publish (ADR-005 section 5).
-    /// The executor's state changeset parameter is added with the executor crate.
-    fn commit_block(
-        &mut self,
-        header: &Header,
-        body_rlp: &[u8],
-        receipts_rlp: &[u8],
-    ) -> Result<Manifest>;
-    /// Atomic across state, receipts and consensus tables (ADR-005 section 8).
-    fn unwind_to(&mut self, number: u64) -> Result<Manifest>;
-    fn durability(&self) -> Durability;
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
