@@ -1471,3 +1471,22 @@ async fn ipc_bind_is_private_refuses_non_sockets_and_live_sockets() {
     assert_eq!(std::fs::read(&f).expect("kept"), b"keep");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn object_and_array_ids_are_refused_without_dispatch() {
+    let r = rpc();
+    for id in [json!({"a": 1}), json!([1])] {
+        let e = ask(
+            &r,
+            json!({"jsonrpc": "2.0", "id": id, "method": "eth_blockNumber"}),
+        );
+        assert_eq!(e["error"]["code"], -32600);
+        assert_eq!(e["id"], Value::Null);
+        assert!(e.get("result").is_none());
+    }
+    let o = ask(
+        &r,
+        json!({"jsonrpc": "2.0", "id": "abc", "method": "eth_blockNumber"}),
+    );
+    assert_eq!(o["id"], "abc");
+}
