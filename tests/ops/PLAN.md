@@ -25,6 +25,7 @@ Method (from `docs/perf.md` section 4): open-loop load, latency measured from th
 - Setup: a loop-device or small tmpfs filesystem as the datadir (same harness as `tests/fault/PLAN.md` loop-device gate; needs root or an approved runner).
 - Steps: import a replay range while a ballast file shrinks free space past each threshold in turn; case A slow fill (watermark acts first); case B fast fill (ballast written between two samples, so `NoSpace` fires); case C fill during a commit; case D free space after stop (resume with hysteresis, no flapping); case E fill below Y (clean exit).
 - Pass: A: one `disk_low` alarm line, import stops at a block boundary, RPC reads and pruning continue, resume only above the resume level, then import continues. B: `Degraded(NoSpace)` with one `no_space` alarm, no torn commit. C and E: after restart `reconcile` reports a consistent head and the safety record file is byte-identical (ADR-005, ADR-010). No corruption: full `xone db verify` after every case.
+- Done: the watermark is wired (`diskguard.rs`): unit tests of one alarm, hysteresis, two-sample exit and `df` parsing, and `Node::run` returning `DiskFull` after an internal stop. Cases A to E on a loop device are not run.
 - Needs: the `xone-db` implementation (only traits and `reconcile` exist); `statvfs` free-space sampling (a dependency or an approved `unsafe`-free crate, since this crate forbids `unsafe`); the import pipeline and its stop-at-block-boundary hook; the pruner; `xone db verify` (ADR-005 Gate B tool).
 
 ## O4. Malformed-peer flood
