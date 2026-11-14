@@ -33,13 +33,19 @@ pub enum BaseFeeError {
 /// geth `XDCBaseFeeForBlock` behind the `IsEIP1559` gate: what the header of block `number` must
 /// carry, or `None` when it must carry none.
 pub fn base_fee_for_block(spec: &ChainSpec, number: u64) -> Option<u64> {
-    spec.is_eip1559(number).then(|| {
-        if spec.gas2500x.is_active(number) {
-            XDC_BASE_FEE * GAS_2500X_MULTIPLIER
-        } else {
-            XDC_BASE_FEE
-        }
-    })
+    spec.is_eip1559(number)
+        .then(|| xdc_base_fee_for_block(spec, number))
+}
+
+/// geth `params.XDCBaseFeeForBlock` itself (`params/xdc_gas.go:36-42`): the tier of block
+/// `number`, without the `Eip1559Block` gate (its callers check what they need, e.g. the London
+/// gate of `eth_feeHistory`'s next fee, `eth/gasprice/feehistory.go:93-97`).
+pub fn xdc_base_fee_for_block(spec: &ChainSpec, number: u64) -> u64 {
+    if spec.gas2500x.is_active(number) {
+        XDC_BASE_FEE * GAS_2500X_MULTIPLIER
+    } else {
+        XDC_BASE_FEE
+    }
 }
 
 /// geth `CalcBaseFee` for the child of block `parent_number` (`eip1559.go:121-127`).

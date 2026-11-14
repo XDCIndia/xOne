@@ -4910,6 +4910,7 @@ dependencies = [
  "tokio-tungstenite",
  "xone-chainspec",
  "xone-consensus",
+ "xone-evm",
  "xone-executor",
  "xone-primitives",
  "xone-state",

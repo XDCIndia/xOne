@@ -1338,3 +1338,64 @@ async fn a_plain_http_request_to_the_websocket_port_is_not_dispatched() {
     assert!(out.is_empty() || out.starts_with("HTTP/1.1 4"), "{out}");
     h.abort();
 }
+
+/// #256: geth's percentile validation, zero count, the head bound and the next block's fee.
+#[test]
+fn fee_history_validates_percentiles_and_evaluates_the_next_fee() {
+    let mut spec = xone_chainspec::apothem();
+    spec.london = xone_chainspec::ForkBlock::At(0);
+    spec.eip1559 = xone_chainspec::ForkBlock::At(0);
+    spec.gas2500x = xone_chainspec::ForkBlock::At(51);
+    let r = rpc_spec(spec, Limits::default(), 0);
+    let fh = |params: Value| ask(&r, req(1, "eth_feeHistory", params));
+    // zero count: no data, no error
+    let v = fh(json!(["0x0", "latest", []]));
+    assert_eq!(
+        v["result"],
+        json!({"oldestBlock": "0x0", "gasUsedRatio": null}),
+        "{v}"
+    );
+    // fractional percentiles are accepted, one reward per block
+    let v = fh(json!([2, "0x14", [12.5, 50, 99.9]]));
+    assert_eq!(
+        v["result"]["reward"].as_array().map(Vec::len),
+        Some(2),
+        "{v}"
+    );
+    assert_eq!(
+        v["result"]["reward"][0],
+        json!(["0x0", "0x0", "0x0"]),
+        "{v}"
+    );
+    for bad in [
+        json!([50, 10]),
+        json!([10, 10]),
+        json!([-1]),
+        json!([100.5]),
+    ] {
+        let v = fh(json!([1, "latest", bad]));
+        assert_eq!(v["error"]["code"], -32000, "{v}");
+        assert!(
+            v["error"]["message"]
+                .as_str()
+                .unwrap_or("")
+                .starts_with("invalid reward percentile"),
+            "{v}"
+        );
+    }
+    let v = fh(json!([1, "latest", (0..101).collect::<Vec<_>>()]));
+    assert!(v["error"]["message"]
+        .as_str()
+        .unwrap_or("")
+        .contains("over the query limit 100"));
+    let v = fh(json!([1, "0x65", []]));
+    assert_eq!(
+        v["error"]["message"],
+        "request beyond head block: requested 101, head 100"
+    );
+    // a range ending just before the Gas2500x row: the next fee is the new tier, not a repeat
+    let v = fh(json!([2, "0x32", []]));
+    let fees = &v["result"]["baseFeePerGas"];
+    assert_eq!(fees.as_array().map(Vec::len), Some(3), "{v}");
+    assert_eq!(fees[2], format!("{:#x}", 625_000_000_000u64), "{v}");
+}
