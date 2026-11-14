@@ -58,6 +58,17 @@ pub const FLAGS: &[Flag] = &[
         "Data directory for the databases and the chain marker.",
         "flags.go:93 ; geth,xone",
     ),
+    Flag {
+        aliases: &["datadir.segments"],
+        ..f(
+            "datadir.ancient",
+            P,
+            "<datadir>/xone/static",
+            "/cold/xone-segments",
+            "Directory of the frozen history segments (headers, bodies, receipts), e.g. on a slower disk. Recorded in the datadir; the tree must carry the datadir's identity, a wrong or missing path refuses to start (issue #225).",
+            "flags.go:109 ; geth",
+        )
+    },
     f(
         "networkid",
         N,

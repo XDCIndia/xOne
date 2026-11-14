@@ -64,6 +64,9 @@ pub struct Config {
     pub profile: Option<Profile>,
     pub network_id: Option<u64>,
     pub datadir: PathBuf,
+    /// The frozen history segment tree kept outside the datadir (`--datadir.ancient`, issue #225).
+    /// None: the tree recorded in the datadir, else `<datadir>/xone/static`.
+    pub datadir_ancient: Option<PathBuf>,
     pub identity: Option<String>,
     pub override_genesis: Option<PathBuf>,
     /// Fork table of a private chain (`--chainspec`); the table format of `generated/forks.json` with one network.
@@ -267,6 +270,7 @@ defaults!(Config {
     profile: None,
     network_id: None,
     datadir: PathBuf::from("xone-data"),
+    datadir_ancient: None,
     identity: None,
     override_genesis: None,
     chainspec: None,
@@ -523,6 +527,7 @@ impl Config {
     pub fn set(&mut self, key: &str, v: &str) -> Result<(), ConfigError> {
         match key {
             "datadir" => self.datadir = v.into(),
+            "datadir.ancient" | "datadir.segments" => self.datadir_ancient = Some(v.into()),
             "networkid" => self.network_id = Some(num(key, v)?),
             "identity" => self.identity = Some(v.to_owned()),
             "override.genesis" => self.override_genesis = Some(v.into()),

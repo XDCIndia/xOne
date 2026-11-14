@@ -555,28 +555,178 @@ impl SegFile for OsFile {
 #[derive(Clone)]
 pub struct OsDir {
     root: PathBuf,
+    /// Where the `static/` names live: `root/static`, or the path recorded in
+    /// [`STATIC_PATH_FILE`] (`--datadir.ancient`).
+    static_root: PathBuf,
     _lock: Arc<File>,
+    _static_lock: Arc<File>,
+}
+
+/// The file in the datadir naming a segment tree kept outside it (one absolute path, one line).
+pub const STATIC_PATH_FILE: &str = "segments.path";
+/// The datadir's copy of its segment tree's identity.
+pub const ID_FILE: &str = "segments.id";
+/// The identity file inside a segment tree; it must equal the datadir's [`ID_FILE`].
+pub const TREE_ID_FILE: &str = "SEGMENTS_ID";
+
+fn take_lock(path: &Path, what: &str) -> io::Result<File> {
+    let lock = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(false)
+        .open(path)?;
+    lock.try_lock().map_err(|e| match e {
+        fs::TryLockError::WouldBlock => io::Error::new(
+            io::ErrorKind::WouldBlock,
+            format!("the {what} is in use by another process (locked)"),
+        ),
+        fs::TryLockError::Error(e) => e,
+    })?;
+    Ok(lock)
+}
+
+fn read_id(path: &Path) -> io::Result<Option<String>> {
+    match fs::read_to_string(path) {
+        Ok(s) => Ok(Some(s.trim().to_owned())),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+/// Writes `body` to `path` through a synced temporary file and a rename, then syncs the directory.
+fn write_synced(path: &Path, body: &str) -> io::Result<()> {
+    let dir = path.parent().unwrap_or_else(|| Path::new("."));
+    let tmp = path.with_extension("tmp");
+    let mut f = File::create(&tmp)?;
+    io::Write::write_all(&mut f, body.as_bytes())?;
+    f.sync_all()?;
+    fs::rename(&tmp, path)?;
+    File::open(dir)?.sync_all()
+}
+
+/// The segment tree `root` uses now: the recorded path, else `root/static`.
+pub fn static_root_of(root: &Path) -> io::Result<PathBuf> {
+    Ok(match read_id(&root.join(STATIC_PATH_FILE))? {
+        Some(p) if !p.is_empty() => PathBuf::from(p),
+        _ => root.join("static"),
+    })
+}
+
+fn new_id(root: &Path) -> String {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    let seed = format!("{}|{nanos}|{}", root.display(), std::process::id());
+    format!("{:x}", keccak256(seed.as_bytes()))
+}
+
+fn mismatch(tree: &Path, why: &str) -> io::Error {
+    io::Error::new(
+        io::ErrorKind::InvalidData,
+        format!(
+            "segment tree {}: {why}; pass --datadir.ancient with the path of this datadir's tree",
+            tree.display()
+        ),
+    )
+}
+
+fn has_segment_files(tree: &Path) -> io::Result<bool> {
+    for s in ["headers", "bodies", "receipts"] {
+        match fs::read_dir(tree.join(s)) {
+            Ok(mut rd) => {
+                if rd.next().is_some() {
+                    return Ok(true);
+                }
+            }
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(false)
+}
+
+/// Checks that `tree` is the segment tree of datadir `root` (ADR-005 identity, issue #225). A new
+/// pair (neither id written) is stamped; any other disagreement fails without writing anything.
+fn check_identity(root: &Path, tree: &Path) -> io::Result<()> {
+    match (
+        read_id(&root.join(ID_FILE))?,
+        read_id(&tree.join(TREE_ID_FILE))?,
+    ) {
+        (Some(a), Some(b)) if a == b => Ok(()),
+        (Some(_), Some(_)) | (None, Some(_)) => {
+            Err(mismatch(tree, "it belongs to another datadir"))
+        }
+        (Some(_), None) => Err(mismatch(tree, "missing, empty or not a segment tree")),
+        (None, None) => {
+            let id = new_id(root);
+            fs::create_dir_all(tree)?;
+            write_synced(&tree.join(TREE_ID_FILE), &id)?;
+            write_synced(&root.join(ID_FILE), &id)
+        }
+    }
+}
+
+/// Points datadir `root` at the segment tree `path` (`--datadir.ancient`, issue #225), before
+/// [`OsDir::open`]. The tree must carry this datadir's identity; an empty or missing `path` is
+/// accepted only while the datadir holds no segment files yet (a new node). A wrong path fails
+/// with an [`io::ErrorKind::InvalidData`] error and changes nothing.
+pub fn set_static_root(root: &Path, path: &Path) -> io::Result<()> {
+    fs::create_dir_all(root)?;
+    let _lock = take_lock(&root.join("LOCK"), "datadir")?;
+    let path = if path.is_absolute() {
+        path.to_owned()
+    } else {
+        std::env::current_dir()?.join(path)
+    };
+    let current = static_root_of(root)?;
+    if current == path {
+        return Ok(());
+    }
+    let root_id = read_id(&root.join(ID_FILE))?;
+    let tree_id = read_id(&path.join(TREE_ID_FILE))?;
+    match (root_id, tree_id) {
+        (Some(a), Some(b)) if a == b => {}
+        (_, Some(_)) => return Err(mismatch(&path, "it belongs to another datadir")),
+        (Some(_), None) | (None, None) => {
+            if has_segment_files(&current)? {
+                return Err(mismatch(
+                    &path,
+                    "missing, empty or not a segment tree (move the existing tree there first)",
+                ));
+            }
+            if has_segment_files(&path)? {
+                return Err(mismatch(&path, "holds segment files without an identity"));
+            }
+            let id = match read_id(&root.join(ID_FILE))? {
+                Some(id) => id,
+                None => new_id(root),
+            };
+            fs::create_dir_all(&path)?;
+            write_synced(&path.join(TREE_ID_FILE), &id)?;
+            write_synced(&root.join(ID_FILE), &id)?;
+        }
+    }
+    let shown = path.to_str().ok_or_else(|| {
+        io::Error::new(io::ErrorKind::InvalidInput, "the segment path is not UTF-8")
+    })?;
+    write_synced(&root.join(STATIC_PATH_FILE), &format!("{shown}\n"))
 }
 
 impl OsDir {
-    /// Creates the directory layout and takes the lock. Fails if another process holds it.
+    /// Creates the directory layout and takes the lock. Fails if another process holds it. The
+    /// `static/` names live in the tree [`static_root_of`] names, which must carry this datadir's
+    /// identity (issue #225).
     pub fn open(root: &Path) -> io::Result<Self> {
         fs::create_dir_all(root)?;
-        let lock = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(false)
-            .open(root.join("LOCK"))?;
-        lock.try_lock().map_err(|e| match e {
-            fs::TryLockError::WouldBlock => io::Error::new(
-                io::ErrorKind::WouldBlock,
-                "the datadir is in use by another process (locked)",
-            ),
-            fs::TryLockError::Error(e) => e,
-        })?;
+        let lock = take_lock(&root.join("LOCK"), "datadir")?;
+        let static_root = static_root_of(root)?;
+        check_identity(root, &static_root)?;
+        let static_lock = take_lock(&static_root.join("LOCK"), "segment tree")?;
         let d = Self {
             root: root.to_owned(),
+            static_root,
             _lock: Arc::new(lock),
+            _static_lock: Arc::new(static_lock),
         };
         for p in [
             "static/headers",
@@ -585,7 +735,7 @@ impl OsDir {
             "journal",
             "quarantine",
         ] {
-            fs::create_dir_all(d.root.join(p))?;
+            fs::create_dir_all(d.path(p))?;
         }
         for p in [
             "static/headers",
@@ -601,6 +751,22 @@ impl OsDir {
         Ok(d)
     }
 
+    /// The file a datadir-relative name resolves to: `static/...` under the segment tree.
+    fn path(&self, name: &str) -> PathBuf {
+        if name == "static" {
+            return self.static_root.clone();
+        }
+        match name.strip_prefix("static/") {
+            Some(rest) => self.static_root.join(rest),
+            None => self.root.join(name),
+        }
+    }
+
+    /// The segment tree in use (`root/static` unless `--datadir.ancient` moved it).
+    pub fn static_root(&self) -> &Path {
+        &self.static_root
+    }
+
     pub fn root(&self) -> &Path {
         &self.root
     }
@@ -614,14 +780,14 @@ impl SegDir for OsDir {
             .write(true)
             .create(true)
             .truncate(true)
-            .open(self.root.join(name))
+            .open(self.path(name))
             .map(OsFile)
     }
     fn open(&self, name: &str) -> io::Result<Option<OsFile>> {
         match OpenOptions::new()
             .read(true)
             .write(true)
-            .open(self.root.join(name))
+            .open(self.path(name))
         {
             Ok(f) => Ok(Some(OsFile(f))),
             Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
@@ -629,7 +795,7 @@ impl SegDir for OsDir {
         }
     }
     fn list(&self, dir: &str) -> io::Result<Vec<String>> {
-        let rd = match fs::read_dir(self.root.join(dir)) {
+        let rd = match fs::read_dir(self.path(dir)) {
             Ok(r) => r,
             Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
             Err(e) => return Err(e),
@@ -642,16 +808,16 @@ impl SegDir for OsDir {
         Ok(v)
     }
     fn rename(&self, from: &str, to: &str) -> io::Result<()> {
-        fs::rename(self.root.join(from), self.root.join(to))
+        fs::rename(self.path(from), self.path(to))
     }
     fn remove(&self, name: &str) -> io::Result<()> {
-        match fs::remove_file(self.root.join(name)) {
+        match fs::remove_file(self.path(name)) {
             Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
             r => r,
         }
     }
     fn sync(&self, dir: &str) -> io::Result<()> {
-        File::open(self.root.join(dir))?.sync_all()
+        File::open(self.path(dir))?.sync_all()
     }
     fn boot_id(&self) -> String {
         fs::read_to_string("/proc/sys/kernel/random/boot_id")
@@ -662,6 +828,79 @@ impl SegDir for OsDir {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn tmp(tag: &str) -> PathBuf {
+        let p = std::env::temp_dir().join(format!("xone-segroot-{tag}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&p);
+        p
+    }
+
+    #[test]
+    fn separate_tree_is_used_and_checked() {
+        let base = tmp("sep");
+        let (root, tree) = (base.join("dd"), base.join("cold"));
+        set_static_root(&root, &tree).unwrap();
+        {
+            let d = OsDir::open(&root).unwrap();
+            assert_eq!(d.static_root(), tree.as_path());
+            let mut f = d.create("static/headers/0").unwrap();
+            f.write_at(0, b"h").unwrap();
+        }
+        assert!(tree.join("headers/0").exists());
+        assert!(!root.join("static/headers/0").exists());
+        // Reopening finds the recorded path without the flag.
+        OsDir::open(&root).unwrap();
+        // The same path again is a no-op.
+        set_static_root(&root, &tree).unwrap();
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn wrong_or_missing_tree_fails_and_changes_nothing() {
+        let base = tmp("wrong");
+        let (root, tree) = (base.join("dd"), base.join("cold"));
+        set_static_root(&root, &tree).unwrap();
+        OsDir::open(&root)
+            .unwrap()
+            .create("static/bodies/0")
+            .unwrap();
+        let recorded = fs::read_to_string(root.join(STATIC_PATH_FILE)).unwrap();
+        // An empty path while the datadir has segment files.
+        let e = set_static_root(&root, &base.join("empty")).unwrap_err();
+        assert_eq!(e.kind(), io::ErrorKind::InvalidData);
+        // Another datadir's tree.
+        let (other, other_tree) = (base.join("dd2"), base.join("cold2"));
+        set_static_root(&other, &other_tree).unwrap();
+        OsDir::open(&other).unwrap();
+        let e = set_static_root(&root, &other_tree).unwrap_err();
+        assert_eq!(e.kind(), io::ErrorKind::InvalidData);
+        assert_eq!(
+            fs::read_to_string(root.join(STATIC_PATH_FILE)).unwrap(),
+            recorded
+        );
+        // The recorded tree gone: open fails rather than starting with no history.
+        fs::remove_dir_all(&tree).unwrap();
+        let e = OsDir::open(&root).err().unwrap();
+        assert_eq!(e.kind(), io::ErrorKind::InvalidData);
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn existing_tree_moves_out_of_the_datadir() {
+        let base = tmp("move");
+        let root = base.join("dd");
+        OsDir::open(&root)
+            .unwrap()
+            .create("static/receipts/0")
+            .unwrap();
+        assert!(root.join(ID_FILE).exists());
+        let cold = base.join("cold");
+        fs::rename(root.join("static"), &cold).unwrap();
+        set_static_root(&root, &cold).unwrap();
+        let d = OsDir::open(&root).unwrap();
+        assert!(d.open("static/receipts/0").unwrap().is_some());
+        let _ = fs::remove_dir_all(&base);
+    }
 
     #[test]
     fn crossing_chunks_keeps_one_writer_per_segment() {
