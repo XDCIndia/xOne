@@ -107,6 +107,10 @@ pub struct SyncCfg {
     pub cache_mb: u32,
     /// Blocks of transaction index kept; 0 is the whole chain.
     pub tx_history: u64,
+    /// `--db.max-size`: bytes the MDBX database may grow to (`docs/ops/db-geometry.md`).
+    pub db_max_size: u64,
+    /// `--db.growth-step`: bytes the MDBX database grows by.
+    pub db_growth_step: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -292,7 +296,9 @@ defaults!(SyncCfg {
     from_block: None,
     minimal: false,
     cache_mb: 4096,
-    tx_history: 2_350_000
+    tx_history: 2_350_000,
+    db_max_size: 1 << 40,
+    db_growth_step: 64 << 20
 });
 defaults!(P2p {
     port: 30303,
@@ -379,6 +385,28 @@ fn invalid(key: &str, value: &str, why: &'static str) -> ConfigError {
     }
 }
 
+/// A byte count: plain bytes or a number with a binary suffix, `KB`/`KiB`, `MB`/`MiB`,
+/// `GB`/`GiB`, `TB`/`TiB` (all powers of 1024, as MDBX sizes are).
+pub fn parse_byte_size(v: &str) -> Option<u64> {
+    let t = v.trim();
+    let split = t.find(|c: char| !c.is_ascii_digit()).unwrap_or(t.len());
+    let (n, unit) = t.split_at(split);
+    let n: u64 = n.parse().ok()?;
+    let shift = match unit.trim().to_ascii_lowercase().as_str() {
+        "" | "b" => 0,
+        "k" | "kb" | "kib" => 10,
+        "m" | "mb" | "mib" => 20,
+        "g" | "gb" | "gib" => 30,
+        "t" | "tb" | "tib" => 40,
+        _ => return None,
+    };
+    n.checked_mul(1u64.checked_shl(shift)?)
+}
+
+fn byte_size(key: &str, v: &str) -> Result<u64, ConfigError> {
+    parse_byte_size(v).ok_or_else(|| invalid(key, v, "bytes, or a number with KB, MB, GB or TB"))
+}
+
 fn num<T: std::str::FromStr>(key: &str, v: &str) -> Result<T, ConfigError> {
     v.parse()
         .map_err(|_| invalid(key, v, "not a number in range"))
@@ -442,6 +470,19 @@ impl Config {
         c.logging.levels()?;
         c.required_blocks(None)?;
         Ok(c)
+    }
+
+    /// The MDBX map geometry of `--db.max-size` and `--db.growth-step`, validated.
+    pub fn db_geometry(&self) -> Result<xone_db::mdbx::Geometry, String> {
+        let bytes = |n: u64| {
+            usize::try_from(n).map_err(|_| format!("{n} bytes does not fit this platform"))
+        };
+        let g = xone_db::mdbx::Geometry {
+            max_size: bytes(self.sync.db_max_size)?,
+            growth_step: bytes(self.sync.db_growth_step)?,
+        };
+        g.validate()?;
+        Ok(g)
     }
 
     /// The heights whose hash every peer and every chain must carry: the built-in entries of
@@ -562,6 +603,8 @@ impl Config {
             "minimal" => self.sync.minimal = flag(key, v)?,
             "cache" => self.sync.cache_mb = num(key, v)?,
             "history.transactions" | "txlookuplimit" => self.sync.tx_history = num(key, v)?,
+            "db.max-size" => self.sync.db_max_size = byte_size(key, v)?,
+            "db.growth-step" => self.sync.db_growth_step = byte_size(key, v)?,
             "port" => self.p2p.port = num(key, v)?,
             "discovery.port" => self.p2p.discovery_port = Some(num(key, v)?),
             "maxpeers" => self.p2p.max_peers = num(key, v)?,
@@ -629,6 +672,26 @@ impl Config {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn db_geometry_flags_take_byte_sizes() {
+        assert_eq!(parse_byte_size("4096"), Some(4096));
+        assert_eq!(parse_byte_size("64MB"), Some(64 << 20));
+        assert_eq!(parse_byte_size("2 TiB"), Some(2 << 40));
+        assert_eq!(parse_byte_size("1.5TB"), None);
+        assert_eq!(parse_byte_size("9PB"), None);
+        let mut c = Config::default();
+        assert_eq!(c.db_geometry(), Ok(xone_db::mdbx::Geometry::default()));
+        c.set("db.max-size", "2TB").unwrap();
+        c.set("db.growth-step", "256MB").unwrap();
+        assert_eq!(
+            c.db_geometry().map(|g| (g.max_size, g.growth_step)),
+            Ok((2 << 40, 256 << 20))
+        );
+        assert!(c.set("db.max-size", "lots").is_err());
+        c.set("db.growth-step", "4TB").unwrap();
+        assert!(c.db_geometry().is_err());
+    }
+
     use super::*;
 
     #[test]

@@ -114,8 +114,9 @@ pub fn build(
         .transpose()
         .map_err(|e| e.to_string())?;
 
+    let geometry = cfg.db_geometry().map_err(|e| e.to_string())?;
     let open = |minimal: bool| {
-        core::Core::open_full(
+        core::Core::open_tuned(
             spec.clone(),
             genesis,
             &cfg.datadir.join("xone"),
@@ -124,6 +125,7 @@ pub fn build(
             // a node that signs commits every block to the device before it goes on
             producer_plan.is_none(),
             cfg.sync.state_disk,
+            geometry,
         )
     };
     // a snap-synced datadir is anchored: it runs as a minimal node from its pivot

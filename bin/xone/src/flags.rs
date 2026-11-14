@@ -48,6 +48,7 @@ const N: Option<&str> = Some("<n>");
 const S: Option<&str> = Some("<string>");
 const P: Option<&str> = Some("<path>");
 const L: Option<&str> = Some("<a,b,..>");
+const Z: Option<&str> = Some("<size>");
 
 pub const FLAGS: &[Flag] = &[
     f(
@@ -129,6 +130,22 @@ pub const FLAGS: &[Flag] = &[
         "1024",
         "Megabytes of memory for internal caches.",
         "flags.go:556",
+    ),
+    f(
+        "db.max-size",
+        Z,
+        "1TB",
+        "2TB",
+        "Largest size the MDBX database may grow to (bytes, or KB/MB/GB/TB, powers of 1024; 16MB..8TB). Must cover an existing database; a full map stops writes with an error naming this flag.",
+        "not in geth-XDC at the pin; issue #311",
+    ),
+    f(
+        "db.growth-step",
+        Z,
+        "64MB",
+        "256MB",
+        "Bytes the MDBX database grows by when it fills (at least 1MB, at most --db.max-size).",
+        "not in geth-XDC at the pin; issue #311",
     ),
     Flag {
         aliases: &[],

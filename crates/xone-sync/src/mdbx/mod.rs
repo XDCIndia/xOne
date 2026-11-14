@@ -87,6 +87,8 @@ pub struct Config {
     /// behind bounded caches ([`DiskFlat`]) instead of a copy of every row in memory. The rows, the
     /// roots and the commit order are the same.
     pub disk_state: bool,
+    /// `--db.max-size` and `--db.growth-step`: the MDBX map geometry.
+    pub geometry: xone_db::mdbx::Geometry,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -359,7 +361,7 @@ impl<D: SegDir> MdbxStore<D> {
             }
         }
         let names: Vec<&str> = T::ALL.iter().map(|t| t.name()).collect();
-        let env = Env::open_with(path, &names, cfg.group_commit.is_none())?;
+        let env = Env::open_geometry(path, &names, cfg.group_commit.is_none(), cfg.geometry)?;
         let mut s = Self {
             env: Arc::new(env),
             segs: Segs::new(dir, cfg.per_file),
