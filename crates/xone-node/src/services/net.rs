@@ -56,7 +56,8 @@ pub fn load_or_create_key(datadir: &Path) -> Result<SecretKey, String> {
 pub struct NetHandle {
     pub peers: Peers,
     pub id: PeerId,
-    pub enode: String,
+    /// The advertised enode URL; `--nat any` updates its IP from the discovery pongs (issue #167).
+    pub enode: Arc<std::sync::RwLock<String>>,
     pub listen: String,
     pub name: String,
     pub network_id: u64,
@@ -120,6 +121,49 @@ pub struct NetService {
     targets: Vec<(Enode, bool)>,
     boots: Vec<Enode>,
     max_peers: usize,
+    nat: Nat,
+}
+
+/// `--nat` (issue #167): how the advertised address is chosen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Nat {
+    /// `none`: the listen address (loopback when unspecified), never changed.
+    None,
+    /// `any` and the default: the IP that at least 3 bonded discovery peers report in their pongs.
+    Auto,
+    /// `extip:<IP>`: this IP, never changed.
+    ExtIp(IpAddr),
+}
+
+/// Parses `--nat`; an unknown value, or UPnP and NAT-PMP (no port-mapping client yet), stops the
+/// start with an error naming the accepted values.
+pub fn parse_nat(v: Option<&str>) -> Result<Nat, String> {
+    match v.map(str::trim) {
+        None | Some("" | "any") => Ok(Nat::Auto),
+        Some("none") => Ok(Nat::None),
+        Some(x) if x.starts_with("extip:") => x
+            .trim_start_matches("extip:")
+            .parse::<IpAddr>()
+            .map(Nat::ExtIp)
+            .map_err(|_| format!("--nat {x}: not an IP address")),
+        Some(x) if x == "upnp" || x == "pmp" || x.starts_with("pmp:") => Err(format!(
+            "--nat {x}: UPnP and NAT-PMP are not supported yet; use any, none or extip:<IP>"
+        )),
+        Some(x) => Err(format!(
+            "--nat {x}: unknown value; use any, none or extip:<IP>"
+        )),
+    }
+}
+
+fn enode_url(id: PeerId, host: &str, port: u16) -> String {
+    let host = match host.parse::<IpAddr>() {
+        Ok(IpAddr::V6(a)) => format!("[{a}]"),
+        _ => host.to_owned(),
+    };
+    format!(
+        "enode://{}@{host}:{port}",
+        alloy_primitives::hex::encode(id)
+    )
 }
 
 impl NetService {
@@ -159,24 +203,16 @@ impl NetService {
         let listen = SocketAddr::new(ip, cfg.p2p.port);
         let udp = (!cfg.p2p.no_discover)
             .then(|| SocketAddr::new(ip, cfg.p2p.discovery_port.unwrap_or(cfg.p2p.port)));
-        let host = match cfg
-            .p2p
-            .nat
-            .as_deref()
-            .and_then(|n| n.strip_prefix("extip:"))
-        {
-            Some(x) => x.to_owned(),
-            None => "127.0.0.1".to_owned(),
+        let nat = parse_nat(cfg.p2p.nat.as_deref())?;
+        let host = match nat {
+            Nat::ExtIp(ip) => ip.to_string(),
+            Nat::Auto | Nat::None => "127.0.0.1".to_owned(),
         };
         let id = xone_net::rlpx::peer_id(&key);
         Ok(Self {
             h: NetHandle {
                 id,
-                enode: format!(
-                    "enode://{}@{host}:{}",
-                    alloy_primitives::hex::encode(id),
-                    cfg.p2p.port
-                ),
+                enode: Arc::new(std::sync::RwLock::new(enode_url(id, &host, cfg.p2p.port))),
                 listen: listen.to_string(),
                 name: pc.name.clone(),
                 network_id: pc.network_id,
@@ -192,6 +228,7 @@ impl NetService {
             targets,
             boots,
             max_peers: cfg.p2p.max_peers as usize,
+            nat,
         })
     }
 
@@ -222,6 +259,7 @@ async fn discovery(
     boots: Vec<(SocketAddr, PeerId)>,
     peers: Peers,
     max: usize,
+    advertise: Option<(Arc<std::sync::RwLock<String>>, u16)>,
 ) {
     let mut sock = sock;
     // Unix milliseconds: discv4 expirations are absolute Unix seconds (geth-XDC
@@ -252,6 +290,16 @@ async fn discovery(
             _ = tick.tick() => {
                 let t = now();
                 d.expire(t);
+                if let Some((enode, port)) = &advertise {
+                    if let Some(ip) = d.external_ip(t) {
+                        let url = enode_url(d.id(), &ip.to_string(), *port);
+                        let mut cur = enode.write().unwrap_or_else(PoisonError::into_inner);
+                        if *cur != url {
+                            tracing::info!(target: "net", "advertised address now {ip} (discovery)");
+                            *cur = url;
+                        }
+                    }
+                }
                 d.revalidate(t, &mut sock);
                 if d.table().is_empty() {
                     // nobody has answered yet: bond with the boot nodes again
@@ -322,6 +370,7 @@ impl Service for NetService {
                 boots,
                 self.h.peers.clone(),
                 self.max_peers,
+                (self.nat == Nat::Auto).then(|| (self.h.enode.clone(), self.listen.port())),
             ));
         }
         Ok(())
@@ -345,5 +394,34 @@ impl Service for NetService {
             });
             rt.shutdown_timeout(Duration::from_secs(1));
         }
+    }
+}
+
+#[cfg(test)]
+mod nat_tests {
+    use super::*;
+
+    #[test]
+    fn nat_values() {
+        assert_eq!(parse_nat(None), Ok(Nat::Auto));
+        assert_eq!(parse_nat(Some("any")), Ok(Nat::Auto));
+        assert_eq!(parse_nat(Some("none")), Ok(Nat::None));
+        assert_eq!(
+            parse_nat(Some("extip:203.0.113.7")),
+            Ok(Nat::ExtIp([203, 0, 113, 7].into()))
+        );
+        for bad in [
+            "extip:nope",
+            "upnp",
+            "pmp",
+            "pmp:192.168.0.1",
+            "stun",
+            "ANY",
+        ] {
+            assert!(parse_nat(Some(bad)).is_err(), "{bad}");
+        }
+        let id = PeerId::repeat_byte(0xab);
+        assert!(enode_url(id, "::1", 30303).ends_with("@[::1]:30303"));
+        assert!(enode_url(id, "10.0.0.1", 30303).ends_with("@10.0.0.1:30303"));
     }
 }
