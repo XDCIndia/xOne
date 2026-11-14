@@ -140,7 +140,23 @@ impl PoolShared {
         let _ = self.on_head(|st| pool.reset(st, now(), number, gas));
         raws.retain(|h, _| pool.has(h));
     }
+
+    /// geth `legacypool` eviction tick: drops queued accounts idle for longer than the pool
+    /// lifetime at `now` (unix seconds), with their encodings. Pending transactions never expire.
+    /// Returns how many transactions went.
+    pub fn expire(&self, now: u64) -> usize {
+        let mut g = self.lock();
+        let Inner { pool, raws } = &mut *g;
+        let n = self.on_head(|st| pool.evict_expired(st, now)).unwrap_or(0);
+        if n > 0 {
+            raws.retain(|h, _| pool.has(h));
+        }
+        n
+    }
 }
+
+/// geth `evictionInterval`: how often queued transactions are checked for expiry.
+const EVICTION_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60);
 
 impl PoolApi for PoolShared {
     fn status(&self) -> (usize, usize) {
@@ -205,8 +221,22 @@ impl Service for PoolService {
         let mut head = self.shared.core.head.subscribe();
         let shared = self.shared.clone();
         self.task = Some(self.rt.spawn(async move {
-            while head.changed().await.is_ok() {
-                shared.reset();
+            // Expiry runs on its own monotonic tick, so a stalled head still ages the queue out.
+            let mut tick = tokio::time::interval(EVICTION_INTERVAL);
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            tick.tick().await;
+            loop {
+                tokio::select! {
+                    h = head.changed() => {
+                        if h.is_err() {
+                            break;
+                        }
+                        shared.reset();
+                    }
+                    _ = tick.tick() => {
+                        shared.expire(now());
+                    }
+                }
             }
         }));
         Ok(())
