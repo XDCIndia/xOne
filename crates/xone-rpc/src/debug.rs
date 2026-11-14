@@ -4,7 +4,7 @@
 
 use crate::{
     api::{CallFrame, PreAccount, TraceOut, Tracer},
-    eth::block_of,
+    eth::{block_of, header_of},
     json::{addr, h256, header_rlp, hex, q, qu},
     server::{Cost, Ctx, Registry},
     types::{BlockRef, Params, RpcError, R},
@@ -16,7 +16,7 @@ use xone_sync::bootstrap::retention::Class;
 
 pub fn register(r: &mut Registry) {
     r.add("debug_getRawHeader", Cost::C1, |c, p| {
-        Ok(block_of(c, p.block_ref(0)?)?.map_or(Value::Null, |b| hex(&header_rlp(&b.header))))
+        Ok(header_of(c, p.block_ref(0)?)?.map_or(Value::Null, |h| hex(&header_rlp(&h))))
     });
     r.add("debug_getRawBlock", Cost::C1, |c, p| {
         Ok(block_of(c, p.block_ref(0)?)?.map_or(Value::Null, |b| hex(&b.raw)))

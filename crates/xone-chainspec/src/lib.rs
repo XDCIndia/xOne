@@ -4,6 +4,7 @@
 //! from geth-XDC at the SHA recorded in `genesis/PIN`; nothing in it is typed
 //! by hand. The genesis JSON files are byte-exact copies from that pin.
 
+mod denylist;
 mod genesis;
 mod networks;
 mod required;
@@ -12,6 +13,7 @@ use std::collections::BTreeMap;
 
 use alloy_primitives::{Address, B256};
 
+pub use denylist::{default_denylist_block, is_denylisted, DENYLIST};
 pub use genesis::Genesis;
 pub use networks::{
     apothem, devnet, devnet551, load, load_custom, load_named, mainnet, net2040, Network,

@@ -4,11 +4,12 @@
 use crate::{
     api::{BlockView, CallRequest},
     json::{
-        addr, block_json, decode_receipts, h256, hex, log_json, q, qu, receipt_json, tx_json, Loc,
+        addr, block_json, decode_receipts, h256, hex, log_json, q, qu, receipt_json,
+        receipt_json_at, tx_json, Loc,
     },
     server::{Cost, Ctx, Registry},
     subscriptions::LogFilter,
-    types::{parse_address, parse_tag, BlockRef, Params, RpcError, R},
+    types::{parse_address, parse_tag, resolve_tag, BlockRef, Params, RpcError, R},
 };
 use alloy_primitives::{keccak256, Address, Bytes, B256, U256};
 use serde_json::{json, Value};
@@ -103,6 +104,25 @@ pub fn block_of(c: &Ctx, r: BlockRef) -> Result<Option<BlockView>, RpcError> {
     Ok(c.be.chain.block(hash))
 }
 
+/// The header of `r` alone: a retained header answers even when its body is pruned or not yet
+/// downloaded (header retention is checked, not body retention).
+pub fn header_of(c: &Ctx, r: BlockRef) -> Result<Option<xone_primitives::Header>, RpcError> {
+    let hash = match r {
+        BlockRef::Hash(h) => h,
+        BlockRef::Number(n) => {
+            if n > c.be.chain.head().0 {
+                return Ok(None);
+            }
+            c.be.chain.history(Class::Header, n)?;
+            match c.be.chain.hash_by_number(n) {
+                Some(h) => h,
+                None => return Ok(None),
+            }
+        }
+    };
+    Ok(c.be.chain.header(hash))
+}
+
 /// The header a state read runs at; unknown is "header not found", below the window is the typed error.
 fn state_at(c: &Ctx, p: &Params, i: usize) -> Result<(u64, B256), RpcError> {
     let r = p.block_ref_or_latest(i)?;
@@ -174,8 +194,11 @@ fn block_receipts(c: &Ctx, p: &Params) -> R {
     let rc = decode_receipts(&raw)?;
     let id = c.be.chain.spec().chain_id;
     let mut out = Vec::with_capacity(b.txs.len());
+    // One pass: the first log index of each receipt is the running count of the ones before.
+    let mut first_log = 0usize;
     for (i, t) in b.txs.iter().enumerate() {
-        out.push(receipt_json(t, &rc, i, &loc(&b, i), id)?);
+        out.push(receipt_json_at(t, &rc, i, first_log, &loc(&b, i), id)?);
+        first_log += rc.get(i).map_or(0, |r| r.logs.len());
     }
     Ok(Value::Array(out))
 }
@@ -414,7 +437,7 @@ fn get_logs(c: &Ctx, p: &Params) -> R {
     } else {
         let end = |k: &str, d: u64| match o.get(k).and_then(Value::as_str) {
             None => Ok(d),
-            Some(s) => parse_tag(s, head),
+            Some(s) => resolve_tag(s, head, c.be.chain.finalized()),
         };
         let (from, to) = (end("fromBlock", head)?, end("toBlock", head)?);
         if from > to {
