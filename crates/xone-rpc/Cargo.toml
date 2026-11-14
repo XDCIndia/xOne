@@ -16,6 +16,8 @@ alloy-primitives.workspace = true
 alloy-rlp.workspace = true
 # `--rpc.jwtsecret` (HS256 JWT, geth `node/jwt_handler.go`); all three are already in the lock.
 base64 = "0.22"
+# gzip HTTP responses (#278); already in the lock, pure Rust backend
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 hmac = "0.12"
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 http-body-util = "0.1"
@@ -28,9 +30,11 @@ tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "time", "
 tokio-tungstenite = "0.29"
 xone-chainspec.workspace = true
 xone-consensus.workspace = true
+xone-evm.workspace = true
 xone-executor.workspace = true
 xone-primitives.workspace = true
 xone-state.workspace = true
 xone-sync.workspace = true
 
 [dev-dependencies]
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }

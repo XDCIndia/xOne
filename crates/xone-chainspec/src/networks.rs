@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 use crate::{ChainSpec, Effective, Error, ExpTimeoutConfig, Genesis, V2Config, XdposConfig, V2};
 
 /// Written by `conformance/exporter` from the pinned geth-XDC. Never edit it.
-const FORKS_JSON: &str = include_str!("../generated/forks.json");
+pub const FORKS_JSON: &str = include_str!("../generated/forks.json");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Network {

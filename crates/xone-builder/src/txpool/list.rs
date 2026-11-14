@@ -124,8 +124,24 @@ impl List {
     /// Remove what the account can no longer pay (cost above `cost_limit`) or the block cannot hold
     /// (gas above `gas_limit`); a strict list also hands back everything above the lowest removed
     /// nonce as `invalids`, which the caller re-queues (`list.go:385-431`).
-    pub(super) fn filter(&mut self, cost_limit: U256, gas_limit: u64) -> (Vec<Tx>, Vec<Tx>) {
-        let bad = |t: &Tx| t.tx.gas > gas_limit || t.cost().is_none_or(|c| c > cost_limit);
+    ///
+    /// A transaction to a registered TRC21 token is paid from the token's fee capacity too: it
+    /// stays while `cost_limit + capacity` covers its cost at the TRC21 gas price (`list.go:397-408`).
+    pub(super) fn filter(
+        &mut self,
+        cost_limit: U256,
+        gas_limit: u64,
+        trc21: &super::Trc21Fees,
+    ) -> (Vec<Tx>, Vec<Tx>) {
+        let bad = |t: &Tx| {
+            if t.tx.gas > gas_limit {
+                return true;
+            }
+            if let Some((cap, cost)) = trc21.cost(t) {
+                return cost.is_none_or(|c| cost_limit.saturating_add(cap) < c);
+            }
+            t.cost().is_none_or(|c| c > cost_limit)
+        };
         let removed: Vec<Tx> = self.txs.values().filter(|t| bad(t)).cloned().collect();
         if removed.is_empty() {
             return (Vec::new(), Vec::new());

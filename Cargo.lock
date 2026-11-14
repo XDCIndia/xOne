@@ -4062,6 +4062,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "tikv-jemalloc-ctl"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a184c43b8ab2f41df2733b55556e3f5f632f4aeaa205b1bb018f574b7f5f142"
+dependencies = [
+ "libc",
+ "paste",
+ "tikv-jemalloc-sys",
+]
+
+[[package]]
+name = "tikv-jemalloc-sys"
+version = "0.7.1+5.3.1-0-g81034ce1f1373e37dc865038e1bc8eeecf559ce8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a2825c78386b4ae0314074867860ba9577875de945f05992c38815cbec327f0"
+dependencies = [
+ "cc",
+ "libc",
+]
+
+[[package]]
+name = "tikv-jemallocator"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "249f09e49ab1609436f34c776e84231bead18d6a955f119f939bdc1d847561bd"
+dependencies = [
+ "libc",
+ "tikv-jemalloc-sys",
+]
+
+[[package]]
 name = "time"
 version = "0.3.55"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4668,11 +4699,14 @@ dependencies = [
  "clap",
  "flate2",
  "serde_json",
+ "tikv-jemalloc-ctl",
+ "tikv-jemallocator",
  "tracing",
  "xone-chainspec",
  "xone-consensus",
  "xone-node",
  "xone-primitives",
+ "xone-signer",
  "xone-sync",
 ]
 
@@ -4850,6 +4884,7 @@ dependencies = [
  "alloy-trie",
  "flate2",
  "getrandom 0.3.4",
+ "k256",
  "rustls",
  "secp256k1 0.30.0",
  "serde",
@@ -4898,6 +4933,7 @@ dependencies = [
  "alloy-primitives",
  "alloy-rlp",
  "base64 0.22.1",
+ "flate2",
  "futures-util",
  "hmac",
  "http-body-util",
@@ -4910,6 +4946,7 @@ dependencies = [
  "tokio-tungstenite",
  "xone-chainspec",
  "xone-consensus",
+ "xone-evm",
  "xone-executor",
  "xone-primitives",
  "xone-state",

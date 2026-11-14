@@ -32,7 +32,7 @@ use xone_rpc::{
     },
     policy::{registry, Policy},
     server::{Limits, Rpc},
-    transport::{serve_http, serve_ipc, serve_ws},
+    transport::{bind_ipc, serve_http, serve_ipc_on, serve_ws},
     types::RpcError,
 };
 use xone_state::StateRead;
@@ -218,8 +218,15 @@ impl NetApi for RpcNet {
         self.net.add_peer(&e, trusted).map_err(RpcError::server)?;
         Ok(true)
     }
-    fn remove_peer(&self, _: &str, _: bool) -> Result<bool, RpcError> {
-        Ok(false)
+    /// Stops the redial job of the peer; its open session, if any, stays until it ends.
+    fn remove_peer(&self, enode: &str, _: bool) -> Result<bool, RpcError> {
+        let e: Enode = enode
+            .parse()
+            .map_err(|e: crate::enode::EnodeError| RpcError::invalid_params(e.to_string()))?;
+        let id =
+            e.id.parse::<alloy_primitives::B512>()
+                .map_err(|e| RpcError::invalid_params(e.to_string()))?;
+        Ok(self.net.remove_dial(&id))
     }
 }
 
@@ -352,6 +359,9 @@ fn limits(l: &NodeLimits) -> Limits {
         body_bytes: usize::try_from(l.rpc_body_bytes).unwrap_or(d.body_bytes),
         batch_items: l.rpc_batch_items as usize,
         response_bytes: usize::try_from(l.rpc_response_bytes).unwrap_or(d.response_bytes),
+        call_gas_cap: l.rpc_gas_cap,
+        tx_fee_cap: l.rpc_tx_fee_cap,
+        evm_timeout: std::time::Duration::from_millis(l.rpc_evm_timeout_ms),
         ..d
     }
 }
@@ -545,10 +555,24 @@ impl Service for RpcService {
             }
         }
         if let Some((path, rpc)) = self.ipc.clone() {
-            // a socket file left by a killed node would fail the bind
-            let _ = std::fs::remove_file(&path);
+            // Bound here, not in the task: an unusable path fails the start, and the listeners
+            // already started are stopped, so no partial RPC service reports success.
+            let bound = {
+                let _rt = self.rt.enter();
+                bind_ipc(&path)
+            };
+            let l = match bound {
+                Ok(l) => l,
+                Err(e) => {
+                    for t in self.tasks.drain(..) {
+                        t.abort();
+                    }
+                    return Err(err(format!("ipc listen {}: {e}", path.display())));
+                }
+            };
+            eprintln!("rpc: ipc listening on {}", path.display());
             self.tasks.push(self.rt.spawn(async move {
-                if let Err(e) = serve_ipc(rpc, &path).await {
+                if let Err(e) = serve_ipc_on(rpc, l).await {
                     eprintln!("rpc: ipc stopped: {e}");
                 }
             }));

@@ -41,6 +41,12 @@ pub enum KeystoreError {
     Permissions { path: PathBuf, mode: u32 },
     #[error("{}: i/o error: {kind}", .path.display())]
     Io { path: PathBuf, kind: io::ErrorKind },
+    /// `xone account new|import`: the keystore directory already holds this address.
+    #[error("account already exists: {0:#x}")]
+    AccountExists(Address),
+    /// `xone account update`: no file of the keystore directory has this address.
+    #[error("no key for the given address: {0:#x}")]
+    NoSuchAccount(Address),
 }
 
 impl From<FileError> for KeystoreError {
@@ -112,6 +118,18 @@ impl LocalSigner {
         Ok(Self { key, address })
     }
 
+    /// A fresh random key that lives in memory only (`xone --dev`). Nothing is written.
+    pub fn generate() -> Result<Self, KeystoreError> {
+        let mut key = KeyBytes::zeroed();
+        loop {
+            getrandom::fill(key.as_mut_bytes())
+                .map_err(|_| KeystoreError::Malformed("no system randomness"))?;
+            if let Ok(s) = Self::from_key_bytes(&key) {
+                return Ok(s);
+            }
+        }
+    }
+
     pub fn address(&self) -> Address {
         self.address
     }
@@ -172,7 +190,7 @@ pub fn load(
 /// Decrypt keystore v3 JSON. Pure: a failure returns an error and no signer, and every
 /// intermediate secret is a zeroizing buffer, so there is no partial unlock state.
 pub fn decrypt(json: &[u8], password: &Password) -> Result<LocalSigner, KeystoreError> {
-    let r = decrypt_inner(json, password);
+    let r = decrypt_inner(json, password).map(|(_, s)| s);
     if let Err(e) = &r {
         tracing::debug!(error = %e, "keystore unlock failed");
     }
@@ -188,7 +206,18 @@ fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     a.len() == b.len() && a.iter().zip(b).fold(0u8, |d, (x, y)| d | (x ^ y)) == 0
 }
 
-fn decrypt_inner(json: &[u8], password: &Password) -> Result<LocalSigner, KeystoreError> {
+/// [`decrypt`] that also hands back the key, for re-encryption (`xone account update`).
+pub(crate) fn decrypt_key(
+    json: &[u8],
+    password: &Password,
+) -> Result<(KeyBytes, LocalSigner), KeystoreError> {
+    decrypt_inner(json, password)
+}
+
+fn decrypt_inner(
+    json: &[u8],
+    password: &Password,
+) -> Result<(KeyBytes, LocalSigner), KeystoreError> {
     // `load` bounds the file; this is the same bound for callers that hand over bytes.
     if u64::try_from(json.len()).map_or(true, |n| n > MAX_FILE) {
         return Err(KeystoreError::ResourcePolicy("file too large"));
@@ -296,5 +325,5 @@ fn decrypt_inner(json: &[u8], password: &Password) -> Result<LocalSigner, Keysto
             ));
         }
     }
-    Ok(signer)
+    Ok((key, signer))
 }

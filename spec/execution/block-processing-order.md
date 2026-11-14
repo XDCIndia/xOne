@@ -31,6 +31,10 @@ A block is executed on the state of its parent, in this order. The result holds 
 - An account deleted by SELFDESTRUCT or by EIP-161 takes its storage with it; recreating it in the same block is `OverlayError::Recreated` (not covered).
 - An error of the reward hook is only logged by geth (`xdpos.go:1595-1599`); the executor treats it as an error of the block, which is stricter.
 
+## Blacklist
+
+`check_denylist`, first in the per-transaction loop (`state_processor.go:223-229`): from `ChainSpec::denylist_block` on, a transaction whose sender (checked first) or recipient is in `xone_chainspec::DENYLIST` makes the block invalid (`ExecError::Denylisted`). A contract creation has no recipient. Below the denylist block the same block executes.
+
 ## Not covered by the executor
 
-Blacklist checks (`state_processor.go:223-229`, a rejection that a canonical block never needs), wide balances above 2^256 between transactions (`OverlayError::Wide`), the Prague block itself (deploy of Multicall3 and the EIP-2935 contract), EIP-7702 set-code transactions, Amsterdam and later.
+Wide balances above 2^256 between transactions (`OverlayError::Wide`), the Prague block itself (deploy of Multicall3 and the EIP-2935 contract), EIP-7702 set-code transactions, Amsterdam and later.

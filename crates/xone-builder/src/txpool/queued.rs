@@ -164,6 +164,7 @@ impl Queue {
         state: &S,
         nonces: &mut Noncer,
         account_queue: usize,
+        trc21: &super::Trc21Fees,
     ) -> (Vec<Tx>, Vec<B256>, Vec<Address>) {
         let (mut promotable, mut dropped, mut removed) = (Vec::new(), Vec::new(), Vec::new());
         for a in accounts {
@@ -175,7 +176,7 @@ impl Queue {
                 .as_ref()
                 .map_or((0, Default::default()), |x| (x.nonce, x.balance.low()));
             dropped.extend(l.forward(nonce).iter().map(|t| t.hash));
-            let (drops, _) = l.filter(bal, gas_limit);
+            let (drops, _) = l.filter(bal, gas_limit, trc21);
             dropped.extend(drops.iter().map(|t| t.hash));
             promotable.extend(l.ready(nonces.get(state, *a)));
             dropped.extend(l.cap(account_queue).iter().map(|t| t.hash));
@@ -274,6 +275,7 @@ impl Pool {
             state,
             &mut self.nonces,
             usize::try_from(self.cfg.account_queue).unwrap_or(usize::MAX),
+            &self.trc21,
         );
         let mut promoted = Vec::new();
         for tx in promotable {

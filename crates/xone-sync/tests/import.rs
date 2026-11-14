@@ -505,3 +505,29 @@ fn a_chain_through_the_wrong_hash_at_a_required_height_is_refused_before_it_is_s
     }
     assert_eq!(bad.head().0, 0);
 }
+
+#[test]
+fn hostile_framing_is_a_typed_error_not_a_panic() {
+    let mut bad = vec![
+        vec![0xbf, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff], // string, not a list
+        vec![0xc0],                                                 // list without a header
+    ];
+    // Maximum u64 length prefix: offset and size arithmetic must not wrap.
+    let max = vec![0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
+    // Noncanonical: 5 bytes of payload in the long form, and a leading zero.
+    let long_form = vec![0xf8, 0x05, 1, 2, 3, 4, 5];
+    let zero_lead = vec![0xf9, 0x00, 0x40];
+    for f in [&max, &long_form, &zero_lead] {
+        let mut s = source(f);
+        assert!(s.headers(0, 1).is_err());
+    }
+    bad.push(max);
+    for raw in bad {
+        assert!(decode_block(&raw).is_err());
+    }
+    // A valid block with a trailing byte is refused.
+    let (mut one, _) = raws(1);
+    let mut raw = one.remove(1);
+    raw.push(0);
+    assert!(decode_block(&raw).is_err());
+}

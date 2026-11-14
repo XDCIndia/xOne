@@ -58,8 +58,7 @@ const SOURCES: [(&str, &str); 24] = [
 fn body_and_receipt_verification_is_unconditional_in_the_import_path() {
     let body = INSERT.split("fn insert_locked").nth(1).unwrap();
     let pre = "verifier.verify_body(&block.header, &block.body)?;";
-    let post =
-        "verifier.verify_receipts(&block.header, block.body.transactions.len(), &ex.receipts)?;";
+    let post = "check_receipts(&verifier, &block.header, block.body.transactions.len(), &ex)?;";
     let (pre_at, post_at) = (
         body.find(pre).expect("body check"),
         body.find(post).expect("receipt check"),

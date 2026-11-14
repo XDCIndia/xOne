@@ -48,3 +48,4 @@ xone-sync.workspace = true
 
 [dev-dependencies]
 alloy-trie.workspace = true
+k256.workspace = true
