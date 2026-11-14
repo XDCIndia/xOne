@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "Sequential replay of Apothem on xOne's own state (xone-replay). Test tool, not shipped."
+description = "Sequential replay of Apothem on xOneRS's own state (xone-replay). Test tool, not shipped."
 
 [[bin]]
 name = "xone-replay"

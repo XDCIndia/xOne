@@ -61,7 +61,7 @@ bin=target/release/xone
 stamp=$("$bin" --version)
 [[ "$stamp" != *unknown* ]] || die "stamp contains 'unknown': $stamp"
 [[ "$stamp" != *-dirty* ]] || die "stamp says -dirty: $stamp"
-want="xOne/v$VERSION-${COMMIT:0:8}-$(date -u -d "@$SDE" +%d%m%Y)/linux-x86_64/rustc$(rustc --version | cut -d' ' -f2)"
+want="xOneRS/v$VERSION-${COMMIT:0:8}-$(date -u -d "@$SDE" +%d%m%Y)/linux-x86_64/rustc$(rustc --version | cut -d' ' -f2)"
 [ "$stamp" = "$want" ] || die "stamp mismatch: binary says '$stamp', tag and commit say '$want'"
 has_dep=no; objdump -h "$bin" | grep -q '\.dep-v0' && has_dep=yes
 [ "$auditable" = 0 ] || [ "$has_dep" = yes ] || die "built with cargo-auditable but the binary has no .dep-v0 section"

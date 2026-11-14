@@ -1,6 +1,6 @@
-# xOne
+# xOneRS
 
-XDC execution-client rebuild in Rust. The build backlog is in [#51](https://github.com/XDCIndia/xOne/issues/51); [#57](https://github.com/XDCIndia/xOne/issues/57) defines readiness for individual deliverables and the evidence needed to close their parent issues.
+xOneRS is the Rust client of the xOne family (xOneRS, xOneTS, xOneC, xOnePy): an XDC execution-client rebuild in Rust. The binary and crate names stay `xone`, `xone-*`. The build backlog is in [#51](https://github.com/XDCIndia/xOne/issues/51); [#57](https://github.com/XDCIndia/xOne/issues/57) defines readiness for individual deliverables and the evidence needed to close their parent issues.
 
 ## Status
 

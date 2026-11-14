@@ -25,7 +25,7 @@ description: Build stamping, the pull-request flow, commit identity and release 
 
 ## Version stamp
 
-Format: `xOne/v<semver>-<commit8>-<DDMMYYYY>/<os>-<arch>/rustc<version>`
+Format: `xOneRS/v<semver>-<commit8>-<DDMMYYYY>/<os>-<arch>/rustc<version>`
 
 - `<commit8>` is the first 8 characters of the commit; a modified tree adds `-dirty`.
 - `<DDMMYYYY>` is the UTC build date.

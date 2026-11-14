@@ -1,4 +1,4 @@
-//! xOne command line (XB-19): geth-compatible flags, `init`, `dumpconfig`, a bounded
+//! xOneRS command line (XB-19): geth-compatible flags, `init`, `dumpconfig`, a bounded
 //! start and stop. `--version` and `version` print and exit before anything is read.
 
 mod cmd;
@@ -158,10 +158,10 @@ mod tests {
     #[test]
     fn stamp_shape() {
         let s = stamp();
-        // xOne / v<semver>-<commit8>[-dirty]-<DDMMYYYY> / <os>-<arch> / rustc<version>
+        // xOneRS / v<semver>-<commit8>[-dirty]-<DDMMYYYY> / <os>-<arch> / rustc<version>
         let parts: Vec<_> = s.split('/').collect();
         assert_eq!(parts.len(), 4, "{s}");
-        assert_eq!(parts[0], "xOne");
+        assert_eq!(parts[0], "xOneRS");
         assert!(parts[1].starts_with("v0.1.0-"), "{s}");
         let date = parts[1].rsplit('-').next().unwrap();
         assert!(

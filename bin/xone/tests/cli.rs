@@ -47,7 +47,7 @@ fn version_prints_and_never_touches_the_datadir() {
             t.elapsed()
         );
         assert!(o.status.success(), "{args:?}");
-        assert!(out(&o).starts_with("xOne/v"), "{args:?}: {}", out(&o));
+        assert!(out(&o).starts_with("xOneRS/v"), "{args:?}: {}", out(&o));
         assert!(
             !std::path::Path::new(dd).exists(),
             "{args:?} created the datadir"

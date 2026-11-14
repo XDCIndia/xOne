@@ -1,5 +1,5 @@
 //! Builds the version stamp
-//! `xOne/v<semver>-<commit8>[-dirty]-<DDMMYYYY>/<os>-<arch>/rustc<version>`.
+//! `xOneRS/v<semver>-<commit8>[-dirty]-<DDMMYYYY>/<os>-<arch>/rustc<version>`.
 
 use std::{
     env,
@@ -55,7 +55,7 @@ fn main() {
         .unwrap_or_else(|| "unknown".into());
 
     let stamp = format!(
-        "xOne/v{}-{}{}-{}/{}-{}/rustc{}",
+        "xOneRS/v{}-{}{}-{}/{}-{}/rustc{}",
         env::var("CARGO_PKG_VERSION").unwrap(),
         commit,
         if dirty { "-dirty" } else { "" },
