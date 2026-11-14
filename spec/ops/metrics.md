@@ -6,7 +6,6 @@ Rust: `xone_node::observe::metrics` (`Snapshot`, `encode`, `MetricsServer`). The
 |---|---|---|
 | `xone_build_info{version}` | gauge | the build stamp, value 1 (same string as `web3_clientVersion` and ethstats `node`) |
 | `xone_head_block_number` | gauge | head number (absent without a head) |
-| `xone_head_block_hash_info{hash}` | gauge | head hash as a label, value 1 |
 | `xone_head_block_age_seconds` | gauge | now minus head timestamp |
 | `xone_syncing`, `xone_peers` | gauge | |
 | `xone_txpool_pending`, `xone_txpool_queued` | gauge | |
@@ -18,6 +17,8 @@ Rust: `xone_node::observe::metrics` (`Snapshot`, `encode`, `MetricsServer`). The
 | `xone_timeouts_total`, `xone_missed_eligible_turns_total` | counter | the miss counter increments in `scrape_missed_turn_and_health_endpoints` |
 | `xone_storage_bytes` | gauge | datadir size |
 | `xone_log_suppressed_lines_total`, `xone_log_dropped_lines_total` | counter | from `Logs::counters` |
+
+**Head hash.** There is no head-hash metric: a label that changes every block makes one new Prometheus series per block. The removed `xone_head_block_hash_info{hash}` is replaced by `eth_getBlockByNumber("latest", false)` (`.hash`) on the RPC endpoint; `xone_head_block_number` and `xone_head_block_age_seconds` are unchanged.
 
 **Endpoints** on `--metrics.addr` and `--metrics.port` (default 127.0.0.1:6060): `/metrics`; `/livez` always 200 while the process answers (a partition never makes it fail, so it cannot cause restart loops); `/readyz` 200 only when `Snapshot::ready(max_head_age)`: a head exists, the head is not older than the limit, not syncing, not `degraded` (recovery, durability or signer-fencing fault), not shutting down; otherwise 503. A single-node devnet that cannot meet the age rule passes a larger `max_head_age_secs`; the rule is never switched off. The geth reference is `node/health.go` (XDC addition, pin `6fc8e8c2`); xOneGo `health_endpoints.go:44-111` is the lesson.
 
