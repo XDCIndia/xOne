@@ -13,6 +13,10 @@ pub enum Refusal {
     InvalidHost,
     #[error("origin not allowed")]
     InvalidOrigin,
+    /// A transport with a JWT secret got no token, a malformed one, a wrong signature or a stale
+    /// `iat` (HTTP 401, a WebSocket handshake 401). The reason is not told to the client.
+    #[error("missing or invalid authorization")]
+    Unauthorized,
     /// An API list names a module that does not exist: the listener does not start, nothing is widened.
     #[error("unknown API namespace `{0}`")]
     UnknownNamespace(String),
@@ -29,7 +33,9 @@ pub fn registry(namespaces: &[String]) -> Result<Registry, Refusal> {
             "eth" => {
                 crate::eth::register(&mut reg);
                 crate::xdc_ext::register(&mut reg);
+                crate::xdc::register_eth_heal(&mut reg);
             }
+            "xdc" => crate::xdc::register(&mut reg),
             "net" => crate::net::register(&mut reg),
             "web3" => crate::web3::register(&mut reg),
             "txpool" => crate::txpool::register(&mut reg),
@@ -43,12 +49,26 @@ pub fn registry(namespaces: &[String]) -> Result<Registry, Refusal> {
     Ok(reg)
 }
 
-/// `--http.vhosts` and `--ws.origins`; `"*"` allows any. The default is geth's: host `localhost`
-/// (an IP address is always accepted) and origin `http://localhost`.
-#[derive(Debug, Clone)]
+/// `--http.vhosts`, `--ws.origins` and `--rpc.jwtsecret`; `"*"` allows any host or origin. The
+/// default is geth's: host `localhost` (an IP address is always accepted), origin `http://localhost`,
+/// no authentication. `Host`, `Origin` and forwarding headers (`X-Forwarded-For`, `Forwarded`) never
+/// grant access: only the JWT does.
+#[derive(Clone)]
 pub struct Policy {
     pub vhosts: Vec<String>,
     pub origins: Vec<String>,
+    /// The 32-byte HS256 secret. `Some`: every request needs `Authorization: Bearer <jwt>`.
+    pub jwt: Option<[u8; 32]>,
+}
+
+impl std::fmt::Debug for Policy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Policy")
+            .field("vhosts", &self.vhosts)
+            .field("origins", &self.origins)
+            .field("jwt", &self.jwt.map(|_| "<redacted>"))
+            .finish()
+    }
 }
 
 impl Default for Policy {
@@ -56,8 +76,52 @@ impl Default for Policy {
         Self {
             vhosts: vec!["localhost".into()],
             origins: vec![],
+            jwt: None,
         }
     }
+}
+
+/// geth `node/jwt_handler.go`: the token's `iat` must be within 60 s of the local clock.
+pub const JWT_IAT_SKEW_SECS: u64 = 60;
+/// A longer `Authorization` value is refused before it is decoded.
+const MAX_TOKEN_BYTES: usize = 1024;
+
+/// HS256 only (geth `jwt.WithValidMethods([HS256])`): `alg: none` and every other algorithm fail.
+fn verify_jwt(secret: &[u8; 32], token: &str, now: u64) -> bool {
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+    use hmac::{Hmac, Mac};
+    if token.len() > MAX_TOKEN_BYTES {
+        return false;
+    }
+    let mut it = token.split('.');
+    let (Some(h), Some(p), Some(sig), None) = (it.next(), it.next(), it.next(), it.next()) else {
+        return false;
+    };
+    let json = |s: &str| {
+        URL_SAFE_NO_PAD
+            .decode(s)
+            .ok()
+            .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+    };
+    let (Some(head), Some(claims), Ok(sig)) = (json(h), json(p), URL_SAFE_NO_PAD.decode(sig))
+    else {
+        return false;
+    };
+    if head.get("alg").and_then(serde_json::Value::as_str) != Some("HS256") {
+        return false;
+    }
+    let Ok(mut mac) = Hmac::<sha2::Sha256>::new_from_slice(secret) else {
+        return false;
+    };
+    mac.update(&token.as_bytes()[..h.len() + 1 + p.len()]);
+    // constant-time comparison (`hmac` `verify_slice`)
+    if mac.verify_slice(&sig).is_err() {
+        return false;
+    }
+    claims
+        .get("iat")
+        .and_then(serde_json::Value::as_u64)
+        .is_some_and(|iat| iat.abs_diff(now) <= JWT_IAT_SKEW_SECS)
 }
 
 fn host_of(h: &str) -> &str {
@@ -103,6 +167,22 @@ impl Policy {
         Err(Refusal::InvalidHost)
     }
 
+    /// geth `jwtHandler`: with a secret, `Authorization: Bearer <HS256 jwt>` with a fresh `iat` is
+    /// required before anything is dispatched; without one every request passes.
+    pub fn check_auth(&self, authorization: Option<&str>) -> Result<(), Refusal> {
+        let Some(secret) = &self.jwt else {
+            return Ok(());
+        };
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+        let token = authorization.and_then(|a| a.strip_prefix("Bearer "));
+        match token {
+            Some(t) if verify_jwt(secret, t.trim(), now) => Ok(()),
+            _ => Err(Refusal::Unauthorized),
+        }
+    }
+
     /// `wsHandshakeValidator`: a request without `Origin` is not a browser and passes.
     pub fn check_origin(&self, origin: Option<&str>) -> Result<(), Refusal> {
         let Some(o) = origin else {
@@ -129,7 +209,7 @@ mod tests {
     fn host_rules() {
         let p = Policy {
             vhosts: vec!["node.example".into()],
-            origins: vec![],
+            ..Policy::default()
         };
         assert!(p.check_host(Some("node.example:8545")).is_ok());
         assert!(p.check_host(Some("10.0.0.1:8545")).is_ok());
@@ -154,8 +234,62 @@ mod tests {
         let p = Policy {
             vhosts: vec![],
             origins: vec!["https://app.example".into()],
+            jwt: None,
         };
         assert!(p.check_origin(Some("https://APP.example")).is_ok());
         assert!(p.check_origin(Some("http://app.example")).is_err());
+    }
+
+    /// A token signed with `secret` over `claims`, the way a client builds one.
+    pub(crate) fn jwt(secret: &[u8; 32], header: &str, claims: &str) -> String {
+        use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+        use hmac::{Hmac, Mac};
+        let msg = format!(
+            "{}.{}",
+            URL_SAFE_NO_PAD.encode(header),
+            URL_SAFE_NO_PAD.encode(claims)
+        );
+        let mut mac = Hmac::<sha2::Sha256>::new_from_slice(secret).expect("any key length");
+        mac.update(msg.as_bytes());
+        format!(
+            "{msg}.{}",
+            URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes())
+        )
+    }
+
+    #[test]
+    fn jwt_rules() {
+        let k = [7u8; 32];
+        let hs = r#"{"alg":"HS256","typ":"JWT"}"#;
+        let now = 1_700_000_000u64;
+        let good = jwt(&k, hs, &format!(r#"{{"iat":{now}}}"#));
+        assert!(verify_jwt(&k, &good, now));
+        assert!(verify_jwt(&k, &good, now + 60));
+        assert!(!verify_jwt(&k, &good, now + 61), "stale iat");
+        assert!(!verify_jwt(&[8u8; 32], &good, now), "wrong secret");
+        assert!(!verify_jwt(&k, &jwt(&k, hs, "{}"), now), "no iat");
+        assert!(
+            !verify_jwt(&k, &jwt(&k, hs, r#"{"iat":-1}"#), now),
+            "negative iat"
+        );
+        let none = jwt(&k, r#"{"alg":"none"}"#, &format!(r#"{{"iat":{now}}}"#));
+        assert!(!verify_jwt(&k, &none, now), "alg none");
+        let unsigned = good.rsplit_once('.').unwrap().0.to_owned() + ".";
+        assert!(!verify_jwt(&k, &unsigned, now), "empty signature");
+        for bad in ["", "a.b", "a.b.c.d", "!!.!!.!!", &"a".repeat(2000)] {
+            assert!(!verify_jwt(&k, bad, now), "{bad:.20}");
+        }
+        let p = Policy {
+            jwt: Some(k),
+            ..Policy::default()
+        };
+        assert_eq!(p.check_auth(None), Err(Refusal::Unauthorized));
+        assert_eq!(
+            p.check_auth(Some(&good)),
+            Err(Refusal::Unauthorized),
+            "no Bearer"
+        );
+        assert!(!format!("{p:?}").contains('7'));
+        assert!(Policy::default().check_auth(None).is_ok());
     }
 }

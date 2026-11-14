@@ -80,6 +80,9 @@ pub enum SyncError {
     /// The headers do not form a chain: the source's answer, or the rows staged before a restart.
     #[error("block {number} does not link to its parent (unwind the stages to restart)")]
     Link { number: u64 },
+    /// A staged header is at a required height with another hash: refused before it is stored.
+    #[error("{0}")]
+    RequiredBlock(#[from] xone_chainspec::RequiredBlockMismatch),
     #[error("block {number}: body does not match the header: {error}")]
     Body { number: u64, error: BodyError },
     #[error("block {number}, transaction {index}: {error}")]
