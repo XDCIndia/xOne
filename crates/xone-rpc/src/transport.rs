@@ -371,14 +371,67 @@ pub async fn serve_ws(rpc: Arc<Rpc>, listener: TcpListener) {
     }
 }
 
+/// Binds the IPC socket at `path`, owner-only (0600) from the moment it is reachable there.
+///
+/// geth `rpc/ipc_unix.go`: the socket is the owner's only; IPC serves every namespace. The socket
+/// is bound inside a fresh 0700 directory next to `path`, set to 0600 and then renamed into place,
+/// so there is no window in which another user can connect between bind and chmod. A stale socket
+/// left by a killed node is replaced; a live one (something answers on it) or a path that is not a
+/// socket is refused, and nothing is removed. Must run inside a Tokio runtime.
+pub fn bind_ipc(path: &Path) -> std::io::Result<UnixListener> {
+    use std::os::unix::fs::{DirBuilderExt, FileTypeExt, PermissionsExt};
+    use std::{fs, io};
+    match fs::symlink_metadata(path) {
+        Ok(m) if m.file_type().is_socket() => {
+            if std::os::unix::net::UnixStream::connect(path).is_ok() {
+                return Err(io::Error::new(
+                    io::ErrorKind::AddrInUse,
+                    format!("{}: another process is listening", path.display()),
+                ));
+            }
+            fs::remove_file(path)?;
+        }
+        Ok(_) => {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                format!("{}: exists and is not a socket", path.display()),
+            ))
+        }
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e),
+    }
+    let parent = path
+        .parent()
+        .filter(|d| !d.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let name = path
+        .file_name()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "IPC path has no file name"))?;
+    let tmp = parent.join(format!(
+        ".{}.{}.bind",
+        name.to_string_lossy(),
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&tmp);
+    fs::DirBuilder::new().mode(0o700).create(&tmp)?;
+    let inner = tmp.join("s");
+    let bound = (|| {
+        let l = UnixListener::bind(&inner)?;
+        fs::set_permissions(&inner, fs::Permissions::from_mode(0o600))?;
+        fs::rename(&inner, path)?;
+        Ok(l)
+    })();
+    let _ = fs::remove_dir_all(&tmp);
+    bound
+}
+
 /// IPC: a Unix socket carrying a stream of JSON values, no framing (geth `rpc/ipc.go`).
 pub async fn serve_ipc(rpc: Arc<Rpc>, path: &Path) -> std::io::Result<()> {
-    let listener = UnixListener::bind(path)?;
-    // geth `rpc/ipc_unix.go`: the socket is the owner's only (0600); IPC serves every namespace.
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
-    }
+    serve_ipc_on(rpc, bind_ipc(path)?).await
+}
+
+/// [`serve_ipc`] on a listener from [`bind_ipc`], so the caller reports a bind failure at start.
+pub async fn serve_ipc_on(rpc: Arc<Rpc>, listener: UnixListener) -> std::io::Result<()> {
     let conns = Arc::new(Semaphore::new(rpc.limits.ipc_connections));
     loop {
         let (stream, _) = listener.accept().await?;
