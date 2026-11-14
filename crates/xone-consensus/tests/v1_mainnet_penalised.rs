@@ -18,7 +18,8 @@ use std::path::PathBuf;
 
 use alloy_primitives::{address, Address, Bytes, B256};
 use serde::Deserialize;
-use xone_consensus::v1::checkpoint::{addresses, checkpoint_signers, masternodes_of, same_set};
+use xone_consensus::penalty::same_set;
+use xone_consensus::v1::checkpoint::{addresses, checkpoint_signers, masternodes_of};
 use xone_primitives::Header;
 
 const EPOCH: u64 = 900;

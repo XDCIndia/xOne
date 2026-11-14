@@ -198,3 +198,100 @@ Deduplication: `gh issue list --state all --search` per strength (static binary,
 - Zeam is a consensus (lean) client and Phant a stateless research client; they are cited for build and packaging practice only, not for node features.
 - The GLIBC_2.38 floor and the 19.4 MB size were measured on the local release build of `xOne/v0.1.0` on Ubuntu 24.04; the CI release build was not run.
 - Size and memory targets in the issues are proposals until measured by the `docs/perf.md` procedure.
+
+
+## Third pass: expansion from scratch (2026-11-14)
+
+Brief: resume Phase 5 with the keywords of everything found since pass 1 (archive snapshots, seeded distribution, node permissioning, SDK and node builder, resource budgets, static binaries, CI budgets, RPC recorder, fast-sync history, tracing, metrics push, live hooks, XDC RPC extensions), the GitHub topics of the selected repos, awesome lists and web search; re-scan every selected competitor for missed areas; repeat until a pass adds nothing. Audited xOneRS: main `f4ae78d`. Competitor clones: `.gap-audit/refs/` (shallow, not committed); the first ten at the pass-1 commits, the four new ones at the commits in `gap-ledger.json`. The geth-XDC oracle pin `XDCIndia/go-ethereum@6fc8e8c2` (conformance/PIN) was read as the canonical reference for methods and flags; it is not scored as a competitor.
+
+Priority rule (`priority_rule_pass3` in the ledger): operator impact first (the pass-2 scale), raised one level, never above P1, when 8+ of the 14 selected competitors have the capability or a canonical XDC client ships it in a namespace or default the fleet uses.
+
+### Competitors
+
+| Repo | Score | Overlap/Activity/Adoption/Access | Status | Reason |
+|---|---|---|---|---|
+| `BuildOnViction/victionchain` | 83 | 42/20/6/15 | selected | Viction (formerly TomoChain) client: Proof-of-Stake-Voting with masternodes, double validation, epoch checkpoints and randomize, the lineage XDPoS V1 was derived from. Not a fork of a selected repo; XDPoSChain descends from its code. |
+| `harmony-one/harmony` | 73 | 26/20/12/15 | selected | EVM chain with FBFT (round-based BFT), staking epochs, rewards and an eth-compatible RPC; Go node with its own tracer API, Rosetta and webhooks. |
+| `tempoxyz/tempo` | 73 | 26/20/12/15 | selected | Rust L1 on the reth SDK with its own BFT consensus layer, validator config, localnet, follow mode and snapshot download; adds operator surface over reth (unlike reth-bsc). |
+| `kaiachain/kaia` | 70 | 32/20/3/15 | selected | Istanbul-BFT EVM chain with a validator committee, staking and rewards; adds chain-data export (Kafka, MySQL), homi network generator and live pruning over its geth base. |
+| `BuildOnViction/vic-geth` | 78 | 40/20/3/15 | rejected | Score 78 but excluded by the fork rule: a rebuild of victionchain on current geth; its operator surface is geth's (selected) and its consensus is victionchain's (selected). |
+| `etclabscore/core-geth` | 65 | 24/20/6/15 | rejected | Score 65 but excluded by the fork rule: geth derivative for Ethereum Classic; extra flags are PoW, ECBP-1100 and legacy light-client items; its trace_ module is already counted from Erigon and Nethermind. |
+| `ethereum-optimism/op-geth` | 63 | 22/20/6/15 | rejected | Score 63 but excluded by the fork rule: geth fork whose additions are OP Stack L2 features (SKIP-14). |
+| `celo-org/celo-blockchain` | 64 | 30/10/9/15 | rejected | Score 64 but end of life: the repository calls itself the previous Celo client, the last commit is a CI config change, and Celo now runs op-geth as an L2 (SKIP-14). |
+| `Consensys-inc-archive/quorum` | 57 | 30/0/12/15 | rejected | Score 57: archived (GoQuorum end of life); its permissioning and QBFT live on in Besu (selected). |
+| `berachain/bera-reth` | 58 | 20/20/3/15 | rejected | Score 58: reth SDK extension for a beacon-driven chain; adds nothing operator-facing over reth. |
+| `FISCO-BCOS/FISCO-BCOS` | 57 | 10/20/12/15 | rejected | Score 57: consortium chain with its own RPC and P2P; not an Ethereum-family client (no devp2p, no eth JSON-RPC). |
+| `shardeum/shardeum` | 58 | 8/20/15/15 | rejected | Score 58: sharded network whose validator is not an Ethereum-family node; eth RPC is a separate gateway. |
+| `ava-labs/coreth` | 47 | 26/0/6/15 | rejected | Score 47: archived. |
+| `ava-labs/subnet-evm` | 47 | 26/0/6/15 | rejected | Score 47: archived. |
+| `klaytn/klaytn` | 53 | 32/0/6/15 | rejected | Score 53: archived; superseded by kaiachain/kaia (selected). |
+| `XinFinOrg/XinFin-Node-Telemetry` | 28 | 5/20/3/0 | rejected | Score 28: log shipping helper for XinFin nodes, not a client; no licence. |
+
+All four new selections have OSI licences (LGPL-3.0, Apache-2.0/MIT); no evidence is licence-restricted.
+
+### Gaps and issues
+
+| ID | Issue | Priority | Area | Seen in | Title |
+|---|---|---|---|---|---|
+| GAP-0047 | [#218](https://github.com/XDCIndia/xOneRS/issues/218) | P1 | sync | 5/14 + oracle | Required-block peer check with built-in network anchors (--eth.requiredblocks; Apothem reset block 83,665,617) |
+| GAP-0048 | [#220](https://github.com/XDCIndia/xOneRS/issues/220) | P1 | tracing | 9/14 + oracle | Divergence tracing: debug_intermediateRoots, debug_traceBadBlock, debug_traceBlock (raw RLP), debug_standardTraceBlockToFile and debug_traceChain |
+| GAP-0049 | [#221](https://github.com/XDCIndia/xOneRS/issues/221) | P1 | p2p | 9/14 + oracle | Persistent peer table: remember good peers across restarts (geth nodes DB, reth peers file) |
+| GAP-0050 | [#222](https://github.com/XDCIndia/xOneRS/issues/222) | P2 | rpc | 8/14 + oracle | Node self-description RPC: eth_config (EIP-7910 fork configuration) and eth_capabilities (served history ranges) |
+| GAP-0051 | [#223](https://github.com/XDCIndia/xOneRS/issues/223) | P2 | cli | 6/14 | Private XDPoS network generator: genesis with masternodes and system contracts, node keys and per-node configs (xone network init) |
+| GAP-0052 | [#224](https://github.com/XDCIndia/xOneRS/issues/224) | P2 | sync | 4/14 + oracle | Sync stop targets: --exitwhensynced and --synctarget (stop at a given block hash) |
+| GAP-0053 | [#225](https://github.com/XDCIndia/xOneRS/issues/225) | P2 | storage | 4/14 + oracle | Separate directory for frozen history segments (--datadir.ancient / --datadir.static-files) so history can sit on cheaper disk |
+| GAP-0054 | [#226](https://github.com/XDCIndia/xOneRS/issues/226) | P2 | observability | 5/14 + oracle | Slow-block log: one structured line with per-phase timings for each block slower than a threshold (--debug.logslowblock) |
+| GAP-0055 | [#227](https://github.com/XDCIndia/xOneRS/issues/227) | P2 | cli | 7/14 + oracle | Environment-variable configuration: every flag settable as XONE_<FLAG> (container and systemd deployments) |
+| GAP-0056 | [#228](https://github.com/XDCIndia/xOneRS/issues/228) | P2 | release | 8/14 | OS packages: .deb and .rpm with the systemd unit, and a signed APT/YUM repository |
+| GAP-0057 | [#230](https://github.com/XDCIndia/xOneRS/issues/230) | P2 | cli | 9/14 + oracle | Standalone EVM tool: t8n (transition), state-test and block-test runners on the xOneRS executor (xone evm) |
+| GAP-0058 | [#231](https://github.com/XDCIndia/xOneRS/issues/231) | P3 | xdc-rpc | 0/14 + oracle | xdc_ RPC namespace served by geth-XDC: the eth block-chain methods under xdc_ plus xdc_getStateHealStatus |
+| GAP-0059 | [#232](https://github.com/XDCIndia/xOneRS/issues/232) | P3 | sdk | 1/14 | Chain-data exporter: stream blocks, receipts, logs and traces to Kafka (reorg-aware, resumable), for explorers and indexers |
+
+Counts: 13 issues (#218 to #232); P1 3, P2 8, P3 2; by area: cli 3, observability 1, p2p 1, release 1, rpc 1, sdk 1, storage 1, sync 2, tracing 1, xdc-rpc 1. Labels `gap-audit`, `area:<name>`, `priority:<P>` (all labels existed).
+
+Scope added to existing issues by comment instead of new issues (rule: do not split gaps): #168 (five more XDC methods), #160 (eight more debug diagnostics), #156 (transactionReceipts subscription), #163 (start-up `--log.vmodule`), #171 (six more RPC listener and safety flags).
+
+Deduplication: every candidate was searched with `gh issue list --state all --search` (Apothem reset, required block, stale branch, slow block, cold storage, ancient, localnet, genesis generator, evm tool, state test, packages, eth_config, capabilities, xdc_ namespace, heal status, rpc metrics, per-method, peers persist, nodes database, kafka, exitwhensynced) and against the bodies of GAP-0001 to GAP-0046.
+
+### Method
+
+- RPC: the method sets of XDPoSChain and of the oracle pin were extracted from their registered API types (`internal/ethapi`, `eth`, `eth/filters`, `eth/tracers`, `node`, `consensus/XDPoS`) and diffed against the methods `crates/xone-rpc/src` registers and the 46 existing gap bodies; 137 oracle methods are not served, all but the ones above are covered by an existing gap or a skip.
+- Flags: the 274 flag names of the oracle pin were diffed against `docs/cli/flags.md` and `bin/xone/src/flags.rs` and the existing bodies.
+- Probes over all 14 clones: RPC authentication and TLS, divergence tracing, required blocks, node database, network generators, stop targets, cold-storage paths, slow-block logs, environment configuration, OS packages, t8n tools, exporters, webhooks, version checks, per-method RPC metrics.
+
+### Not filed (pass 3)
+
+| ID | Item | Reason |
+|---|---|---|
+| SKIP-18 | JSON-RPC authentication on the public endpoints (Besu credentials/JWT, reth --rpc.jwtsecret, Harmony auth port) | Covered: #60 defines authentication enforcement per transport; the mechanism belongs there. |
+| SKIP-19 | TLS on the RPC listener (Besu --rpc-http-tls-enabled) | 1 of 14; deployments terminate TLS at a reverse proxy, and #60 owns transport exposure. |
+| SKIP-20 | Per-method RPC latency metrics (geth rpc/metrics.go, reth rpc-builder metrics.rs, Erigon, Besu, Nethermind, Kaia, XDPoSChain) | Covered: GAP-0033 (#184) step 4 adds the per-method RPC latency histogram. |
+| SKIP-21 | Start-up per-module log filter (--log.vmodule) | Covered: added to #163 (GAP-0012) by comment; the filter exists in crates/xone-node/src/observe/logs.rs but no flag fills it. |
+| SKIP-22 | eth_getOwnerByCoinbase, eth_getTokenStats, XDPoS_getBlockInfoByV2EpochNum, XDPoS_calculateBlockInfoByV1EpochNum, XDPoS_getV2BlockByHeader | Covered: added to #168 (GAP-0017) by comment (do not split gaps). |
+| SKIP-23 | debug_getBlockRlp, debug_printBlock, debug_preimage, debug_dbGet, debug_dbAncient(s), debug_discoveryV4Table, debug_clearTxpool | Covered: added to #160 (GAP-0009) by comment. |
+| SKIP-24 | eth_subscribe("transactionReceipts") | Covered: added to #156 (GAP-0005) by comment. |
+| SKIP-25 | RPC listener and safety flags: --rpc.allow-unprotected-txs, --rpc.http-body-limit, --rpc.logquerylimit, --rpc.rangelimit, --http.rpcprefix, --ws.rpcprefix | Covered: added to #171 (GAP-0020) by comment. |
+| SKIP-26 | XDPoS_propose, XDPoS_discard, XDPoS_proposals (clique-style signer votes) | ADR-008 working scope lists XDPoSAdmin_* as out; the oracle serves propose and discard only on the authenticated endpoint. |
+| SKIP-27 | Rosetta (Mesh) API | 1 of 14 (Harmony); a second API surface outside the JSON-RPC parity scope of #42. |
+| SKIP-28 | Event webhooks (Harmony webhooks, Nethermind health-check webhooks) | Covered: the SkyNet heartbeat pushes node status to a configured URL (crates/xone-node/src/observe/heartbeat.rs) and GAP-0033 (#184) adds alert rules. |
+| SKIP-29 | Version and vulnerability check (geth-derived version-check) | 0 of 14 selected (only core-geth and vic-geth, both rejected); no XDC advisory feed exists to check against. |
+| SKIP-30 | Bootnodes fetched from an HTTP endpoint (Tempo --tempo.bootnodes-endpoint) | 1 of 14; bootnode lists ship with the release (ops/bootnodes). |
+| SKIP-31 | Live state pruning, database migration, offline state GC (Kaia db_migration, Viction cmd/gc) | Not applicable: path-keyed trie rows are overwritten in place (second pass) and the storage engine is the #135 decision. |
+| SKIP-32 | Chain-specific features: Kaia governance_, mainbridge/subbridge, auction; Harmony staking, sharding, multi-BLS keys; Tempo zones and DKG; Viction TomoX | No XDC counterpart: XDC subnets belong to XDC-Subnet, XDCx is ADR-009 empty-tx routing only, XDPoS has one key per masternode (SKIP-13 analogue). |
+| SKIP-33 | geth-XDC flags with no XDC counterpart or already covered: beacon.*, blobpool.*, crypto.kzg, era and history import/export, bintrie, override.bpo*, miner.*, cache.*, gogc, memorylimit, fdlimit, store-reward, fastsyncpivot*, nodekeyhex, maxpendpeers | SKIP-01, -05, -06, -09; Go runtime tuning (xOne has --cache and ADR-007 limits); rewards are computed, not filed (GAP-0017); pivots are pinned by --snap.pins (#14); the node key is a datadir file (GAP-0027); peer budgets are #16; dumpgenesis is in GAP-0051. |
+| SKIP-34 | Historical re-execution under candidate rules (Tempo shadow replay) | Covered: the conformance harness replays on xOne's own state (#10, conformance/harness). |
+
+### Expansion passes (third run)
+
+| Pass | Competitor expansion | Feature re-scan | New gaps |
+|---|---|---|---|
+| 3a | 18 keyword queries, 12 topics plus the selected repos' own topics, awesome-reth, web search, XinFinOrg and BuildOnViction org listings: 16 candidates scored, 4 selected (victionchain 81, harmony 73, tempo 73, kaia 70) | oracle and XDPoSChain RPC and flag diffs; 17 probes over 14 clones | GAP-0047 to GAP-0059 (13), 5 scope comments, SKIP-18 to SKIP-34 |
+| 3b | Keywords of the 3a gaps (puppeth, t8n, chaindatafetcher, evm localnet, required blocks) and the new repos' topics (pbft, proof-of-stake, harmony-protocol, sharding): FISCO-BCOS 57, shardeum 58, no new candidate at 60+ | Kaia subcommands and 18 RPC namespaces, Harmony namespaces, Tempo CLI modules, Viction flags against XDPoSChain: every item is a filed gap, a scope comment or a skip | 0 |
+
+Stop condition met: pass 3b added zero competitors and zero gaps.
+
+### Limits
+
+- Presence is file and identifier evidence, not a behavioural test; XDPoSChain `build/deb` holds only shell completions and was not counted as packaging.
+- The oracle pin is private; its links resolve only for readers with access.
+- Kaia, Harmony and Tempo are chains of their own; only their operator features were compared, not their consensus.
