@@ -92,6 +92,15 @@ struct Sub {
     conn: u64,
     kind: Kind,
     tx: Sender<String>,
+    /// Notifications start once the `eth_subscribe` reply is queued ([`Hub::activate`]).
+    active: bool,
+}
+
+/// Why [`Hub::subscribe_bounded`] refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SubRefused {
+    PerConnection(usize),
+    Total(usize),
 }
 
 #[derive(Default)]
@@ -110,8 +119,65 @@ impl Hub {
             conn,
             kind,
             tx,
+            active: true,
         });
         id
+    }
+
+    /// Registers an inactive subscription when the connection holds fewer than `per_conn` and the
+    /// hub fewer than `total`; [`Hub::activate`] starts its notifications. Unsubscribing or closing
+    /// the connection frees the capacity.
+    pub fn subscribe_bounded(
+        &self,
+        conn: u64,
+        kind: Kind,
+        tx: Sender<String>,
+        per_conn: usize,
+        total: usize,
+    ) -> Result<String, SubRefused> {
+        let mut g = self.subs.lock().unwrap_or_else(PoisonError::into_inner);
+        if g.1.len() >= total {
+            return Err(SubRefused::Total(total));
+        }
+        if g.1.iter().filter(|s| s.conn == conn).count() >= per_conn {
+            return Err(SubRefused::PerConnection(per_conn));
+        }
+        g.0 += 1;
+        let id = format!("{:#034x}", u128::from(g.0) << 64 | u128::from(conn));
+        g.1.push(Sub {
+            id: id.clone(),
+            conn,
+            kind,
+            tx,
+            active: false,
+        });
+        Ok(id)
+    }
+
+    /// Queues `reply` on `tx` and starts the notifications of `ids`, under the lock every
+    /// notification is sent under: no event of `ids` precedes the reply. A full queue queues
+    /// nothing, removes `ids` and returns `false` (the connection is a slow consumer).
+    pub fn reply_then_activate(
+        &self,
+        conn: u64,
+        ids: &[String],
+        tx: &Sender<String>,
+        reply: Option<String>,
+    ) -> bool {
+        let mut g = self.subs.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(r) = reply {
+            if tx.try_send(r).is_err() {
+                g.1.retain(|s| !(s.conn == conn && ids.contains(&s.id)));
+                return false;
+            }
+        }
+        for s in
+            g.1.iter_mut()
+                .filter(|s| s.conn == conn && ids.contains(&s.id))
+        {
+            s.active = true;
+        }
+        true
     }
 
     pub fn unsubscribe(&self, conn: u64, id: &str) -> bool {
@@ -148,6 +214,9 @@ impl Hub {
         let mut dropped = vec![];
         let mut g = self.subs.lock().unwrap_or_else(PoisonError::into_inner);
         g.1.retain(|s| {
+            if !s.active {
+                return true;
+            }
             let Some(result) = pick(&s.kind) else { return true };
             let msg = json!({"jsonrpc": "2.0", "method": "eth_subscription", "params": {"subscription": s.id, "result": result}});
             match s.tx.try_send(msg.to_string()) {
@@ -258,6 +327,40 @@ pub fn parse_kind(params: &[Value]) -> Result<Kind, RpcError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn no_notification_precedes_the_reply_and_bounds_hold() {
+        let hub = Hub::default();
+        let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+        let a = hub
+            .subscribe_bounded(1, Kind::NewHeads, tx.clone(), 2, 3)
+            .unwrap();
+        let head = json!({"number": "0x1"});
+        // inactive: the head is not sent
+        hub.publish_head(&head);
+        assert!(rx.try_recv().is_err());
+        assert!(hub.reply_then_activate(1, std::slice::from_ref(&a), &tx, Some("reply".into())));
+        hub.publish_head(&head);
+        assert_eq!(rx.try_recv().unwrap(), "reply");
+        assert!(rx.try_recv().unwrap().contains("eth_subscription"));
+        // two per connection, three in all; unsubscribe frees the place
+        let _b = hub
+            .subscribe_bounded(1, Kind::NewHeads, tx.clone(), 2, 3)
+            .unwrap();
+        assert_eq!(
+            hub.subscribe_bounded(1, Kind::NewHeads, tx.clone(), 2, 3),
+            Err(SubRefused::PerConnection(2))
+        );
+        let _c = hub
+            .subscribe_bounded(2, Kind::NewHeads, tx.clone(), 2, 3)
+            .unwrap();
+        assert_eq!(
+            hub.subscribe_bounded(3, Kind::NewHeads, tx.clone(), 2, 3),
+            Err(SubRefused::Total(3))
+        );
+        assert!(hub.unsubscribe(1, &a));
+        assert!(hub.subscribe_bounded(1, Kind::NewHeads, tx, 2, 3).is_ok());
+    }
     use tokio::sync::mpsc;
 
     #[test]

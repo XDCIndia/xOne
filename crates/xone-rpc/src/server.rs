@@ -82,6 +82,12 @@ impl Registry {
     pub fn put(&mut self, name: &'static str, entry: (Cost, Handler)) {
         self.map.insert(name, entry);
     }
+    /// Whether any method of namespace `ns` (`eth` for `eth_*`) is served.
+    pub fn has_namespace(&self, ns: &str) -> bool {
+        self.map
+            .keys()
+            .any(|k| k.split_once('_').is_some_and(|(n, _)| n == ns))
+    }
     /// Every registered name, sorted.
     pub fn names(&self) -> Vec<&'static str> {
         let mut v: Vec<_> = self.map.keys().copied().collect();
@@ -99,6 +105,10 @@ pub struct Limits {
     pub ws_connections: usize,
     pub ws_in_flight: usize,
     pub ws_out_buffer: usize,
+    /// Subscriptions one WebSocket or IPC connection may hold (#267).
+    pub subs_per_conn: usize,
+    /// Subscriptions all connections together may hold.
+    pub subs_total: usize,
     pub ipc_connections: usize,
     pub ipc_in_flight: usize,
     pub body_bytes: usize,
@@ -123,6 +133,8 @@ impl Default for Limits {
             ws_connections: 128,
             ws_in_flight: 8,
             ws_out_buffer: 1024,
+            subs_per_conn: 128,
+            subs_total: 4096,
             ipc_connections: 16,
             ipc_in_flight: 8,
             body_bytes: 5 << 20,
@@ -365,6 +377,16 @@ impl Rpc {
             }
         };
         serde_json::to_vec(&out).ok()
+    }
+
+    /// Charges one subscription request to the connection's and the transport's token buckets
+    /// (ADR-007 section 4, like any C1 call); `Err(seconds)` to wait.
+    pub fn take_subscription(&self, conn: &Conn) -> Result<(), u64> {
+        let now = self.now_ms();
+        let units = Cost::C1.units();
+        lock(&conn.bucket)
+            .take(now, units)
+            .and_then(|()| lock(&self.global_bucket).take(now, units))
     }
 
     fn rejected(&self, e: RpcError, retry_after: Option<u64>) -> Reply {
