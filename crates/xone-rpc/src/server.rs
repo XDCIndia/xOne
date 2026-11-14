@@ -423,11 +423,14 @@ impl Rpc {
         // One permit per class in use (C0 is unbounded), taken in ascending class order so two
         // batches cannot deadlock; all or none.
         let mut permits = Vec::new();
-        for i in 1..4 {
-            if !classes[i] {
-                continue;
-            }
-            match self.class_sem[i].clone().try_acquire_owned() {
+        for (sem, _) in self
+            .class_sem
+            .iter()
+            .zip(classes)
+            .skip(1)
+            .filter(|(_, used)| *used)
+        {
+            match sem.clone().try_acquire_owned() {
                 Ok(p) => permits.push(p),
                 Err(_) => return self.rejected(RpcError::limit(json!(1)), Some(1)),
             }
