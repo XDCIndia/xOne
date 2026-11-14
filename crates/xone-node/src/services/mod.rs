@@ -228,6 +228,20 @@ pub fn build(
     })
 }
 
+/// The board's `syncMode`. `--minimal` holds only an anchored window and refuses older history,
+/// whatever `--syncmode` says (spec/bootstrap/minimal-mode.md); a node started with snap (or its
+/// alias fast) whose datadir is anchored got its state by snap sync; any other node followed from
+/// genesis. `archive` never reaches here: `gcmode archive` is refused by the config.
+fn sync_mode(mode: &str, minimal: bool, anchored: bool) -> &'static str {
+    if minimal {
+        "minimal"
+    } else if mode == "snap" && anchored {
+        "snap"
+    } else {
+        "full"
+    }
+}
+
 /// The hello frame's static facts. `node` and `client` are the build's one stamp.
 fn identity(
     cfg: &crate::Config,
@@ -243,13 +257,41 @@ fn identity(
         protocol: "eth/63, xdpos/100".into(),
         os: std::env::consts::OS.into(),
         os_v: std::env::consts::ARCH.into(),
-        // a node started with snap whose datadir is anchored got its state by snap sync
-        sync_mode: if cfg.sync.mode == "snap" && anchored {
-            "snap".into()
-        } else {
-            "full".into()
-        },
+        sync_mode: sync_mode(&cfg.sync.mode, cfg.sync.minimal, anchored).into(),
         gc_mode: cfg.sync.gcmode.clone(),
         state_scheme: "hash".into(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::identity;
+    use crate::observe::ethstats::hello;
+
+    /// The hello `syncMode` per node type (#123): full, snap and fast anchored, minimal.
+    #[test]
+    fn hello_sync_mode_per_node_type() {
+        for (flags, anchored, want) in [
+            (&[("syncmode", "full")][..], false, "full"),
+            (&[("syncmode", "snap")][..], false, "full"), // snap on a chain followed from genesis
+            (&[("syncmode", "snap")][..], true, "snap"),
+            (&[("syncmode", "fast")][..], true, "snap"),
+            (&[("minimal", "true")][..], true, "minimal"),
+            (
+                &[("syncmode", "snap"), ("minimal", "true")][..],
+                true,
+                "minimal",
+            ),
+        ] {
+            let mut c = crate::Config::default();
+            for (k, v) in flags {
+                c.set(k, v).unwrap_or_else(|e| panic!("{e}"));
+            }
+            let h = hello("n", "s", &identity(&c, 2040, "xOne/v0", anchored), None);
+            assert!(
+                h.contains(&format!("\"syncMode\":\"{want}\",\"gcMode\":\"full\"")),
+                "{flags:?} anchored={anchored}: {h}"
+            );
+        }
     }
 }
