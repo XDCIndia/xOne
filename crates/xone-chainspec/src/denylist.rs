@@ -124,8 +124,12 @@ mod tests {
     #[test]
     fn list_is_sorted_unique_and_complete() {
         assert!(DENYLIST.windows(2).all(|w| w[0] < w[1]));
-        assert!(is_denylisted(&address!("5248bfb72fd4f234e062d3e9bb76f08643004fcd")));
-        assert!(is_denylisted(&address!("0000000000000000000000000000000000000011")));
+        assert!(is_denylisted(&address!(
+            "5248bfb72fd4f234e062d3e9bb76f08643004fcd"
+        )));
+        assert!(is_denylisted(&address!(
+            "0000000000000000000000000000000000000011"
+        )));
         assert!(!is_denylisted(&Address::ZERO));
     }
 

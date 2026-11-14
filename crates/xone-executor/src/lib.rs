@@ -971,11 +971,18 @@ mod denylist_tests {
         assert!(check_denylist(&spec, fork - 1, 0, LISTED, Some(LISTED)).is_ok());
         assert!(matches!(
             check_denylist(&spec, fork, 3, LISTED, Some(LISTED)),
-            Err(ExecError::Denylisted { index: 3, side: DenySide::Sender, .. })
+            Err(ExecError::Denylisted {
+                index: 3,
+                side: DenySide::Sender,
+                ..
+            })
         ));
         assert!(matches!(
             check_denylist(&spec, fork, 0, OTHER, Some(LISTED)),
-            Err(ExecError::Denylisted { side: DenySide::Recipient, .. })
+            Err(ExecError::Denylisted {
+                side: DenySide::Recipient,
+                ..
+            })
         ));
         assert!(check_denylist(&spec, fork, 0, OTHER, None).is_ok());
         assert!(check_denylist(&spec, fork, 0, OTHER, Some(OTHER)).is_ok());
