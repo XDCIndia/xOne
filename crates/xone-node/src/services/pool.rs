@@ -28,7 +28,21 @@ use crate::lifecycle::{Service, ServiceError};
 struct Inner {
     pool: Pool,
     /// Consensus encodings of what the pool holds: the pool keeps decoded transactions only.
+    /// [`Inner::release`] keeps it to the pool's live transactions after every mutation.
     raws: HashMap<B256, Bytes>,
+}
+
+impl Inner {
+    /// Drops the encodings of transactions the pool no longer holds: replaced, evicted for price
+    /// or space, expired or made stale by a reset. Each admitted transaction adds exactly one
+    /// entry, so the map can only outgrow the pool when the pool removed something; the scan runs
+    /// only then, and is bounded by the pool size plus one batch.
+    fn release(&mut self) {
+        if self.raws.len() > self.pool.len().0 {
+            let pool = &self.pool;
+            self.raws.retain(|h, _| pool.has(h));
+        }
+    }
 }
 
 pub struct PoolShared {
@@ -89,7 +103,8 @@ impl PoolShared {
             Ok(r) => r,
             Err(e) => return raws.iter().map(|_| Err(e.clone())).collect(),
         };
-        raws.iter()
+        let out = raws
+            .iter()
             .zip(res)
             .map(|(raw, r)| match r {
                 Ok(()) => {
@@ -99,7 +114,10 @@ impl PoolShared {
                 }
                 Err(e) => Err(e.to_string()),
             })
-            .collect()
+            .collect::<Vec<_>>();
+        // A replacement or an eviction in this batch removed transactions the map still holds.
+        g.release();
+        out
     }
 
     /// Transactions of a `Transactions` message; a refusal is the sender's business, not ours.
@@ -135,10 +153,10 @@ impl PoolShared {
         let (number, _) = self.core.head();
         let gas = self.core.hist.read().tip().header.gas_limit;
         let mut g = self.lock();
-        let Inner { pool, raws } = &mut *g;
+        let pool = &mut g.pool;
         // a pool that cannot reset keeps its transactions; the next head tries again
         let _ = self.on_head(|st| pool.reset(st, now(), number, gas));
-        raws.retain(|h, _| pool.has(h));
+        g.release();
     }
 }
 
