@@ -100,6 +100,7 @@ impl MetricsSource for NodeStats {
             peers_required_block_refused_total: self.peers.required_refused(),
             txpool_pending: self.pending_txs() as u64,
             blocks_imported_total: number.saturating_sub(self.progress.start.load(Relaxed)),
+            slow_blocks_total: self.core.slow_blocks.load(Relaxed),
             ..Snapshot::default()
         }
     }
