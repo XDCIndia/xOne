@@ -140,8 +140,27 @@ pub fn with_state<S: StateRead>(pool: &mut Pool, state: &S, tx: &PoolTx) -> Resu
             tx: tx.tx.nonce,
         });
     }
-    let balance = acct.as_ref().map_or(U256::ZERO, |a| a.balance.low());
-    let cost = tx.cost().ok_or(Error::InsufficientFunds)?;
+    let mut balance = acct.as_ref().map_or(U256::ZERO, |a| a.balance.low());
+    if pool.trc21.at != Some(pool.head.number) {
+        pool.trc21 = super::Trc21Fees::read(&pool.spec, state, pool.head.number);
+    }
+    // geth-XDC `ValidateTransactionWithState`: to a registered TRC21 token, the token's fee
+    // capacity adds to the balance and the cost is at the TRC21 gas price of the pending block.
+    let cost = match (pool.trc21.cost(tx), tx.tx.to) {
+        (Some((cap, cost)), Some(to)) => {
+            if !xone_state::system_contracts::trc21_issuer::validate_trc21_tx(
+                state,
+                from,
+                to,
+                tx.tx.data.as_ref(),
+            ) {
+                return Err(Error::InsufficientFunds);
+            }
+            balance = balance.saturating_add(cap);
+            cost.ok_or(Error::InsufficientFunds)?
+        }
+        _ => tx.cost().ok_or(Error::InsufficientFunds)?,
+    };
     if balance < cost {
         return Err(Error::InsufficientFunds);
     }
