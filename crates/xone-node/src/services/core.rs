@@ -392,13 +392,38 @@ impl Core {
         group_commit: bool,
         disk_state: bool,
     ) -> Result<Self, CoreError> {
+        Self::open_tuned(
+            spec,
+            genesis,
+            dir,
+            ckpt_every,
+            minimal,
+            group_commit,
+            disk_state,
+            xone_db::mdbx::Geometry::default(),
+        )
+    }
+
+    /// [`Core::open_full`] with the MDBX map geometry of `--db.max-size` and `--db.growth-step`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn open_tuned(
+        spec: ChainSpec,
+        genesis: &Genesis,
+        dir: &Path,
+        ckpt_every: u64,
+        minimal: bool,
+        group_commit: bool,
+        disk_state: bool,
+        geometry: xone_db::mdbx::Geometry,
+    ) -> Result<Self, CoreError> {
         let (flat0, codes0, g) = genesis_state(genesis, &spec)?;
         std::fs::create_dir_all(dir).map_err(|e| FileError(format!("{}: {e}", dir.display())))?;
-        let mut node_store = store::open(
+        let mut node_store = store::open_tuned(
             dir,
             RETENTION,
             group_commit.then_some(GROUP_COMMIT),
             disk_state,
+            geometry,
         )?;
         let resumed = resume(&mut node_store)?;
         let loaded = store::load(&node_store)?;

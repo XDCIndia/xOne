@@ -48,6 +48,28 @@ pub fn open(
     group_commit: Option<std::time::Duration>,
     disk_state: bool,
 ) -> Result<NodeStore, FileError> {
+    open_tuned(
+        dir,
+        retention,
+        group_commit,
+        disk_state,
+        xone_db::mdbx::Geometry::default(),
+    )
+}
+
+/// [`open`] with the MDBX map geometry of `--db.max-size` and `--db.growth-step`, checked against
+/// the database on disk before it is opened.
+pub fn open_tuned(
+    dir: &Path,
+    retention: u64,
+    group_commit: Option<std::time::Duration>,
+    disk_state: bool,
+    geometry: xone_db::mdbx::Geometry,
+) -> Result<NodeStore, FileError> {
+    geometry.validate().map_err(FileError)?;
+    geometry
+        .check_existing(&dir.join("chain.mdbx"))
+        .map_err(FileError)?;
     if dir.join("head.json").exists() {
         return Err(FileError(format!(
             "{} holds the file store of an older build; it cannot be opened (remove the datadir and sync again)",
@@ -63,6 +85,7 @@ pub fn open(
             per_file: BLOCKS_PER_FILE,
             group_commit,
             disk_state,
+            geometry,
         },
     )
     .map_err(|e| FileError(format!("{}: {e}", dir.display())))

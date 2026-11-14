@@ -53,6 +53,7 @@ fn run() -> Result<(), String> {
             per_file: BLOCKS_PER_FILE,
             group_commit: Some(std::time::Duration::from_secs(3600)),
             disk_state: disk,
+            geometry: Default::default(),
         },
     )
     .map_err(|e| e.to_string())?;

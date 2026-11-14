@@ -18,6 +18,8 @@ Source column: file:line in geth-XDC (`XDCIndia/go-ethereum` at `6fc8e8c2`; `fla
 | `--syncfromblock <n>` |  | unset | First block to import; unset means from genesis. xone-defined. | not in geth-XDC at the pin; task list |
 | `--minimal` |  | false | Start from the anchor of an imported snapshot (`xone snapshot import`), keep only the retention window, never sync from genesis or read an archive. | not in geth-XDC at the pin; issue #38 |
 | `--cache <n>` |  | 4096 | Megabytes of memory for internal caches. | flags.go:556 |
+| `--db.max-size <size>` |  | 1TB | Largest size the MDBX database may grow to (bytes, or KB/MB/GB/TB, powers of 1024; 16MB..8TB). Must cover an existing database; a full map stops writes with an error naming this flag. | not in geth-XDC at the pin; issue #311 |
+| `--db.growth-step <size>` |  | 64MB | Bytes the MDBX database grows by when it fills (at least 1MB, at most --db.max-size). | not in geth-XDC at the pin; issue #311 |
 | `--history.transactions <n>` | `-txlookuplimit` (deprecated) | 2350000 | Recent blocks whose transactions stay indexed; 0 is the whole chain. | flags.go:379 |
 | `--port <n>` |  | 30303 | P2P listening port (TCP). | flags.go:969 ; geth,xone |
 | `--discovery.port <n>` |  | same as port | P2P discovery port (UDP). | flags.go:1026 ; xone |
