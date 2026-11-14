@@ -44,6 +44,10 @@ jobs:
       - run: ci/check-fixtures.sh
       - run: ci/check-layering.sh
       - run: ci/check-layering.sh --fixtures
+      - name: Unsafe and FFI table matches the tree
+        run: |
+          ci/unsafe-audit.sh > "$RUNNER_TEMP/unsafe-audit.md"
+          python3 -I ci/unsafe-audit-drift.py "$RUNNER_TEMP/unsafe-audit.md" docs/assurance/unsafe-ffi-audit-2026-11-11.md
       - run: command -v cargo-deny || cargo install cargo-deny --locked --version 0.20.2
       - run: command -v cargo-audit || cargo install cargo-audit --locked --version 0.23.0
       - run: cargo deny --locked check
@@ -59,6 +63,27 @@ jobs:
       - uses: actions/checkout@v4
       - run: rustup toolchain install nightly-2026-03-24 --profile minimal --component miri,rust-src
       - run: cargo +nightly-2026-03-24 miri test -p xone-primitives --lib
+
+  # Mutation testing of the consensus crates, nightly only, 8 shards of at most 60 minutes (issue #15).
+  # Surviving mutants are a report (see the artifact), not a failure. Config: mutants.toml.
+  mutants:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - run: cargo install cargo-mutants --locked --version 25.3.1
+      - run: cargo mutants --shard ${{ matrix.shard }}/8 --no-shuffle --timeout 120 || [ $? -eq 2 ]   # 2 = mutants survived
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mutants-${{ matrix.shard }}
+          path: mutants.out
+          if-no-files-found: ignore
 
   # The oracle fork is private. Missing read access fails this qualification;
   # committed-table smoke tests still run in `check`, but cannot replace drift proof.
