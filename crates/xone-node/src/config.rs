@@ -79,8 +79,19 @@ pub struct Config {
     pub mining: Mining,
     pub logging: Logging,
     pub metrics: Listen,
+    pub metrics_push: MetricsPush,
     pub pprof: Listen,
     pub limits: Limits,
+}
+
+/// Metrics push to a Prometheus Pushgateway (issue #186). Off unless `url` is set.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct MetricsPush {
+    /// `http://host:port[/prefix]`; credentials in the URL are refused.
+    pub url: Option<String>,
+    pub job: String,
+    pub interval_secs: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -280,8 +291,14 @@ defaults!(Config {
     mining: Mining::default(),
     logging: Logging::default(),
     metrics: Listen::default(),
+    metrics_push: MetricsPush::default(),
     pprof: Listen::default(),
     limits: Limits::default(),
+});
+defaults!(MetricsPush {
+    url: None,
+    job: "xone".into(),
+    interval_secs: 15,
 });
 defaults!(SyncCfg {
     mode: "full".into(),
@@ -618,6 +635,9 @@ impl Config {
             "metrics" => self.metrics.enabled = flag(key, v)?,
             "metrics.addr" => self.metrics.addr = v.to_owned(),
             "metrics.port" => self.metrics.port = num(key, v)?,
+            "metrics.push.url" => self.metrics_push.url = (!v.is_empty()).then(|| v.to_owned()),
+            "metrics.push.job" => self.metrics_push.job = v.to_owned(),
+            "metrics.push.interval" => self.metrics_push.interval_secs = num(key, v)?,
             "pprof" => self.pprof.enabled = flag(key, v)?,
             "pprof.addr" => self.pprof.addr = v.to_owned(),
             "pprof.port" => self.pprof.port = num(key, v)?,

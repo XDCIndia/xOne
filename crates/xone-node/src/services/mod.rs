@@ -230,6 +230,16 @@ pub fn build(
             stats.clone(),
         )));
     }
+    if let Some(url) = &cfg.metrics_push.url {
+        node.add(Box::new(crate::observe::push::Pusher::new(
+            &crate::observe::push::PushCfg {
+                url: url.clone(),
+                job: cfg.metrics_push.job.clone(),
+                interval: Duration::from_secs(cfg.metrics_push.interval_secs),
+            },
+            stats.clone(),
+        )?));
+    }
     if let Some(url) = &cfg.ethstats {
         node.add(Box::new(crate::observe::ethstats::Ethstats::new(
             crate::observe::ethstats::EthstatsCfg {
