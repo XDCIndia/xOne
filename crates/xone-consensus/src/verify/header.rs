@@ -16,10 +16,8 @@ use xone_chainspec::{ChainSpec, V2};
 use xone_primitives::{ecrecover, Header, QuorumCert, EXTRA_SEAL};
 
 use super::error::HeaderError;
-use crate::v1::{
-    checkpoint::{addresses, same_set},
-    double_validation, switch, turn,
-};
+use crate::penalty::same_set;
+use crate::v1::{checkpoint::addresses, double_validation, switch, turn};
 use crate::v2::{
     self, cert,
     epoch_switch::{self, Expected, SwitchQuery},
