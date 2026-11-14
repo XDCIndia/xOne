@@ -110,7 +110,7 @@ pub fn build(
     let producer_plan = cfg
         .mining
         .mine
-        .then(|| producer::plan(cfg, spec.chain_id))
+        .then(|| producer::plan(cfg, &spec))
         .transpose()
         .map_err(|e| e.to_string())?;
 
