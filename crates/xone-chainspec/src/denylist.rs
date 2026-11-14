@@ -85,11 +85,11 @@ pub fn is_denylisted(a: &Address) -> bool {
 
 /// geth-XDC `BlackListHFNumber` for a chain whose genesis has no `denylistBlock`
 /// (`common.CopyXDCConstants`): mainnet 38,383,838, Apothem 23,779,191, the devnets and the
-/// puppeth chain 0, and the mainnet base for every other chain ID.
+/// puppeth chain 0 (551, 5050, 5151, 5551, 99999), and the mainnet base for every other chain ID.
 pub fn default_denylist_block(chain_id: u64) -> u64 {
     match chain_id {
         51 => 23_779_191,
-        551 | 5050 | 5551 | 99_999 => 0,
+        551 | 5050 | 5151 | 5551 | 99_999 => 0,
         _ => 38_383_838,
     }
 }
@@ -138,6 +138,11 @@ mod tests {
         assert_eq!(default_denylist_block(50), 38_383_838);
         assert_eq!(default_denylist_block(51), 23_779_191);
         assert_eq!(default_denylist_block(551), 0);
+        // `common/types.go:258`, `:275` (local devnet 5151): BlackListHFNumber = 0
+        assert_eq!(default_denylist_block(5151), 0);
+        for id in [5050, 5551, 99_999] {
+            assert_eq!(default_denylist_block(id), 0, "{id}");
+        }
         assert_eq!(default_denylist_block(2040), 38_383_838);
     }
 }
