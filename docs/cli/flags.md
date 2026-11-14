@@ -68,6 +68,7 @@ Source column: file:line in geth-XDC (`XDCIndia/go-ethereum` at `6fc8e8c2`; `fla
 | `--metrics.port <n>` |  | 6060 | Metrics listen port. | flags.go:1088 |
 | `--dev` |  | false | Developer chain: chain id 1337 with one validator whose key is made in memory at start and never written, sealing alone, and a funded developer account (the public test key of the test-junk mnemonic, printed at start). Implies --mine, --http and --nodiscover; the datadir is a new temp dir unless --datadir names an empty one. Refused with a network flag, --networkid, --override.genesis, --chainspec, --keystore or --password. V1 until block 2700, then V2. | flags.go:500 ; xone |
 | `--dev.period <n>` |  | 2 | Seconds between blocks of the --dev chain (1 to 60). | flags.go:504 |
+| `--rpc.record <path>` |  |  | Record every dispatched RPC request (method, params, transport, time) as JSONL in this directory, rotated at 64 MiB x 4 files. Never records headers, admin_*, personal_*, perm_* or signing calls. Off when empty. | xone |
 | `--pprof` |  | false | Enable the profiling endpoint. | internal/debug/flags.go:106 |
 | `--pprof.addr <string>` |  | 127.0.0.1 | Profiling listen address. | internal/debug/flags.go:117 |
 | `--pprof.port <n>` |  | 6060 | Profiling listen port. | internal/debug/flags.go:111 |

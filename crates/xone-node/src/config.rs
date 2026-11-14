@@ -79,6 +79,8 @@ pub struct Config {
     pub mining: Mining,
     pub logging: Logging,
     pub metrics: Listen,
+    /// `--rpc.record <dir>` (issue #197): record dispatched RPC requests as JSONL. Off when None.
+    pub rpc_record: Option<PathBuf>,
     pub pprof: Listen,
     pub limits: Limits,
     pub dev: Dev,
@@ -290,6 +292,7 @@ defaults!(Config {
     mining: Mining::default(),
     logging: Logging::default(),
     metrics: Listen::default(),
+    rpc_record: None,
     pprof: Listen::default(),
     limits: Limits::default(),
     dev: Dev::default(),
@@ -603,6 +606,7 @@ impl Config {
                 self.http.jwt_secret = Some(v.into());
                 self.ws.jwt_secret = Some(v.into());
             }
+            "rpc.record" => self.rpc_record = (!v.is_empty()).then(|| v.into()),
             "authrpc.addr" => self.authrpc.addr = v.to_owned(),
             "authrpc.port" => self.authrpc.port = num(key, v)?,
             "authrpc.jwtsecret" => self.authrpc.jwt_secret = Some(v.into()),

@@ -539,6 +539,14 @@ pub const FLAGS: &[Flag] = &[
         "flags.go:504",
     ),
     f(
+        "rpc.record",
+        P,
+        "",
+        "/d/rpc-record",
+        "Record every dispatched RPC request (method, params, transport, time) as JSONL in this directory, rotated at 64 MiB x 4 files. Never records headers, admin_*, personal_*, perm_* or signing calls. Off when empty.",
+        "xone",
+    ),
+    f(
         "pprof",
         B,
         "false",

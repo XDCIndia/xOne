@@ -1391,3 +1391,74 @@ async fn a_plain_http_request_to_the_websocket_port_is_not_dispatched() {
     assert!(out.is_empty() || out.starts_with("HTTP/1.1 4"), "{out}");
     h.abort();
 }
+
+/// RPC recorder (issue #197): dispatched requests become JSON lines; admin and signing calls never.
+#[test]
+fn recorder_writes_requests_but_never_admin_or_signing_calls() {
+    use xone_rpc::record::{Recorder, FILE};
+    let dir = std::env::temp_dir().join(format!("xone-rpcrec-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let rec = Arc::new(Recorder::open(&dir, 1 << 20, 2).unwrap());
+    let mut r = rpc();
+    {
+        let rm = Arc::get_mut(&mut r).unwrap();
+        rm.recorder = Some(rec.clone());
+        rm.transport = "http";
+    }
+    ask(&r, req(1, "eth_blockNumber", json!([])));
+    ask(&r, req(2, "admin_peers", json!([])));
+    ask(&r, req(3, "eth_sign", json!(["0x11", "0xdead"])));
+    ask(
+        &r,
+        json!([
+            req(4, "eth_getBalance", json!([format!("{ACCT:#x}"), "latest"])),
+            req(5, "personal_unlockAccount", json!(["0x11", "pw"]))
+        ]),
+    );
+    let t0 = std::time::Instant::now();
+    while rec.written() < 2 {
+        assert!(
+            t0.elapsed() < std::time::Duration::from_secs(5),
+            "not written"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let text = std::fs::read_to_string(dir.join(FILE)).unwrap();
+    let lines: Vec<Value> = text
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    let methods: Vec<&str> = lines
+        .iter()
+        .map(|l| l["method"].as_str().unwrap())
+        .collect();
+    assert_eq!(methods, ["eth_blockNumber", "eth_getBalance"], "{text}");
+    assert_eq!(lines[0]["transport"], "http");
+    assert!(lines[1]["params"].is_array() && lines[0]["t"].as_u64().is_some());
+    assert!(!text.contains("pw") && !text.contains("0xdead"));
+    assert_eq!(rec.dropped(), 0);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn recorder_rotates_by_size() {
+    use xone_rpc::record::{Recorder, FILE};
+    let dir = std::env::temp_dir().join(format!("xone-rpcrot-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let rec = Recorder::open(&dir, 200, 3).unwrap();
+    for _ in 0..20 {
+        rec.record("ws", "eth_chainId", None);
+    }
+    let t0 = std::time::Instant::now();
+    while rec.written() < 20 {
+        assert!(
+            t0.elapsed() < std::time::Duration::from_secs(5),
+            "not written"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(std::fs::metadata(dir.join(FILE)).unwrap().len() <= 200);
+    assert!(dir.join(format!("{FILE}.1")).exists() && dir.join(format!("{FILE}.2")).exists());
+    assert!(!dir.join(format!("{FILE}.3")).exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}

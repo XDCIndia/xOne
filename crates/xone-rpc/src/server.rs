@@ -208,6 +208,10 @@ pub struct Rpc {
     global_bucket: Mutex<Bucket>,
     /// Set by the node's watchdog: C2 and C3 answer `-32005 "node busy"` (ADR-007 section 3, rule 6).
     pub shed: AtomicBool,
+    /// `--rpc.record` (issue #197): every dispatched request, minus the denied methods.
+    pub recorder: Option<Arc<crate::record::Recorder>>,
+    /// The transport name written by the recorder (`http`, `ws`, `ipc`).
+    pub transport: &'static str,
     start: Instant,
     next_conn: Mutex<u64>,
 }
@@ -249,6 +253,8 @@ impl Rpc {
             policy: Default::default(),
             hub: Arc::default(),
             shed: AtomicBool::new(false),
+            recorder: None,
+            transport: "rpc",
             start: Instant::now(),
             next_conn: Mutex::new(0),
         })
@@ -291,6 +297,9 @@ impl Rpc {
             return fail(id, RpcError::invalid_request("invalid request"));
         }
         let method = method.unwrap_or("");
+        if let Some(r) = &self.recorder {
+            r.record(self.transport, method, obj.get("params"));
+        }
         let notification = id.is_none();
         let res = self.call(method, obj.get("params"), cancel);
         if notification {
