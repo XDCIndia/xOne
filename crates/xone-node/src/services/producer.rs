@@ -241,6 +241,9 @@ struct Worker {
     seal_ms: u128,
     /// Peer votes received per round (the last 16 rounds), for the `stuck` line.
     votes_in: BTreeMap<u64, u32>,
+    /// ADR-010 fence clock: valid BFT gossip arrived since the last fence tick, and when that tick was.
+    heard: bool,
+    fence_at: Instant,
 }
 
 fn say(m: impl std::fmt::Display) {
@@ -399,6 +402,18 @@ impl Worker {
 
     fn tick(&mut self) {
         self.inbound();
+        // The fence (ADR-010 section 8) counts seconds of connected time with valid gossip; nothing advanced it,
+        // so on Apothem (quiet = 120) a producer never signed. ponytail: no key sighting yet (fence.sighted),
+        // add it when the inbound path recovers signers.
+        if self.heard && self.fence_at.elapsed() >= Duration::from_secs(1) {
+            let was = self.unit.fence_mut().open();
+            self.unit.fence_mut().tick();
+            if !was && self.unit.fence_mut().open() {
+                say("fence open: the quiet window passed, signing starts");
+            }
+            self.heard = false;
+            self.fence_at = Instant::now();
+        }
         self.finish_pending();
         // The head as the BFT machine sees it: the history's tip. `Core::head` is the store's head, which a
         // block reaches before the history does (`Core::import` commits, then derives and pushes); a tick in
@@ -1181,6 +1196,7 @@ impl Worker {
                 BftMessage::SyncInfo(s) => Event::SyncInfo(s.clone(), Some(tag)),
             };
             if self.bft_event(ev) {
+                self.heard = true;
                 self.peers.relay_bft(&msg, &from);
             }
         }
@@ -1209,6 +1225,9 @@ impl Worker {
             }
             let d = match driven {
                 Ok(d) => d,
+                // the quiet window (ADR-010) refuses every signature for a while after a start: that is a
+                // skip, not a fault; stopping here left a fresh Apothem producer dead from its first vote
+                Err(xone_consensus::unit::UnitError::FenceClosed) => continue,
                 Err(e) => {
                     say(format!("stopping: {e}"));
                     self.dead = true;
@@ -1389,6 +1408,8 @@ impl ProducerService {
                 pending: None,
                 seal_ms: 0,
                 votes_in: BTreeMap::new(),
+                heard: false,
+                fence_at: Instant::now(),
             }),
             stop,
             thread: None,
