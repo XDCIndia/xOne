@@ -4,6 +4,7 @@ pub mod core;
 pub mod gaprpc;
 pub mod hist;
 pub mod net;
+pub mod peerfile;
 pub mod pool;
 pub mod producer;
 pub mod rpc;

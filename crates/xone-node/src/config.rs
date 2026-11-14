@@ -122,6 +122,10 @@ pub struct P2p {
     /// `--eth.requiredblocks`: `<n>=<0x hash>` entries the operator adds to, or uses to replace,
     /// the built-in ones of the network ([`Config::required_blocks`]).
     pub required_blocks: Vec<String>,
+    /// `--peers.file`: the persistent peer table; None is `<datadir>/peers.json`.
+    pub peers_file: Option<PathBuf>,
+    /// `--peers.nopersist`: neither read nor write the peer table.
+    pub peers_nopersist: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -301,7 +305,9 @@ defaults!(P2p {
     no_discover: false,
     nat: None,
     bootnodes: vec![],
-    required_blocks: vec![]
+    required_blocks: vec![],
+    peers_file: None,
+    peers_nopersist: false
 });
 defaults!(Http {
     enabled: false,
@@ -566,6 +572,8 @@ impl Config {
             "discovery.port" => self.p2p.discovery_port = Some(num(key, v)?),
             "maxpeers" => self.p2p.max_peers = num(key, v)?,
             "nodiscover" => self.p2p.no_discover = flag(key, v)?,
+            "peers.file" => self.p2p.peers_file = Some(v.into()),
+            "peers.nopersist" => self.p2p.peers_nopersist = flag(key, v)?,
             "nat" => self.p2p.nat = Some(v.to_owned()),
             "bootnodes" => self.p2p.bootnodes = list(v),
             "eth.requiredblocks" => {

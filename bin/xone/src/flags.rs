@@ -175,6 +175,22 @@ pub const FLAGS: &[Flag] = &[
         "flags.go:997",
     ),
     f(
+        "peers.file",
+        P,
+        "<datadir>/peers.json",
+        "/d/peers.json",
+        "Persistent peer table: outbound peers with a completed handshake, dialled again at start (at most 1,000, kept 7 days, written every 5 minutes and at stop).",
+        "reth --peers-file ; xone",
+    ),
+    f(
+        "peers.nopersist",
+        B,
+        "false",
+        "true",
+        "Neither read nor write the persistent peer table.",
+        "reth --no-persist-peers ; xone",
+    ),
+    f(
         "nat",
         S,
         "unset",
