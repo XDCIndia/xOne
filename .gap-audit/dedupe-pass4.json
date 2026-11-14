@@ -1,0 +1,407 @@
+[
+  {
+    "query": "finalized in:title",
+    "issues": []
+  },
+  {
+    "query": "canonical in:title",
+    "issues": [
+      {
+        "number": 63,
+        "title": "txpool: reconcile canonical-head changes and reinject eligible orphaned transactions",
+        "url": "https://github.com/XDCIndia/xOneRS/issues/63"
+      },
+      {
+        "number": 99,
+        "title": "rpc: reject overflowing eth_getLogs ranges before enumerating canonical history",
+        "url": "https://github.com/XDCIndia/xOneRS/issues/99"
+      }
+    ]
+  },
+  {
+    "query": "cors in:title",
+    "issues": []
+  },
+  {
+    "query": "feeHistory in:title",
+    "issues": []
+  },
+  {
+    "query": "bloom in:title",
+    "issues": []
+  },
+  {
+    "query": "parallel execution in:title",
+    "issues": []
+  },
+  {
+    "query": "pending state in:title",
+    "issues": []
+  },
+  {
+    "query": "call estimate in:title",
+    "issues": []
+  },
+  {
+    "query": "prefetch in:title",
+    "issues": []
+  },
+  {
+    "query": "parallel in:title",
+    "issues": [
+      {
+        "number": 246,
+        "title": "perf: parallel storage roots and a 16-way account-trie hash",
+        "url": "https://github.com/XDCIndia/xOneRS/issues/246"
+      }
+    ]
+  },
+  {
+    "query": "fee history in:title",
+    "issues": []
+  },
+  {
+    "query": "EIP-1898 in:title",
+    "issues": []
+  },
+  {
+    "query": "CORS in:body",
+    "issues": [
+      {
+        "number": 172,
+        "title": "[GAP-0021] GraphQL endpoint (EIP-1767)",
+        "url": "https://github.com/XDCIndia/xOneRS/issues/172"
+      },
+      {
+        "number": 60,
+        "title": "rpc security: transport-specific exposure and authorization without HTTP or WS bypass",
+        "url": "https://github.com/XDCIndia/xOneRS/issues/60"
+      }
+    ]
+  },
+  {
+    "query": "requireCanonical in:body",
+    "issues": []
+  },
+  {
+    "query": "finalized in:body",
+    "issues": [
+      {
+        "number": 35,
+        "title": "consensus/v2 BFT: vote and timeout pools, round timer, voting rule with lock QC, sibling votes, SyncInfo handling and forensics",
+        "url": "https://github.com/XDCIndia/xOneRS/issues/35"
+      },
+      {
+        "number": 51,
+        "title": "tracker: build backlog, 7th client from scratch (XA + XB checklist, combined DAG, milestone order)",
+        "url": "https://github.com/XDCIndia/xOneRS/issues/51"
+      },
+      {
+        "number": 135,
+        "title": "storage: database and storage-architecture decision for the xOne clients (Go, Rust, TS)",
+        "url": "https://github.com/XDCIndia/xOneRS/issues/135"
+      }
+    ]
+  },
+  {
+    "query": "eth_feeHistory in:title",
+    "issues": []
+  },
+  {
+    "query": "topics in:title",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"missing receipts\" in:title",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"call arguments\" in:title",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"wide balance\" in:title",
+    "issues": [
+      {
+        "number": 7,
+        "title": "spike: wide-balance domain and revm compatibility proof across the full rule and revert matrix",
+        "url": "https://github.com/XDCIndia/xOneRS/issues/7"
+      },
+      {
+        "number": 37,
+        "title": "snap: snap/1 client and server in Rust with XDC wide-balance accounts and pre-pivot completeness",
+        "url": "https://github.com/XDCIndia/xOneRS/issues/37"
+      }
+    ],
+    "error": null
+  },
+  {
+    "query": "\"withLog\"",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"request IDs\" in:title",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"subscription\" in:title",
+    "issues": [
+      {
+        "number": 156,
+        "title": "[GAP-0005] Standard read-only RPC methods still missing (eth_maxPriorityFeePerGas, eth_getHeaderBy*, eth_getRawTransaction*, eth_pendingTransactions, uncle-by-index, txpool_contentFrom, rpc_modules, syncing subscription)",
+        "url": "https://github.com/XDCIndia/xOneRS/issues/156"
+      }
+    ],
+    "error": null
+  },
+  {
+    "query": "\"blocking\" in:title",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"slow\" in:title",
+    "issues": [
+      {
+        "number": 226,
+        "title": "[GAP-0054] Slow-block log: one structured line with per-phase timings for each block slower than a threshold (--debug.logslowblock)",
+        "url": "https://github.com/XDCIndia/xOneRS/issues/226"
+      },
+      {
+        "number": 125,
+        "title": "net: a snap-synced or anchored peer answers GetBlockBodies for old blocks slowly or not at all; clients time out and set it aside for 60 s",
+        "url": "https://github.com/XDCIndia/xOneRS/issues/125"
+      }
+    ],
+    "error": null
+  },
+  {
+    "query": "\"compression\" in:title",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"totalDifficulty\" in:title",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"hash lookup\" in:title",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"log index\" in:title",
+    "issues": [
+      {
+        "number": 232,
+        "title": "[GAP-0059] Chain-data exporter: stream blocks, receipts, logs and traces to Kafka (reorg-aware, resumable), for explorers and indexers",
+        "url": "https://github.com/XDCIndia/xOneRS/issues/232"
+      }
+    ],
+    "error": null
+  },
+  {
+    "query": "\"raw header\" in:title",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"full transaction\" in:title",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"OpenRPC\"",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"routing table\" in:title",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"subnet\" in:title",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"IPv6\" in:title",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"redial\" in:title",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"heap\" in:title",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"snap\" \"serving\" in:title",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"bytecode\" in:title",
+    "issues": [
+      {
+        "number": 248,
+        "title": "perf: cache the analysed bytecode across transactions and blocks",
+        "url": "https://github.com/XDCIndia/xOneRS/issues/248"
+      }
+    ],
+    "error": null
+  },
+  {
+    "query": "\"limits\" \"configuration\" in:title",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"macOS\" in:title",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"telemetry\" in:title",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"heartbeat\" in:title",
+    "issues": [
+      {
+        "number": 41,
+        "title": "observability: ethstats with stamped identity, SkyNet heartbeat (camelCase), Prometheus metrics and log rotation",
+        "url": "https://github.com/XDCIndia/xOneRS/issues/41"
+      }
+    ],
+    "error": null
+  },
+  {
+    "query": "\"cardinality\"",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"blocks_imported_total\"",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"readiness\" in:title",
+    "issues": [
+      {
+        "number": 57,
+        "title": "plan: phase-level readiness DAG and active-session ownership without umbrella deadlocks",
+        "url": "https://github.com/XDCIndia/xOneRS/issues/57"
+      }
+    ],
+    "error": null
+  },
+  {
+    "query": "\"geometry\" in:title",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"gzip\" in:title",
+    "issues": [
+      {
+        "number": 278,
+        "title": "[GAP-0076] Negotiate gzip compression for large HTTP RPC responses",
+        "url": "https://github.com/XDCIndia/xOneRS/issues/278"
+      }
+    ],
+    "error": null
+  },
+  {
+    "query": "\"import\" \"datadir\" in:title",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"RLP\" \"length\" in:title",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"flush\" in:title",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"schema\" in:title",
+    "issues": [
+      {
+        "number": 280,
+        "title": "[GAP-0082] Generate a machine-readable RPC schema and optional rpc.discover endpoint",
+        "url": "https://github.com/XDCIndia/xOneRS/issues/280"
+      }
+    ],
+    "error": null
+  },
+  {
+    "query": "\"WebSocket\" \"limit\" in:title",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"Content-Type\"",
+    "issues": [
+      {
+        "number": 121,
+        "title": "rpc: the typed unsupported-history refusal reports the head as pivot on snap, fast and minimal nodes",
+        "url": "https://github.com/XDCIndia/xOneRS/issues/121"
+      }
+    ],
+    "error": null
+  },
+  {
+    "query": "\"IPC\" in:title",
+    "issues": [
+      {
+        "number": 180,
+        "title": "[GAP-0029] Interactive console: xone attach over IPC/HTTP",
+        "url": "https://github.com/XDCIndia/xOneRS/issues/180"
+      }
+    ],
+    "error": null
+  },
+  {
+    "query": "\"arity\" in:title",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"expiry\" in:title",
+    "issues": [
+      {
+        "number": 96,
+        "title": "net: runtime discv4 clock emits packet expiry timestamps near 1970",
+        "url": "https://github.com/XDCIndia/xOneRS/issues/96"
+      }
+    ],
+    "error": null
+  },
+  {
+    "query": "\"raw\" \"cache\" in:title",
+    "issues": [],
+    "error": null
+  },
+  {
+    "query": "\"txpool_status\" in:title",
+    "issues": [],
+    "error": null
+  }
+]

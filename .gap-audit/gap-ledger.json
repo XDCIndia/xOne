@@ -3,9 +3,9 @@
   "priority_rule": "P0 = a missing node type (archive); P1 = 8+ of 10 selected competitors, or present in the canonical XDC clients; P2 = 5-7; P3 = 1-4.",
   "competitor_commits": {
     "ethereum/go-ethereum": "8059ff8beb3170eb8b977169ac51bb0423c97ee1",
-    "erigontech/erigon": "bbb5524e53fb057e7d47a5066e152f1091ac4ba4",
+    "erigontech/erigon": "5b59b99c73893b4a21cc1cea175e6263cf914912",
     "paradigmxyz/reth": "36600d5ff9628465475dd4c7608e2e9f2fe24273",
-    "lambdaclass/ethrex": "740ea493880b6c073b81537010df75e143c615c2",
+    "lambdaclass/ethrex": "7e272ac5075aec832304909b376bada4eca52e77",
     "NethermindEth/nethermind": "a7dd73052e696ad934d228aad3f33e660701fdb7",
     "besu-eth/besu": "2b839d96863d01210f45a6f62127e6229e5b0889",
     "status-im/nimbus-eth1": "5e3fd7e9d19177980cc1c086c46c4e1dcf38eced",
@@ -15,7 +15,18 @@
     "BuildOnViction/victionchain": "31fe7cb935b46b8b5b115d070e64b30d6b8165b1",
     "kaiachain/kaia": "0f9ad843d1ccb7381cc43070ce13002cca7b1ed9",
     "harmony-one/harmony": "a41e194761c81fe846994864e789a7d306bbc439",
-    "tempoxyz/tempo": "35d8b937fba89ae0bfdea1edf735fb6f8aa41c23"
+    "tempoxyz/tempo": "35d8b937fba89ae0bfdea1edf735fb6f8aa41c23",
+    "sei-protocol/sei-chain": "efa1e663467ee973e95f844f7505a6d218cadab0",
+    "category-labs/monad": "83f8bc65ca725a77f7b6ead50756eed90fa28691",
+    "etclabscore/core-geth": "4720ac33055e8e5482ce2fb6c5ff800aad8a5889",
+    "ava-labs/avalanchego": "f27fa6712b340a552376fd7ecdf2de15307cd7bd",
+    "circlefin/arc-node": "6e764023ee6515fe70573e123ed2db912a7207b4",
+    "skalenetwork/skaled": "6ae2c94a82b2349faad2f2c02a75cc1d78fc2116",
+    "0xsoniclabs/sonic": "e12abf3b8405af4c382c0bb4f0d81d543a7264da",
+    "Galxe/gravity-reth": "c407bd938013a4250544c303ac294a36482dcd98",
+    "autonity/autonity": "cf1c15ee0bfae7cd1eff7b9b2c3a69f70b4b951f",
+    "KiiChain/kiichain": "85d9352541cb7d600e8312bbe0cd51bbe3ca2c0d",
+    "crypto-org-chain/cronos": "0801cdef03b15788a81698cef368a44a6f60c031"
   },
   "gaps": [
     {
@@ -87,7 +98,9 @@
       "seen_in_count": 10,
       "issue_url": "https://github.com/XDCIndia/xOneRS/issues/154",
       "key": "structlog",
-      "related": "#42"
+      "related": "#42",
+      "issue_state": "open",
+      "issue_state_checked": "2026-11-14"
     },
     {
       "id": "GAP-0004",
@@ -252,7 +265,9 @@
       "seen_in_count": 8,
       "issue_url": "https://github.com/XDCIndia/xOneRS/issues/161",
       "key": "tracecall",
-      "related": "#42"
+      "related": "#42",
+      "issue_state": "open",
+      "issue_state_checked": "2026-11-14"
     },
     {
       "id": "GAP-0011",
@@ -321,7 +336,9 @@
       "seen_in_count": 8,
       "issue_url": "https://github.com/XDCIndia/xOneRS/issues/164",
       "key": "jsonlogs",
-      "related": "#41"
+      "related": "#41",
+      "issue_state": "closed",
+      "issue_state_checked": "2026-11-14"
     },
     {
       "id": "GAP-0014",
@@ -1002,7 +1019,9 @@
       "seen_in_count": null,
       "issue_url": "https://github.com/XDCIndia/xOneRS/issues/201",
       "key": "locbudget",
-      "related": "#15, #44, #22"
+      "related": "#15, #44, #22",
+      "issue_state": "closed",
+      "issue_state_checked": "2026-11-14"
     },
     {
       "id": "GAP-0047",
@@ -1073,7 +1092,9 @@
       "in_oracle": true,
       "issue_url": "https://github.com/XDCIndia/xOneRS/issues/220",
       "key": "divergencetrace",
-      "related": "#160 (GAP-0009 getBadBlocks store), #154 (GAP-0003 struct logger), #10, #42"
+      "related": "#160 (GAP-0009 getBadBlocks store), #154 (GAP-0003 struct logger), #10, #42",
+      "issue_state": "open",
+      "issue_state_checked": "2026-11-14"
     },
     {
       "id": "GAP-0049",
@@ -1339,7 +1360,9 @@
       "in_oracle": false,
       "issue_url": "https://github.com/XDCIndia/xOneRS/issues/228",
       "key": "ospackages",
-      "related": "#46 (release packaging, closed), #193 (GAP-0038 static binaries, aarch64), #62 (release assurance on packaged bytes)"
+      "related": "#46 (release packaging, closed), #193 (GAP-0038 static binaries, aarch64), #62 (release assurance on packaged bytes)",
+      "issue_state": "closed",
+      "issue_state_checked": "2026-11-14"
     },
     {
       "id": "GAP-0057",
@@ -1421,7 +1444,1158 @@
       "in_oracle": false,
       "issue_url": "https://github.com/XDCIndia/xOneRS/issues/232",
       "key": "dataexport",
-      "related": "#187 (GAP-0036 live hooks), #198 (GAP-0043 library), #183 (GAP-0032 ots)"
+      "related": "#187 (GAP-0036 live hooks), #198 (GAP-0043 library), #183 (GAP-0032 ots)",
+      "issue_state": "open",
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "finality-tags",
+      "title": "Resolve finalized block queries from the committed XDPoS head",
+      "area": "rpc",
+      "priority": "P1",
+      "id": "GAP-0060",
+      "status": "issued",
+      "sources": [
+        "XinFinOrg/XDPoSChain:eth/api_backend.go",
+        "ethereum/go-ethereum:eth/api_backend.go",
+        "paradigmxyz/reth:crates/storage/storage-api/src/block_id.rs"
+      ],
+      "ours": "crates/xone-rpc/src/types.rs; crates/xone-rpc/src/eth.rs; crates/xone-rpc/src/api.rs; crates/xone-node/src/services/rpc.rs",
+      "seen_in_count": 3,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/254",
+      "related": "#42 owns general RPC parity; #33 owns fork choice. Neither records this selector defect.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 254,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "canonical-selectors",
+      "title": "Honor requireCanonical and validate EIP-1898 block selectors",
+      "area": "rpc",
+      "priority": "P1",
+      "id": "GAP-0061",
+      "status": "issued",
+      "sources": [
+        "XinFinOrg/XDPoSChain:rpc/types.go",
+        "XinFinOrg/XDPoSChain:eth/api_backend.go",
+        "ethereum/go-ethereum:eth/api_backend.go",
+        "paradigmxyz/reth:crates/storage/provider/src/providers/consistent.rs"
+      ],
+      "ours": "crates/xone-rpc/src/types.rs; crates/xone-rpc/src/eth.rs",
+      "seen_in_count": 3,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/255",
+      "related": "#100 pins state during reads; this adds selector validation and canonicality, not another state-pinning implementation.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 255,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "http-cors",
+      "title": "Wire http.corsdomain through HTTP preflight and response headers",
+      "area": "rpc",
+      "priority": "P2",
+      "id": "GAP-0062",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:node/rpcstack.go",
+        "paradigmxyz/reth:crates/rpc/rpc-builder/src/cors.rs",
+        "besu-eth/besu:ethereum/api/src/main/java/org/hyperledger/besu/ethereum/api/jsonrpc/JsonRpcHttpService.java"
+      ],
+      "ours": "bin/xone/src/flags.rs; crates/xone-node/src/config.rs; crates/xone-node/src/services/rpc.rs; crates/xone-rpc/src/transport.rs",
+      "seen_in_count": 3,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/257",
+      "related": "#60 owns transport authorization and #171 owns RPC limits. This issue fixes the existing CORS flag that is not wired to HTTP.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 257,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "fee-history",
+      "title": "Complete eth_feeHistory percentile and next-block fee semantics",
+      "area": "rpc",
+      "priority": "P1",
+      "id": "GAP-0063",
+      "status": "issued",
+      "sources": [
+        "XinFinOrg/XDPoSChain:eth/gasprice/feehistory.go",
+        "ethereum/go-ethereum:eth/gasprice/feehistory.go",
+        "paradigmxyz/reth:crates/rpc/rpc-eth-api/src/helpers/fee.rs"
+      ],
+      "ours": "crates/xone-rpc/src/eth.rs; spec/rpc/scope-adr-008.md; crates/xone-evm/src/fees.rs",
+      "seen_in_count": 3,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/256",
+      "related": "#42 is the parent RPC scope; this issue replaces explicit shortcuts in the current feeHistory implementation.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 256,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "log-bloom",
+      "title": "Skip receipt reads when header blooms exclude an eth_getLogs match",
+      "area": "rpc",
+      "priority": "P2",
+      "id": "GAP-0064",
+      "status": "issued",
+      "sources": [
+        "XinFinOrg/XDPoSChain:eth/filters/filter.go",
+        "ethereum/go-ethereum:eth/filters/filter.go",
+        "paradigmxyz/reth:crates/rpc/rpc/src/eth/filter.rs"
+      ],
+      "ours": "crates/xone-rpc/src/eth.rs; crates/xone-rpc/src/subscriptions.rs; crates/xone-rpc/src/api.rs",
+      "seen_in_count": 3,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/258",
+      "related": "#99 fixed range overflow; #153 adds polling filters. Neither adds bloom pruning to this existing method.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 258,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "state-prefetch",
+      "title": "Add bounded read-only state prefetch before block execution",
+      "area": "perf",
+      "priority": "P2",
+      "id": "GAP-0065",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:core/state_prefetcher.go",
+        "XinFinOrg/XDPoSChain:core/state_prefetcher.go",
+        "lambdaclass/ethrex:crates/blockchain/prewarm.rs"
+      ],
+      "ours": "crates/xone-state/src/provider.rs; crates/xone-sync/src/mdbx/diskflat.rs; crates/xone-executor/src/lib.rs; crates/xone-node/src/services/core.rs",
+      "seen_in_count": 3,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/259",
+      "related": "#248 caches analyzed bytecode; #246 hashes tries in parallel; #247 overlaps commit. This issue warms state reads and does not duplicate those changes.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 259,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "parallel-evm",
+      "title": "Prototype deterministic parallel transaction execution with serial fallback",
+      "area": "perf",
+      "priority": "P3",
+      "id": "GAP-0066",
+      "status": "issued",
+      "sources": [
+        "Galxe/gravity-reth:crates/ethereum/evm/src/parallel_execute.rs",
+        "category-labs/monad:category/execution/ethereum/execute_block.cpp",
+        "sei-protocol/sei-chain:giga/evmonly/occ.go"
+      ],
+      "ours": "crates/xone-executor/src/lib.rs; crates/xone-executor/src/overlay.rs; crates/xone-state/src/provider.rs; docs/reviews/2026-11-10-architecture-scale-pq-review.md",
+      "seen_in_count": 3,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/260",
+      "related": "#7, #10 and #58 provide execution correctness gates. #246 concerns trie hashing, not EVM transaction scheduling.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 260,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "log-filter-grammar",
+      "title": "Validate log-filter ranges, topic shapes and wildcard alternatives",
+      "area": "rpc",
+      "priority": "P2",
+      "id": "GAP-0067",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:eth/filters/api.go",
+        "XinFinOrg/XDPoSChain:eth/filters/api.go"
+      ],
+      "ours": "crates/xone-rpc/src/subscriptions.rs; crates/xone-rpc/src/eth.rs",
+      "seen_in_count": 2,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/270",
+      "related": "#153 adds polling filters and #258 adds bloom pruning. This fixes the existing filter input contract used by both.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 270,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "log-history-holes",
+      "title": "Refuse incomplete eth_getLogs results when canonical data is unavailable",
+      "area": "rpc",
+      "priority": "P1",
+      "id": "GAP-0068",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:eth/filters/filter.go",
+        "XinFinOrg/XDPoSChain:eth/filters/filter.go"
+      ],
+      "ours": "crates/xone-rpc/src/eth.rs; crates/xone-rpc/src/api.rs; crates/xone-node/src/services/rpc.rs",
+      "seen_in_count": 2,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/264",
+      "related": "#99 addressed range overflow; #121 corrected pivot reporting. Neither handles silent data omission in the current scan.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 264,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "call-transaction-args",
+      "title": "Preserve and validate transaction arguments for call and gas estimation",
+      "area": "rpc",
+      "priority": "P1",
+      "id": "GAP-0069",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:internal/ethapi/transaction_args.go",
+        "XinFinOrg/XDPoSChain:internal/ethapi/transaction_args.go"
+      ],
+      "ours": "crates/xone-rpc/src/api.rs; crates/xone-rpc/src/eth.rs",
+      "seen_in_count": 2,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/265",
+      "related": "#42 owns the runtime call backend; #158 concerns state/block overrides and #155 generates access lists. This unit is the transaction-argument contract.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 265,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "wide-balance-rpc",
+      "title": "Return complete wide balances through read-only RPC quantities",
+      "area": "rpc",
+      "priority": "P2",
+      "id": "GAP-0070",
+      "status": "issued",
+      "sources": [
+        "XinFinOrg/XDPoSChain:internal/ethapi/api.go",
+        "XinFinOrg/XDPoSChain:common/hexutil/json.go"
+      ],
+      "ours": "crates/xone-rpc/src/eth.rs; crates/xone-rpc/src/json.rs; crates/xone-primitives/src/wide_balance.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/271",
+      "related": "#7 owns execution-domain proof. This is a separately testable read-only serialization gap.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 271,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "call-tracer-log-contract",
+      "title": "Carry callTracer event logs through the trace result model",
+      "area": "tracing",
+      "priority": "P2",
+      "id": "GAP-0071",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:eth/tracers/native/call.go",
+        "ethereum/go-ethereum:eth/tracers/native/gen_callframe_json.go"
+      ],
+      "ours": "crates/xone-rpc/src/api.rs; crates/xone-rpc/src/debug.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/273",
+      "related": "#42 owns trace execution and #169 adds other native tracers. This fixes an accepted option that the current public model cannot represent.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 273,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "jsonrpc-envelope",
+      "title": "Validate request IDs and preserve response correlation on RPC failures",
+      "area": "rpc",
+      "priority": "P1",
+      "id": "GAP-0072",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:rpc/json.go",
+        "ethereum/go-ethereum:rpc/handler.go"
+      ],
+      "ours": "crates/xone-rpc/src/server.rs; crates/xone-rpc/src/transport.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/266",
+      "related": "#42 supplies protocol parity. This issue captures specific failure-path correlation defects in the current server.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 266,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "subscription-admission",
+      "title": "Apply namespace policy and resource admission to subscription requests",
+      "area": "rpc",
+      "priority": "P1",
+      "id": "GAP-0073",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:rpc/handler.go",
+        "ethereum/go-ethereum:rpc/subscription.go"
+      ],
+      "ours": "crates/xone-rpc/src/transport.rs; crates/xone-rpc/src/subscriptions.rs; crates/xone-node/src/services/rpc.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/267",
+      "related": "#60 is the exposure parent and #122 fixed event publication. This defect is the current bypass around admission, not another event publisher.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 267,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "blocking-worker-permits",
+      "title": "Hold RPC permits until blocking workers stop and account for each cost class",
+      "area": "rpc",
+      "priority": "P1",
+      "id": "GAP-0074",
+      "status": "issued",
+      "sources": [
+        "paradigmxyz/reth:crates/rpc/rpc-eth-api/src/helpers/blocking_task.rs",
+        "paradigmxyz/reth:crates/tasks/src/pool.rs"
+      ],
+      "ours": "crates/xone-rpc/src/server.rs; crates/xone-rpc/src/transport.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/268",
+      "related": "#16 defines budgets. This unit repairs two concrete admission-accounting paths that do not enforce those budgets.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 268,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "http-ingress-deadlines",
+      "title": "Bound HTTP header, body, idle and response-write time before RPC dispatch",
+      "area": "rpc",
+      "priority": "P1",
+      "id": "GAP-0075",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:node/rpcstack.go",
+        "ethereum/go-ethereum:rpc/http.go"
+      ],
+      "ours": "crates/xone-rpc/src/transport.rs; crates/xone-rpc/src/server.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/269",
+      "related": "#16 defines RPC budgets and #60 defines exposure. This issue handles pre-dispatch network IO, which method deadlines cannot cover.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 269,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "http-compression",
+      "title": "Negotiate gzip compression for large HTTP RPC responses",
+      "area": "rpc",
+      "priority": "P3",
+      "id": "GAP-0076",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:node/rpcstack.go",
+        "XinFinOrg/XDPoSChain:node/rpcstack.go"
+      ],
+      "ours": "crates/xone-rpc/src/transport.rs",
+      "seen_in_count": 2,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/278",
+      "related": "#257 wires CORS. Compression is a separate opt-in transport efficiency feature.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 278,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "block-total-difficulty",
+      "title": "Include exact totalDifficulty in XDC block RPC responses",
+      "area": "rpc",
+      "priority": "P2",
+      "id": "GAP-0077",
+      "status": "issued",
+      "sources": [
+        "XinFinOrg/XDPoSChain:internal/ethapi/api.go",
+        "XinFinOrg/XDPoSChain:eth/api_backend.go"
+      ],
+      "ours": "crates/xone-rpc/src/json.rs; crates/xone-rpc/src/api.rs; crates/xone-node/src/services/rpc.rs; crates/xone-node/src/services/hist.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/274",
+      "related": "#119 concerns P2P Status ranking after snap. This issue adds the missing RPC field and reuses its corrected TD source.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 274,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "pool-hash-lookup",
+      "title": "Use the txpool hash index for eth_getTransactionByHash",
+      "area": "perf",
+      "priority": "P2",
+      "id": "GAP-0078",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:eth/api_backend.go",
+        "ethereum/go-ethereum:core/txpool/txpool.go"
+      ],
+      "ours": "crates/xone-rpc/src/eth.rs; crates/xone-rpc/src/api.rs; crates/xone-node/src/services/pool.rs; crates/xone-builder/src/txpool/mod.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/275",
+      "related": "#165 adds pool operator controls. This is a bounded lookup optimization in an existing read method.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 275,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "receipt-linear-encoding",
+      "title": "Serialize block receipts with one cumulative log-index pass",
+      "area": "perf",
+      "priority": "P2",
+      "id": "GAP-0079",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:core/types/receipt.go",
+        "ethereum/go-ethereum:internal/ethapi/api.go"
+      ],
+      "ours": "crates/xone-rpc/src/json.rs; crates/xone-rpc/src/eth.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/276",
+      "related": "#244 and #245 optimize execution roots. This issue removes repeated work in RPC response construction.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 276,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "raw-header-retention",
+      "title": "Read debug_getRawHeader from retained headers without requiring block bodies",
+      "area": "rpc",
+      "priority": "P2",
+      "id": "GAP-0080",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:internal/ethapi/dbapi.go"
+      ],
+      "ours": "crates/xone-rpc/src/debug.rs; crates/xone-rpc/src/eth.rs; crates/xone-rpc/src/api.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/277",
+      "related": "#160 adds other diagnostics and #156 adds header methods. This corrects an already registered raw-header method.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 277,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "pending-full-subscription",
+      "title": "Support full transaction objects in newPendingTransactions subscriptions",
+      "area": "rpc",
+      "priority": "P3",
+      "id": "GAP-0081",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:eth/filters/api.go",
+        "paradigmxyz/reth:crates/rpc/rpc/src/eth/pubsub.rs"
+      ],
+      "ours": "crates/xone-rpc/src/subscriptions.rs; crates/xone-node/src/services/pool.rs; crates/xone-rpc/src/json.rs",
+      "seen_in_count": 2,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/279",
+      "related": "#156 covers additional methods and other subscriptions. #42 already owns hash notifications; this adds the unsupported full-object option.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 279,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "openrpc-discovery",
+      "title": "Generate a machine-readable RPC schema and optional rpc.discover endpoint",
+      "area": "rpc",
+      "priority": "P3",
+      "id": "GAP-0082",
+      "status": "issued",
+      "sources": [
+        "etclabscore/core-geth:node/openrpc.go",
+        "etclabscore/core-geth:node/node.go"
+      ],
+      "ours": "crates/xone-rpc/src/server.rs; crates/xone-rpc/src/policy.rs; spec/rpc/scope-adr-008.md",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/280",
+      "related": "#188 owns human RPC documentation. This unit adds machine-readable contracts and discovery, reusing that documentation work.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 280,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "discovery-revalidation",
+      "title": "Revalidate discovery endpoints and replace dead routing-table entries",
+      "area": "p2p",
+      "priority": "P2",
+      "id": "GAP-0083",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:p2p/discover/table_reval.go",
+        "ethereum/go-ethereum:p2p/discover/v4_udp.go"
+      ],
+      "ours": "crates/xone-net/src/discv4.rs; crates/xone-node/src/services/net.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/294",
+      "related": "#221 persists peers across restarts. This unit manages freshness and replacement while a node is running.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 294,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "discovery-diversity",
+      "title": "Limit subnet concentration in the discovery routing table",
+      "area": "p2p",
+      "priority": "P2",
+      "id": "GAP-0084",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:p2p/discover/table.go",
+        "ethereum/go-ethereum:p2p/discover/table_test.go"
+      ],
+      "ours": "crates/xone-net/src/discv4.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/295",
+      "related": "#175 restricts allowed CIDRs and #199 restricts peer identities. Diversity limits address concentration among otherwise allowed discovery entries.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 295,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "ipv6-p2p",
+      "title": "Support explicit IPv6 P2P listeners and valid advertised enode URLs",
+      "area": "p2p",
+      "priority": "P3",
+      "id": "GAP-0085",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:p2p/server.go",
+        "ethereum/go-ethereum:p2p/enode/urlv4.go"
+      ],
+      "ours": "crates/xone-node/src/services/net.rs; crates/xone-node/src/enode.rs; crates/xone-node/src/config.rs; bin/xone/src/flags.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/308",
+      "related": "#167 handles NAT and external-address discovery. This unit adds an address-family-capable listener and correct formatting.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 308,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "dial-lifecycle",
+      "title": "Deduplicate peer redial jobs and bound retry scheduling",
+      "area": "p2p",
+      "priority": "P2",
+      "id": "GAP-0086",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:p2p/dial.go"
+      ],
+      "ours": "crates/xone-node/src/services/net.rs; crates/xone-net/src/peers/mod.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/296",
+      "related": "#163 and #42 own admin peer methods. This fixes scheduler ownership underneath those methods rather than creating another removePeer API.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 296,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "producer-price-heap",
+      "title": "Use a heap for block-builder transaction selection",
+      "area": "perf",
+      "priority": "P2",
+      "id": "GAP-0087",
+      "status": "issued",
+      "sources": [
+        "XinFinOrg/XDPoSChain:miner/ordering.go",
+        "ethereum/go-ethereum:core/txpool/txorder/ordering.go"
+      ],
+      "ours": "crates/xone-builder/src/producer/build.rs",
+      "seen_in_count": 2,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/297",
+      "related": "#43 implements block production. #250 parallelizes sender recovery; neither changes this selection data structure.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 297,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "snap-server-streaming",
+      "title": "Serve snap ranges from bounded database views without rebuilding whole-state snapshots",
+      "area": "sync",
+      "priority": "P1",
+      "id": "GAP-0088",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:eth/protocols/snap/handlers.go",
+        "paradigmxyz/reth:crates/net/network/src/eth_requests.rs"
+      ],
+      "ours": "crates/xone-node/src/services/snap.rs; crates/xone-snap/src/server.rs; crates/xone-sync/src/mdbx/mod.rs; crates/xone-db/src/mdbx.rs",
+      "seen_in_count": 2,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/285",
+      "related": "#145 makes local state and snap installation disk-backed. This distinct server-side path still materializes full snapshots.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 285,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "snap-cold-bytecodes",
+      "title": "Serve snap bytecode requests without requiring a warmed root cache",
+      "area": "sync",
+      "priority": "P2",
+      "id": "GAP-0089",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:eth/protocols/snap/handlers.go"
+      ],
+      "ours": "crates/xone-node/src/services/snap.rs; crates/xone-snap/src/server.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/298",
+      "related": "#37 owns snap/1. This is the rootless bytecode query path, separate from range-proof streaming.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 298,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "resource-config-validation",
+      "title": "Reject unusable resource and lifecycle limits before starting services",
+      "area": "cli",
+      "priority": "P2",
+      "id": "GAP-0090",
+      "status": "issued",
+      "sources": [
+        "paradigmxyz/reth:crates/node/core/src/args/database.rs",
+        "ethereum/go-ethereum:node/rpcstack.go"
+      ],
+      "ours": "crates/xone-node/src/config.rs; crates/xone-node/src/services/rpc.rs; crates/xone-node/src/lifecycle.rs",
+      "seen_in_count": 2,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/299",
+      "related": "#39 defines configuration precedence and #16 defines limits. This adds validation for unusable combinations in the current typed config.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 299,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "macos-release",
+      "title": "Publish verified native macOS arm64 follower binaries",
+      "area": "release",
+      "priority": "P3",
+      "id": "GAP-0091",
+      "status": "issued",
+      "sources": [
+        "paradigmxyz/reth:.github/workflows/release.yml"
+      ],
+      "ours": "ci/release.sh; ci/test-release.sh; ops/install.md; Cargo.toml",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/309",
+      "related": "#193 and #46 qualify Linux x86_64/aarch64 packaging. This is an additional native platform, not another Linux package.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 309,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "telemetry-url-contract",
+      "title": "Parse telemetry URLs correctly for IPv6, ports and request targets",
+      "area": "observability",
+      "priority": "P2",
+      "id": "GAP-0092",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:ethstats/ethstats.go",
+        "ethereum/go-ethereum:rpc/http.go"
+      ],
+      "ours": "crates/xone-node/src/observe/wire.rs; crates/xone-node/src/observe/heartbeat.rs; crates/xone-node/src/observe/ethstats.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/300",
+      "related": "#41 implements telemetry. This unit fixes its shared endpoint parsing and HTTP serialization.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 300,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "heartbeat-token-units",
+      "title": "Fix heartbeat scheduling when the interval exceeds the token-bucket burst",
+      "area": "observability",
+      "priority": "P2",
+      "id": "GAP-0093",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:ethstats/ethstats.go"
+      ],
+      "ours": "crates/xone-node/src/observe/heartbeat.rs; crates/xone-primitives/src/limits/bucket.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/301",
+      "related": "#41 owns runtime heartbeat integration. This is a deterministic scheduling defect inside the existing service, even before integration.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 301,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "metrics-cardinality",
+      "title": "Remove per-block hash churn from Prometheus metric labels",
+      "area": "observability",
+      "priority": "P2",
+      "id": "GAP-0094",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:core/blockchain.go",
+        "ethereum/go-ethereum:metrics/prometheus/collector.go"
+      ],
+      "ours": "crates/xone-node/src/observe/metrics.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/302",
+      "related": "#184 adds dashboards and alerts. This fixes the producer metric that would create unbounded series churn.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 302,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "import-counter-semantics",
+      "title": "Make blocks_imported_total a monotonic process counter",
+      "area": "observability",
+      "priority": "P2",
+      "id": "GAP-0095",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:metrics/counter.go",
+        "ethereum/go-ethereum:core/blockchain.go"
+      ],
+      "ours": "crates/xone-node/src/services/stats.rs; crates/xone-node/src/observe/metrics.rs; crates/xone-node/src/services/core.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/303",
+      "related": "#41 defines metrics and #226 adds timing. This repairs the counter semantics of an existing metric.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 303,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "readiness-runtime-state",
+      "title": "Connect readiness to real degradation and shutdown state",
+      "area": "observability",
+      "priority": "P1",
+      "id": "GAP-0096",
+      "status": "issued",
+      "sources": [
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.HealthChecks/NodeHealthService.cs",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.HealthChecks/NodeHealthCheck.cs"
+      ],
+      "ours": "crates/xone-node/src/services/stats.rs; crates/xone-node/src/observe/metrics.rs; crates/xone-node/src/lifecycle.rs; crates/xone-node/src/services/core.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/286",
+      "related": "#41 and #62 are the health/qualification parents. This issue fixes the missing runtime wiring between their existing components.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 286,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "mdbx-geometry",
+      "title": "Expose validated MDBX capacity and growth settings",
+      "area": "storage",
+      "priority": "P3",
+      "id": "GAP-0097",
+      "status": "issued",
+      "sources": [
+        "paradigmxyz/reth:crates/node/core/src/args/database.rs"
+      ],
+      "ours": "crates/xone-db/src/mdbx.rs; crates/xone-node/src/config.rs; bin/xone/src/flags.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/311",
+      "related": "#135 chooses the storage architecture and #176 adds maintenance commands. This unit exposes bounded geometry for the selected MDBX backend.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 311,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "gzip-block-files",
+      "title": "Read and write geth-compatible gzip block archives",
+      "area": "cli",
+      "priority": "P3",
+      "id": "GAP-0098",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:cmd/utils/cmd.go",
+        "XinFinOrg/XDPoSChain:cmd/utils/cmd.go"
+      ],
+      "ours": "crates/xone-sync/src/import.rs; crates/xone-sync/src/export.rs; bin/xone/src/cmd/mod.rs; bin/xone/src/cmd/export.rs",
+      "seen_in_count": 2,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/312",
+      "related": "#34 owns block-file transfer. This is a missing supported encoding, separate from persistent datadir command wiring.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 312,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "persistent-import-export",
+      "title": "Connect import and export commands to the persistent datadir",
+      "area": "cli",
+      "priority": "P1",
+      "id": "GAP-0099",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:cmd/geth/chaincmd.go",
+        "ethereum/go-ethereum:cmd/utils/cmd.go"
+      ],
+      "ours": "bin/xone/src/cmd/mod.rs; bin/xone/src/cmd/import.rs; bin/xone/src/cmd/export.rs; crates/xone-node/src/datadir.rs; crates/xone-sync/src/mdbx/mod.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/287",
+      "related": "#34 provides import/export primitives. This issue replaces the explicitly temporary command backend that is still wired in the shipped binary.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 287,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "blockfile-length-validation",
+      "title": "Validate block-file RLP lengths before arithmetic, allocation and seeking",
+      "area": "sync",
+      "priority": "P1",
+      "id": "GAP-0100",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:rlp/decode.go",
+        "ethereum/go-ethereum:core/types/block.go"
+      ],
+      "ours": "crates/xone-sync/src/import.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/288",
+      "related": "#34 owns file import. This is a concrete hostile-length and container-validation gap in its decoder.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 288,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "export-write-completion",
+      "title": "Propagate buffered export write failures before reporting success",
+      "area": "cli",
+      "priority": "P1",
+      "id": "GAP-0101",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:core/blockchain.go",
+        "ethereum/go-ethereum:cmd/utils/cmd.go"
+      ],
+      "ours": "bin/xone/src/cmd/export.rs; crates/xone-sync/src/export.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/289",
+      "related": "#34 owns export. This is its command-level completion/error propagation contract, independent of gzip support.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 289,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "schema-marker-validation",
+      "title": "Fail closed on malformed database schema markers before migration",
+      "area": "storage",
+      "priority": "P1",
+      "id": "GAP-0102",
+      "status": "issued",
+      "sources": [
+        "paradigmxyz/reth:crates/storage/db/src/version.rs"
+      ],
+      "ours": "crates/xone-sync/src/mdbx/mod.rs; crates/xone-db/src/mdbx.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/290",
+      "related": "#11 covers crash-safe publication and #135 architecture. This issue repairs the schema discriminator used before those data paths.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 290,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "websocket-frame-limit",
+      "title": "Apply configured WebSocket message limits before decoding or allocation",
+      "area": "rpc",
+      "priority": "P1",
+      "id": "GAP-0103",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:rpc/websocket.go"
+      ],
+      "ours": "crates/xone-rpc/src/transport.rs; crates/xone-rpc/src/server.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/291",
+      "related": "#267 fixes subscription policy/admission. This unit moves byte enforcement ahead of WebSocket message assembly and parsing.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 291,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "http-content-type",
+      "title": "Validate HTTP JSON-RPC media types before dispatch",
+      "area": "rpc",
+      "priority": "P2",
+      "id": "GAP-0104",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:rpc/http.go",
+        "ethereum/go-ethereum:rpc/http_test.go"
+      ],
+      "ours": "crates/xone-rpc/src/transport.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/304",
+      "related": "#257 handles CORS headers/preflight and #60 owns authorization. This is validation of the actual POST representation.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 304,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "ipc-startup-contract",
+      "title": "Bind and secure IPC before reporting RPC service startup success",
+      "area": "rpc",
+      "priority": "P1",
+      "id": "GAP-0105",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:node/rpcstack.go",
+        "ethereum/go-ethereum:rpc/ipc_unix.go"
+      ],
+      "ours": "crates/xone-node/src/services/rpc.rs; crates/xone-rpc/src/transport.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/292",
+      "related": "#39 defines startup failure handling and #60 IPC exposure. This is the current asynchronous-bind path that bypasses those gates.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 292,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "rpc-argument-arity",
+      "title": "Enforce RPC method arity and distinguish quantities from block tags",
+      "area": "rpc",
+      "priority": "P2",
+      "id": "GAP-0106",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:rpc/json.go",
+        "ethereum/go-ethereum:internal/ethapi/api.go"
+      ],
+      "ours": "crates/xone-rpc/src/server.rs; crates/xone-rpc/src/types.rs; crates/xone-rpc/src/eth.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/305",
+      "related": "#266 fixes the JSON-RPC envelope and #265 call-object fields. This unit validates positional method signatures and scalar domains.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 305,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "txpool-expiry-tick",
+      "title": "Run queued transaction expiry from the live pool service",
+      "area": "txpool",
+      "priority": "P2",
+      "id": "GAP-0107",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:core/txpool/legacypool/legacypool.go"
+      ],
+      "ours": "crates/xone-node/src/services/pool.rs; crates/xone-builder/src/txpool/evict.rs; crates/xone-builder/src/txpool/queued.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/306",
+      "related": "#165 exposes pool controls and journaling. This issue wires the already implemented lifetime behavior into the live service.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 306,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "txpool-raw-cache",
+      "title": "Keep raw transaction storage bounded during replacement and eviction",
+      "area": "txpool",
+      "priority": "P1",
+      "id": "GAP-0108",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:core/txpool/legacypool/legacypool.go",
+        "ethereum/go-ethereum:core/txpool/legacypool/list.go"
+      ],
+      "ours": "crates/xone-node/src/services/pool.rs; crates/xone-builder/src/txpool/mod.rs; crates/xone-builder/src/txpool/evict.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/293",
+      "related": "#165 configures pool bounds. This repairs a side cache that currently outlives the bounded entries.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 293,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
+    },
+    {
+      "key": "txpool-status-counts",
+      "title": "Report pending and queued counts correctly in txpool_status",
+      "area": "rpc",
+      "priority": "P2",
+      "id": "GAP-0109",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:internal/ethapi/api.go",
+        "ethereum/go-ethereum:core/txpool/legacypool/legacypool.go"
+      ],
+      "ours": "crates/xone-node/src/services/pool.rs; crates/xone-builder/src/txpool/mod.rs; crates/xone-rpc/src/txpool.rs",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/307",
+      "related": "#42 owns txpool RPC parity. This is a concrete tuple-contract mismatch in the current adapter.",
+      "evidence_kind": "static source review",
+      "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+      "pass": "pass4",
+      "issue_number": 307,
+      "issue_state": "open",
+      "new_issue": true,
+      "issue_state_checked": "2026-11-14"
     }
   ],
   "skipped": [
@@ -1431,7 +2605,8 @@
       "reason": "No XDC counterpart: XDPoS selects the head itself; there is no consensus-layer client. --authrpc flags exist for join.sh compatibility only.",
       "sources": [
         "paradigmxyz/reth:crates/rpc/rpc-api/src/engine.rs"
-      ]
+      ],
+      "pass4_scope_correction": "This historical exclusion applies to an XDC network profile only. Ethereum-profile work is now tracked by https://github.com/XDCIndia/xOneRS/issues/214; do not use this entry to reject that accepted scope."
     },
     {
       "id": "SKIP-02",
@@ -1439,7 +2614,8 @@
       "reason": "No XDC counterpart: geth-XDC and XDPoSChain peers speak discv4 only (XDC ping variant); a discv5 table would find no XDC peers.",
       "sources": [
         "paradigmxyz/reth:crates/net/discv5/src/filter.rs"
-      ]
+      ],
+      "pass4_scope_correction": "This historical exclusion applies to an XDC network profile only. Ethereum-profile work is now tracked by https://github.com/XDCIndia/xOneRS/issues/214; do not use this entry to reject that accepted scope."
     },
     {
       "id": "SKIP-03",
@@ -1447,7 +2623,8 @@
       "reason": "No XDC counterpart: XDPoSChain params carry no enrtree URL and no XDC DNS tree is published.",
       "sources": [
         "erigontech/erigon:p2p/dnsdisc/client.go"
-      ]
+      ],
+      "pass4_scope_correction": "This historical exclusion applies to an XDC network profile only. Ethereum-profile work is now tracked by https://github.com/XDCIndia/xOneRS/issues/214; do not use this entry to reject that accepted scope."
     },
     {
       "id": "SKIP-04",
@@ -1455,7 +2632,8 @@
       "reason": "No XDC counterpart: the XDC network runs eth/100 and eth/101 without ForkID (#32).",
       "sources": [
         "ethereum/go-ethereum:eth/protocols/eth"
-      ]
+      ],
+      "pass4_scope_correction": "This historical exclusion applies to an XDC network profile only. Ethereum-profile work is now tracked by https://github.com/XDCIndia/xOneRS/issues/214; do not use this entry to reject that accepted scope."
     },
     {
       "id": "SKIP-05",
@@ -1465,7 +2643,8 @@
         "ethereum/go-ethereum:internal/era/era.go",
         "paradigmxyz/reth:crates/era/src/era1/mod.rs",
         "NethermindEth/nethermind:src/Nethermind/Nethermind.Era1/EraImporter.cs"
-      ]
+      ],
+      "pass4_scope_correction": "This historical exclusion applies to an XDC network profile only. Ethereum-profile work is now tracked by https://github.com/XDCIndia/xOneRS/issues/214; do not use this entry to reject that accepted scope."
     },
     {
       "id": "SKIP-06",
@@ -1473,7 +2652,8 @@
       "reason": "No XDC counterpart: XDC has no blob transactions.",
       "sources": [
         "ethereum/go-ethereum:core/txpool/blobpool"
-      ]
+      ],
+      "pass4_scope_correction": "This historical exclusion applies to an XDC network profile only. Ethereum-profile work is now tracked by https://github.com/XDCIndia/xOneRS/issues/214; do not use this entry to reject that accepted scope."
     },
     {
       "id": "SKIP-07",
@@ -1505,7 +2685,8 @@
       "reason": "Conflicts with accepted scope ADR-009 (#23): empty-tx routing only.",
       "sources": [
         "XinFinOrg/XDPoSChain:XDCx"
-      ]
+      ],
+      "pass4_scope_correction": "The newly merged ADR-009 document explicitly remains a proposal awaiting owner acceptance. Empty-transaction routing is current behavior; do not describe the new proposal as an accepted decision."
     },
     {
       "id": "SKIP-11",
@@ -1544,7 +2725,8 @@
       "id": "SKIP-15",
       "title": "Ethstats reporting, health endpoints, static/trusted peers, remote signer, snapshot export/import, snap/1 serving",
       "reason": "Not a gap: present in xOneRS (crates/xone-node/src/observe/ethstats.rs, metrics.rs /livez /readyz, enode.rs, crates/xone-signer/src/remote.rs, bin/xone/src/cmd/snapshot.rs, crates/xone-snap/src/server.rs).",
-      "sources": []
+      "sources": [],
+      "pass4_scope_correction": "Module presence is not production completion. Remote signer integration remains #40, telemetry integration #41 and RPC/pending-event adapter integration #42. Specific distinct implementation defects are recorded in pass4."
     },
     {
       "id": "SKIP-16",
@@ -1707,7 +2889,8 @@
       "sources": [
         "XDCIndia/go-ethereum@6fc8e8c2:cmd/utils/flags.go"
       ],
-      "pass": "pass3"
+      "pass": "pass3",
+      "pass4_scope_correction": "This historical exclusion applies to an XDC network profile only. Ethereum-profile work is now tracked by https://github.com/XDCIndia/xOneRS/issues/214; do not use this entry to reject that accepted scope."
     },
     {
       "id": "SKIP-34",
@@ -1717,9 +2900,65 @@
         "tempoxyz/tempo:bin/tempo/src/shadow_replay.rs"
       ],
       "pass": "pass3"
+    },
+    {
+      "id": "SKIP-35",
+      "title": "Split static peers from trusted peers",
+      "reason": "ADR-007 deliberately gives configured static peers trusted treatment. This audit does not reverse that accepted policy.",
+      "sources": [
+        "ethereum/go-ethereum:p2p/server.go"
+      ],
+      "ours": "docs/adr/ADR-007-operations-limits.md",
+      "pass": "pass4"
+    },
+    {
+      "id": "SKIP-36",
+      "title": "HSM integration and account allowlists",
+      "reason": "Remote signer #40 excludes HSM support; account permissioning is outside #199. Do not create a duplicate architecture decision as an implementation gap.",
+      "sources": [
+        "besu-eth/besu:app/src/main/java/org/hyperledger/besu/cli/BesuCommand.java"
+      ],
+      "ours": "https://github.com/XDCIndia/xOneRS/issues/40",
+      "pass": "pass4"
+    },
+    {
+      "id": "SKIP-37",
+      "title": "Cosmos modules, chain-specific fees and alternative consensus rules",
+      "reason": "Cronos/Kii application modules, Arc payment rules and Monad/Sei consensus changes are not XDC protocol requirements. Only compatible node operations and deterministic execution techniques are compared.",
+      "sources": [
+        "crypto-org-chain/cronos:app/app.go",
+        "KiiChain/kiichain:app/app.go",
+        "circlefin/arc-node:crates/evm/src/lib.rs",
+        "category-labs/monad:README.md",
+        "sei-protocol/sei-chain:README.md"
+      ],
+      "ours": "spec/",
+      "pass": "pass4"
+    },
+    {
+      "id": "SKIP-38",
+      "title": "Billing, tax, refunds, multi-currency invoices and graphical client areas",
+      "reason": "These are not capabilities of a blockchain execution client. Token balances and transaction fees are protocol state, not an invoicing subsystem.",
+      "sources": [
+        "ethereum/go-ethereum:README.md"
+      ],
+      "ours": "README.md",
+      "pass": "pass4"
     }
   ],
   "priority_rule_advantages": "Second pass (strengths): priority by impact for an XDC node operator, not by competitor count. P1 = operators are blocked or forced into a workaround today; P2 = large cost or capability gain for many operators; P3 = integrators, private networks or maintainers.",
   "oracle_pin": "XDCIndia/go-ethereum@6fc8e8c2088b7f18264f5663036669d04fa7becf",
-  "priority_rule_pass3": "Third pass: operator impact first (P1 = operators blocked or forced into a workaround today; P2 = large cost or capability gain for many operators; P3 = integrators, private networks or maintainers), raised one level (never above P1) when 8+ of the 14 selected competitors have it, or when a canonical XDC client (XDPoSChain, the geth-XDC oracle pin) ships it in a namespace or default the fleet uses."
+  "priority_rule_pass3": "Third pass: operator impact first (P1 = operators blocked or forced into a workaround today; P2 = large cost or capability gain for many operators; P3 = integrators, private networks or maintainers), raised one level (never above P1) when 8+ of the 14 selected competitors have it, or when a canonical XDC client (XDPoSChain, the geth-XDC oracle pin) ships it in a namespace or default the fleet uses.",
+  "pass4": {
+    "date": "2026-11-14",
+    "base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+    "target_new_issues": 50,
+    "status": "issued_complete",
+    "constraint": "Only distinct, evidenced gaps qualify. Existing issues are deduplicated, not recreated.",
+    "new_issues_created": 50,
+    "ledger_open_entries": 0,
+    "rechecked_main": "a0dc523827c9ce8bdd305e9d8470f023aa2c7fba",
+    "closure_note": "Requested batch of 50 new issues completed. This is issue coverage, not implementation completion or proof that no possible feature gap remains.",
+    "priority_rule": "Impact first: P1 correctness, availability or uncontrolled resource growth; P2 operator capability or common efficiency improvement; P3 optional platform and integration improvements. seen_in_count is a lower bound from cited independent repositories, not an inferred market total."
+  }
 }

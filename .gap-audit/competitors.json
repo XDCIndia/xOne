@@ -7,7 +7,7 @@
       "url": "https://github.com/XinFinOrg/XDPoSChain",
       "found_via": "gh search 'XDPoS' / topic xinfin; owner brief",
       "stars": 60,
-      "last_commit": "2026-10-27",
+      "last_commit": "2026-10-27T15:39:42+08:00",
       "license": "LGPL-3.0",
       "overlap_score": 86,
       "score_breakdown": {
@@ -17,14 +17,27 @@
         "code_access_15": 15
       },
       "status": "selected",
-      "reason": "Canonical public XDC client (XDPoS V1/V2, XDC RPC extensions). GitHub fork of go-ethereum that adds the whole XDC protocol, so the fork rule does not apply."
+      "reason": "Canonical public XDC client (XDPoS V1/V2, XDC RPC extensions). GitHub fork of go-ethereum that adds the whole XDC protocol, so the fork rule does not apply.",
+      "forks": 73,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/XinFinOrg/XDPoSChain",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "commit": "cb1ef79073c05f50b9df75b1e740387b9d72af99",
+      "license_evidence": [
+        "https://github.com/XinFinOrg/XDPoSChain/blob/cb1ef79073c05f50b9df75b1e740387b9d72af99/COPYING",
+        "https://github.com/XinFinOrg/XDPoSChain/blob/cb1ef79073c05f50b9df75b1e740387b9d72af99/COPYING.LESSER"
+      ],
+      "evidence_urls": [
+        "https://github.com/XinFinOrg/XDPoSChain/blob/cb1ef79073c05f50b9df75b1e740387b9d72af99/README.md"
+      ]
     },
     {
       "repo": "ethereum/go-ethereum",
       "url": "https://github.com/ethereum/go-ethereum",
       "found_via": "gh search 'ethereum client go'; snowball from XDPoSChain parent",
       "stars": 51479,
-      "last_commit": "2026-11-13",
+      "last_commit": "2026-11-13T17:16:16+01:00",
       "license": "LGPL-3.0/GPL-3.0",
       "overlap_score": 80,
       "score_breakdown": {
@@ -34,14 +47,27 @@
         "code_access_15": 15
       },
       "status": "selected",
-      "reason": "Upstream of geth-XDC and XDPoSChain; reference for RPC, tracing, CLI and operator tooling."
+      "reason": "Upstream of geth-XDC and XDPoSChain; reference for RPC, tracing, CLI and operator tooling.",
+      "forks": 22105,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/ethereum/go-ethereum",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "commit": "8059ff8beb3170eb8b977169ac51bb0423c97ee1",
+      "license_evidence": [
+        "https://github.com/ethereum/go-ethereum/blob/8059ff8beb3170eb8b977169ac51bb0423c97ee1/COPYING",
+        "https://github.com/ethereum/go-ethereum/blob/8059ff8beb3170eb8b977169ac51bb0423c97ee1/COPYING.LESSER"
+      ],
+      "evidence_urls": [
+        "https://github.com/ethereum/go-ethereum/blob/8059ff8beb3170eb8b977169ac51bb0423c97ee1/README.md"
+      ]
     },
     {
       "repo": "bnb-chain/bsc",
       "url": "https://github.com/bnb-chain/bsc",
       "found_via": "web search 'DPoS EVM client'; snowball",
       "stars": 3316,
-      "last_commit": "2026-11-03",
+      "last_commit": "2026-11-03T10:04:27+08:00",
       "license": "LGPL-3.0",
       "overlap_score": 79,
       "score_breakdown": {
@@ -51,14 +77,27 @@
         "code_access_15": 15
       },
       "status": "selected",
-      "reason": "geth fork with PoSA (Parlia) and fast-finality votes: the closest DPoS/BFT analogue to XDPoS; adds block pruning and vote tooling over geth."
+      "reason": "geth fork with PoSA (Parlia) and fast-finality votes: the closest DPoS/BFT analogue to XDPoS; adds block pruning and vote tooling over geth.",
+      "forks": 1826,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/bnb-chain/bsc",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "commit": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+      "license_evidence": [
+        "https://github.com/bnb-chain/bsc/blob/54afaff4da31ac9e49ba646a4f65104edac5a2f3/COPYING",
+        "https://github.com/bnb-chain/bsc/blob/54afaff4da31ac9e49ba646a4f65104edac5a2f3/COPYING.LESSER"
+      ],
+      "evidence_urls": [
+        "https://github.com/bnb-chain/bsc/blob/54afaff4da31ac9e49ba646a4f65104edac5a2f3/README.md"
+      ]
     },
     {
       "repo": "paradigmxyz/reth",
       "url": "https://github.com/paradigmxyz/reth",
       "found_via": "seed (owner brief)",
       "stars": 5858,
-      "last_commit": "2026-11-13",
+      "last_commit": "2026-11-13T19:05:19Z",
       "license": "Apache-2.0/MIT",
       "overlap_score": 78,
       "score_breakdown": {
@@ -68,14 +107,27 @@
         "code_access_15": 15
       },
       "status": "selected",
-      "reason": "Rust execution client; same language and storage engine (MDBX) as xOneRS."
+      "reason": "Rust execution client; same language and storage engine (MDBX) as xOneRS.",
+      "forks": 2605,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/paradigmxyz/reth",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "commit": "36600d5ff9628465475dd4c7608e2e9f2fe24273",
+      "license_evidence": [
+        "https://github.com/paradigmxyz/reth/blob/36600d5ff9628465475dd4c7608e2e9f2fe24273/LICENSE-APACHE",
+        "https://github.com/paradigmxyz/reth/blob/36600d5ff9628465475dd4c7608e2e9f2fe24273/LICENSE-MIT"
+      ],
+      "evidence_urls": [
+        "https://github.com/paradigmxyz/reth/blob/36600d5ff9628465475dd4c7608e2e9f2fe24273/README.md"
+      ]
     },
     {
       "repo": "0xPolygon/bor",
       "url": "https://github.com/0xPolygon/bor",
       "found_via": "web search 'proof of stake evm client'; snowball",
       "stars": 1109,
-      "last_commit": "2026-11-13",
+      "last_commit": "2026-11-13T11:25:50-08:00",
       "license": "LGPL-3.0",
       "overlap_score": 78,
       "score_breakdown": {
@@ -85,14 +137,27 @@
         "code_access_15": 15
       },
       "status": "selected",
-      "reason": "geth fork for a validator-set PoS chain; adds history pruning and sequencer tooling over geth."
+      "reason": "geth fork for a validator-set PoS chain; adds history pruning and sequencer tooling over geth.",
+      "forks": 623,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/0xPolygon/bor",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "commit": "ee09efd5dd9ef75917368990b272581b0e2c2665",
+      "license_evidence": [
+        "https://github.com/0xPolygon/bor/blob/ee09efd5dd9ef75917368990b272581b0e2c2665/COPYING",
+        "https://github.com/0xPolygon/bor/blob/ee09efd5dd9ef75917368990b272581b0e2c2665/COPYING.LESSER"
+      ],
+      "evidence_urls": [
+        "https://github.com/0xPolygon/bor/blob/ee09efd5dd9ef75917368990b272581b0e2c2665/README.md"
+      ]
     },
     {
       "repo": "besu-eth/besu",
       "url": "https://github.com/besu-eth/besu",
       "found_via": "gh topic ethereum-client",
-      "stars": 1870,
-      "last_commit": "2026-11-13",
+      "stars": 1871,
+      "last_commit": "2026-11-13T10:25:32Z",
       "license": "Apache-2.0",
       "overlap_score": 77,
       "score_breakdown": {
@@ -102,14 +167,26 @@
         "code_access_15": 15
       },
       "status": "selected",
-      "reason": "Java client with IBFT2/QBFT BFT engines (round-based BFT like XDPoS V2), storage subcommands, OTel."
+      "reason": "Java client with IBFT2/QBFT BFT engines (round-based BFT like XDPoS V2), storage subcommands, OTel.",
+      "forks": 1171,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/besu-eth/besu",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "commit": "2b839d96863d01210f45a6f62127e6229e5b0889",
+      "license_evidence": [
+        "https://github.com/besu-eth/besu/blob/2b839d96863d01210f45a6f62127e6229e5b0889/LICENSE"
+      ],
+      "evidence_urls": [
+        "https://github.com/besu-eth/besu/blob/2b839d96863d01210f45a6f62127e6229e5b0889/README.md"
+      ]
     },
     {
       "repo": "erigontech/erigon",
       "url": "https://github.com/erigontech/erigon",
       "found_via": "gh search 'ethereum full node'; owner brief hint",
       "stars": 3625,
-      "last_commit": "2026-11-14",
+      "last_commit": "2026-11-14T05:14:25Z",
       "license": "LGPL-3.0",
       "overlap_score": 75,
       "score_breakdown": {
@@ -119,14 +196,26 @@
         "code_access_15": 15
       },
       "status": "selected",
-      "reason": "Staged-sync client on MDBX; trace_ and ots_ namespaces, prune modes."
+      "reason": "Staged-sync client on MDBX; trace_ and ots_ namespaces, prune modes.",
+      "forks": 1577,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/erigontech/erigon",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "commit": "5b59b99c73893b4a21cc1cea175e6263cf914912",
+      "license_evidence": [
+        "https://github.com/erigontech/erigon/blob/5b59b99c73893b4a21cc1cea175e6263cf914912/COPYING"
+      ],
+      "evidence_urls": [
+        "https://github.com/erigontech/erigon/blob/5b59b99c73893b4a21cc1cea175e6263cf914912/README.md"
+      ]
     },
     {
       "repo": "NethermindEth/nethermind",
       "url": "https://github.com/NethermindEth/nethermind",
       "found_via": "gh topic ethereum-client",
       "stars": 1628,
-      "last_commit": "2026-11-14",
+      "last_commit": "2026-11-14T09:17:46+08:00",
       "license": "GPL-3.0/LGPL-3.0",
       "overlap_score": 75,
       "score_breakdown": {
@@ -136,14 +225,27 @@
         "code_access_15": 15
       },
       "status": "selected",
-      "reason": ".NET client with AuRa/Clique PoA, trace/ots modules, snapshot download."
+      "reason": ".NET client with AuRa/Clique PoA, trace/ots modules, snapshot download.",
+      "forks": 762,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/NethermindEth/nethermind",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "commit": "a7dd73052e696ad934d228aad3f33e660701fdb7",
+      "license_evidence": [
+        "https://github.com/NethermindEth/nethermind/blob/a7dd73052e696ad934d228aad3f33e660701fdb7/LICENSE-GPL",
+        "https://github.com/NethermindEth/nethermind/blob/a7dd73052e696ad934d228aad3f33e660701fdb7/LICENSE-LGPL"
+      ],
+      "evidence_urls": [
+        "https://github.com/NethermindEth/nethermind/blob/a7dd73052e696ad934d228aad3f33e660701fdb7/README.md"
+      ]
     },
     {
       "repo": "lambdaclass/ethrex",
       "url": "https://github.com/lambdaclass/ethrex",
       "found_via": "seed (owner brief)",
       "stars": 915,
-      "last_commit": "2026-11-14",
+      "last_commit": "2026-11-14T03:41:17Z",
       "license": "Apache-2.0/MIT",
       "overlap_score": 69,
       "score_breakdown": {
@@ -153,14 +255,27 @@
         "code_access_15": 15
       },
       "status": "selected",
-      "reason": "Minimal Rust client; L1 RPC, debug and admin surface comparable to ours."
+      "reason": "Minimal Rust client; L1 RPC, debug and admin surface comparable to ours.",
+      "forks": 256,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/lambdaclass/ethrex",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "commit": "7e272ac5075aec832304909b376bada4eca52e77",
+      "license_evidence": [
+        "https://github.com/lambdaclass/ethrex/blob/7e272ac5075aec832304909b376bada4eca52e77/LICENSE-APACHE",
+        "https://github.com/lambdaclass/ethrex/blob/7e272ac5075aec832304909b376bada4eca52e77/LICENSE-MIT"
+      ],
+      "evidence_urls": [
+        "https://github.com/lambdaclass/ethrex/blob/7e272ac5075aec832304909b376bada4eca52e77/README.md"
+      ]
     },
     {
       "repo": "status-im/nimbus-eth1",
       "url": "https://github.com/status-im/nimbus-eth1",
       "found_via": "gh search 'ethereum execution client'",
       "stars": 637,
-      "last_commit": "2026-11-14",
+      "last_commit": "2026-11-13T22:09:02Z",
       "license": "Apache-2.0/MIT",
       "overlap_score": 68,
       "score_breakdown": {
@@ -170,7 +285,20 @@
         "code_access_15": 15
       },
       "status": "selected",
-      "reason": "Resource-restricted execution client; filters, GraphQL, minimal-hardware focus."
+      "reason": "Resource-restricted execution client; filters, GraphQL, minimal-hardware focus.",
+      "forks": 169,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/status-im/nimbus-eth1",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "commit": "5e3fd7e9d19177980cc1c086c46c4e1dcf38eced",
+      "license_evidence": [
+        "https://github.com/status-im/nimbus-eth1/blob/5e3fd7e9d19177980cc1c086c46c4e1dcf38eced/LICENSE-APACHEv2",
+        "https://github.com/status-im/nimbus-eth1/blob/5e3fd7e9d19177980cc1c086c46c4e1dcf38eced/LICENSE-MIT"
+      ],
+      "evidence_urls": [
+        "https://github.com/status-im/nimbus-eth1/blob/5e3fd7e9d19177980cc1c086c46c4e1dcf38eced/README.md"
+      ]
     },
     {
       "repo": "XinFinOrg/XDC-Subnet",
@@ -592,7 +720,7 @@
       "url": "https://github.com/BuildOnViction/victionchain",
       "found_via": "pass 3: gh search 'xdpos'/'POSV' lineage, BuildOnViction org listing",
       "stars": 182,
-      "last_commit": "2026-10-20",
+      "last_commit": "2026-10-20T09:50:51+07:00",
       "license": "LGPL-3.0",
       "overlap_score": 83,
       "score_breakdown": {
@@ -603,14 +731,27 @@
       },
       "status": "selected",
       "reason": "Viction (formerly TomoChain) client: Proof-of-Stake-Voting with masternodes, double validation, epoch checkpoints and randomize, the lineage XDPoS V1 was derived from. Not a fork of a selected repo; XDPoSChain descends from its code.",
-      "pass": "pass3"
+      "pass": "pass3",
+      "forks": 98,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/BuildOnViction/victionchain",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "commit": "31fe7cb935b46b8b5b115d070e64b30d6b8165b1",
+      "license_evidence": [
+        "https://github.com/BuildOnViction/victionchain/blob/31fe7cb935b46b8b5b115d070e64b30d6b8165b1/COPYING",
+        "https://github.com/BuildOnViction/victionchain/blob/31fe7cb935b46b8b5b115d070e64b30d6b8165b1/COPYING.LESSER"
+      ],
+      "evidence_urls": [
+        "https://github.com/BuildOnViction/victionchain/blob/31fe7cb935b46b8b5b115d070e64b30d6b8165b1/README.md"
+      ]
     },
     {
       "repo": "harmony-one/harmony",
       "url": "https://github.com/harmony-one/harmony",
       "found_via": "pass 3: topic pbft / proof-of-stake (topics of the selected set), web search 'BFT EVM client'",
       "stars": 1447,
-      "last_commit": "2026-08-19",
+      "last_commit": "2026-08-19T13:31:21-04:00",
       "license": "LGPL-3.0",
       "overlap_score": 73,
       "score_breakdown": {
@@ -621,14 +762,26 @@
       },
       "status": "selected",
       "reason": "EVM chain with FBFT (round-based BFT), staking epochs, rewards and an eth-compatible RPC; Go node with its own tracer API, Rosetta and webhooks.",
-      "pass": "pass3"
+      "pass": "pass3",
+      "forks": 290,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/harmony-one/harmony",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "commit": "a41e194761c81fe846994864e789a7d306bbc439",
+      "license_evidence": [
+        "https://github.com/harmony-one/harmony/blob/a41e194761c81fe846994864e789a7d306bbc439/LICENSE"
+      ],
+      "evidence_urls": [
+        "https://github.com/harmony-one/harmony/blob/a41e194761c81fe846994864e789a7d306bbc439/README.md"
+      ]
     },
     {
       "repo": "tempoxyz/tempo",
       "url": "https://github.com/tempoxyz/tempo",
       "found_via": "pass 3: web search 'reth SDK L1 BFT'; awesome-reth",
       "stars": 1044,
-      "last_commit": "2026-11-13",
+      "last_commit": "2026-11-13T22:22:33Z",
       "license": "Apache-2.0/MIT",
       "overlap_score": 73,
       "score_breakdown": {
@@ -639,14 +792,27 @@
       },
       "status": "selected",
       "reason": "Rust L1 on the reth SDK with its own BFT consensus layer, validator config, localnet, follow mode and snapshot download; adds operator surface over reth (unlike reth-bsc).",
-      "pass": "pass3"
+      "pass": "pass3",
+      "forks": 384,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/tempoxyz/tempo",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "commit": "35d8b937fba89ae0bfdea1edf735fb6f8aa41c23",
+      "license_evidence": [
+        "https://github.com/tempoxyz/tempo/blob/35d8b937fba89ae0bfdea1edf735fb6f8aa41c23/LICENSE-APACHE",
+        "https://github.com/tempoxyz/tempo/blob/35d8b937fba89ae0bfdea1edf735fb6f8aa41c23/LICENSE-MIT"
+      ],
+      "evidence_urls": [
+        "https://github.com/tempoxyz/tempo/blob/35d8b937fba89ae0bfdea1edf735fb6f8aa41c23/README.md"
+      ]
     },
     {
       "repo": "kaiachain/kaia",
       "url": "https://github.com/kaiachain/kaia",
       "found_via": "pass 3: web search 'Istanbul BFT EVM client', successor of klaytn/klaytn",
       "stars": 67,
-      "last_commit": "2026-11-10",
+      "last_commit": "2026-11-10T10:43:12+09:00",
       "license": "LGPL-3.0",
       "overlap_score": 70,
       "score_breakdown": {
@@ -657,7 +823,20 @@
       },
       "status": "selected",
       "reason": "Istanbul-BFT EVM chain with a validator committee, staking and rewards; adds chain-data export (Kafka, MySQL), homi network generator and live pruning over its geth base.",
-      "pass": "pass3"
+      "pass": "pass3",
+      "forks": 127,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/kaiachain/kaia",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "commit": "0f9ad843d1ccb7381cc43070ce13002cca7b1ed9",
+      "license_evidence": [
+        "https://github.com/kaiachain/kaia/blob/0f9ad843d1ccb7381cc43070ce13002cca7b1ed9/COPYING",
+        "https://github.com/kaiachain/kaia/blob/0f9ad843d1ccb7381cc43070ce13002cca7b1ed9/COPYING.LESSER"
+      ],
+      "evidence_urls": [
+        "https://github.com/kaiachain/kaia/blob/0f9ad843d1ccb7381cc43070ce13002cca7b1ed9/README.md"
+      ]
     },
     {
       "repo": "BuildOnViction/vic-geth",
@@ -680,20 +859,44 @@
     {
       "repo": "etclabscore/core-geth",
       "url": "https://github.com/etclabscore/core-geth",
-      "found_via": "pass 3: snowball from geth derivatives",
+      "found_via": "GitHub search, topic and README snowball; core-geth",
       "stars": 308,
-      "last_commit": "2026-11-08",
-      "license": "LGPL-3.0",
-      "overlap_score": 65,
+      "last_commit": "2026-11-08T12:24:49+05:30",
+      "license": "LGPL-3.0/GPL-3.0",
+      "overlap_score": 70,
       "score_breakdown": {
-        "feature_overlap_50": 24,
+        "feature_overlap_50": 29,
         "activity_20": 20,
         "adoption_15": 6,
         "code_access_15": 15
       },
-      "status": "rejected",
-      "reason": "Score 65 but excluded by the fork rule: geth derivative for Ethereum Classic; extra flags are PoW, ECBP-1100 and legacy light-client items; its trace_ module is already counted from Erigon and Nethermind.",
-      "pass": "pass3"
+      "status": "selected",
+      "reason": "Reconsidered: OpenRPC generation and rpc.discover add a verified operator and integrator capability beyond the selected geth parent.",
+      "pass": "pass3",
+      "previous_assessment": {
+        "status": "rejected",
+        "overlap_score": 65,
+        "score_breakdown": {
+          "feature_overlap_50": 24,
+          "activity_20": 20,
+          "adoption_15": 6,
+          "code_access_15": 15
+        },
+        "reason": "Score 65 but excluded by the fork rule: geth derivative for Ethereum Classic; extra flags are PoW, ECBP-1100 and legacy light-client items; its trace_ module is already counted from Erigon and Nethermind."
+      },
+      "forks": 189,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/etclabscore/core-geth",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "commit": "4720ac33055e8e5482ce2fb6c5ff800aad8a5889",
+      "license_evidence": [
+        "https://github.com/etclabscore/core-geth/blob/4720ac33055e8e5482ce2fb6c5ff800aad8a5889/COPYING",
+        "https://github.com/etclabscore/core-geth/blob/4720ac33055e8e5482ce2fb6c5ff800aad8a5889/COPYING.LESSER"
+      ],
+      "evidence_urls": [
+        "https://github.com/etclabscore/core-geth/blob/4720ac33055e8e5482ce2fb6c5ff800aad8a5889/README.md"
+      ]
     },
     {
       "repo": "ethereum-optimism/op-geth",
@@ -808,7 +1011,7 @@
       "url": "https://github.com/ava-labs/coreth",
       "found_via": "pass 3: snowball from geth derivatives",
       "stars": 204,
-      "last_commit": "2025-11-25",
+      "last_commit": "2025-11-25T19:59:06Z",
       "license": "LGPL-3.0",
       "overlap_score": 47,
       "score_breakdown": {
@@ -819,14 +1022,24 @@
       },
       "status": "rejected",
       "reason": "Score 47: archived.",
-      "pass": "pass3"
+      "pass": "pass3",
+      "forks": 156,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/ava-labs/coreth",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "commit": "cde9154e68214f6a0763801436bc5bb76a26a50a",
+      "evidence_urls": [
+        "https://github.com/ava-labs/coreth/blob/cde9154e68214f6a0763801436bc5bb76a26a50a/README.md",
+        "https://api.github.com/repos/ava-labs/coreth"
+      ]
     },
     {
       "repo": "ava-labs/subnet-evm",
       "url": "https://github.com/ava-labs/subnet-evm",
       "found_via": "pass 3: snowball from geth derivatives",
       "stars": 272,
-      "last_commit": "2025-12-15",
+      "last_commit": "2025-12-12T20:57:17Z",
       "license": "LGPL-3.0",
       "overlap_score": 47,
       "score_breakdown": {
@@ -837,7 +1050,17 @@
       },
       "status": "rejected",
       "reason": "Score 47: archived.",
-      "pass": "pass3"
+      "pass": "pass3",
+      "forks": 280,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/ava-labs/subnet-evm",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "commit": "edc9ebe7129c6da86587b79af0d659bf3f7f2fb1",
+      "evidence_urls": [
+        "https://github.com/ava-labs/subnet-evm/blob/edc9ebe7129c6da86587b79af0d659bf3f7f2fb1/README.md",
+        "https://api.github.com/repos/ava-labs/subnet-evm"
+      ]
     },
     {
       "repo": "klaytn/klaytn",
@@ -874,6 +1097,734 @@
       "status": "rejected",
       "reason": "Score 28: log shipping helper for XinFin nodes, not a client; no licence.",
       "pass": "pass3"
+    },
+    {
+      "repo": "autonity/autonity",
+      "url": "https://github.com/autonity/autonity",
+      "found_via": "GitHub search, topic and README snowball; selected-client README links",
+      "status": "selected",
+      "reason": "BFT EVM client with an integrated node, RPC, discovery and validator operations.",
+      "license": "LGPL-3.0",
+      "overlap_score": 64,
+      "score_breakdown": {
+        "feature_overlap_50": 36,
+        "activity_20": 10,
+        "adoption_15": 3,
+        "code_access_15": 15
+      },
+      "stars": 69,
+      "forks": 63,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/autonity/autonity",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "last_commit": "2025-10-22T13:46:47+01:00",
+      "commit": "cf1c15ee0bfae7cd1eff7b9b2c3a69f70b4b951f",
+      "license_evidence": [
+        "https://github.com/autonity/autonity/blob/cf1c15ee0bfae7cd1eff7b9b2c3a69f70b4b951f/COPYING",
+        "https://github.com/autonity/autonity/blob/cf1c15ee0bfae7cd1eff7b9b2c3a69f70b4b951f/COPYING.LESSER"
+      ],
+      "evidence_urls": [
+        "https://github.com/autonity/autonity/blob/cf1c15ee0bfae7cd1eff7b9b2c3a69f70b4b951f/README.md"
+      ]
+    },
+    {
+      "repo": "0xsoniclabs/sonic",
+      "url": "https://github.com/0xsoniclabs/sonic",
+      "found_via": "GitHub search, topic and README snowball; selected-client README links",
+      "status": "selected",
+      "reason": "Full EVM node with its own gossip, state and API modules; operational patterns are relevant without copying Sonic consensus.",
+      "license": "LGPL-3.0",
+      "overlap_score": 65,
+      "score_breakdown": {
+        "feature_overlap_50": 27,
+        "activity_20": 20,
+        "adoption_15": 3,
+        "code_access_15": 15
+      },
+      "stars": 76,
+      "forks": 33,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/0xsoniclabs/sonic",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "last_commit": "2026-11-13T15:15:09+01:00",
+      "commit": "e12abf3b8405af4c382c0bb4f0d81d543a7264da",
+      "license_evidence": [
+        "https://github.com/0xsoniclabs/sonic/blob/e12abf3b8405af4c382c0bb4f0d81d543a7264da/COPYING.LESSER"
+      ],
+      "evidence_urls": [
+        "https://github.com/0xsoniclabs/sonic/blob/e12abf3b8405af4c382c0bb4f0d81d543a7264da/README.md"
+      ]
+    },
+    {
+      "repo": "ethereumclassic/core-geth",
+      "url": "https://github.com/ethereumclassic/core-geth",
+      "found_via": "GitHub search, topic and README snowball; core-geth",
+      "status": "rejected",
+      "reason": "Fork exclusion: duplicate lineage of selected etclabscore/core-geth; no additional gap evidence was found in discovery.",
+      "license": "LGPL-3.0",
+      "overlap_score": 67,
+      "score_breakdown": {
+        "feature_overlap_50": 29,
+        "activity_20": 20,
+        "adoption_15": 3,
+        "code_access_15": 15
+      },
+      "stars": 6,
+      "forks": 12,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/ethereumclassic/core-geth",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "last_commit": "2026-10-12T17:44:51Z",
+      "commit": "50f00770daa3f9e31e4d6bd63e17f49a1d78a35f",
+      "evidence_urls": [
+        "https://github.com/ethereumclassic/core-geth/blob/50f00770daa3f9e31e4d6bd63e17f49a1d78a35f/README.md",
+        "https://api.github.com/repos/ethereumclassic/core-geth"
+      ]
+    },
+    {
+      "repo": "evmos/evmos",
+      "url": "https://github.com/evmos/evmos",
+      "found_via": "GitHub search, topic and README snowball; topic:evm language:Go",
+      "status": "rejected",
+      "reason": "Docs and licence only: Evmos Non-Commercial License is not an open licence suitable for this code audit; no code was cloned or read. Last commit is older than 18 months.",
+      "license": "Evmos Non-Commercial License",
+      "overlap_score": 34,
+      "score_breakdown": {
+        "feature_overlap_50": 22,
+        "activity_20": 0,
+        "adoption_15": 12,
+        "code_access_15": 0
+      },
+      "stars": 1680,
+      "forks": 898,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/evmos/evmos",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "last_commit": "2025-01-20T11:20:35Z",
+      "commit": "0402a01c9036b40a7f47dc2fc5fb4cfae019f5f1",
+      "evidence_urls": [
+        "https://github.com/evmos/evmos/blob/0402a01c9036b40a7f47dc2fc5fb4cfae019f5f1/README.md",
+        "https://api.github.com/repos/evmos/evmos"
+      ]
+    },
+    {
+      "repo": "crypto-org-chain/cronos",
+      "url": "https://github.com/crypto-org-chain/cronos",
+      "found_via": "GitHub search, topic and README snowball; topic:evm language:Go",
+      "status": "selected",
+      "reason": "Cosmos-based EVM node supplies relevant node configuration, RPC and state operations; Cosmos-only protocol features are out of scope.",
+      "license": "Apache-2.0",
+      "overlap_score": 63,
+      "score_breakdown": {
+        "feature_overlap_50": 22,
+        "activity_20": 20,
+        "adoption_15": 6,
+        "code_access_15": 15
+      },
+      "stars": 336,
+      "forks": 303,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/crypto-org-chain/cronos",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "last_commit": "2026-11-12T20:44:23Z",
+      "commit": "0801cdef03b15788a81698cef368a44a6f60c031",
+      "license_evidence": [
+        "https://github.com/crypto-org-chain/cronos/blob/0801cdef03b15788a81698cef368a44a6f60c031/LICENSE"
+      ],
+      "evidence_urls": [
+        "https://github.com/crypto-org-chain/cronos/blob/0801cdef03b15788a81698cef368a44a6f60c031/README.md"
+      ]
+    },
+    {
+      "repo": "skalenetwork/skaled",
+      "url": "https://github.com/skalenetwork/skaled",
+      "found_via": "GitHub search, topic and README snowball; evm blockchain client",
+      "status": "selected",
+      "reason": "C++ EVM node with distinct consensus, historic storage and JSON-RPC modules.",
+      "license": "GPL-3.0",
+      "overlap_score": 69,
+      "score_breakdown": {
+        "feature_overlap_50": 28,
+        "activity_20": 20,
+        "adoption_15": 6,
+        "code_access_15": 15
+      },
+      "stars": 102,
+      "forks": 42,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/skalenetwork/skaled",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "last_commit": "2026-11-04T16:17:48Z",
+      "commit": "6ae2c94a82b2349faad2f2c02a75cc1d78fc2116",
+      "license_evidence": [
+        "https://github.com/skalenetwork/skaled/blob/6ae2c94a82b2349faad2f2c02a75cc1d78fc2116/LICENSE"
+      ],
+      "evidence_urls": [
+        "https://github.com/skalenetwork/skaled/blob/6ae2c94a82b2349faad2f2c02a75cc1d78fc2116/README.md"
+      ]
+    },
+    {
+      "repo": "Galxe/gravity-reth",
+      "url": "https://github.com/Galxe/gravity-reth",
+      "found_via": "GitHub search, topic and README snowball; reth fork",
+      "status": "selected",
+      "reason": "Reth derivative with a distinct parallel execution integration; this is an addition beyond its selected parent.",
+      "license": "Apache-2.0/MIT",
+      "overlap_score": 65,
+      "score_breakdown": {
+        "feature_overlap_50": 27,
+        "activity_20": 20,
+        "adoption_15": 3,
+        "code_access_15": 15
+      },
+      "stars": 21,
+      "forks": 18,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/Galxe/gravity-reth",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "last_commit": "2026-11-06T15:16:13+08:00",
+      "commit": "c407bd938013a4250544c303ac294a36482dcd98",
+      "license_evidence": [
+        "https://github.com/Galxe/gravity-reth/blob/c407bd938013a4250544c303ac294a36482dcd98/LICENSE-APACHE",
+        "https://github.com/Galxe/gravity-reth/blob/c407bd938013a4250544c303ac294a36482dcd98/LICENSE-MIT"
+      ],
+      "evidence_urls": [
+        "https://github.com/Galxe/gravity-reth/blob/c407bd938013a4250544c303ac294a36482dcd98/README.md"
+      ]
+    },
+    {
+      "repo": "circlefin/arc-reth",
+      "url": "https://github.com/circlefin/arc-reth",
+      "found_via": "GitHub search, topic and README snowball; reth fork",
+      "status": "rejected",
+      "reason": "Fork exclusion: README explicitly says this repository adds no features and contains upstream releases plus public backports.",
+      "license": "Apache-2.0/MIT",
+      "overlap_score": 66,
+      "score_breakdown": {
+        "feature_overlap_50": 28,
+        "activity_20": 20,
+        "adoption_15": 3,
+        "code_access_15": 15
+      },
+      "stars": 1,
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/circlefin/arc-reth",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "last_commit": "2026-11-05T16:52:22-05:00",
+      "commit": "c7aacbed73c35f02f252fc43197c91e3e19d676f",
+      "license_evidence": [
+        "https://github.com/circlefin/arc-reth/blob/c7aacbed73c35f02f252fc43197c91e3e19d676f/LICENSE-APACHE",
+        "https://github.com/circlefin/arc-reth/blob/c7aacbed73c35f02f252fc43197c91e3e19d676f/LICENSE-MIT"
+      ],
+      "evidence_urls": [
+        "https://github.com/circlefin/arc-reth/blob/c7aacbed73c35f02f252fc43197c91e3e19d676f/README.md"
+      ]
+    },
+    {
+      "repo": "openethereum/parity-ethereum",
+      "url": "https://github.com/openethereum/parity-ethereum",
+      "found_via": "GitHub search, topic and README snowball; ethereum client rust; topic:ethereum language:Rust",
+      "status": "rejected",
+      "reason": "Archived 2020 predecessor; low activity and unclear metadata licence. Not cloned or used as code evidence.",
+      "license": "NOASSERTION",
+      "overlap_score": 48,
+      "score_breakdown": {
+        "feature_overlap_50": 28,
+        "activity_20": 0,
+        "adoption_15": 15,
+        "code_access_15": 5
+      },
+      "stars": 6817,
+      "forks": 1691,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/openethereum/parity-ethereum",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "last_commit": "2020-02-05T15:44:18Z",
+      "commit": "55c90d4016505317034e3e98f699af07f5404b63",
+      "evidence_urls": [
+        "https://github.com/openethereum/parity-ethereum/blob/55c90d4016505317034e3e98f699af07f5404b63/README.md",
+        "https://api.github.com/repos/openethereum/parity-ethereum"
+      ]
+    },
+    {
+      "repo": "stars-labs/heco-chain",
+      "url": "https://github.com/stars-labs/heco-chain",
+      "found_via": "GitHub search, topic and README snowball; evm blockchain client; ethereum client go; topic:evm language:Go",
+      "status": "rejected",
+      "reason": "Stale geth derivative; the last observed commit is from 2022.",
+      "license": "LGPL-3.0",
+      "overlap_score": 50,
+      "score_breakdown": {
+        "feature_overlap_50": 29,
+        "activity_20": 0,
+        "adoption_15": 6,
+        "code_access_15": 15
+      },
+      "stars": 244,
+      "forks": 138,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/stars-labs/heco-chain",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "last_commit": "2022-08-15T10:02:36Z",
+      "commit": "123ccb14caf0bb27a7563de7f55db54910d92fdd",
+      "evidence_urls": [
+        "https://github.com/stars-labs/heco-chain/blob/123ccb14caf0bb27a7563de7f55db54910d92fdd/README.md",
+        "https://api.github.com/repos/stars-labs/heco-chain"
+      ]
+    },
+    {
+      "repo": "okx/exchain",
+      "url": "https://github.com/okx/exchain",
+      "found_via": "GitHub search, topic and README snowball; topic:evm language:Go",
+      "status": "rejected",
+      "reason": "Last observed commit is older than 18 months; Cosmos/Wasm-specific additions do not justify another selected client. Root licence text was checked.",
+      "license": "Apache-2.0",
+      "overlap_score": 46,
+      "score_breakdown": {
+        "feature_overlap_50": 22,
+        "activity_20": 0,
+        "adoption_15": 9,
+        "code_access_15": 15
+      },
+      "stars": 582,
+      "forks": 193,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/okx/exchain",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "last_commit": "2025-05-08T04:03:36Z",
+      "commit": "5e4c3c5f7995b57c1284aeaa614886d638b7431e",
+      "evidence_urls": [
+        "https://github.com/okx/exchain/blob/5e4c3c5f7995b57c1284aeaa614886d638b7431e/README.md",
+        "https://api.github.com/repos/okx/exchain"
+      ]
+    },
+    {
+      "repo": "energicryptocurrency/go-energi",
+      "url": "https://github.com/energicryptocurrency/go-energi",
+      "found_via": "GitHub search, topic and README snowball; ethereum full node",
+      "status": "rejected",
+      "reason": "Masternode EVM client, but the last observed commit is from 2024 and its score is below the selection threshold.",
+      "license": "LGPL-3.0",
+      "overlap_score": 48,
+      "score_breakdown": {
+        "feature_overlap_50": 30,
+        "activity_20": 0,
+        "adoption_15": 3,
+        "code_access_15": 15
+      },
+      "stars": 48,
+      "forks": 18,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/energicryptocurrency/go-energi",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "last_commit": "2024-07-12T06:40:28Z",
+      "commit": "ba88e5d3419c776243a4b320f3d661136d5c5e9c",
+      "evidence_urls": [
+        "https://github.com/energicryptocurrency/go-energi/blob/ba88e5d3419c776243a4b320f3d661136d5c5e9c/README.md",
+        "https://api.github.com/repos/energicryptocurrency/go-energi"
+      ]
+    },
+    {
+      "repo": "ava-labs/avalanchego",
+      "url": "https://github.com/ava-labs/avalanchego",
+      "found_via": "GitHub search, topic and README snowball; selected-client README links",
+      "status": "selected",
+      "reason": "Active node monorepo includes the Coreth and Subnet-EVM implementations that replaced the archived repositories.",
+      "license": "BSD-3-Clause; graft/coreth LGPL-3.0",
+      "overlap_score": 69,
+      "score_breakdown": {
+        "feature_overlap_50": 22,
+        "activity_20": 20,
+        "adoption_15": 12,
+        "code_access_15": 15
+      },
+      "stars": 2360,
+      "forks": 874,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/ava-labs/avalanchego",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "last_commit": "2026-11-13T19:31:21Z",
+      "commit": "f27fa6712b340a552376fd7ecdf2de15307cd7bd",
+      "license_evidence": [
+        "https://github.com/ava-labs/avalanchego/blob/f27fa6712b340a552376fd7ecdf2de15307cd7bd/LICENSE",
+        "https://github.com/ava-labs/avalanchego/blob/f27fa6712b340a552376fd7ecdf2de15307cd7bd/graft/coreth/LICENSE"
+      ],
+      "evidence_urls": [
+        "https://github.com/ava-labs/avalanchego/blob/f27fa6712b340a552376fd7ecdf2de15307cd7bd/README.md"
+      ]
+    },
+    {
+      "repo": "tokamak-network/py-ethclient",
+      "url": "https://github.com/tokamak-network/py-ethclient",
+      "found_via": "GitHub search, topic and README snowball; selected-client README links",
+      "status": "rejected",
+      "reason": "Recent partial Python execution-client project; activity and adoption yield a score below 60.",
+      "license": "MIT",
+      "overlap_score": 52,
+      "score_breakdown": {
+        "feature_overlap_50": 24,
+        "activity_20": 10,
+        "adoption_15": 3,
+        "code_access_15": 15
+      },
+      "stars": 1,
+      "forks": 1,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/tokamak-network/py-ethclient",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "last_commit": "2026-03-01T16:03:18Z",
+      "commit": "a9cd5dfdb748c68526c567d33a61b00376f95e1e",
+      "evidence_urls": [
+        "https://github.com/tokamak-network/py-ethclient/blob/a9cd5dfdb748c68526c567d33a61b00376f95e1e/README.md",
+        "https://api.github.com/repos/tokamak-network/py-ethclient"
+      ]
+    },
+    {
+      "repo": "Fantom-foundation/go-opera",
+      "url": "https://github.com/Fantom-foundation/go-opera",
+      "found_via": "GitHub search, topic and README snowball; topic:evm language:Go",
+      "status": "rejected",
+      "reason": "Last observed commit is from 2022; selected Sonic supplies the active related node implementation.",
+      "license": "LGPL-3.0",
+      "overlap_score": 48,
+      "score_breakdown": {
+        "feature_overlap_50": 27,
+        "activity_20": 0,
+        "adoption_15": 6,
+        "code_access_15": 15
+      },
+      "stars": 294,
+      "forks": 221,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/Fantom-foundation/go-opera",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "last_commit": "2022-11-21T11:04:42Z",
+      "commit": "e529a4e7317e2f02e284c194677b301bb640cd73",
+      "evidence_urls": [
+        "https://github.com/Fantom-foundation/go-opera/blob/e529a4e7317e2f02e284c194677b301bb640cd73/README.md",
+        "https://api.github.com/repos/Fantom-foundation/go-opera"
+      ]
+    },
+    {
+      "repo": "berachain/polaris",
+      "url": "https://github.com/berachain/polaris",
+      "found_via": "GitHub search, topic and README snowball; topic:evm language:Go",
+      "status": "rejected",
+      "reason": "Archived modular EVM integration; stale and not a maintained full-client competitor.",
+      "license": "NOASSERTION",
+      "overlap_score": 35,
+      "score_breakdown": {
+        "feature_overlap_50": 18,
+        "activity_20": 0,
+        "adoption_15": 12,
+        "code_access_15": 5
+      },
+      "stars": 1071,
+      "forks": 354,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/berachain/polaris",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "last_commit": "2024-06-09T20:51:07Z",
+      "commit": "7cc50544837e24b51d73976da14d29f5bdd00671",
+      "evidence_urls": [
+        "https://github.com/berachain/polaris/blob/7cc50544837e24b51d73976da14d29f5bdd00671/README.md",
+        "https://api.github.com/repos/berachain/polaris"
+      ]
+    },
+    {
+      "repo": "evmos/ethermint",
+      "url": "https://github.com/evmos/ethermint",
+      "found_via": "GitHub search, topic and README snowball; topic:evm language:Go",
+      "status": "rejected",
+      "reason": "Archived Cosmos EVM library; current full-node integrations were selected instead.",
+      "license": "LGPL-3.0",
+      "overlap_score": 45,
+      "score_breakdown": {
+        "feature_overlap_50": 18,
+        "activity_20": 0,
+        "adoption_15": 12,
+        "code_access_15": 15
+      },
+      "stars": 1800,
+      "forks": 583,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/evmos/ethermint",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "last_commit": "2024-04-04T18:25:02Z",
+      "commit": "fd8c2d25cf80e7d2d2a142e7b374f979f8f51981",
+      "evidence_urls": [
+        "https://github.com/evmos/ethermint/blob/fd8c2d25cf80e7d2d2a142e7b374f979f8f51981/README.md",
+        "https://api.github.com/repos/evmos/ethermint"
+      ]
+    },
+    {
+      "repo": "openethereum/openethereum",
+      "url": "https://github.com/openethereum/openethereum",
+      "found_via": "GitHub search, topic and README snowball; topic:ethereum language:Rust",
+      "status": "rejected",
+      "reason": "Archived and deprecated client; last observed commit is from 2022.",
+      "license": "GPL-3.0",
+      "overlap_score": 55,
+      "score_breakdown": {
+        "feature_overlap_50": 28,
+        "activity_20": 0,
+        "adoption_15": 12,
+        "code_access_15": 15
+      },
+      "stars": 1623,
+      "forks": 357,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/openethereum/openethereum",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "last_commit": "2022-04-05T07:00:29Z",
+      "commit": "6c2d392d867b058ff867c4373e40850ca3f96969",
+      "evidence_urls": [
+        "https://github.com/openethereum/openethereum/blob/6c2d392d867b058ff867c4373e40850ca3f96969/README.md",
+        "https://api.github.com/repos/openethereum/openethereum"
+      ]
+    },
+    {
+      "repo": "KiiChain/kiichain",
+      "url": "https://github.com/KiiChain/kiichain",
+      "found_via": "GitHub search, topic and README snowball; topic:evm language:Go",
+      "status": "selected",
+      "reason": "EVM node integration, tracing registration, CLI and operator workflows are relevant; Cosmos-only application modules are not parity requirements.",
+      "license": "Apache-2.0",
+      "overlap_score": 63,
+      "score_breakdown": {
+        "feature_overlap_50": 22,
+        "activity_20": 20,
+        "adoption_15": 6,
+        "code_access_15": 15
+      },
+      "stars": 153,
+      "forks": 125,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/KiiChain/kiichain",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "last_commit": "2026-11-12T15:27:37-03:00",
+      "commit": "85d9352541cb7d600e8312bbe0cd51bbe3ca2c0d",
+      "license_evidence": [
+        "https://github.com/KiiChain/kiichain/blob/85d9352541cb7d600e8312bbe0cd51bbe3ca2c0d/LICENSE"
+      ],
+      "evidence_urls": [
+        "https://github.com/KiiChain/kiichain/blob/85d9352541cb7d600e8312bbe0cd51bbe3ca2c0d/README.md"
+      ]
+    },
+    {
+      "repo": "ten-protocol/go-ten",
+      "url": "https://github.com/ten-protocol/go-ten",
+      "found_via": "GitHub search, topic and README snowball; topic:evm language:Go",
+      "status": "rejected",
+      "reason": "Confidential L2 node has limited overlap with XDC L1 operations and an unresolved metadata licence; docs-only screening.",
+      "license": "NOASSERTION",
+      "overlap_score": 33,
+      "score_breakdown": {
+        "feature_overlap_50": 15,
+        "activity_20": 10,
+        "adoption_15": 3,
+        "code_access_15": 5
+      },
+      "stars": 65,
+      "forks": 49,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/ten-protocol/go-ten",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "last_commit": "2026-03-03T14:10:55Z",
+      "commit": "e74439c54a6c7ca1aca7f6b5d51be92ea815742d",
+      "evidence_urls": [
+        "https://github.com/ten-protocol/go-ten/blob/e74439c54a6c7ca1aca7f6b5d51be92ea815742d/README.md",
+        "https://api.github.com/repos/ten-protocol/go-ten"
+      ]
+    },
+    {
+      "repo": "ubiq/go-ubiq",
+      "url": "https://github.com/ubiq/go-ubiq",
+      "found_via": "GitHub search, topic and README snowball; geth fork; topic:evm language:Go",
+      "status": "rejected",
+      "reason": "Stale geth derivative; last observed commit is from 2024.",
+      "license": "LGPL-3.0",
+      "overlap_score": 45,
+      "score_breakdown": {
+        "feature_overlap_50": 27,
+        "activity_20": 0,
+        "adoption_15": 3,
+        "code_access_15": 15
+      },
+      "stars": 83,
+      "forks": 18,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/ubiq/go-ubiq",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "last_commit": "2024-03-26T19:17:54Z",
+      "commit": "29a4ef4949df41907312c5caabf9a3dc8647d54b",
+      "evidence_urls": [
+        "https://github.com/ubiq/go-ubiq/blob/29a4ef4949df41907312c5caabf9a3dc8647d54b/README.md",
+        "https://api.github.com/repos/ubiq/go-ubiq"
+      ]
+    },
+    {
+      "repo": "a16z/helios",
+      "url": "https://github.com/a16z/helios",
+      "found_via": "GitHub search, topic and README snowball; topic:ethereum language:Rust",
+      "status": "rejected",
+      "reason": "Light client rather than a full execution and block-producing node; below threshold.",
+      "license": "MIT",
+      "overlap_score": 55,
+      "score_breakdown": {
+        "feature_overlap_50": 8,
+        "activity_20": 20,
+        "adoption_15": 12,
+        "code_access_15": 15
+      },
+      "stars": 2199,
+      "forks": 476,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/a16z/helios",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "last_commit": "2026-11-10T17:28:56Z",
+      "commit": "2922a475ef1b48476983333cbae7fc92fdb46cd6",
+      "evidence_urls": [
+        "https://github.com/a16z/helios/blob/2922a475ef1b48476983333cbae7fc92fdb46cd6/README.md",
+        "https://api.github.com/repos/a16z/helios"
+      ]
+    },
+    {
+      "repo": "circlefin/arc-node",
+      "url": "https://github.com/circlefin/arc-node",
+      "found_via": "GitHub search, topic and README snowball; selected-client README links",
+      "status": "selected",
+      "reason": "Rust BFT/EVM node with distinct consensus, signing, execution and snapshot modules over Reth; evaluated as source, not production maturity.",
+      "license": "Apache-2.0",
+      "overlap_score": 69,
+      "score_breakdown": {
+        "feature_overlap_50": 28,
+        "activity_20": 20,
+        "adoption_15": 6,
+        "code_access_15": 15
+      },
+      "stars": 208,
+      "forks": 221,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/circlefin/arc-node",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "last_commit": "2026-09-25T08:55:19-04:00",
+      "commit": "6e764023ee6515fe70573e123ed2db912a7207b4",
+      "license_evidence": [
+        "https://github.com/circlefin/arc-node/blob/6e764023ee6515fe70573e123ed2db912a7207b4/LICENSE"
+      ],
+      "evidence_urls": [
+        "https://github.com/circlefin/arc-node/blob/6e764023ee6515fe70573e123ed2db912a7207b4/README.md"
+      ]
+    },
+    {
+      "repo": "category-labs/monad",
+      "url": "https://github.com/category-labs/monad",
+      "found_via": "GitHub search, topic and README snowball; selected-client README links",
+      "status": "selected",
+      "reason": "Native execution, state storage and RPC implementation supplies parallel-execution design evidence; consensus is not transplanted.",
+      "license": "GPL-3.0",
+      "overlap_score": 71,
+      "score_breakdown": {
+        "feature_overlap_50": 24,
+        "activity_20": 20,
+        "adoption_15": 12,
+        "code_access_15": 15
+      },
+      "stars": 1233,
+      "forks": 442,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/category-labs/monad",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "last_commit": "2026-11-13T18:34:58Z",
+      "commit": "83f8bc65ca725a77f7b6ead50756eed90fa28691",
+      "license_evidence": [
+        "https://github.com/category-labs/monad/blob/83f8bc65ca725a77f7b6ead50756eed90fa28691/LICENSE"
+      ],
+      "evidence_urls": [
+        "https://github.com/category-labs/monad/blob/83f8bc65ca725a77f7b6ead50756eed90fa28691/README.md"
+      ]
+    },
+    {
+      "repo": "sei-protocol/sei-chain",
+      "url": "https://github.com/sei-protocol/sei-chain",
+      "found_via": "GitHub search, topic and README snowball; selected-client README links",
+      "status": "selected",
+      "reason": "Full EVM node with distinct concurrent execution, RPC and state modules supplies execution design evidence.",
+      "license": "Apache-2.0",
+      "overlap_score": 74,
+      "score_breakdown": {
+        "feature_overlap_50": 27,
+        "activity_20": 20,
+        "adoption_15": 12,
+        "code_access_15": 15
+      },
+      "stars": 2841,
+      "forks": 890,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/sei-protocol/sei-chain",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "last_commit": "2026-11-14T03:25:00Z",
+      "commit": "efa1e663467ee973e95f844f7505a6d218cadab0",
+      "license_evidence": [
+        "https://github.com/sei-protocol/sei-chain/blob/efa1e663467ee973e95f844f7505a6d218cadab0/LICENSE.md"
+      ],
+      "evidence_urls": [
+        "https://github.com/sei-protocol/sei-chain/blob/efa1e663467ee973e95f844f7505a6d218cadab0/README.md"
+      ]
+    },
+    {
+      "repo": "getamis/eth-client",
+      "url": "https://github.com/getamis/eth-client",
+      "found_via": "GitHub search, topic and README snowball; topic:ethereum-client; topic:ethereum-client sort:stars",
+      "status": "rejected",
+      "reason": "RPC client library rather than a blockchain node; last observed commit is from 2017.",
+      "license": "LGPL-3.0",
+      "overlap_score": 21,
+      "score_breakdown": {
+        "feature_overlap_50": 3,
+        "activity_20": 0,
+        "adoption_15": 3,
+        "code_access_15": 15
+      },
+      "stars": 55,
+      "forks": 13,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/getamis/eth-client",
+      "review_pass": "pass4",
+      "adoption_note": "Star bands provide a reproducible adoption proxy; forks are recorded as context. Contributor counts were not fetched.",
+      "last_commit": "2017-11-13T02:57:04Z",
+      "commit": "e1c84550208d48654ab0f6aa309044cb56fd3aa1",
+      "evidence_urls": [
+        "https://github.com/getamis/eth-client/blob/e1c84550208d48654ab0f6aa309044cb56fd3aa1/README.md",
+        "https://api.github.com/repos/getamis/eth-client"
+      ]
     }
   ],
   "pass3": {
@@ -885,5 +1836,40 @@
       "awesome lists: jmcph4/awesome-reth; web search: BFT EVM clients (Istanbul BFT, Kaia, core-geth)",
       "org listings: XinFinOrg, BuildOnViction"
     ]
+  },
+  "pass4": {
+    "date": "2026-11-14",
+    "selected_count": 25,
+    "newly_selected_count": 11,
+    "scoring_note": "Same 50/20/15/15 weights. Newly selected and rejected candidates use actual default-branch commit dates, not repository updatedAt. Historical assessments remain identified. High-scoring duplicate forks, own sibling clients and superseded repositories retain explicit exclusion reasons.",
+    "search_log": "discovery-pass4.json",
+    "source_pins": {
+      "XinFinOrg/XDPoSChain": "cb1ef79073c05f50b9df75b1e740387b9d72af99",
+      "BuildOnViction/victionchain": "31fe7cb935b46b8b5b115d070e64b30d6b8165b1",
+      "ethereum/go-ethereum": "8059ff8beb3170eb8b977169ac51bb0423c97ee1",
+      "bnb-chain/bsc": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+      "0xPolygon/bor": "ee09efd5dd9ef75917368990b272581b0e2c2665",
+      "paradigmxyz/reth": "36600d5ff9628465475dd4c7608e2e9f2fe24273",
+      "besu-eth/besu": "2b839d96863d01210f45a6f62127e6229e5b0889",
+      "NethermindEth/nethermind": "a7dd73052e696ad934d228aad3f33e660701fdb7",
+      "erigontech/erigon": "5b59b99c73893b4a21cc1cea175e6263cf914912",
+      "sei-protocol/sei-chain": "efa1e663467ee973e95f844f7505a6d218cadab0",
+      "harmony-one/harmony": "a41e194761c81fe846994864e789a7d306bbc439",
+      "tempoxyz/tempo": "35d8b937fba89ae0bfdea1edf735fb6f8aa41c23",
+      "category-labs/monad": "83f8bc65ca725a77f7b6ead50756eed90fa28691",
+      "etclabscore/core-geth": "4720ac33055e8e5482ce2fb6c5ff800aad8a5889",
+      "kaiachain/kaia": "0f9ad843d1ccb7381cc43070ce13002cca7b1ed9",
+      "ava-labs/avalanchego": "f27fa6712b340a552376fd7ecdf2de15307cd7bd",
+      "circlefin/arc-node": "6e764023ee6515fe70573e123ed2db912a7207b4",
+      "lambdaclass/ethrex": "7e272ac5075aec832304909b376bada4eca52e77",
+      "skalenetwork/skaled": "6ae2c94a82b2349faad2f2c02a75cc1d78fc2116",
+      "status-im/nimbus-eth1": "5e3fd7e9d19177980cc1c086c46c4e1dcf38eced",
+      "0xsoniclabs/sonic": "e12abf3b8405af4c382c0bb4f0d81d543a7264da",
+      "Galxe/gravity-reth": "c407bd938013a4250544c303ac294a36482dcd98",
+      "autonity/autonity": "cf1c15ee0bfae7cd1eff7b9b2c3a69f70b4b951f",
+      "KiiChain/kiichain": "85d9352541cb7d600e8312bbe0cd51bbe3ca2c0d",
+      "crypto-org-chain/cronos": "0801cdef03b15788a81698cef368a44a6f60c031"
+    },
+    "limitations": "Selection is an engineering relevance judgment, not a maturity ranking. Code presence does not establish runtime correctness. No non-commercial or unresolved-licence code was cloned."
   }
 }
