@@ -1,0 +1,10 @@
+{
+ "bytecodePending": 0,
+ "enabled": false,
+ "healStartUnix": 0,
+ "inProgress": false,
+ "lastError": "",
+ "mode": "snap-heal",
+ "targetRoot": "",
+ "trienodePending": 0
+}

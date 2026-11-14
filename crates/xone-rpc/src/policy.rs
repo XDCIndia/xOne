@@ -33,7 +33,9 @@ pub fn registry(namespaces: &[String]) -> Result<Registry, Refusal> {
             "eth" => {
                 crate::eth::register(&mut reg);
                 crate::xdc_ext::register(&mut reg);
+                crate::xdc::register_eth_heal(&mut reg);
             }
+            "xdc" => crate::xdc::register(&mut reg),
             "net" => crate::net::register(&mut reg),
             "web3" => crate::web3::register(&mut reg),
             "txpool" => crate::txpool::register(&mut reg),
