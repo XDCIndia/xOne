@@ -42,6 +42,7 @@ pub fn registry(namespaces: &[String]) -> Result<Registry, Refusal> {
             "admin" => crate::admin::register(&mut reg),
             "debug" => crate::debug::register(&mut reg),
             "xdpos" => crate::xdpos::register(&mut reg),
+            "ots" => crate::ots::register(&mut reg),
             "personal" => {}
             _ => return Err(Refusal::UnknownNamespace(ns.clone())),
         }

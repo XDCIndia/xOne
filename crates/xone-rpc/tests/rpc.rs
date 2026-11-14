@@ -1391,3 +1391,36 @@ async fn a_plain_http_request_to_the_websocket_port_is_not_dispatched() {
     assert!(out.is_empty() || out.starts_with("HTTP/1.1 4"), "{out}");
     h.abort();
 }
+
+/// Otterscan `ots_*` first slice (issue #183): served only when listed, Erigon shapes.
+#[test]
+fn ots_namespace_shapes() {
+    let off = rpc_api(&["eth"], Default::default());
+    assert_eq!(
+        ask(&off, req(1, "ots_getApiLevel", json!([])))["error"]["code"],
+        -32601
+    );
+    let r = rpc_api(&["eth", "ots"], Default::default());
+    assert_eq!(ask(&r, req(1, "ots_getApiLevel", json!([])))["result"], 8);
+    let has = ask(
+        &r,
+        req(1, "ots_hasCode", json!([format!("{ACCT:#x}"), "latest"])),
+    );
+    assert_eq!(has["result"], false, "{has}");
+    let d = ask(&r, req(1, "ots_getBlockDetails", json!([5])));
+    let b = &d["result"]["block"];
+    assert!(b.get("transactions").is_none(), "{d}");
+    assert_eq!(b["transactionCount"], 0);
+    assert!(b["logsBloom"].is_null());
+    assert_eq!(d["result"]["totalFees"], "0x0");
+    assert_eq!(d["result"]["issuance"]["issuance"], "0x0");
+    let h = b["hash"].as_str().unwrap().to_owned();
+    let byh = ask(&r, req(1, "ots_getBlockDetailsByHash", json!([h])));
+    assert_eq!(byh["result"], d["result"]);
+    let t = ask(&r, req(1, "ots_getBlockTransactions", json!([5, 0, 25])));
+    assert_eq!(t["result"]["fullblock"]["transactionCount"], 0, "{t}");
+    assert_eq!(t["result"]["receipts"], json!([]));
+    let e = ask(&r, req(1, "ots_getBlockTransactions", json!([5, 0, 0])));
+    assert_eq!(e["error"]["code"], -32602, "{e}");
+    assert!(ask(&r, req(1, "ots_getBlockDetails", json!([500])))["result"].is_null());
+}

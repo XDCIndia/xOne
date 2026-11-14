@@ -124,7 +124,7 @@ pub fn header_of(c: &Ctx, r: BlockRef) -> Result<Option<xone_primitives::Header>
 }
 
 /// The header a state read runs at; unknown is "header not found", below the window is the typed error.
-fn state_at(c: &Ctx, p: &Params, i: usize) -> Result<(u64, B256), RpcError> {
+pub(crate) fn state_at(c: &Ctx, p: &Params, i: usize) -> Result<(u64, B256), RpcError> {
     let r = p.block_ref_or_latest(i)?;
     let hash = match r {
         BlockRef::Hash(h) => h,
