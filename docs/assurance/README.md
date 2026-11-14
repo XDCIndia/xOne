@@ -143,3 +143,7 @@ different paths (equal binary and tarball hashes on 2026-11-12), `ci/test-packag
 Records: `docs/ops/release.md`, `docs/ops/release-rehearsal.md`. Gaps: two builders on separate machines,
 a different `CARGO_HOME`, signing key custody (owner), SBOM and provenance not signed beyond `SHA256SUMS`,
 no aarch64, no CI run on a tag.
+
+## Code-size budget (issue #201)
+
+`python3 -I ci/loc.py --budget ci/loc-budget.toml` counts non-blank, non-comment Rust lines per crate (tests and generated files excluded) and fails when `xone-consensus`, `xone-evm`, `xone-signer` or `xone-primitives` is above its ceiling (main plus 15 percent). On a pull request the `assurance` job also writes a per-crate line and dependency delta against the merge base to the job summary (`ci/loc.py --base REF`). The failing case is `LocBudgetGate` in `ci/tests/test_gates.py`. Raise a ceiling with a one-line change of `ci/loc-budget.toml`.
