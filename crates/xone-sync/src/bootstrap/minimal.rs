@@ -62,8 +62,25 @@ pub fn prune<S: Store>(
     committed: Option<u64>,
     slack: u64,
 ) -> Result<Option<Keep>, MinimalError> {
+    prune_with(spec, store, committed, None, slack)
+}
+
+/// [`prune`] that also keeps what a restart from block `restart` (a state checkpoint at or below the
+/// head: the store goes back to it and replays) needs at that block, which is longer than the head's.
+pub fn prune_with<S: Store>(
+    spec: &ChainSpec,
+    store: &mut S,
+    committed: Option<u64>,
+    restart: Option<u64>,
+    slack: u64,
+) -> Result<Option<Keep>, MinimalError> {
     let (head, _) = store.head();
-    let keep = keep_from(spec, head, committed)?;
+    let mut keep = keep_from(spec, head, committed)?;
+    if let Some(r) = restart.filter(|r| *r < head) {
+        let k = keep_from(spec, r, committed)?;
+        keep.headers_from = keep.headers_from.min(k.headers_from);
+        keep.records_from = keep.records_from.min(k.records_from);
+    }
     let (h, r) = firsts(store).ok_or(MinimalError::NoManifest)?;
     if keep.headers_from <= h.saturating_add(slack) && keep.records_from <= r.saturating_add(slack)
         || (keep.headers_from <= h && keep.records_from <= r)
