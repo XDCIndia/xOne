@@ -161,6 +161,7 @@ pub fn build(
     let pool = Arc::new(pool::PoolShared::new(core.clone())?);
     // the producer's BFT machine reads the votes, timeouts and SyncInfos the follower receives
     let (bft_tx, bft_rx) = std::sync::mpsc::channel();
+    let gate = crate::diskguard::ImportGate::default();
     let chain_svc = chain::ChainService::new(
         core.clone(),
         rth.clone(),
@@ -168,7 +169,8 @@ pub fn build(
         pool.clone(),
         events,
         producer_plan.is_some().then_some(bft_tx),
-    );
+    )
+    .with_gate(gate.clone());
     let progress = chain_svc.progress.clone();
     let pool_svc = pool::PoolService::new(pool.clone(), rth.clone());
     let producer_svc = producer_plan
@@ -197,6 +199,13 @@ pub fn build(
         Duration::from_millis(l.service_stop_timeout_ms),
         Duration::from_millis(l.stop_timeout_ms),
     );
+    // first: the guard reads free space before the node imports anything
+    node.add(Box::new(crate::diskguard::DiskGuard::new(
+        cfg.datadir.clone(),
+        cfg.limits.clone(),
+        gate,
+        node.internal_stop(),
+    )));
     node.add(Box::new(net_svc));
     node.add(Box::new(chain_svc));
     node.add(Box::new(pool_svc));

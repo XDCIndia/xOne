@@ -568,6 +568,9 @@ fn class(m: &Message) -> Option<Class> {
         Message::Opaque { code, .. } => match *code {
             codes::POOLED_TXS => Class::Tx,
             codes::GET_NODE_DATA => Class::Request,
+            // geth-XDC announces its range on eth/101 (`xdpos2rid`, `eth/protocols/eth/handler.go:306`);
+            // nothing here reads it, so it takes no slot of the response queue
+            codes::BLOCK_RANGE_UPDATE => return None,
             _ => Class::Response,
         },
         // Status after the handshake is a violation, handled by the caller; 0x08 and 0x09 are drained.

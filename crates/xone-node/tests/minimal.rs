@@ -27,6 +27,7 @@ use xone_node::{
     services::{
         self,
         core::{now, Core},
+        store::{load_ckpt, save_ckpt},
     },
     snapshot::{export_datadir, import_datadir},
     Config,
@@ -224,6 +225,47 @@ fn a_minimal_node_follows_two_checkpoints_and_a_reward_from_a_fake_peer_only() {
     let state = built.core.chain.with_store(|s| flat_root(s.head_flat()));
     assert_eq!(state, blocks[1800].header.state_root);
     built.node.stop().unwrap();
+    let _ = std::fs::remove_dir_all(&min);
+}
+
+/// #119: an anchored datadir whose install carried the pivot's total difficulty (what
+/// `--syncmode snap` derives from the source's Status) reports the td of a full node at the same
+/// head, before and after a restart. The Status td is `hist.td` (`services::build`, `chain.rs`).
+#[test]
+fn an_anchored_node_with_the_pivot_td_reports_the_td_of_a_full_node() {
+    let blocks = vectors(120);
+    let net = Network::Apothem;
+    let (spec, genesis) = (net.spec(), net.genesis().unwrap());
+    let full = scratch("td-full");
+    let core = Core::open(spec.clone(), &genesis, &full.join("xone"), 100).unwrap();
+    for b in &blocks[1..=102] {
+        let (h, body) = parts(b);
+        core.import(h, body, now()).unwrap();
+    }
+    let want = core.hist.read().td;
+    drop(core);
+    let _ = std::fs::remove_dir_all(&full);
+    let at_pivot = want - blocks[101].header.difficulty - blocks[102].header.difficulty;
+
+    let min = import(&blocks, "td");
+    let dir = min.join("xone");
+    // a snapshot file carries no td; the snap install writes the pivot's into this checkpoint
+    let mut ck = load_ckpt(&dir, AT, |_| true).unwrap();
+    assert_eq!((ck.number, ck.td), (AT, U256::ZERO));
+    ck.td = at_pivot;
+    save_ckpt(&dir, &ck).unwrap();
+    let core = Core::open_with(spec.clone(), &genesis, &dir, 100, true, false).unwrap();
+    assert_eq!(core.hist.read().td, at_pivot);
+    for b in &blocks[101..=102] {
+        let (h, body) = parts(b);
+        core.import(h, body, now()).unwrap();
+    }
+    assert_eq!(core.head(), (102, blocks[102].header.hash()));
+    assert_eq!(core.hist.read().td, want);
+    drop(core);
+    let core = Core::open_with(spec, &genesis, &dir, 100, true, false).unwrap();
+    assert_eq!(core.head().0, 102);
+    assert_eq!(core.hist.read().td, want);
     let _ = std::fs::remove_dir_all(&min);
 }
 

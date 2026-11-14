@@ -9,6 +9,7 @@
 pub mod config;
 pub mod datadir;
 mod disk;
+pub mod diskguard;
 pub mod enode;
 pub mod lifecycle;
 pub mod observe;
