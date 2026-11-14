@@ -252,6 +252,7 @@ async fn discovery(
             _ = tick.tick() => {
                 let t = now();
                 d.expire(t);
+                d.revalidate(t, &mut sock);
                 if d.table().is_empty() {
                     // nobody has answered yet: bond with the boot nodes again
                     for (addr, id) in &boots {
