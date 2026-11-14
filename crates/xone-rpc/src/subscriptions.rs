@@ -14,6 +14,13 @@ use tokio::sync::mpsc::{error::TrySendError, Sender};
 use xone_primitives::Header;
 
 /// geth `filters.FilterCriteria` for logs: any of `addresses` and, per position, any of the topics.
+/// geth `maxTopics`: LOG0 to LOG4.
+pub const MAX_TOPICS: usize = 4;
+/// geth `maxSubTopics`.
+pub const MAX_SUB_TOPICS: usize = 1000;
+/// geth-XDC `ethconfig.Defaults.LogQueryLimit`: addresses, and alternatives per position.
+pub const LOG_QUERY_LIMIT: usize = 1000;
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LogFilter {
     pub addresses: Vec<Address>,
@@ -21,8 +28,23 @@ pub struct LogFilter {
 }
 
 impl LogFilter {
-    /// Parses `{"address": a | [a], "topics": [null | h | [h]]}`; `xdc` addresses are accepted.
+    /// Parses `{"address": a | [a], "topics": [null | h | [h | null]]}` as geth-XDC
+    /// `FilterCriteria.UnmarshalJSON` and `GetLogs` do; `xdc` addresses are accepted. Shape errors
+    /// fail here, before any storage read:
+    /// - `blockHash` together with `fromBlock` or `toBlock`;
+    /// - `topics` that is not an array, more than [`MAX_TOPICS`] positions, a position that is
+    ///   not null, a hash or an array of them, or more than [`MAX_SUB_TOPICS`] alternatives;
+    /// - more than [`LOG_QUERY_LIMIT`] addresses or alternatives in one position.
+    ///
+    /// A null among alternatives makes the position a wildcard, and geth stops reading that
+    /// position there.
     pub fn parse(o: &serde_json::Map<String, Value>) -> Result<Self, RpcError> {
+        let set = |k: &str| o.get(k).is_some_and(|v| !v.is_null());
+        if set("blockHash") && (set("fromBlock") || set("toBlock")) {
+            return Err(RpcError::invalid_params(
+                "cannot specify both BlockHash and FromBlock/ToBlock, choose one or the other",
+            ));
+        }
         let mut f = Self::default();
         match o.get("address") {
             Some(Value::String(s)) => f.addresses.push(parse_address(s)?),
@@ -37,23 +59,44 @@ impl LogFilter {
             Some(Value::Null) | None => {}
             Some(_) => return Err(RpcError::invalid_params("invalid addresses in query")),
         }
-        if let Some(Value::Array(ts)) = o.get("topics") {
-            for t in ts {
-                f.topics.push(match t {
-                    Value::Null => vec![],
-                    Value::String(s) => vec![parse_hash(s)?],
-                    Value::Array(a) => a
-                        .iter()
-                        .map(|x| {
-                            parse_hash(
-                                x.as_str()
-                                    .ok_or_else(|| RpcError::invalid_params("invalid topic"))?,
-                            )
-                        })
-                        .collect::<Result<_, _>>()?,
-                    _ => return Err(RpcError::invalid_params("invalid topic(s)")),
-                });
-            }
+        let ts = match o.get("topics") {
+            Some(Value::Array(ts)) => ts.as_slice(),
+            Some(Value::Null) | None => &[],
+            Some(_) => return Err(RpcError::invalid_params("invalid topic(s)")),
+        };
+        if ts.len() > MAX_TOPICS {
+            return Err(RpcError::invalid_params("exceed max topics"));
+        }
+        for t in ts {
+            f.topics.push(match t {
+                Value::Null => vec![],
+                Value::String(s) => vec![parse_hash(s)?],
+                Value::Array(a) => {
+                    if a.len() > MAX_SUB_TOPICS {
+                        return Err(RpcError::invalid_params("exceed max topics"));
+                    }
+                    let mut alts = vec![];
+                    for x in a {
+                        match x {
+                            // null component: match all
+                            Value::Null => {
+                                alts.clear();
+                                break;
+                            }
+                            Value::String(s) => alts.push(parse_hash(s)?),
+                            _ => return Err(RpcError::invalid_params("invalid topic(s)")),
+                        }
+                    }
+                    alts
+                }
+                _ => return Err(RpcError::invalid_params("invalid topic(s)")),
+            });
+        }
+        if f.addresses.len() > LOG_QUERY_LIMIT || f.topics.iter().any(|t| t.len() > LOG_QUERY_LIMIT)
+        {
+            return Err(RpcError::invalid_params(
+                "exceed max addresses or topics per search position",
+            ));
         }
         Ok(f)
     }
@@ -309,5 +352,37 @@ mod tests {
         assert_eq!(m["params"]["result"]["removed"], json!(true));
         hub.drop_conn(7);
         assert!(hub.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod grammar_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn parse(v: Value) -> Result<LogFilter, RpcError> {
+        LogFilter::parse(v.as_object().expect("object"))
+    }
+
+    #[test]
+    fn filter_shapes_follow_geth_xdc() {
+        let h = format!("{:#x}", B256::repeat_byte(1));
+        let h2 = format!("{:#x}", B256::repeat_byte(2));
+        assert!(parse(json!({"blockHash": h, "fromBlock": "0x1"})).is_err());
+        assert!(parse(json!({"blockHash": h, "toBlock": "latest"})).is_err());
+        assert!(parse(json!({"blockHash": h, "fromBlock": null})).is_ok());
+        assert!(parse(json!({"topics": h})).is_err());
+        assert!(parse(json!({"topics": 1})).is_err());
+        assert!(parse(json!({"topics": null})).is_ok());
+        assert!(parse(json!({"topics": [null, null, null, null, null]})).is_err());
+        assert!(parse(json!({"topics": [[1]]})).is_err());
+        assert!(parse(json!({"topics": [{}]})).is_err());
+        // null among alternatives: the position is a wildcard
+        let f = parse(json!({"topics": [[h, null, h2], [h2]]})).expect("null alternative");
+        assert_eq!(f.topics, vec![vec![], vec![B256::repeat_byte(2)]]);
+        let many: Vec<String> = (0..1001).map(|_| h.clone()).collect();
+        assert!(parse(json!({"topics": [many]})).is_err());
+        let addrs: Vec<String> = (0..1001).map(|_| format!("{:#x}", Address::ZERO)).collect();
+        assert!(parse(json!({"address": addrs})).is_err());
     }
 }
