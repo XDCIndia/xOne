@@ -22,7 +22,7 @@ use xone_consensus::{
     verify::{Body, HeaderError, HeaderVerifier},
 };
 use xone_db::mdbx::T;
-use xone_executor::execute_verified;
+use xone_executor::{code_cache::CodeCache, execute_verified};
 use xone_primitives::{Header, WideBalance};
 use xone_rpc::subscriptions::Hub;
 use xone_state::{
@@ -461,6 +461,7 @@ impl Core {
                     gaps,
                     switches: vec![],
                     td: U256::ZERO,
+                    code_cache: CodeCache::default(),
                 };
                 for n in from..=c.number {
                     let header = header(n)?;
@@ -546,6 +547,7 @@ impl Core {
                     gaps: BTreeMap::new(),
                     switches: vec![],
                     td: g.difficulty,
+                    code_cache: CodeCache::default(),
                 };
                 (
                     0,
