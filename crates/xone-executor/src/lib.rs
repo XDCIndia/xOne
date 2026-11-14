@@ -695,15 +695,30 @@ fn finalise_bal<S: StateRead, E: Env>(
     Ok(())
 }
 
+/// Below this many transactions a block is decoded on the calling thread: a thread costs more
+/// than a few recoveries.
+const DECODE_SEQUENTIAL_BELOW: usize = 32;
+/// The smallest share of one thread (about 8 ms of recovery at 0.5 ms per signature).
+const DECODE_MIN_CHUNK: usize = 16;
+
+/// The chunk length that splits `len` transactions over `cores` threads, `len` itself when the
+/// block is decoded on the calling thread.
+fn decode_chunk(len: usize, cores: usize) -> usize {
+    if len < DECODE_SEQUENTIAL_BELOW || cores <= 1 {
+        return len.max(1);
+    }
+    len.div_ceil(cores).max(DECODE_MIN_CHUNK)
+}
+
 /// Decodes every transaction and recovers its sender. Recovery dominates a large block (about 0.5 ms
-/// per signature on a busy host), so a long list is split over threads; the result, and the first
-/// error by index, are those of the sequential loop.
+/// per signature on a busy host), so a long list is split over every core (as ethrex does with
+/// rayon); the result, and the first error by index, are those of the sequential loop.
 fn decode_all(raws: &[Bytes], chain_id: u64) -> Result<Vec<Tx>, ExecError> {
     let one = move |index: usize, raw: &Bytes| {
         tx::decode(raw, chain_id).map_err(|error| ExecError::Tx { index, error })
     };
-    let threads = std::thread::available_parallelism().map_or(1, |n| n.get().min(8));
-    let chunk = raws.len().div_ceil(threads).max(256);
+    let cores = std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get);
+    let chunk = decode_chunk(raws.len(), cores);
     if raws.len() <= chunk {
         return raws.iter().enumerate().map(|(i, r)| one(i, r)).collect();
     }
@@ -899,6 +914,29 @@ mod decode_tests {
         assert!(matches!(
             decode_all(&raws, 2040),
             Err(ExecError::Tx { index: 700, .. })
+        ));
+    }
+
+    #[test]
+    fn decode_splits_by_core_count_and_keeps_small_blocks_sequential() {
+        // a small block, or one core: the calling thread
+        assert_eq!(decode_chunk(0, 16), 1);
+        assert_eq!(decode_chunk(31, 16), 31);
+        assert_eq!(decode_chunk(2_000, 1), 2_000);
+        // the old rule recovered 256 transactions on one thread and 512 on two
+        assert_eq!(decode_chunk(256, 16), 16);
+        assert_eq!(decode_chunk(512, 16), 32);
+        assert_eq!(decode_chunk(2_048, 32), 64);
+        // never below the minimum share
+        assert_eq!(decode_chunk(40, 16), 16);
+        // the threaded result is the sequential one at every split
+        let good = Bytes::from(alloy_primitives::hex::decode(TX).unwrap());
+        let mut raws = vec![good; 300];
+        raws[250] = Bytes::from_static(&[0xc0]);
+        raws[40] = Bytes::from_static(&[0xc0]);
+        assert!(matches!(
+            decode_all(&raws, 2040),
+            Err(ExecError::Tx { index: 40, .. })
         ));
     }
 }
