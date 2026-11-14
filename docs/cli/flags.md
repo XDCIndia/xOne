@@ -66,6 +66,9 @@ Source column: file:line in geth-XDC (`XDCIndia/go-ethereum` at `6fc8e8c2`; `fla
 | `--metrics` |  | false | Enable the metrics endpoint. | flags.go:1074 |
 | `--metrics.addr <string>` |  | 127.0.0.1 | Metrics listen address. | flags.go:1083 |
 | `--metrics.port <n>` |  | 6060 | Metrics listen port. | flags.go:1088 |
+| `--metrics.push.url <string>` |  |  | Push the /metrics page to this Prometheus Pushgateway (http:// only, no credentials in the URL). Off when empty. | xone (reth/besu push gateway) |
+| `--metrics.push.job <string>` |  | xone | Pushgateway job name. | xone |
+| `--metrics.push.interval <n>` |  | 15 | Seconds between metrics pushes. | xone |
 | `--pprof` |  | false | Enable the profiling endpoint. | internal/debug/flags.go:106 |
 | `--pprof.addr <string>` |  | 127.0.0.1 | Profiling listen address. | internal/debug/flags.go:117 |
 | `--pprof.port <n>` |  | 6060 | Profiling listen port. | internal/debug/flags.go:111 |
