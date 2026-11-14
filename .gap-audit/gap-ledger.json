@@ -11,7 +11,11 @@
     "status-im/nimbus-eth1": "5e3fd7e9d19177980cc1c086c46c4e1dcf38eced",
     "XinFinOrg/XDPoSChain": "cb1ef79073c05f50b9df75b1e740387b9d72af99",
     "bnb-chain/bsc": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
-    "0xPolygon/bor": "ee09efd5dd9ef75917368990b272581b0e2c2665"
+    "0xPolygon/bor": "ee09efd5dd9ef75917368990b272581b0e2c2665",
+    "BuildOnViction/victionchain": "31fe7cb935b46b8b5b115d070e64b30d6b8165b1",
+    "kaiachain/kaia": "0f9ad843d1ccb7381cc43070ce13002cca7b1ed9",
+    "harmony-one/harmony": "a41e194761c81fe846994864e789a7d306bbc439",
+    "tempoxyz/tempo": "35d8b937fba89ae0bfdea1edf735fb6f8aa41c23"
   },
   "gaps": [
     {
@@ -999,6 +1003,425 @@
       "issue_url": "https://github.com/XDCIndia/xOneRS/issues/201",
       "key": "locbudget",
       "related": "#15, #44, #22"
+    },
+    {
+      "id": "GAP-0047",
+      "title": "Required-block peer check with built-in network anchors (--eth.requiredblocks; Apothem reset block 83,665,617)",
+      "area": "sync",
+      "status": "issued",
+      "pass": "pass3",
+      "sources": [
+        "ethereum/go-ethereum:cmd/utils/flags.go",
+        "ethereum/go-ethereum:eth/handler.go",
+        "bnb-chain/bsc:cmd/utils/flags.go",
+        "0xPolygon/bor:internal/cli/server/flags.go",
+        "besu-eth/besu:app/src/main/java/org/hyperledger/besu/cli/BesuCommand.java",
+        "besu-eth/besu:ethereum/eth/src/main/java/org/hyperledger/besu/ethereum/eth/peervalidation/RequiredBlocksPeerValidator.java",
+        "erigontech/erigon:cmd/utils/flags.go",
+        "XDCIndia/go-ethereum@6fc8e8c2:cmd/utils/flags.go"
+      ],
+      "ours": "`crates/xone-node/src/services/snapsync.rs` (pivot anchor from `--snap.pins` or two peers, snap only); `crates/xone-net/src/eth` (handshake, no block challenge); `crates/xone-chainspec/src/networks.rs` (no anchor list)",
+      "priority": "P1",
+      "priority_reason": "P1: an Apothem operator has no protection against the abandoned pre-reset branch today, and the canonical client ships the anchor by default (5 of 14 competitors plus geth-XDC).",
+      "seen_in": [
+        "geth",
+        "bsc",
+        "bor",
+        "besu",
+        "erigon"
+      ],
+      "seen_in_count": 5,
+      "in_oracle": true,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/218",
+      "key": "requiredblocks",
+      "related": "#45 (Apothem follow gate), #14 (authenticated bootstrap anchor), #37, #98"
+    },
+    {
+      "id": "GAP-0048",
+      "title": "Divergence tracing: debug_intermediateRoots, debug_traceBadBlock, debug_traceBlock (raw RLP), debug_standardTraceBlockToFile and debug_traceChain",
+      "area": "tracing",
+      "status": "issued",
+      "pass": "pass3",
+      "sources": [
+        "ethereum/go-ethereum:eth/tracers/api.go",
+        "bnb-chain/bsc:eth/tracers/api.go",
+        "0xPolygon/bor:eth/tracers/api.go",
+        "XinFinOrg/XDPoSChain:eth/tracers/api.go",
+        "besu-eth/besu:ethereum/api/src/main/java/org/hyperledger/besu/ethereum/api/jsonrpc/internal/methods/DebugStandardTraceBadBlockToFile.java",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.JsonRpc/Modules/DebugModule/IDebugRpcModule.cs",
+        "paradigmxyz/reth:crates/rpc/rpc-api/src/debug.rs",
+        "harmony-one/harmony:hmy/tracers/api.go",
+        "kaiachain/kaia:node/cn/tracers/api.go",
+        "XDCIndia/go-ethereum@6fc8e8c2:eth/tracers/api.go",
+        "XDCIndia/go-ethereum@6fc8e8c2:eth/api_debug_replay.go"
+      ],
+      "ours": "`crates/xone-rpc/src/debug.rs` (traceTransaction, traceBlockByNumber/Hash; callTracer and prestateTracer), `spec/rpc/scope-adr-008.md` (raw traceBlock out), no bad-block store (GAP-0009, #160)",
+      "priority": "P1",
+      "priority_reason": "P1: maintainers and operators chasing a state-root divergence (the P0 class of this project) have no per-transaction root today (base P2), raised because 9 of 14 competitors and both canonical XDC clients serve it. Reverses the ADR-008 'debug_traceBlock (raw) out' line; the ADR change is part of the work.",
+      "seen_in": [
+        "XDPoSChain",
+        "geth",
+        "bsc",
+        "bor",
+        "besu",
+        "nethermind",
+        "reth",
+        "harmony",
+        "kaia"
+      ],
+      "seen_in_count": 9,
+      "in_oracle": true,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/220",
+      "key": "divergencetrace",
+      "related": "#160 (GAP-0009 getBadBlocks store), #154 (GAP-0003 struct logger), #10, #42"
+    },
+    {
+      "id": "GAP-0049",
+      "title": "Persistent peer table: remember good peers across restarts (geth nodes DB, reth peers file)",
+      "area": "p2p",
+      "status": "issued",
+      "pass": "pass3",
+      "sources": [
+        "ethereum/go-ethereum:p2p/enode/nodedb.go",
+        "bnb-chain/bsc:p2p/enode/nodedb.go",
+        "0xPolygon/bor:p2p/enode/nodedb.go",
+        "XinFinOrg/XDPoSChain:p2p/enode/nodedb.go",
+        "BuildOnViction/victionchain:p2p/discover/database.go",
+        "erigontech/erigon:p2p/enode/nodedb.go",
+        "paradigmxyz/reth:crates/node/core/src/args/network.rs",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.Network/NetworkStorage.cs",
+        "kaiachain/kaia:networks/p2p/discover/database.go",
+        "XDCIndia/go-ethereum@6fc8e8c2:p2p/enode/nodedb.go",
+        "XDCIndia/go-ethereum@6fc8e8c2:node/config.go"
+      ],
+      "ours": "`crates/xone-net/src/discv4.rs` and `crates/xone-net/src/peers` (in-memory table only); `crates/xone-node/src/enode.rs` reads static-nodes.json and trusted-nodes.json; `crates/xone-node/src/services/net.rs` (nodekey only in the datadir)",
+      "priority": "P1",
+      "priority_reason": "P1: base P2 (restarts depend on bootnodes; the workaround is a hand-kept static-nodes.json), raised because 9 of 14 competitors and both canonical XDC clients keep a node database.",
+      "seen_in": [
+        "XDPoSChain",
+        "geth",
+        "bsc",
+        "bor",
+        "victionchain",
+        "erigon",
+        "reth",
+        "nethermind",
+        "kaia"
+      ],
+      "seen_in_count": 9,
+      "in_oracle": true,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/221",
+      "key": "peerdb",
+      "related": "#32 (p2p), #178 (GAP-0027 devp2p tooling), #199 (GAP-0044 allowlist)"
+    },
+    {
+      "id": "GAP-0050",
+      "title": "Node self-description RPC: eth_config (EIP-7910 fork configuration) and eth_capabilities (served history ranges)",
+      "area": "rpc",
+      "status": "issued",
+      "pass": "pass3",
+      "sources": [
+        "ethereum/go-ethereum:internal/ethapi/api.go",
+        "ethereum/go-ethereum:internal/ethapi/capabilities.go",
+        "bnb-chain/bsc:internal/ethapi/api.go",
+        "0xPolygon/bor:internal/ethapi/api.go",
+        "besu-eth/besu:ethereum/api/src/main/java/org/hyperledger/besu/ethereum/api/jsonrpc/internal/methods/EthConfig.java",
+        "erigontech/erigon:rpc/jsonrpc/eth_system.go",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.JsonRpc/Modules/Eth/IEthRpcModule.cs",
+        "paradigmxyz/reth:crates/rpc/rpc-eth-api/src/helpers/config.rs",
+        "lambdaclass/ethrex:crates/networking/rpc/rpc.rs",
+        "XDCIndia/go-ethereum@6fc8e8c2:internal/ethapi/api.go",
+        "XDCIndia/go-ethereum@6fc8e8c2:internal/ethapi/capabilities.go"
+      ],
+      "ours": "`crates/xone-rpc/src/eth.rs` (not registered); fork data in `crates/xone-chainspec/generated/forks.json`; retention in `spec/retention.md` and `crates/xone-node/src/config.rs`",
+      "priority": "P2",
+      "priority_reason": "P2: base P3 (integrators and tooling), raised because 8 of 14 competitors and the geth-XDC oracle serve eth_config, in the eth namespace the fleet enables.",
+      "seen_in": [
+        "geth",
+        "bsc",
+        "bor",
+        "besu",
+        "erigon",
+        "nethermind",
+        "reth",
+        "ethrex"
+      ],
+      "seen_in_count": 8,
+      "in_oracle": true,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/222",
+      "key": "ethconfig",
+      "related": "#121 (typed unsupported-history refusal), #6 (fork table), #42"
+    },
+    {
+      "id": "GAP-0051",
+      "title": "Private XDPoS network generator: genesis with masternodes and system contracts, node keys and per-node configs (xone network init)",
+      "area": "cli",
+      "status": "issued",
+      "pass": "pass3",
+      "sources": [
+        "XinFinOrg/XDPoSChain:cmd/puppeth/wizard_genesis.go",
+        "BuildOnViction/victionchain:cmd/puppeth/wizard_genesis.go",
+        "bnb-chain/bsc:cmd/geth/chaincmd.go",
+        "besu-eth/besu:app/src/main/java/org/hyperledger/besu/cli/subcommands/operator/GenerateBlockchainConfig.java",
+        "kaiachain/kaia:cmd/homi/setup/cmd.go",
+        "tempoxyz/tempo:bin/tempo/src/localnet.rs"
+      ],
+      "ours": "`crates/xone-chainspec/src/genesis.rs` (loads a genesis), `ops/devnet/`, `bin/xone/src/main.rs` (init, genesis-hash, dumpconfig); no generator",
+      "priority": "P2",
+      "priority_reason": "P2: base P3 (private networks and test networks), raised because the canonical XDPoSChain ships a generator (6 of 14 competitors).",
+      "seen_in": [
+        "XDPoSChain",
+        "victionchain",
+        "bsc",
+        "besu",
+        "kaia",
+        "tempo"
+      ],
+      "seen_in_count": 6,
+      "in_oracle": false,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/223",
+      "key": "netgen",
+      "related": "#166 (GAP-0015 --dev), #199 (GAP-0044 permissioning), #25 (genesis loader), #140 (net2040)"
+    },
+    {
+      "id": "GAP-0052",
+      "title": "Sync stop targets: --exitwhensynced and --synctarget (stop at a given block hash)",
+      "area": "sync",
+      "status": "issued",
+      "pass": "pass3",
+      "sources": [
+        "ethereum/go-ethereum:cmd/utils/flags.go",
+        "bnb-chain/bsc:cmd/utils/flags.go",
+        "0xPolygon/bor:cmd/utils/flags.go",
+        "paradigmxyz/reth:crates/node/core/src/args/debug.rs",
+        "XDCIndia/go-ethereum@6fc8e8c2:cmd/utils/flags.go"
+      ],
+      "ours": "`crates/xone-sync/src/follow.rs` (follow never ends), `crates/xone-node/src/lifecycle.rs` (bounded shutdown on signal), `--syncfromblock` exists for the start only",
+      "priority": "P2",
+      "priority_reason": "P2: base P3 (snapshot builders and CI), raised because the geth-XDC oracle has both flags (4 of 14 competitors).",
+      "seen_in": [
+        "geth",
+        "bsc",
+        "bor",
+        "reth"
+      ],
+      "seen_in_count": 4,
+      "in_oracle": true,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/224",
+      "key": "stoptargets",
+      "related": "#34 (sync), #185 (GAP-0034 snapshot import), #38"
+    },
+    {
+      "id": "GAP-0053",
+      "title": "Separate directory for frozen history segments (--datadir.ancient / --datadir.static-files) so history can sit on cheaper disk",
+      "area": "storage",
+      "status": "issued",
+      "pass": "pass3",
+      "sources": [
+        "ethereum/go-ethereum:cmd/utils/flags.go",
+        "bnb-chain/bsc:cmd/utils/flags.go",
+        "0xPolygon/bor:cmd/utils/flags.go",
+        "paradigmxyz/reth:crates/node/core/src/args/datadir_args.rs",
+        "XDCIndia/go-ethereum@6fc8e8c2:cmd/utils/flags.go"
+      ],
+      "ours": "`crates/xone-db/src/segments.rs` (`seg_dir` under the datadir), `crates/xone-db/src/recover.rs`, `crates/xone-db/src/manifest.rs`, `crates/xone-node/src/datadir.rs`",
+      "priority": "P2",
+      "priority_reason": "P2: base P3 (a symlink works today), raised because the geth-XDC oracle has the flag (4 of 14 competitors); it also helps the datadir-size work of #149.",
+      "seen_in": [
+        "geth",
+        "bsc",
+        "bor",
+        "reth"
+      ],
+      "seen_in_count": 4,
+      "in_oracle": true,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/225",
+      "key": "ancientdir",
+      "related": "#149 (datadir size), #135 (storage decision), #11 (crash-safe publication), #194 (GAP-0039 compressed segments)"
+    },
+    {
+      "id": "GAP-0054",
+      "title": "Slow-block log: one structured line with per-phase timings for each block slower than a threshold (--debug.logslowblock)",
+      "area": "observability",
+      "status": "issued",
+      "pass": "pass3",
+      "sources": [
+        "ethereum/go-ethereum:cmd/utils/flags.go",
+        "ethereum/go-ethereum:core/blockchain_stats.go",
+        "bnb-chain/bsc:core/blockchain_stats.go",
+        "erigontech/erigon:node/cli/default_flags.go",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.Config/IBlocksConfig.cs",
+        "paradigmxyz/reth:crates/node/core/src/args/engine.rs",
+        "XDCIndia/go-ethereum@6fc8e8c2:cmd/utils/flags.go"
+      ],
+      "ours": "`crates/xone-node/src/observe/metrics.rs` (aggregates), `crates/xone-node/src/observe/logs.rs`, `crates/xone-sync/src/stages`, `crates/xone-node/src/services/core.rs`",
+      "priority": "P2",
+      "priority_reason": "P2: base P3 (diagnostics), raised because the geth-XDC oracle has it (5 of 14 competitors); it serves the eligible-turn accounting of #13 and #47.",
+      "seen_in": [
+        "geth",
+        "bsc",
+        "erigon",
+        "nethermind",
+        "reth"
+      ],
+      "seen_in_count": 5,
+      "in_oracle": true,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/226",
+      "key": "slowblock",
+      "related": "#13 (perf contract), #47 (gate E eligible turns), #164 (GAP-0013 JSON logs)"
+    },
+    {
+      "id": "GAP-0055",
+      "title": "Environment-variable configuration: every flag settable as XONE_<FLAG> (container and systemd deployments)",
+      "area": "cli",
+      "status": "issued",
+      "pass": "pass3",
+      "sources": [
+        "ethereum/go-ethereum:cmd/geth/main.go",
+        "bnb-chain/bsc:cmd/geth/main.go",
+        "0xPolygon/bor:cmd/geth/main.go",
+        "besu-eth/besu:app/src/main/java/org/hyperledger/besu/cli/util/EnvironmentVariableDefaultProvider.java",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.Config/EnvConfigSource.cs",
+        "kaiachain/kaia:cmd/utils/flags.go",
+        "lambdaclass/ethrex:cmd/ethrex/cli.rs",
+        "XDCIndia/go-ethereum@6fc8e8c2:cmd/geth/main.go"
+      ],
+      "ours": "`bin/xone/src/flags.rs` (clap flags, TOML via `--config`), `ops/run-xone.sh` (hand-written env mapping), `ops/xone@.service` (`EnvironmentFile=-/etc/xone/%i.env`)",
+      "priority": "P2",
+      "priority_reason": "P2: base P3 (the launcher works for the common flags), raised because the geth-XDC oracle maps every flag (7 of 14 competitors).",
+      "seen_in": [
+        "geth",
+        "bsc",
+        "bor",
+        "besu",
+        "nethermind",
+        "kaia",
+        "ethrex"
+      ],
+      "seen_in_count": 7,
+      "in_oracle": true,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/227",
+      "key": "envconfig",
+      "related": "#39 (cli compatibility), #60 (secrets in env must stay redacted)"
+    },
+    {
+      "id": "GAP-0056",
+      "title": "OS packages: .deb and .rpm with the systemd unit, and a signed APT/YUM repository",
+      "area": "release",
+      "status": "issued",
+      "pass": "pass3",
+      "sources": [
+        "ethereum/go-ethereum:build/ci.go",
+        "ethereum/go-ethereum:build/deb",
+        "bnb-chain/bsc:build/deb",
+        "0xPolygon/bor:packaging/rpm",
+        "erigontech/erigon:.github/workflows/release.yml",
+        "paradigmxyz/reth:Makefile",
+        "NethermindEth/nethermind:.github/workflows/publish-packages.yml",
+        "kaiachain/kaia:build/ci.go",
+        "harmony-one/harmony:scripts/package/rpm",
+        "harmony-one/harmony:scripts/package/deb"
+      ],
+      "ours": "`ci/release.sh` (tarball, SHA256SUMS, gpg signature), `ci/test-packaging.sh`, `ops/xone@.service`, `ops/install.md`, `ops/upgrade-rollback.md`",
+      "priority": "P2",
+      "priority_reason": "P2: base P3 (the tarball and runbook work), raised because 8 of 14 competitors ship packages.",
+      "seen_in": [
+        "geth",
+        "bsc",
+        "bor",
+        "erigon",
+        "reth",
+        "nethermind",
+        "kaia",
+        "harmony"
+      ],
+      "seen_in_count": 8,
+      "in_oracle": false,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/228",
+      "key": "ospackages",
+      "related": "#46 (release packaging, closed), #193 (GAP-0038 static binaries, aarch64), #62 (release assurance on packaged bytes)"
+    },
+    {
+      "id": "GAP-0057",
+      "title": "Standalone EVM tool: t8n (transition), state-test and block-test runners on the xOneRS executor (xone evm)",
+      "area": "cli",
+      "status": "issued",
+      "pass": "pass3",
+      "sources": [
+        "ethereum/go-ethereum:cmd/evm/internal/t8ntool",
+        "bnb-chain/bsc:cmd/evm/internal/t8ntool",
+        "0xPolygon/bor:cmd/evm/internal/t8ntool",
+        "XinFinOrg/XDPoSChain:cmd/evm/staterunner.go",
+        "erigontech/erigon:cmd/evm/internal/t8ntool",
+        "besu-eth/besu:ethereum/evmtool/src/main/java/org/hyperledger/besu/evmtool/T8nSubCommand.java",
+        "NethermindEth/nethermind:tools/Evm/Evm/T8n",
+        "lambdaclass/ethrex:tooling/ethrex-evm/src/t8n",
+        "status-im/nimbus-eth1:tools/t8n",
+        "XDCIndia/go-ethereum@6fc8e8c2:cmd/evm/internal/t8ntool"
+      ],
+      "ours": "`crates/xone-executor/src/lib.rs` and `crates/xone-evm/src/` (library only), `conformance/harness` (replay against the oracle), `fuzz/` (cargo-fuzz targets); no t8n CLI",
+      "priority": "P2",
+      "priority_reason": "P2: base P3 (maintainers; no operator effect), raised because 9 of 14 competitors and both canonical XDC clients ship it. It makes #10 (EEST) and #120 (EVM oracle gaps) cheaper.",
+      "seen_in": [
+        "XDPoSChain",
+        "geth",
+        "bsc",
+        "bor",
+        "erigon",
+        "besu",
+        "nethermind",
+        "ethrex",
+        "nimbus"
+      ],
+      "seen_in_count": 9,
+      "in_oracle": true,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/230",
+      "key": "t8n",
+      "related": "#10 (EEST and independent test sources), #120 (EVM oracle gaps), #26 (revm integration)"
+    },
+    {
+      "id": "GAP-0058",
+      "title": "xdc_ RPC namespace served by geth-XDC: the eth block-chain methods under xdc_ plus xdc_getStateHealStatus",
+      "area": "xdc-rpc",
+      "status": "issued",
+      "pass": "pass3",
+      "sources": [
+        "XDCIndia/go-ethereum@6fc8e8c2:eth/backend.go",
+        "XDCIndia/go-ethereum@6fc8e8c2:internal/ethapi/api_xdc.go"
+      ],
+      "ours": "`crates/xone-rpc/src/eth.rs`, `crates/xone-rpc/src/xdc_ext.rs` (eth_ names only), `crates/xone-rpc/src/policy.rs` (namespace list), `crates/xone-node/src/services/snapsync.rs` (heal progress in logs and metrics only)",
+      "priority": "P3",
+      "priority_reason": "P3: integrators and operators of snap nodes; only the geth-XDC oracle serves it and the fleet's default `--http.api` list (`eth,net,web3,admin,debug,txpool,XDPoS`) does not enable `xdc`, so the canonical-client raise does not apply.",
+      "seen_in": [],
+      "seen_in_count": 0,
+      "in_oracle": true,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/231",
+      "key": "xdcns",
+      "related": "#168 (GAP-0017 XDC extensions), #42, #60 (namespace exposure per transport)"
+    },
+    {
+      "id": "GAP-0059",
+      "title": "Chain-data exporter: stream blocks, receipts, logs and traces to Kafka (reorg-aware, resumable), for explorers and indexers",
+      "area": "sdk",
+      "status": "issued",
+      "pass": "pass3",
+      "sources": [
+        "kaiachain/kaia:datasync/chaindatafetcher/kafka",
+        "kaiachain/kaia:datasync/chaindatafetcher/chaindata_fetcher.go",
+        "kaiachain/kaia:datasync/dbsyncer/dbsync.go",
+        "kaiachain/kaia:cmd/utils/flags.go"
+      ],
+      "ours": "`crates/xone-rpc/src/subscriptions.rs` (newHeads and logs over WebSocket), no exporter; hooks planned in #187 (GAP-0036)",
+      "priority": "P3",
+      "priority_reason": "P3: integrators (explorers, indexers, analytics); 1 of 14 competitors; builds on #187.",
+      "seen_in": [
+        "kaia"
+      ],
+      "seen_in_count": 1,
+      "in_oracle": false,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/232",
+      "key": "dataexport",
+      "related": "#187 (GAP-0036 live hooks), #198 (GAP-0043 library), #183 (GAP-0032 ots)"
     }
   ],
   "skipped": [
@@ -1139,7 +1562,164 @@
         "ethereum/go-ethereum:cmd/geth/snapshot.go",
         "paradigmxyz/reth:crates/cli/commands/src/db/mod.rs"
       ]
+    },
+    {
+      "id": "SKIP-18",
+      "title": "JSON-RPC authentication on the public endpoints (Besu credentials/JWT, reth --rpc.jwtsecret, Harmony auth port)",
+      "reason": "Covered: #60 defines authentication enforcement per transport; the mechanism belongs there.",
+      "sources": [
+        "besu-eth/besu:app/src/main/java/org/hyperledger/besu/cli/options/JsonRpcHttpOptions.java",
+        "paradigmxyz/reth:crates/node/core/src/args/rpc_server.rs"
+      ],
+      "pass": "pass3"
+    },
+    {
+      "id": "SKIP-19",
+      "title": "TLS on the RPC listener (Besu --rpc-http-tls-enabled)",
+      "reason": "1 of 14; deployments terminate TLS at a reverse proxy, and #60 owns transport exposure.",
+      "sources": [
+        "besu-eth/besu:app/src/main/java/org/hyperledger/besu/cli/options/JsonRpcHttpOptions.java"
+      ],
+      "pass": "pass3"
+    },
+    {
+      "id": "SKIP-20",
+      "title": "Per-method RPC latency metrics (geth rpc/metrics.go, reth rpc-builder metrics.rs, Erigon, Besu, Nethermind, Kaia, XDPoSChain)",
+      "reason": "Covered: GAP-0033 (#184) step 4 adds the per-method RPC latency histogram.",
+      "sources": [
+        "ethereum/go-ethereum:rpc/metrics.go",
+        "paradigmxyz/reth:crates/rpc/rpc-builder/src/metrics.rs"
+      ],
+      "pass": "pass3"
+    },
+    {
+      "id": "SKIP-21",
+      "title": "Start-up per-module log filter (--log.vmodule)",
+      "reason": "Covered: added to #163 (GAP-0012) by comment; the filter exists in crates/xone-node/src/observe/logs.rs but no flag fills it.",
+      "sources": [
+        "XDCIndia/go-ethereum@6fc8e8c2:internal/debug/flags.go"
+      ],
+      "pass": "pass3"
+    },
+    {
+      "id": "SKIP-22",
+      "title": "eth_getOwnerByCoinbase, eth_getTokenStats, XDPoS_getBlockInfoByV2EpochNum, XDPoS_calculateBlockInfoByV1EpochNum, XDPoS_getV2BlockByHeader",
+      "reason": "Covered: added to #168 (GAP-0017) by comment (do not split gaps).",
+      "sources": [
+        "XinFinOrg/XDPoSChain:internal/ethapi/api.go",
+        "XinFinOrg/XDPoSChain:consensus/XDPoS/api.go"
+      ],
+      "pass": "pass3"
+    },
+    {
+      "id": "SKIP-23",
+      "title": "debug_getBlockRlp, debug_printBlock, debug_preimage, debug_dbGet, debug_dbAncient(s), debug_discoveryV4Table, debug_clearTxpool",
+      "reason": "Covered: added to #160 (GAP-0009) by comment.",
+      "sources": [
+        "XDCIndia/go-ethereum@6fc8e8c2:internal/ethapi/dbapi.go",
+        "XDCIndia/go-ethereum@6fc8e8c2:eth/api_debug.go"
+      ],
+      "pass": "pass3"
+    },
+    {
+      "id": "SKIP-24",
+      "title": "eth_subscribe(\"transactionReceipts\")",
+      "reason": "Covered: added to #156 (GAP-0005) by comment.",
+      "sources": [
+        "XDCIndia/go-ethereum@6fc8e8c2:eth/filters/api.go"
+      ],
+      "pass": "pass3"
+    },
+    {
+      "id": "SKIP-25",
+      "title": "RPC listener and safety flags: --rpc.allow-unprotected-txs, --rpc.http-body-limit, --rpc.logquerylimit, --rpc.rangelimit, --http.rpcprefix, --ws.rpcprefix",
+      "reason": "Covered: added to #171 (GAP-0020) by comment.",
+      "sources": [
+        "XDCIndia/go-ethereum@6fc8e8c2:cmd/utils/flags.go"
+      ],
+      "pass": "pass3"
+    },
+    {
+      "id": "SKIP-26",
+      "title": "XDPoS_propose, XDPoS_discard, XDPoS_proposals (clique-style signer votes)",
+      "reason": "ADR-008 working scope lists XDPoSAdmin_* as out; the oracle serves propose and discard only on the authenticated endpoint.",
+      "sources": [
+        "XDCIndia/go-ethereum@6fc8e8c2:consensus/XDPoS/api.go"
+      ],
+      "pass": "pass3"
+    },
+    {
+      "id": "SKIP-27",
+      "title": "Rosetta (Mesh) API",
+      "reason": "1 of 14 (Harmony); a second API surface outside the JSON-RPC parity scope of #42.",
+      "sources": [
+        "harmony-one/harmony:rosetta"
+      ],
+      "pass": "pass3"
+    },
+    {
+      "id": "SKIP-28",
+      "title": "Event webhooks (Harmony webhooks, Nethermind health-check webhooks)",
+      "reason": "Covered: the SkyNet heartbeat pushes node status to a configured URL (crates/xone-node/src/observe/heartbeat.rs) and GAP-0033 (#184) adds alert rules.",
+      "sources": [
+        "harmony-one/harmony:webhooks",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.HealthChecks/IHealthChecksConfig.cs"
+      ],
+      "pass": "pass3"
+    },
+    {
+      "id": "SKIP-29",
+      "title": "Version and vulnerability check (geth-derived version-check)",
+      "reason": "0 of 14 selected (only core-geth and vic-geth, both rejected); no XDC advisory feed exists to check against.",
+      "sources": [],
+      "pass": "pass3"
+    },
+    {
+      "id": "SKIP-30",
+      "title": "Bootnodes fetched from an HTTP endpoint (Tempo --tempo.bootnodes-endpoint)",
+      "reason": "1 of 14; bootnode lists ship with the release (ops/bootnodes).",
+      "sources": [
+        "tempoxyz/tempo:bin/tempo/src/localnet.rs"
+      ],
+      "pass": "pass3"
+    },
+    {
+      "id": "SKIP-31",
+      "title": "Live state pruning, database migration, offline state GC (Kaia db_migration, Viction cmd/gc)",
+      "reason": "Not applicable: path-keyed trie rows are overwritten in place (second pass) and the storage engine is the #135 decision.",
+      "sources": [
+        "kaiachain/kaia:db_migration",
+        "BuildOnViction/victionchain:cmd/gc"
+      ],
+      "pass": "pass3"
+    },
+    {
+      "id": "SKIP-32",
+      "title": "Chain-specific features: Kaia governance_, mainbridge/subbridge, auction; Harmony staking, sharding, multi-BLS keys; Tempo zones and DKG; Viction TomoX",
+      "reason": "No XDC counterpart: XDC subnets belong to XDC-Subnet, XDCx is ADR-009 empty-tx routing only, XDPoS has one key per masternode (SKIP-13 analogue).",
+      "sources": [],
+      "pass": "pass3"
+    },
+    {
+      "id": "SKIP-33",
+      "title": "geth-XDC flags with no XDC counterpart or already covered: beacon.*, blobpool.*, crypto.kzg, era and history import/export, bintrie, override.bpo*, miner.*, cache.*, gogc, memorylimit, fdlimit, store-reward, fastsyncpivot*, nodekeyhex, maxpendpeers",
+      "reason": "SKIP-01, -05, -06, -09; Go runtime tuning (xOne has --cache and ADR-007 limits); rewards are computed, not filed (GAP-0017); pivots are pinned by --snap.pins (#14); the node key is a datadir file (GAP-0027); peer budgets are #16; dumpgenesis is in GAP-0051.",
+      "sources": [
+        "XDCIndia/go-ethereum@6fc8e8c2:cmd/utils/flags.go"
+      ],
+      "pass": "pass3"
+    },
+    {
+      "id": "SKIP-34",
+      "title": "Historical re-execution under candidate rules (Tempo shadow replay)",
+      "reason": "Covered: the conformance harness replays on xOne's own state (#10, conformance/harness).",
+      "sources": [
+        "tempoxyz/tempo:bin/tempo/src/shadow_replay.rs"
+      ],
+      "pass": "pass3"
     }
   ],
-  "priority_rule_advantages": "Second pass (strengths): priority by impact for an XDC node operator, not by competitor count. P1 = operators are blocked or forced into a workaround today; P2 = large cost or capability gain for many operators; P3 = integrators, private networks or maintainers."
+  "priority_rule_advantages": "Second pass (strengths): priority by impact for an XDC node operator, not by competitor count. P1 = operators are blocked or forced into a workaround today; P2 = large cost or capability gain for many operators; P3 = integrators, private networks or maintainers.",
+  "oracle_pin": "XDCIndia/go-ethereum@6fc8e8c2088b7f18264f5663036669d04fa7becf",
+  "priority_rule_pass3": "Third pass: operator impact first (P1 = operators blocked or forced into a workaround today; P2 = large cost or capability gain for many operators; P3 = integrators, private networks or maintainers), raised one level (never above P1) when 8+ of the 14 selected competitors have it, or when a canonical XDC client (XDPoSChain, the geth-XDC oracle pin) ships it in a namespace or default the fleet uses."
 }
