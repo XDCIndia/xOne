@@ -6,10 +6,11 @@ ADR-008 is not in `docs/adr/` yet; this page is the working scope of issue #42 w
 
 | namespace | methods |
 | --- | --- |
-| `eth` | `chainId, blockNumber, syncing, mining, coinbase, gasPrice, feeHistory, getBlockByNumber, getBlockByHash, getBlockTransactionCountBy{Number,Hash}, getUncleCountByBlock{Number,Hash}, getBlockReceipts, getTransactionByHash, getTransactionBy{Block...}AndIndex, getTransactionReceipt, getBalance, getTransactionCount, getCode, getStorageAt, call, estimateGas, getLogs, sendRawTransaction`, the XDC extensions, `eth_subscribe` (`newHeads`, `logs`, `newPendingTransactions`) and `eth_unsubscribe` on WebSocket and IPC |
+| `eth` | `chainId, blockNumber, syncing, mining, coinbase, gasPrice, maxPriorityFeePerGas, accounts (always empty), feeHistory, getHeaderBy{Number,Hash}, getUncleByBlock{Number,Hash}AndIndex (no uncles on XDPoS: null), getRawTransactionByHash, getRawTransactionByBlock{Number,Hash}AndIndex, getBlockByNumber, getBlockByHash, getBlockTransactionCountBy{Number,Hash}, getUncleCountByBlock{Number,Hash}, getBlockReceipts, getTransactionByHash, getTransactionBy{Block...}AndIndex, getTransactionReceipt, getBalance, getTransactionCount, getCode, getStorageAt, call, estimateGas, getLogs, sendRawTransaction`, the XDC extensions, `eth_subscribe` (`newHeads`, `logs`, `newPendingTransactions`) and `eth_unsubscribe` on WebSocket and IPC |
 | `net` | `version, listening, peerCount` |
 | `web3` | `clientVersion` (the build's one stamp function). `web3_sha3` is not served: the pinned geth-XDC answers `-32601` |
-| `txpool` | `status, content, inspect` |
+| `txpool` | `status, content, contentFrom, inspect` |
+| `rpc` | `modules`: the namespaces of the transport and `rpc`, each at `1.0` (geth `RPCService.Modules`) |
 | `admin` | `nodeInfo, peers, addPeer, addTrustedPeer, removePeer` |
 | `debug` | `getRawHeader, getRawBlock, traceTransaction, traceBlockByNumber, traceBlockByHash` with `callTracer` and `prestateTracer` (config `onlyTopCall`, `withLog`, `diffMode`); output as geth (`eth/tracers/api.go:175` `txTraceResult{txHash, result}`; `tracers/native/call.go`, `prestate.go`) |
 | `xdc` | off unless the API list names it. The 19 methods of the oracle `BlockChainAPI` that this node serves under `eth_` (`xone-rpc/src/xdc.rs` alias table: the same handlers) and `xdc_getStateHealStatus`; `eth_getStateHealStatus` joins `eth`. The idle answer only (GAP-0058) |

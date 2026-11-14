@@ -4,7 +4,8 @@
 use crate::{
     api::{BlockView, CallRequest},
     json::{
-        addr, block_json, decode_receipts, h256, hex, log_json, q, qu, receipt_json, tx_json, Loc,
+        addr, block_json, decode_receipts, h256, header_json, hex, log_json, q, qu, receipt_json,
+        tx_json, Loc,
     },
     server::{Cost, Ctx, Registry},
     subscriptions::LogFilter,
@@ -43,6 +44,56 @@ pub fn register(r: &mut Registry) {
         Ok(qu(c.be.pool.gas_price()))
     });
     r.add("eth_feeHistory", Cost::C2, fee_history);
+    // #156: geth `MaxPriorityFeePerGas` is `SuggestGasTipCap`, and `eth_gasPrice` is that tip plus
+    // the head's base fee (`internal/ethapi/api.go:78-97`): the gas price less the head's base fee
+    r.add("eth_maxPriorityFeePerGas", Cost::C0, |c, _| {
+        let head =
+            c.be.chain
+                .header(c.be.chain.head().1)
+                .ok_or_else(no_header)?;
+        Ok(qu(c
+            .be
+            .pool
+            .gas_price()
+            .saturating_sub(head.base_fee.unwrap_or(U256::ZERO))))
+    });
+    // geth `EthereumAccountAPI.Accounts`: this node holds no account manager for RPC
+    r.add("eth_accounts", Cost::C0, |_, _| Ok(json!([])));
+    r.add("eth_getHeaderByNumber", Cost::C1, |c, p| {
+        // geth: `pending` has no header
+        if p.opt(0).and_then(Value::as_str) == Some("pending") {
+            return Ok(Value::Null);
+        }
+        let n = p.number_or_latest(0)?;
+        Ok(block_of(c, BlockRef::Number(n))?.map_or(Value::Null, |b| {
+            Value::Object(header_json(&b.header, b.hash))
+        }))
+    });
+    r.add("eth_getHeaderByHash", Cost::C1, |c, p| {
+        let h = p.hash(0)?;
+        Ok(c.be
+            .chain
+            .header(h)
+            .map_or(Value::Null, |hd| Value::Object(header_json(&hd, h))))
+    });
+    // XDPoS blocks carry no uncles: geth answers null for any index
+    r.add("eth_getUncleByBlockNumberAndIndex", Cost::C1, |c, p| {
+        uncle_at(c, p, true)
+    });
+    r.add("eth_getUncleByBlockHashAndIndex", Cost::C1, |c, p| {
+        uncle_at(c, p, false)
+    });
+    r.add("eth_getRawTransactionByHash", Cost::C1, raw_tx_by_hash);
+    r.add(
+        "eth_getRawTransactionByBlockNumberAndIndex",
+        Cost::C1,
+        |c, p| raw_tx_by_index(c, p, true),
+    );
+    r.add(
+        "eth_getRawTransactionByBlockHashAndIndex",
+        Cost::C1,
+        |c, p| raw_tx_by_index(c, p, false),
+    );
     r.add("eth_getBlockByNumber", Cost::C1, |c, p| {
         block_by(c, p, true)
     });
@@ -202,6 +253,47 @@ fn tx_by_index(c: &Ctx, p: &Params, by_number: bool) -> R {
         Some(b) => tx_at(c, &b, i),
         None => Ok(Value::Null),
     }
+}
+
+/// geth `GetUncleByBlock*AndIndex`: the uncle as a block without transactions, null past the end.
+fn uncle_at(c: &Ctx, p: &Params, by_number: bool) -> R {
+    let i = index(p, 1)?;
+    let Some(b) = block_of(c, selector(p, by_number)?)? else {
+        return Ok(Value::Null);
+    };
+    Ok(b.uncles.get(i).map_or(Value::Null, |u| {
+        let mut m = header_json(u, u.hash());
+        m.insert("transactions".into(), json!([]));
+        m.insert("uncles".into(), json!([]));
+        Value::Object(m)
+    }))
+}
+
+/// geth `GetRawTransactionByHash`: the canonical transaction, else the pool's, else null.
+fn raw_tx_by_hash(c: &Ctx, p: &Params) -> R {
+    let h = p.hash(0)?;
+    if let Some((bh, i)) = c.be.chain.tx_location(h) {
+        if let Some(b) = c.be.chain.block(bh) {
+            let i = usize::try_from(i).unwrap_or(usize::MAX);
+            return Ok(b.txs.get(i).map_or(Value::Null, |t| hex(t)));
+        }
+    }
+    let (pending, queued) = c.be.pool.content();
+    Ok(pending
+        .values()
+        .chain(queued.values())
+        .flatten()
+        .find(|raw| keccak256(raw) == h)
+        .map_or(Value::Null, |t| hex(t)))
+}
+
+/// geth `GetRawTransactionByBlock*AndIndex`: a nil `hexutil.Bytes` past the end or for an unknown
+/// block, which encodes as `"0x"`.
+fn raw_tx_by_index(c: &Ctx, p: &Params, by_number: bool) -> R {
+    let i = index(p, 1)?;
+    let b = block_of(c, selector(p, by_number)?)?;
+    Ok(b.and_then(|b| b.txs.get(i).cloned())
+        .map_or_else(|| hex(&[]), |t| hex(&t)))
 }
 
 fn tx_by_hash(c: &Ctx, p: &Params) -> R {

@@ -18,6 +18,23 @@ pub fn register(r: &mut Registry) {
         render(c, |raw, id| tx_json(raw, id, None))
     });
     r.add("txpool_inspect", Cost::C2, |c, _| render(c, inspect_line));
+    // #156: geth `TxPoolAPI.ContentFrom`, the pending and queued transactions of one sender by nonce
+    r.add("txpool_contentFrom", Cost::C1, |c, p| {
+        let from = p.address(0)?;
+        let id = c.be.chain.spec().chain_id;
+        let (pending, queued) = c.be.pool.content();
+        let side = |txs: Option<&Vec<Bytes>>| -> R {
+            let mut by = Map::new();
+            for raw in txs.into_iter().flatten() {
+                let nonce = xone_executor::tx::decode(raw, id)
+                    .map_err(|e| RpcError::internal(e.to_string()))?
+                    .nonce;
+                by.insert(nonce.to_string(), tx_json(raw, id, None)?);
+            }
+            Ok(Value::Object(by))
+        };
+        Ok(json!({"pending": side(pending.get(&from))?, "queued": side(queued.get(&from))?}))
+    });
 }
 
 /// `geth` `fmt.Sprintf("%s: %v wei + %v gas x %v wei", to, value, gas, gasPrice)`.
