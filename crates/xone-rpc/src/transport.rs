@@ -11,18 +11,22 @@ use crate::{
 use futures_util::{SinkExt, StreamExt};
 use http_body_util::{BodyExt, Full, Limited};
 use hyper::{body::Bytes, service::service_fn, Method, Request, Response, StatusCode};
-use hyper_util::rt::TokioIo;
+use hyper_util::rt::{TokioIo, TokioTimer};
 use serde_json::{json, Value};
 use std::{
     convert::Infallible,
+    future::Future,
     path::Path,
+    pin::Pin,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
     },
+    task::{Context, Poll},
+    time::Duration,
 };
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
     net::{TcpListener, UnixListener},
     sync::{mpsc, Semaphore},
     task::JoinSet,
@@ -52,6 +56,99 @@ fn http_reply(status: StatusCode, body: Vec<u8>, retry: Option<u64>) -> Response
         }
     }
     r
+}
+
+/// Decrements the waiting count when the waiter ends, also when its connection drops it.
+struct Waiting<'a>(&'a AtomicUsize);
+
+impl Drop for Waiting<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
+/// A stream whose writes fail with `TimedOut` after `limit` without progress, so a client that
+/// stops reading cannot hold a connection slot (and its response) for ever.
+struct WriteDeadline<T> {
+    io: T,
+    limit: Duration,
+    stall: Option<Pin<Box<tokio::time::Sleep>>>,
+}
+
+impl<T> WriteDeadline<T> {
+    fn new(io: T, limit: Duration) -> Self {
+        Self {
+            io,
+            limit,
+            stall: None,
+        }
+    }
+
+    fn check<R>(
+        &mut self,
+        cx: &mut Context<'_>,
+        p: Poll<std::io::Result<R>>,
+    ) -> Poll<std::io::Result<R>> {
+        if p.is_ready() {
+            self.stall = None;
+            return p;
+        }
+        let limit = self.limit;
+        let s = self
+            .stall
+            .get_or_insert_with(|| Box::pin(tokio::time::sleep(limit)));
+        match s.as_mut().poll(cx) {
+            Poll::Ready(()) => {
+                self.stall = None;
+                Poll::Ready(Err(std::io::ErrorKind::TimedOut.into()))
+            }
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+impl<T: AsyncRead + Unpin> AsyncRead for WriteDeadline<T> {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.io).poll_read(cx, buf)
+    }
+}
+
+impl<T: AsyncWrite + Unpin> AsyncWrite for WriteDeadline<T> {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
+        let p = Pin::new(&mut self.io).poll_write(cx, buf);
+        self.check(cx, p)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        let p = Pin::new(&mut self.io).poll_flush(cx);
+        self.check(cx, p)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        let p = Pin::new(&mut self.io).poll_shutdown(cx);
+        self.check(cx, p)
+    }
+
+    fn poll_write_vectored(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &[std::io::IoSlice<'_>],
+    ) -> Poll<std::io::Result<usize>> {
+        let p = Pin::new(&mut self.io).poll_write_vectored(cx, bufs);
+        self.check(cx, p)
+    }
+
+    fn is_write_vectored(&self) -> bool {
+        self.io.is_write_vectored()
+    }
 }
 
 async fn http_handle(
@@ -96,20 +193,25 @@ async fn http_handle(
                     Some(1),
                 ));
             }
+            let waiting = Waiting(&st.waiting);
             let p = st.in_flight.clone().acquire_owned().await;
-            st.waiting.fetch_sub(1, Ordering::Relaxed);
+            drop(waiting);
             match p {
                 Ok(p) => p,
                 Err(_) => return Ok(http_reply(StatusCode::SERVICE_UNAVAILABLE, vec![], None)),
             }
         }
     };
-    let body = match Limited::new(req.into_body(), limits.body_bytes)
-        .collect()
-        .await
+    // A stalled body holds the work slot at most `http_body_timeout`.
+    let body = match tokio::time::timeout(
+        limits.http_body_timeout,
+        Limited::new(req.into_body(), limits.body_bytes).collect(),
+    )
+    .await
     {
-        Ok(b) => b.to_bytes().to_vec(),
-        Err(_) => return Ok(http_reply(StatusCode::PAYLOAD_TOO_LARGE, vec![], None)),
+        Ok(Ok(b)) => b.to_bytes().to_vec(),
+        Ok(Err(_)) => return Ok(http_reply(StatusCode::PAYLOAD_TOO_LARGE, vec![], None)),
+        Err(_) => return Ok(http_reply(StatusCode::REQUEST_TIMEOUT, vec![], None)),
     };
     let reply = st.rpc.serve(&conn, body).await;
     drop(permit);
@@ -126,7 +228,9 @@ async fn http_handle(
 }
 
 /// Serves HTTP on `listener` until the future is dropped. Beyond `http_connections` open
-/// connections a new one is closed at once.
+/// connections a new one is closed at once. Dropping the future also aborts every open
+/// connection, idle or partly read ones included. Each connection has the header, body and
+/// write-stall deadlines of [`crate::server::Limits`].
 pub async fn serve_http(rpc: Arc<Rpc>, listener: TcpListener) {
     let conns = Arc::new(Semaphore::new(rpc.limits.http_connections));
     let st = Arc::new(HttpState {
@@ -134,19 +238,29 @@ pub async fn serve_http(rpc: Arc<Rpc>, listener: TcpListener) {
         waiting: AtomicUsize::new(0),
         rpc: rpc.clone(),
     });
+    let mut tasks = JoinSet::new();
     loop {
-        let Ok((stream, _)) = listener.accept().await else {
+        let accepted = tokio::select! {
+            a = listener.accept() => a,
+            Some(_) = tasks.join_next(), if !tasks.is_empty() => continue,
+        };
+        let Ok((stream, _)) = accepted else {
             continue;
         };
         let Ok(slot) = conns.clone().try_acquire_owned() else {
             continue;
         };
         let (st, conn) = (st.clone(), Arc::new(rpc.new_conn(1)));
-        tokio::spawn(async move {
+        let lim = &rpc.limits;
+        let io = TokioIo::new(WriteDeadline::new(stream, lim.http_write_timeout));
+        let header_timeout = lim.http_header_timeout;
+        tasks.spawn(async move {
             let svc = service_fn(move |req| http_handle(st.clone(), conn.clone(), req));
             // A dropped connection drops the in-progress request future, which cancels it.
             let _ = hyper::server::conn::http1::Builder::new()
-                .serve_connection(TokioIo::new(stream), svc)
+                .timer(TokioTimer::new())
+                .header_read_timeout(header_timeout)
+                .serve_connection(io, svc)
                 .await;
             drop(slot);
         });

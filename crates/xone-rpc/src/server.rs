@@ -112,6 +112,13 @@ pub struct Limits {
     pub logs_blocks: u64,
     pub logs_results: usize,
     pub call_gas_cap: u64,
+    /// HTTP: time to receive a request head. hyper starts this timer when it waits for the next
+    /// request, so it also bounds an idle keep-alive connection (geth `ReadHeaderTimeout`).
+    pub http_header_timeout: Duration,
+    /// HTTP: time to receive the whole request body once the head is in (geth `ReadTimeout`).
+    pub http_body_timeout: Duration,
+    /// HTTP: longest time a response write may make no progress (geth `WriteTimeout`).
+    pub http_write_timeout: Duration,
 }
 
 impl Default for Limits {
@@ -140,6 +147,9 @@ impl Default for Limits {
             logs_blocks: 5_000,
             logs_results: 10_000,
             call_gas_cap: 50_000_000,
+            http_header_timeout: Duration::from_secs(30),
+            http_body_timeout: Duration::from_secs(30),
+            http_write_timeout: Duration::from_secs(30),
         }
     }
 }
