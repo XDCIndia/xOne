@@ -85,7 +85,10 @@ mod tests {
     #[test]
     fn temp_path_is_a_hidden_sibling() {
         assert_eq!(temp_path("chain.rlp"), ".chain.rlp.partial");
-        assert_eq!(temp_path("/tmp/out/chain.rlp"), "/tmp/out/.chain.rlp.partial");
+        assert_eq!(
+            temp_path("/tmp/out/chain.rlp"),
+            "/tmp/out/.chain.rlp.partial"
+        );
     }
 
     #[test]
