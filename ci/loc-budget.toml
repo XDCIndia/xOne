@@ -1,0 +1,8 @@
+# Per-crate ceilings on counted Rust lines (ci/loc.py). Set 2026-11-14 from main plus 15 percent,
+# rounded up to 50. Raising a ceiling is a one-line reviewed change of this file.
+# Measured: xone-consensus 5005, xone-evm 1467, xone-signer 529, xone-primitives 766.
+[ceiling]
+xone-consensus = 5800
+xone-evm = 1700
+xone-signer = 650
+xone-primitives = 900

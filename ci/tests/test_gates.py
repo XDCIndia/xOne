@@ -131,5 +131,32 @@ class FixtureRunnerGate(unittest.TestCase):
         self.assertIn("FAIL  check-globals", result.stdout)
 
 
+class LocBudgetGate(unittest.TestCase):
+    def run_loc(self, lines, ceiling):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "Cargo.toml").write_text('[workspace]\nmembers = ["crates/xone-consensus"]\n')
+            crate = root / "crates/xone-consensus"
+            (crate / "src").mkdir(parents=True)
+            (crate / "Cargo.toml").write_text('[package]\nname = "xone-consensus"\nversion = "0.0.0"\nedition = "2021"\n')
+            (crate / "src/lib.rs").write_text("// comment\n\n" + "pub fn f() {}\n" * lines
+                                              + "#[cfg(test)]\nmod t {\n    fn x() {}\n}\n")
+            budget = root / "budget.toml"
+            budget.write_text(f"[ceiling]\nxone-consensus = {ceiling}\n")
+            return subprocess.run(
+                ["python3", "-I", str(ROOT / "ci/loc.py"), "--root", str(root), "--budget", str(budget)],
+                capture_output=True, text=True, check=False)
+
+    def test_at_ceiling_passes(self):
+        r = self.run_loc(10, 10)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("| xone-consensus | 10 |", r.stdout)
+
+    def test_over_ceiling_fails(self):
+        r = self.run_loc(11, 10)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("OVER BUDGET xone-consensus", r.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
