@@ -3,7 +3,7 @@
 //! `callTracer` and `prestateTracer` (`tracers/native/call.go`, `prestate.go`). Class C3.
 
 use crate::{
-    api::{CallFrame, PreAccount, TraceOut, Tracer},
+    api::{CallFrame, CallLog, PreAccount, TraceOut, Tracer},
     eth::block_of,
     json::{addr, h256, header_rlp, hex, q, qu},
     server::{Cost, Ctx, Registry},
@@ -31,23 +31,36 @@ pub fn register(r: &mut Registry) {
 }
 
 fn tracer(p: &Params, i: usize) -> Result<Tracer, RpcError> {
-    let cfg = p.opt(i).and_then(Value::as_object);
-    let name = cfg.and_then(|o| o.get("tracer")).and_then(Value::as_str);
-    let tc = cfg
-        .and_then(|o| o.get("tracerConfig"))
-        .and_then(Value::as_object);
-    let flag = |k: &str| {
-        tc.and_then(|o| o.get(k))
-            .and_then(Value::as_bool)
-            .unwrap_or(false)
+    // geth decodes the config with `json.Unmarshal`: `null` is "not set", a wrong type is an error.
+    let cfg = match p.opt(i) {
+        None | Some(Value::Null) => None,
+        Some(Value::Object(o)) => Some(o),
+        Some(_) => return Err(RpcError::invalid_params("trace config must be an object")),
+    };
+    let name = match cfg.and_then(|o| o.get("tracer")) {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) => Some(s.as_str()),
+        Some(_) => return Err(RpcError::invalid_params("tracer must be a string")),
+    };
+    let tc = match cfg.and_then(|o| o.get("tracerConfig")) {
+        None | Some(Value::Null) => None,
+        Some(Value::Object(o)) => Some(o),
+        Some(_) => return Err(RpcError::invalid_params("tracerConfig must be an object")),
+    };
+    let flag = |k: &str| match tc.and_then(|o| o.get(k)) {
+        None | Some(Value::Null) => Ok(false),
+        Some(Value::Bool(b)) => Ok(*b),
+        Some(_) => Err(RpcError::invalid_params(format!(
+            "tracerConfig.{k} must be a boolean"
+        ))),
     };
     match name {
         Some("callTracer") => Ok(Tracer::Call {
-            only_top_call: flag("onlyTopCall"),
-            with_log: flag("withLog"),
+            only_top_call: flag("onlyTopCall")?,
+            with_log: flag("withLog")?,
         }),
         Some("prestateTracer") => Ok(Tracer::Prestate {
-            diff_mode: flag("diffMode"),
+            diff_mode: flag("diffMode")?,
         }),
         // The struct logger (no tracer) and the JS tracers are not part of ADR-008.
         Some(other) => Err(RpcError::server(format!("tracer not found: {other}"))),
@@ -98,7 +111,9 @@ fn trace_block(c: &Ctx, p: &Params, r: BlockRef) -> R {
 }
 
 /// geth `callFrame` marshaling: `type`, `from`, `gas`, `gasUsed`, `to`, `input`, `output`, `error`,
-/// `revertReason`, `calls`, `value`; the optional ones are omitted when empty.
+/// `revertReason`, `calls`, `logs`, `value`; the optional ones are omitted when empty. The
+/// backend fills `logs` only under `withLog`, so an empty list (no logs, or `withLog=false`) is
+/// omitted exactly like geth's `logs,omitempty`.
 fn frame(f: &CallFrame) -> Value {
     let mut m = Map::new();
     m.insert("type".into(), json!(f.kind));
@@ -124,10 +139,26 @@ fn frame(f: &CallFrame) -> Value {
             Value::Array(f.calls.iter().map(frame).collect()),
         );
     }
+    if !f.logs.is_empty() {
+        m.insert(
+            "logs".into(),
+            Value::Array(f.logs.iter().map(log).collect()),
+        );
+    }
     if let Some(v) = f.value {
         m.insert("value".into(), qu(v));
     }
     Value::Object(m)
+}
+
+/// geth `callLog` marshaling: `address`, `topics`, `data`, `position` (`hexutil.Uint`).
+fn log(l: &CallLog) -> Value {
+    json!({
+        "address": addr(l.address),
+        "topics": l.topics.iter().map(|t| h256(*t)).collect::<Vec<_>>(),
+        "data": hex(&l.data),
+        "position": q(l.position),
+    })
 }
 
 fn accounts(m: &BTreeMap<Address, PreAccount>) -> Value {
@@ -170,5 +201,64 @@ pub fn trace_json(o: &TraceOut) -> Value {
             pre,
             post: Some(post),
         } => json!({"post": accounts(post), "pre": accounts(pre)}),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloy_primitives::{Bytes, B256};
+
+    fn cfg(v: Value) -> Result<Tracer, RpcError> {
+        let v = [json!("0x00"), v];
+        tracer(&Params { v: &v, head: 0 }, 1)
+    }
+
+    #[test]
+    fn tracer_config_is_typed() {
+        assert_eq!(
+            cfg(json!({"tracer": "callTracer", "tracerConfig": {"withLog": true}})).ok(),
+            Some(Tracer::Call {
+                only_top_call: false,
+                with_log: true
+            })
+        );
+        assert_eq!(
+            cfg(json!({"tracer": "callTracer", "tracerConfig": {"withLog": null}})).ok(),
+            Some(Tracer::Call {
+                only_top_call: false,
+                with_log: false
+            })
+        );
+        assert!(cfg(json!({"tracer": "callTracer", "tracerConfig": {"withLog": "true"}})).is_err());
+        assert!(cfg(json!({"tracer": "callTracer", "tracerConfig": {"onlyTopCall": 1}})).is_err());
+        assert!(cfg(json!({"tracer": "callTracer", "tracerConfig": []})).is_err());
+        assert!(cfg(json!({"tracer": 5})).is_err());
+        assert!(cfg(json!("callTracer")).is_err());
+    }
+
+    #[test]
+    fn frame_logs_follow_calls_and_are_omitted_when_empty() {
+        let mut f = CallFrame {
+            kind: "CALL".into(),
+            ..CallFrame::default()
+        };
+        assert!(frame(&f).get("logs").is_none());
+        f.logs.push(CallLog {
+            address: Address::repeat_byte(1),
+            topics: vec![B256::repeat_byte(2)],
+            data: Bytes::from_static(&[0xab]),
+            position: 1,
+        });
+        let v = frame(&f);
+        assert_eq!(
+            v["logs"],
+            json!([{
+                "address": "0x0101010101010101010101010101010101010101",
+                "topics": ["0x0202020202020202020202020202020202020202020202020202020202020202"],
+                "data": "0xab",
+                "position": "0x1",
+            }])
+        );
     }
 }
