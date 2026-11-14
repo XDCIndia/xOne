@@ -1209,6 +1209,9 @@ impl Worker {
             }
             let d = match driven {
                 Ok(d) => d,
+                // the quiet window (ADR-010) refuses every signature for a while after a start: that is a
+                // skip, not a fault; stopping here left a fresh Apothem producer dead from its first vote
+                Err(xone_consensus::unit::UnitError::FenceClosed) => continue,
                 Err(e) => {
                     say(format!("stopping: {e}"));
                     self.dead = true;
