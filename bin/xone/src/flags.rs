@@ -177,9 +177,9 @@ pub const FLAGS: &[Flag] = &[
     f(
         "nat",
         S,
-        "unset",
+        "any",
         "extip:1.2.3.4",
-        "NAT port mapping: any, none, upnp, pmp, extip:<IP>.",
+        "Advertised address: any (default; the IP 3+ discovery peers report), none (the listen address), extip:<IP>. upnp and pmp are refused (no port-mapping client yet).",
         "flags.go:991 ; geth,xone",
     ),
     f(

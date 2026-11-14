@@ -92,6 +92,17 @@ pub struct Endpoint {
 }
 
 impl Endpoint {
+    /// The IP of the endpoint: 4 or 16 bytes, else `None`.
+    pub fn ip_addr(&self) -> Option<IpAddr> {
+        match self.ip.len() {
+            4 => <[u8; 4]>::try_from(self.ip.as_ref()).ok().map(IpAddr::from),
+            16 => <[u8; 16]>::try_from(self.ip.as_ref())
+                .ok()
+                .map(IpAddr::from),
+            _ => None,
+        }
+    }
+
     pub fn new(addr: SocketAddr, tcp: u16) -> Self {
         let ip = match addr.ip() {
             IpAddr::V4(a) => Bytes::copy_from_slice(&a.octets()),
@@ -594,6 +605,56 @@ fn relay_ok(sender: IpAddr, addr: IpAddr) -> bool {
     !addr.is_unspecified() && !addr.is_multicast() && (!lan(addr) || lan(sender))
 }
 
+/// How long a pong's statement of our address counts (geth `p2p/enode` `iptrackWindow`).
+pub const IP_WINDOW_MS: u64 = 5 * 60 * 1_000;
+/// Distinct reporters that must agree before an address is predicted (issue #167).
+pub const IP_MIN_STATEMENTS: usize = 3;
+
+/// Our external IP as the pongs of other nodes state it (geth `p2p/netutil/iptrack.go`): the
+/// latest statement per reporter within [`IP_WINDOW_MS`]; an IP stated by at least
+/// [`IP_MIN_STATEMENTS`] distinct reporters, the most stated one, is the prediction. Reporters on a
+/// LAN or loopback address do not count for a public address.
+#[derive(Debug, Default)]
+pub struct IpTracker {
+    statements: HashMap<PeerId, (IpAddr, u64)>,
+}
+
+impl IpTracker {
+    /// Bounds the map: the oldest statement goes first.
+    const MAX: usize = 1_024;
+
+    pub fn add(&mut self, reporter: PeerId, ip: IpAddr, now_ms: u64) {
+        if ip.is_unspecified() || ip.is_multicast() {
+            return;
+        }
+        if self.statements.len() >= Self::MAX && !self.statements.contains_key(&reporter) {
+            if let Some(old) = self
+                .statements
+                .iter()
+                .min_by_key(|(_, (_, t))| *t)
+                .map(|(k, _)| *k)
+            {
+                self.statements.remove(&old);
+            }
+        }
+        self.statements.insert(reporter, (ip, now_ms));
+    }
+
+    pub fn predict(&mut self, now_ms: u64) -> Option<IpAddr> {
+        self.statements
+            .retain(|_, (_, t)| now_ms.saturating_sub(*t) < IP_WINDOW_MS);
+        let mut counts: HashMap<IpAddr, usize> = HashMap::new();
+        for (ip, _) in self.statements.values() {
+            *counts.entry(*ip).or_default() += 1;
+        }
+        counts
+            .into_iter()
+            .filter(|(_, n)| *n >= IP_MIN_STATEMENTS)
+            .max_by(|a, b| a.1.cmp(&b.1).then(b.0.cmp(&a.0)))
+            .map(|(ip, _)| ip)
+    }
+}
+
 pub struct Discv4 {
     key: SecretKey,
     id: PeerId,
@@ -602,6 +663,7 @@ pub struct Discv4 {
     table: Table,
     pings: HashMap<PeerId, PendingPing>,
     finds: HashMap<PeerId, PendingFind>,
+    ips: IpTracker,
 }
 
 impl Discv4 {
@@ -616,6 +678,7 @@ impl Discv4 {
             table: Table::new(&id),
             pings: HashMap::new(),
             finds: HashMap::new(),
+            ips: IpTracker::default(),
         }
     }
 
@@ -625,6 +688,11 @@ impl Discv4 {
 
     pub fn table(&self) -> &Table {
         &self.table
+    }
+
+    /// Our external IP as at least [`IP_MIN_STATEMENTS`] bonded nodes see it (issue #167).
+    pub fn external_ip(&mut self, now_ms: u64) -> Option<IpAddr> {
+        self.ips.predict(now_ms)
     }
 
     fn expiration(now_ms: u64) -> u64 {
@@ -758,9 +826,9 @@ impl Discv4 {
                 Ok(())
             }
             Packet::Pong {
+                to,
                 reply_tok,
                 expiration,
-                ..
             } => {
                 if expired(expiration, now_ms) {
                     return Err(DiscError::Expired);
@@ -776,6 +844,12 @@ impl Discv4 {
                 };
                 self.pings.remove(&id);
                 self.table.insert(node, now_ms);
+                // a verified pong: its `to` is our address as this node sees it
+                if let Some(ip) = to.ip_addr() {
+                    if relay_ok(from.ip(), ip) {
+                        self.ips.add(id, ip, now_ms);
+                    }
+                }
                 Ok(())
             }
             Packet::FindNode { target, expiration } => {
@@ -1374,5 +1448,46 @@ mod tests {
             subnet("2001:db8:1::1".parse().unwrap()),
             subnet("2001:db8:2::1".parse().unwrap())
         );
+    }
+
+    #[test]
+    fn ip_tracker_needs_three_agreeing_reporters_in_the_window() {
+        let mut t = IpTracker::default();
+        let ext = IpAddr::V4(Ipv4Addr::new(203, 0, 113, 7));
+        let other = IpAddr::V4(Ipv4Addr::new(198, 51, 100, 1));
+        t.add(PeerId::repeat_byte(1), ext, NOW);
+        t.add(PeerId::repeat_byte(2), ext, NOW);
+        // the same reporter twice is one statement
+        t.add(PeerId::repeat_byte(2), ext, NOW);
+        t.add(PeerId::repeat_byte(3), other, NOW);
+        assert_eq!(t.predict(NOW), None);
+        t.add(PeerId::repeat_byte(4), ext, NOW);
+        assert_eq!(t.predict(NOW), Some(ext));
+        // a reporter that changes its statement moves its vote
+        t.add(PeerId::repeat_byte(4), other, NOW + 1);
+        assert_eq!(t.predict(NOW + 1), None);
+        t.add(PeerId::repeat_byte(5), ext, NOW + 1);
+        assert_eq!(t.predict(NOW + 1), Some(ext));
+        // statements expire
+        assert_eq!(t.predict(NOW + IP_WINDOW_MS), None);
+        t.add(
+            PeerId::repeat_byte(6),
+            IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+            NOW,
+        );
+        assert!(!t.statements.contains_key(&PeerId::repeat_byte(6)));
+    }
+
+    #[test]
+    fn verified_pongs_feed_the_external_ip() {
+        let mut net = Net::new(4);
+        for b in 2..=4 {
+            net.ping(1, b);
+        }
+        net.run();
+        let me = net.nodes.get_mut(&addr(1)).unwrap();
+        assert_eq!(me.external_ip(NOW), Some(addr(1).ip()));
+        // node 2 has heard from one node only
+        assert_eq!(net.nodes.get_mut(&addr(2)).unwrap().external_ip(NOW), None);
     }
 }

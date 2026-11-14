@@ -182,7 +182,12 @@ impl NetApi for RpcNet {
         NodeInfo {
             id: alloy_primitives::hex::encode(self.net.id),
             name: self.net.name.clone(),
-            enode: self.net.enode.clone(),
+            enode: self
+                .net
+                .enode
+                .read()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone(),
             ip: self
                 .net
                 .listen
