@@ -118,6 +118,9 @@ pub struct P2p {
     pub max_peers: u32,
     pub no_discover: bool,
     pub nat: Option<String>,
+    /// `--p2p.addr`: the IP (v4 or v6) the TCP listener and the discovery socket bind to. None: all
+    /// IPv4 interfaces, or 127.0.0.1 for a node that only peers with loopback nodes.
+    pub addr: Option<String>,
     pub bootnodes: Vec<String>,
     /// `--eth.requiredblocks`: `<n>=<0x hash>` entries the operator adds to, or uses to replace,
     /// the built-in ones of the network ([`Config::required_blocks`]).
@@ -300,6 +303,7 @@ defaults!(P2p {
     max_peers: 50,
     no_discover: false,
     nat: None,
+    addr: None,
     bootnodes: vec![],
     required_blocks: vec![]
 });
@@ -567,6 +571,14 @@ impl Config {
             "maxpeers" => self.p2p.max_peers = num(key, v)?,
             "nodiscover" => self.p2p.no_discover = flag(key, v)?,
             "nat" => self.p2p.nat = Some(v.to_owned()),
+            "p2p.addr" => {
+                let ip: std::net::IpAddr = v
+                    .trim_start_matches('[')
+                    .trim_end_matches(']')
+                    .parse()
+                    .map_err(|_| invalid(key, v, "an IPv4 or IPv6 address, e.g. 0.0.0.0 or ::"))?;
+                self.p2p.addr = Some(ip.to_string());
+            }
             "bootnodes" => self.p2p.bootnodes = list(v),
             "eth.requiredblocks" => {
                 let r = xone_chainspec::parse_required_blocks(v)
