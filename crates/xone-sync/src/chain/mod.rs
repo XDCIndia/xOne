@@ -11,7 +11,7 @@
 
 use alloy_primitives::B256;
 use std::sync::{Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use xone_chainspec::ChainSpec;
+use xone_chainspec::{check_required, ChainSpec, RequiredBlockMismatch};
 use xone_consensus::{v2::commit::Link, verify::HeaderError};
 use xone_primitives::Header;
 use xone_state::{Missing, StateRead};
@@ -77,6 +77,8 @@ pub struct Chain<S, E, H> {
     pub(crate) spec: ChainSpec,
     pub(crate) exec: E,
     pub(crate) check: H,
+    /// `--eth.requiredblocks`: a block at one of these heights with another hash is refused.
+    required: Vec<(u64, B256)>,
     store: RwLock<S>,
     import: Mutex<()>,
 }
@@ -117,9 +119,20 @@ impl<S: Store, E: BlockExecutor, H: HeaderCheck> Chain<S, E, H> {
             spec,
             exec,
             check,
+            required: Vec::new(),
             store: RwLock::new(store),
             import: Mutex::new(()),
         }
+    }
+
+    /// The heights whose hash a header chain must carry (the node's merged required-block list).
+    pub fn set_required_blocks(&mut self, required: Vec<(u64, B256)>) {
+        self.required = required;
+    }
+
+    /// `Err` if `header` is at a required height with another hash.
+    pub fn check_required(&self, header: &Header) -> Result<(), RequiredBlockMismatch> {
+        check_required(&self.required, header.number, header.hash())
     }
 
     pub fn reader(&self) -> Reader<'_, S> {

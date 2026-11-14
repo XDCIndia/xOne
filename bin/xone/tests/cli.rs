@@ -334,3 +334,53 @@ fn import_and_export_run_the_pipeline_and_write_geth_block_files() {
     let o = xone(&["import", "/nonexistent/blocks.rlp"]);
     assert_eq!(o.status.code(), Some(1));
 }
+
+const APOTHEM_ANCHOR: &str =
+    "83665617=0x2432ce6433608954ef6eaf2feba8f9a2fe90f5a913401eb07d5fa2f1bb499c3f";
+
+#[test]
+fn apothem_has_its_required_block_without_a_flag_and_the_operator_replaces_it() {
+    let o = out(&xone(&["--apothem", "dumpconfig"]));
+    assert!(o.contains(APOTHEM_ANCHOR), "{o}");
+    // mainnet starts empty
+    let m = out(&xone(&["dumpconfig"]));
+    assert!(m.contains("required_blocks = []"), "{m}");
+    // an operator entry at the same height replaces it; another height adds
+    let h = format!("0x{}", "11".repeat(32));
+    let o = out(&xone(&[
+        "--apothem",
+        "--eth.requiredblocks",
+        &format!("83665617={h},7={h}"),
+        "dumpconfig",
+    ]));
+    assert!(
+        o.contains(&format!("83665617={h}")) && o.contains(&format!("7={h}")),
+        "{o}"
+    );
+    assert!(!o.contains(APOTHEM_ANCHOR), "{o}");
+    // the dump loads back to the same list
+    let d = scratch("reqblk");
+    std::fs::create_dir_all(&d).unwrap_or_else(|e| panic!("{e}"));
+    let f = d.join("c.toml");
+    std::fs::write(&f, &o).unwrap_or_else(|e| panic!("{e}"));
+    let again = out(&xone(&[
+        "--config",
+        f.to_str().unwrap_or_default(),
+        "dumpconfig",
+    ]));
+    assert_eq!(o, again);
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn a_malformed_required_block_is_refused() {
+    for v in ["5", "x=0x00", "5=0x12"] {
+        assert_eq!(
+            xone(&["--eth.requiredblocks", v, "dumpconfig"])
+                .status
+                .code(),
+            Some(2),
+            "{v}"
+        );
+    }
+}

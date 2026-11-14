@@ -25,6 +25,7 @@ Source column: file:line in geth-XDC (`XDCIndia/go-ethereum` at `6fc8e8c2`; `fla
 | `--nodiscover` |  | false | Disable peer discovery. | flags.go:997 |
 | `--nat <string>` |  | unset | NAT port mapping: any, none, upnp, pmp, extip:<IP>. | flags.go:991 ; geth,xone |
 | `--bootnodes <a,b,..>` |  | built-in for the profile | Comma-separated enode URLs for discovery bootstrap. | flags.go:975 ; geth,xone |
+| `--eth.requiredblocks <a,b,..>` |  | built-in for the profile (Apothem: 83665617) | Comma-separated `<number>=<0x hash>` entries. A peer that serves another hash at one of these heights is disconnected (reason 0x03) within 15 seconds of the handshake, and a header chain through another hash is refused before import or pivot choice. A peer that has not reached the height is kept. An entry replaces the built-in one at the same height. Apothem has one built-in entry, the first canonical block after the September 2026 reset; stale v2.8.2 peers still serve the abandoned branch. dumpconfig prints the merged list. | flags.go:2265 (apothemResetBlockNum) ; geth,xone |
 | `--identity <string>` |  | unset | Node name shown to peers and ethstats. | flags.go:199 ; geth |
 | `--http` |  | false | Enable the HTTP-RPC server. | flags.go:829 ; geth,xone |
 | `--http.addr <string>` |  | localhost | HTTP-RPC listen address. | flags.go:834 ; geth,xone |
@@ -37,6 +38,7 @@ Source column: file:line in geth-XDC (`XDCIndia/go-ethereum` at `6fc8e8c2`; `fla
 | `--ws.port <n>` |  | 8546 | WebSocket-RPC listen port. | flags.go:898 ; geth |
 | `--ws.api <a,b,..>` |  | eth,net,web3 | APIs offered over WebSocket-RPC. | flags.go:904 ; geth |
 | `--ws.origins <a,b,..>` |  | none | Allowed origins for WebSocket-RPC. | flags.go:910 ; geth |
+| `--rpc.jwtsecret <path>` |  | unset | JWT secret file (32 bytes hex): HTTP and WebSocket RPC then require an HS256 bearer token. IPC is not affected. | reth --rpc.jwtsecret; geth node/jwt_handler.go |
 | `--authrpc.addr <string>` |  | localhost | Authenticated RPC listen address. | flags.go:761 |
 | `--authrpc.port <n>` |  | 8551 | Authenticated RPC listen port. | flags.go:767 ; geth,xone |
 | `--authrpc.vhosts <a,b,..>` |  | localhost | Allowed virtual hosts for authenticated RPC. | flags.go:773 |

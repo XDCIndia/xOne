@@ -14,11 +14,15 @@ workspace = true
 [dependencies]
 alloy-primitives.workspace = true
 alloy-rlp.workspace = true
+# `--rpc.jwtsecret` (HS256 JWT, geth `node/jwt_handler.go`); all three are already in the lock.
+base64 = "0.22"
+hmac = "0.12"
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 http-body-util = "0.1"
 hyper = { version = "1", features = ["http1", "server"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
 serde_json.workspace = true
+sha2.workspace = true
 thiserror.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "time", "macros", "io-util"] }
 tokio-tungstenite = "0.29"

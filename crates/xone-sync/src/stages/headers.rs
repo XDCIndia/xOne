@@ -44,6 +44,7 @@ pub fn run<S: Store, E: BlockExecutor, H: HeaderCheck>(
             if h.number != n || h.parent_hash != parent {
                 return Err(SyncError::Link { number: n });
             }
+            chain.check_required(h)?;
             parent = h.hash();
         }
         chain.wr().stage_headers(&hs)?;
