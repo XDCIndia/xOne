@@ -341,7 +341,7 @@ fn session(
     let req = format!(
         "{}://{}:{}{}",
         if p.target.tls { "wss" } else { "ws" },
-        p.target.host,
+        p.target.url_host(),
         p.target.port,
         p.target.path
     );

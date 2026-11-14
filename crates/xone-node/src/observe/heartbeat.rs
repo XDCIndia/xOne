@@ -90,7 +90,7 @@ pub fn post(cfg: &HeartbeatCfg, body: &str) -> Result<(), String> {
     let req = format!(
         "POST {} HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\n{auth}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
         t.path,
-        t.host,
+        t.authority(),
         body.len()
     );
     s.write_all(req.as_bytes()).map_err(|e| e.to_string())?;
