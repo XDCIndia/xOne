@@ -106,6 +106,7 @@ pub fn build(
 ) -> Result<Built, String> {
     use std::{sync::Arc, time::Duration};
 
+    let (stop_at, exit_when_synced) = cfg.sync_stop().map_err(|e| e.to_string())?;
     // the producer's checks come first: a refused `--mine` opens nothing
     let producer_plan = cfg
         .mining
@@ -177,7 +178,8 @@ pub fn build(
         events,
         producer_plan.is_some().then_some(bft_tx),
     )
-    .with_gate(gate.clone());
+    .with_gate(gate.clone())
+    .with_stop_at(stop_at);
     let progress = chain_svc.progress.clone();
     let pool_svc = pool::PoolService::new(pool.clone(), rth.clone());
     let producer_svc = producer_plan
@@ -200,7 +202,7 @@ pub fn build(
         pool: pool.clone(),
         peers: nh.peers.clone(),
     });
-    let rpc_svc = rpc::RpcService::new(cfg, rth, core.clone(), progress, pool, nh.clone())?;
+    let rpc_svc = rpc::RpcService::new(cfg, rth, core.clone(), progress.clone(), pool, nh.clone())?;
     let l = &cfg.limits;
     let mut node = crate::Node::new(
         Duration::from_millis(l.service_stop_timeout_ms),
@@ -220,6 +222,15 @@ pub fn build(
         node.add(Box::new(p));
     }
     node.add(Box::new(rpc_svc));
+    if stop_at.is_some() || exit_when_synced {
+        node.add(Box::new(crate::syncstop::SyncStop::new(
+            core.clone(),
+            progress.clone(),
+            stop_at,
+            exit_when_synced,
+            node.finished(),
+        )));
+    }
     if cfg.metrics.enabled {
         node.add(Box::new(crate::observe::metrics::MetricsServer::new(
             crate::observe::metrics::MetricsCfg {

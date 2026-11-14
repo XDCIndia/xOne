@@ -88,6 +88,10 @@ pub struct Config {
 pub struct SyncCfg {
     /// full or snap; fast is stored as snap (`sync_mode`).
     pub mode: String,
+    /// `--synctarget`: import up to this block hash and nothing above it (forces full sync).
+    pub target: Option<String>,
+    /// `--exitwhensynced`: stop the node once synced (with a target: once it is held).
+    pub exit_when_synced: bool,
     /// `--snap.pins`: a pins file (`<number> <0x hash>` per line, the `snapshot import --pins`
     /// form) that pins the pivot's epoch-switch header; without it two peers must serve the same
     /// header (`spec/snap/pivot.md`).
@@ -285,6 +289,8 @@ defaults!(Config {
 });
 defaults!(SyncCfg {
     mode: "full".into(),
+    target: None,
+    exit_when_synced: false,
     snap_pins: None,
     snap_gap_rpc: None,
     state_disk: false,
@@ -382,6 +388,42 @@ fn invalid(key: &str, value: &str, why: &'static str) -> ConfigError {
 fn num<T: std::str::FromStr>(key: &str, v: &str) -> Result<T, ConfigError> {
     v.parse()
         .map_err(|_| invalid(key, v, "not a number in range"))
+}
+
+/// A `--synctarget` value: `0x` and 64 hex digits.
+pub fn target_hash(v: &str) -> Option<alloy_primitives::B256> {
+    let h = v.strip_prefix("0x")?;
+    (h.len() == 64).then_some(())?;
+    h.parse().ok()
+}
+
+impl Config {
+    /// The sync stop settings, checked: a target is a hash, needs full sync, and neither stop
+    /// setting goes with `--mine`.
+    pub fn sync_stop(&self) -> Result<(Option<alloy_primitives::B256>, bool), ConfigError> {
+        let target = match &self.sync.target {
+            None => None,
+            Some(v) => {
+                Some(target_hash(v).ok_or_else(|| invalid("synctarget", v, "a 0x block hash"))?)
+            }
+        };
+        let any = target.is_some() || self.sync.exit_when_synced;
+        if any && self.mining.mine {
+            return Err(invalid(
+                "mine",
+                "true",
+                "not with --synctarget or --exitwhensynced",
+            ));
+        }
+        if target.is_some() && self.sync.mode != "full" {
+            return Err(invalid(
+                "syncmode",
+                &self.sync.mode,
+                "--synctarget needs full sync",
+            ));
+        }
+        Ok((target, self.sync.exit_when_synced))
+    }
 }
 
 /// geth bool flags: `-http`, `-http=true`, `-http=false`.
@@ -554,6 +596,13 @@ impl Config {
                 });
             }
             "syncmode" => self.sync.mode = sync_mode(key, v)?,
+            "synctarget" => {
+                crate::config::target_hash(v).ok_or_else(|| invalid(key, v, "a 0x block hash"))?;
+                self.sync.target = Some(v.to_owned());
+                // geth-XDC: a sync target forces full sync (`cmd/utils/flags.go:2035`)
+                self.sync.mode = "full".into();
+            }
+            "exitwhensynced" => self.sync.exit_when_synced = flag(key, v)?,
             "gcmode" => self.sync.gcmode = gc_mode(key, v)?,
             "syncfromblock" => self.sync.from_block = Some(num(key, v)?),
             "snap.pins" => self.sync.snap_pins = Some(v.into()),
@@ -774,6 +823,28 @@ mod tests {
         let c = Config::from_toml(bad).unwrap();
         assert!(crate::DiskWatermark::from_limits(1 << 40, &c.limits).is_none());
         assert!(Config::from_toml("[limits]\ndisk_nope = 1\n").is_err());
+    }
+
+    #[test]
+    fn sync_stop_flags_are_checked() {
+        let h = format!("0x{}", "ab".repeat(32));
+        let mut c = Config::default();
+        c.set("syncmode", "snap").unwrap();
+        c.set("synctarget", &h).unwrap();
+        c.set("exitwhensynced", "true").unwrap();
+        assert_eq!(c.sync.mode, "full");
+        let (t, e) = c.sync_stop().unwrap();
+        assert_eq!(t, target_hash(&h));
+        assert!(e);
+        assert!(c.set("synctarget", "0x12").is_err());
+        assert!(c.set("synctarget", &h[2..]).is_err());
+        c.mining.mine = true;
+        assert!(c.sync_stop().is_err());
+        c.mining.mine = false;
+        c.sync.mode = "snap".into();
+        assert!(c.sync_stop().is_err());
+        c.sync.target = None;
+        assert!(c.sync_stop().is_ok());
     }
 
     #[test]

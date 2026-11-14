@@ -147,6 +147,10 @@ fn note(cfg: &Config, m: &str) {
 }
 
 fn run_node(cfg: &Config) -> ExitCode {
+    // `--synctarget` / `--exitwhensynced` with `--mine` or snap sync: refused before anything opens
+    if let Err(e) = cfg.sync_stop() {
+        return fail(e);
+    }
     let (marker, spec, genesis) = match datadir::prepare_chain(cfg) {
         Ok(m) => m,
         Err(e) => return fail(e),

@@ -79,6 +79,8 @@ pub struct Node {
     stopped: bool,
     /// Asked by a service (the disk guard), as opposed to the operator's signal.
     internal_stop: Shutdown,
+    /// Asked by a service whose work is done (`--exitwhensynced`): a clean stop, exit 0.
+    finished: Shutdown,
     per_service: Duration,
     total: Duration,
 }
@@ -91,6 +93,7 @@ impl Node {
             started: 0,
             stopped: false,
             internal_stop: Shutdown::default(),
+            finished: Shutdown::default(),
             per_service,
             total,
         }
@@ -99,6 +102,11 @@ impl Node {
     /// A handle a service can use to stop the node: `run` then stops and returns [`NodeError::DiskFull`].
     pub fn internal_stop(&self) -> Shutdown {
         self.internal_stop.clone()
+    }
+
+    /// A handle a service can use to end the run cleanly: `run` then stops and returns `Ok`.
+    pub fn finished(&self) -> Shutdown {
+        self.finished.clone()
     }
 
     pub fn add(&mut self, s: Box<dyn Service>) {
@@ -157,7 +165,10 @@ impl Node {
     /// Start, wait for a shutdown request, stop.
     pub fn run(&mut self, shutdown: &Shutdown) -> Result<(), NodeError> {
         self.start()?;
-        while !shutdown.is_requested() && !self.internal_stop.is_requested() {
+        while !shutdown.is_requested()
+            && !self.internal_stop.is_requested()
+            && !self.finished.is_requested()
+        {
             thread::sleep(Duration::from_millis(10));
         }
         let internal = self.internal_stop.is_requested();
@@ -381,5 +392,13 @@ mod tests {
         let after = ticks.load(Ordering::SeqCst);
         thread::sleep(Duration::from_millis(20));
         assert_eq!(ticks.load(Ordering::SeqCst), after);
+    }
+
+    #[test]
+    fn a_finished_service_stops_the_node_cleanly() {
+        let mut node = Node::new(Duration::from_secs(1), Duration::from_secs(2));
+        node.add(Box::new(NoopService("x")));
+        node.finished().request();
+        assert_eq!(node.run(&Shutdown::default()), Ok(()));
     }
 }

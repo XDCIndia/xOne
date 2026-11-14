@@ -279,6 +279,8 @@ struct Follower {
     bft: Option<Bft>,
     /// Closed by the disk guard: no block is imported while it is closed (ADR-007 section 7).
     gate: crate::diskguard::ImportGate,
+    /// `--synctarget`: nothing above this block is imported; once it is held, no more headers are asked.
+    stop_at: Option<B256>,
 }
 
 /// Where the follower hands the BFT messages of its peers: the producer verifies them, then relays them.
@@ -337,7 +339,10 @@ impl Follower {
 
     /// Starts a poll at the best peer when nothing is in flight.
     fn kick(&mut self) {
-        if self.inflight.is_some() || self.gate.stopped() {
+        if self.inflight.is_some()
+            || self.gate.stopped()
+            || crate::syncstop::reached(&self.core, self.stop_at)
+        {
             return;
         }
         let Some(peer) = self.best() else { return };
@@ -419,6 +424,15 @@ impl Follower {
         bodies: Vec<BlockBody>,
     ) {
         headers.truncate(bodies.len());
+        // `--synctarget`: a branch is adopted up to the target only, and not at all once it is held
+        if let Some(t) = self.stop_at {
+            if crate::syncstop::reached(&self.core, Some(t)) {
+                return;
+            }
+            if let Some(i) = headers.iter().position(|h| h.hash() == t) {
+                headers.truncate(i + 1);
+            }
+        }
         let blocks: Vec<_> = headers
             .into_iter()
             .zip(bodies)
@@ -457,6 +471,7 @@ impl Follower {
     async fn import(&mut self, blocks: Vec<(Header, Body)>) -> Result<usize, String> {
         let core = self.core.clone();
         let gate = self.gate.clone();
+        let stop_at = self.stop_at;
         let txs: usize = blocks.iter().map(|(_, b)| b.transactions.len()).sum();
         let t0 = std::time::Instant::now();
         let r = tokio::task::spawn_blocking(move || {
@@ -464,6 +479,10 @@ impl Follower {
             for (h, b) in blocks {
                 // disk low: stop at the block boundary, without blaming the peer; sync resumes later
                 if gate.stopped() {
+                    return (n, None);
+                }
+                // `--synctarget`: held, so nothing more is imported
+                if crate::syncstop::reached(&core, stop_at) {
                     return (n, None);
                 }
                 // already canonical: a `NewBlock` delivered it while this answer travelled
@@ -768,11 +787,18 @@ pub struct ChainService {
     stop: watch::Sender<bool>,
     task: Option<JoinHandle<()>>,
     gate: crate::diskguard::ImportGate,
+    stop_at: Option<B256>,
 }
 
 impl ChainService {
     pub fn with_gate(mut self, gate: crate::diskguard::ImportGate) -> Self {
         self.gate = gate;
+        self
+    }
+
+    /// `--synctarget`: import nothing above this block.
+    pub fn with_stop_at(mut self, target: Option<B256>) -> Self {
+        self.stop_at = target;
         self
     }
 
@@ -799,6 +825,7 @@ impl ChainService {
             stop: watch::channel(false).0,
             task: None,
             gate: Default::default(),
+            stop_at: None,
         }
     }
 }
@@ -828,6 +855,7 @@ impl Service for ChainService {
             inflight: None,
             bft: self.bft.take(),
             gate: self.gate.clone(),
+            stop_at: self.stop_at,
         };
         // Data requests are answered by a task of their own; the follower gets the rest.
         let server = Server {
