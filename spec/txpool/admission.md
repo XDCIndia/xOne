@@ -26,9 +26,10 @@ All lines are `XDCIndia/go-ethereum` at `6fc8e8c2` (`core/txpool/validation.go` 
 
 **Rust.** `Pool::add_batch(state, now, &[Arc<PoolTx>])` does geth's `Add(txs, sync)` (`legacypool.go:1244-1340`): the checks of step 2 on every transaction, then step 3 and the insertion of each under one call, then one reorg run for the accounts that were not replaced (`promote_executables`, `truncate_pending`, `truncate_queue`, the events). `Pool::add_raw` decodes first. `state` is the state of the head given to `Pool::new` or the last `Pool::reset`; `now` is the time in seconds. The pool reads no clock.
 
+**Blacklist.** `validate::denylist`, first in `validate::with_state` (`legacypool.go:640-655`): once the pool head is at or past `ChainSpec::denylist_block` (the genesis `denylistBlock`, else the per-chain `BlackListHFNumber`: 50 at 38,383,838, 51 at 23,779,191, 551/5050/5551/99999 at 0, any other chain 38,383,838), a listed sender, then a listed recipient, is refused with `transaction sender or recipient is blacklisted` (geth `ErrBlacklisted`). The 61 addresses are `xone_chainspec::DENYLIST`. The relaying peer is not penalised and the transaction is not propagated.
+
 **Not ported.**
 
-- The blacklist (`legacypool.go:641-655`, `common.IsInBlacklist`): the denylist addresses are not in xOne yet, and block processing has no denylist rule to match (`denylistBlock` is a parsed row only).
 - TRC21 fee-capacity admission and demotion (`validation.go:360-379`, `legacypool.go:610-638`, `list.go:385-431`): xOne has no TRC21 state reader (`spec/evm/special-transactions.md`, Not covered). A TRC21 token transaction from an account with no native balance is refused here and admitted by geth.
 - Set-code (type 4) and blob (type 3) transactions: `xone_executor::tx` does not decode them, so they are `transaction type not supported`, as the executor would refuse them in a block.
 - A head at which xone-evm has no rules (Amsterdam: net2040 is past it): `Pool::new` and `Pool::reset` return `Error::Spec`. The pool cannot be opened there (`crates/xone-builder/tests/archive_candidates.rs`).

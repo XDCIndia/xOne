@@ -127,10 +127,34 @@ fn access_list_counts(tx: &PoolTx) -> (u64, u64) {
     (accounts, keys)
 }
 
-/// `validateTx` (`legacypool.go:640-698`) without the blacklist and TRC21 parts: nonce and balance against
-/// the head state with what the pool already holds for the sender, the tier floor, and the limit on an
-/// account that has code. The balance is the low 256 bits, as `StateDB.GetBalance` returns it.
+/// The blacklist part of `validateTx` (`legacypool.go:640-655`): once the head is at or past the
+/// denylist block, a listed sender, then a listed recipient, is refused.
+pub fn denylist(spec: &xone_chainspec::ChainSpec, head: u64, tx: &PoolTx) -> Result<(), Error> {
+    if !spec.is_denylist(head) {
+        return Ok(());
+    }
+    let from = tx.from();
+    if xone_chainspec::is_denylisted(&from) {
+        return Err(Error::Denylisted {
+            side: "sender",
+            address: from,
+        });
+    }
+    match tx.tx.to {
+        Some(to) if xone_chainspec::is_denylisted(&to) => Err(Error::Denylisted {
+            side: "recipient",
+            address: to,
+        }),
+        _ => Ok(()),
+    }
+}
+
+/// `validateTx` (`legacypool.go:640-698`) without the TRC21 part: the blacklist ([`denylist`]) first, then
+/// nonce and balance against the head state with what the pool already holds for the sender, the tier
+/// floor, and the limit on an account that has code. The balance is the low 256 bits, as
+/// `StateDB.GetBalance` returns it.
 pub fn with_state<S: StateRead>(pool: &mut Pool, state: &S, tx: &PoolTx) -> Result<(), Error> {
+    denylist(&pool.spec, pool.head.number, tx)?;
     let from = tx.from();
     let acct = state.account(from);
     let next = acct.as_ref().map_or(0, |a| a.nonce);

@@ -211,6 +211,10 @@ pub enum Error {
     DuplicateSpecialTransaction,
     #[error("chain rules at the head: {0}")]
     Spec(String),
+    /// geth-XDC `ErrBlacklisted` (`legacypool.go:67`, checked at `:640-655`). The relaying peer is
+    /// not penalised for it.
+    #[error("transaction sender or recipient is blacklisted: {side} {address}")]
+    Denylisted { side: &'static str, address: Address },
 }
 
 impl From<SpecError> for Error {
