@@ -7,6 +7,7 @@
 
 mod export;
 mod import;
+mod p2p;
 mod snapshot;
 
 use std::{fs::File, io::BufReader, process::ExitCode, time::Instant};
@@ -24,6 +25,7 @@ use xone_sync::{
 
 pub use export::export;
 pub use import::import;
+pub use p2p::p2p;
 pub use snapshot::snapshot;
 
 type Accept = fn(
