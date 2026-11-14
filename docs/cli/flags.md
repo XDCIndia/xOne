@@ -4,6 +4,8 @@ Generated from `bin/xone/src/flags.rs` by the `flags_doc_is_current` test; do no
 
 Every flag takes `--name` or `-name` (geth style), `--name value` or `--name=value`. A boolean is `--name` or `--name=false`. A flag always wins over the `--config` file. An unknown flag exits 2.
 
+Every flag is also an environment variable: `XONE_<NAME>`, the name upper-cased with dots and dashes as `_` (`--http.api` is `XONE_HTTP_API`, the config file `XONE_CONFIG`). A flag geth-XDC has (its source below is a geth file) also reads `GETH_<NAME>` when `XONE_<NAME>` is unset, with a warning. Precedence: command line, then environment, then the `--config` file, then the default. An empty variable is unset; a bad value exits 2 naming the variable.
+
 Source column: file:line in geth-XDC (`XDCIndia/go-ethereum` at `6fc8e8c2`; `flags.go` is `cmd/utils/flags.go`), then the `join.sh` launch lines that pass the flag (ItWorksinMyLocal `24b915e`, geth line 570, xone line 682).
 
 | Flag | Aliases | Default | Meaning | Source |
