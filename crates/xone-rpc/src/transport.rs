@@ -5,7 +5,7 @@
 
 use crate::{
     server::{Conn, Rpc},
-    subscriptions::parse_kind,
+    subscriptions::{parse_kind, SubRefused},
     types::RpcError,
 };
 use futures_util::{SinkExt, StreamExt};
@@ -175,35 +175,133 @@ impl Session {
         )
     }
 
-    /// `eth_subscribe` and `eth_unsubscribe`, answered inline. `None` for any other message.
-    fn subscription(&self, msg: &Value) -> Option<Value> {
-        let method = msg.get("method")?.as_str()?;
-        let id = msg.get("id").cloned().unwrap_or(Value::Null);
+    /// Whether `v` is an `eth_subscribe` or `eth_unsubscribe` request.
+    fn is_sub(v: &Value) -> bool {
+        matches!(
+            v.get("method").and_then(Value::as_str),
+            Some("eth_subscribe" | "eth_unsubscribe")
+        )
+    }
+
+    /// One `eth_subscribe` or `eth_unsubscribe` request through the same admission as other
+    /// methods (#267): the JSON-RPC envelope, the transport's namespaces, the token buckets, and the
+    /// subscription bounds. The reply (`None` for a notification) and the subscription to activate
+    /// once the reply is queued.
+    fn subscription(&self, msg: &Value) -> (Option<Value>, Option<String>) {
+        let id = msg.get("id").cloned();
+        let reply = |r: Result<Value, RpcError>| {
+            let id = id.clone().unwrap_or(Value::Null);
+            Some(match r {
+                Ok(r) => json!({"jsonrpc": "2.0", "id": id, "result": r}),
+                Err(e) => json!({"jsonrpc": "2.0", "id": id, "error": e.to_value()}),
+            })
+        };
+        let method = msg.get("method").and_then(Value::as_str).unwrap_or("");
+        if msg.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
+            return (
+                reply(Err(RpcError::invalid_request("invalid request"))),
+                None,
+            );
+        }
+        // a transport without the eth namespace serves no eth subscriptions
+        if !self.rpc.reg.has_namespace("eth") {
+            return (reply(Err(RpcError::method_not_found(method))), None);
+        }
+        if let Err(secs) = self.rpc.take_subscription(&self.conn) {
+            return (reply(Err(RpcError::limit(json!(secs)))), None);
+        }
+        let notification = id.is_none();
         let params: &[Value] = msg
             .get("params")
             .and_then(Value::as_array)
             .map_or(&[], Vec::as_slice);
-        let res: Result<Value, RpcError> = match method {
-            "eth_subscribe" => parse_kind(params)
-                .map(|k| json!(self.rpc.hub.subscribe(self.conn.id, k, self.out.clone()))),
-            "eth_unsubscribe" => Ok(json!(params
+        if method == "eth_unsubscribe" {
+            let done = params
                 .first()
                 .and_then(Value::as_str)
-                .is_some_and(|s| self.rpc.hub.unsubscribe(self.conn.id, s)))),
-            _ => return None,
+                .is_some_and(|s| self.rpc.hub.unsubscribe(self.conn.id, s));
+            return (
+                if notification {
+                    None
+                } else {
+                    reply(Ok(json!(done)))
+                },
+                None,
+            );
+        }
+        // a subscription nobody can learn the id of is not created
+        if notification {
+            return (None, None);
+        }
+        let kind = match parse_kind(params) {
+            Ok(k) => k,
+            Err(e) => return (reply(Err(e)), None),
         };
-        Some(match res {
-            Ok(r) => json!({"jsonrpc": "2.0", "id": id, "result": r}),
-            Err(e) => json!({"jsonrpc": "2.0", "id": id, "error": e.to_value()}),
-        })
+        let lim = &self.rpc.limits;
+        match self.rpc.hub.subscribe_bounded(
+            self.conn.id,
+            kind,
+            self.out.clone(),
+            lim.subs_per_conn,
+            lim.subs_total,
+        ) {
+            Ok(sid) => (reply(Ok(json!(sid))), Some(sid)),
+            Err(r) => {
+                let why = match r {
+                    SubRefused::PerConnection(n) => {
+                        format!("too many subscriptions on this connection (max {n})")
+                    }
+                    SubRefused::Total(n) => format!("too many subscriptions (max {n})"),
+                };
+                (reply(Err(RpcError::limit(json!(why)))), None)
+            }
+        }
+    }
+
+    /// Queues `reply`, then starts the notifications of `activate`: no event precedes the
+    /// subscription's reply.
+    async fn answer(&self, reply: Option<Value>, activate: Vec<String>) {
+        let reply = reply.map(|r| r.to_string());
+        if activate.is_empty() {
+            if let Some(r) = reply {
+                let _ = self.out.send(r).await;
+            }
+            return;
+        }
+        // the reply and the activation are one step under the hub's lock
+        let _ = self
+            .rpc
+            .hub
+            .reply_then_activate(self.conn.id, &activate, &self.out, reply);
     }
 
     async fn on_message(&mut self, text: String) {
         while self.tasks.try_join_next().is_some() {}
         if let Ok(v) = serde_json::from_str::<Value>(&text) {
-            if let Some(reply) = self.subscription(&v) {
-                let _ = self.out.send(reply.to_string()).await;
-                return;
+            match &v {
+                Value::Object(_) if Self::is_sub(&v) => {
+                    let (reply, act) = self.subscription(&v);
+                    self.answer(reply, act.into_iter().collect()).await;
+                    return;
+                }
+                // a batch of only subscription requests: each one admitted like a single one,
+                // one array reply without the notifications' entries
+                Value::Array(items)
+                    if !items.is_empty()
+                        && items.len() <= self.rpc.limits.batch_items
+                        && items.iter().all(Self::is_sub) =>
+                {
+                    let (mut replies, mut act) = (vec![], vec![]);
+                    for it in items {
+                        let (r, a) = self.subscription(it);
+                        replies.extend(r);
+                        act.extend(a);
+                    }
+                    let reply = (!replies.is_empty()).then_some(Value::Array(replies));
+                    self.answer(reply, act).await;
+                    return;
+                }
+                _ => {}
             }
         }
         // ADR-007 Q13/Q14: with the in-flight count full this waits, so the connection is not read.

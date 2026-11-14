@@ -1338,3 +1338,109 @@ async fn a_plain_http_request_to_the_websocket_port_is_not_dispatched() {
     assert!(out.is_empty() || out.starts_with("HTTP/1.1 4"), "{out}");
     h.abort();
 }
+
+/// #267: subscriptions go through the transport's namespaces, the envelope check and a bounded
+/// count that unsubscribe frees; a batch of subscriptions is admitted like single ones.
+#[tokio::test]
+async fn subscriptions_follow_the_transport_policy_and_are_bounded() {
+    use futures_util::{SinkExt, StreamExt};
+    use tokio_tungstenite::tungstenite::Message;
+    async fn serve(r: Arc<Rpc>) -> (String, tokio::task::JoinHandle<()>) {
+        let ls = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let addr = ls.local_addr().expect("addr");
+        (
+            format!("ws://{addr}"),
+            tokio::spawn(xone_rpc::transport::serve_ws(r, ls)),
+        )
+    }
+    async fn ask<S>(ws: &mut S, v: Value) -> Value
+    where
+        S: futures_util::Sink<Message>
+            + futures_util::Stream<Item = Result<Message, tokio_tungstenite::tungstenite::Error>>
+            + Unpin,
+        <S as futures_util::Sink<Message>>::Error: std::fmt::Debug,
+    {
+        ws.send(Message::text(v.to_string())).await.expect("send");
+        let m = tokio::time::timeout(Duration::from_secs(5), ws.next())
+            .await
+            .expect("answered")
+            .expect("msg")
+            .expect("ok");
+        serde_json::from_str(m.to_text().expect("text")).expect("json")
+    }
+
+    // a transport without eth: no eth subscriptions either
+    let mut r = rpc();
+    {
+        let rr = Arc::get_mut(&mut r).expect("sole owner");
+        for n in rr.reg.names() {
+            if n.starts_with("eth_") {
+                let _ = rr.reg.take(n);
+            }
+        }
+    }
+    let (url, h) = serve(r.clone()).await;
+    let (mut ws, _) = tokio_tungstenite::connect_async(&url)
+        .await
+        .expect("connect");
+    let v = ask(&mut ws, req(1, "eth_subscribe", json!(["newHeads"]))).await;
+    assert_eq!(v["error"]["code"], -32601, "{v}");
+    assert!(r.hub.is_empty());
+    h.abort();
+
+    // two per connection
+    let r = rpc_with(
+        Limits {
+            subs_per_conn: 2,
+            ..Limits::default()
+        },
+        0,
+    );
+    let (url, h) = serve(r.clone()).await;
+    let (mut ws, _) = tokio_tungstenite::connect_async(&url)
+        .await
+        .expect("connect");
+    // the envelope is checked like any request
+    let v = ask(
+        &mut ws,
+        json!({"jsonrpc": "1.0", "id": 9, "method": "eth_subscribe", "params": ["newHeads"]}),
+    )
+    .await;
+    assert_eq!(v["error"]["code"], -32600, "{v}");
+    // a batch of two subscriptions: two ids in one array
+    let v = ask(
+        &mut ws,
+        json!([
+            req(1, "eth_subscribe", json!(["newHeads"])),
+            req(2, "eth_subscribe", json!(["newHeads"]))
+        ]),
+    )
+    .await;
+    let ids: Vec<String> = v
+        .as_array()
+        .expect("array reply")
+        .iter()
+        .map(|x| x["result"].as_str().expect("id").to_owned())
+        .collect();
+    assert_eq!(ids.len(), 2);
+    // the third is refused, and unsubscribing frees a place
+    let v = ask(&mut ws, req(3, "eth_subscribe", json!(["newHeads"]))).await;
+    assert_eq!(v["error"]["code"], -32005, "{v}");
+    assert_eq!(r.hub.len(), 2);
+    let v = ask(&mut ws, req(4, "eth_unsubscribe", json!([ids[0]]))).await;
+    assert_eq!(v["result"], true, "{v}");
+    let v = ask(&mut ws, req(5, "eth_subscribe", json!(["newHeads"]))).await;
+    assert!(v["result"].is_string(), "{v}");
+    // closing the connection releases all of them
+    drop(ws);
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while !r.hub.is_empty() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("released on disconnect");
+    h.abort();
+}
