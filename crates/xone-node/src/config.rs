@@ -434,6 +434,66 @@ fn gc_mode(key: &str, v: &str) -> Result<String, ConfigError> {
 }
 
 impl Config {
+    /// The checks of the effective config, after the file and the flags are merged and before a
+    /// listener, database or service is opened (#299): a zero capacity that would make a server
+    /// wait for ever, byte sizes this platform cannot hold, and shutdown budgets that cannot nest.
+    /// `rpc_http_waiting = 0` stays valid: no request waits for a slot, the 429 is immediate.
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        let l = &self.limits;
+        let positive: [(&str, u64); 9] = [
+            ("limits.rpc_http_connections", l.rpc_http_connections.into()),
+            ("limits.rpc_http_in_flight", l.rpc_http_in_flight.into()),
+            ("limits.rpc_ws_connections", l.rpc_ws_connections.into()),
+            ("limits.rpc_ipc_connections", l.rpc_ipc_connections.into()),
+            ("limits.rpc_batch_items", l.rpc_batch_items.into()),
+            ("limits.rpc_body_bytes", l.rpc_body_bytes),
+            ("limits.rpc_response_bytes", l.rpc_response_bytes),
+            ("limits.log_queue_lines", l.log_queue_lines.into()),
+            ("limits.disk_sample_secs", l.disk_sample_secs.into()),
+        ];
+        for (k, v) in positive {
+            if v == 0 {
+                return Err(invalid(
+                    k,
+                    "0",
+                    "must be at least 1 (0 would leave the server waiting for ever)",
+                ));
+            }
+        }
+        for (k, v) in [
+            ("limits.rpc_body_bytes", l.rpc_body_bytes),
+            ("limits.rpc_response_bytes", l.rpc_response_bytes),
+        ] {
+            if usize::try_from(v).is_err() {
+                return Err(invalid(
+                    k,
+                    &v.to_string(),
+                    "larger than this platform can address",
+                ));
+            }
+        }
+        for (k, v) in [
+            ("limits.disk_stop_pct", l.disk_stop_pct),
+            ("limits.disk_resume_pct", l.disk_resume_pct),
+            ("limits.disk_exit_pct", l.disk_exit_pct),
+        ] {
+            if v > 100 {
+                return Err(invalid(k, &v.to_string(), "a percent: 0 to 100"));
+            }
+        }
+        if l.stop_timeout_ms == 0 {
+            return Err(invalid("limits.stop_timeout_ms", "0", "must be at least 1"));
+        }
+        if l.service_stop_timeout_ms == 0 || l.service_stop_timeout_ms > l.stop_timeout_ms {
+            return Err(invalid(
+                "limits.service_stop_timeout_ms",
+                &l.service_stop_timeout_ms.to_string(),
+                "must be at least 1 and at most limits.stop_timeout_ms",
+            ));
+        }
+        Ok(())
+    }
+
     pub fn from_toml(text: &str) -> Result<Self, ConfigError> {
         let c: Self = toml::from_str(text).map_err(|e| ConfigError::Toml(e.to_string()))?;
         let mut c = c;
@@ -630,6 +690,31 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unusable_limits_are_refused_before_start() {
+        assert!(Config::default().validate().is_ok());
+        let bad = |f: fn(&mut Config)| {
+            let mut c = Config::default();
+            f(&mut c);
+            matches!(c.validate(), Err(ConfigError::Invalid { .. }))
+        };
+        assert!(bad(|c| c.limits.rpc_http_in_flight = 0));
+        assert!(bad(|c| c.limits.rpc_http_connections = 0));
+        assert!(bad(|c| c.limits.rpc_body_bytes = 0));
+        assert!(bad(|c| c.limits.disk_sample_secs = 0));
+        assert!(bad(|c| c.limits.disk_stop_pct = 101));
+        assert!(bad(|c| c.limits.stop_timeout_ms = 0));
+        assert!(bad(|c| c.limits.service_stop_timeout_ms = 0));
+        assert!(bad(|c| {
+            c.limits.stop_timeout_ms = 1_000;
+            c.limits.service_stop_timeout_ms = 2_000;
+        }));
+        let mut ok = Config::default();
+        ok.limits.rpc_http_waiting = 0;
+        ok.limits.service_stop_timeout_ms = ok.limits.stop_timeout_ms;
+        assert!(ok.validate().is_ok());
+    }
 
     #[test]
     fn redacted_hides_the_ethstats_secret_and_url_credentials() {
