@@ -29,7 +29,7 @@ Crates in `crates/`, lowest layer first (layering is checked by `ci/check-layeri
 - Network and sync: `xone-net` (RLPx, eth), `xone-snap` (snap/1 client and server), `xone-sync`
 - Node: `xone-db` (MDBX storage), `xone-node` (services, config, datadir, producer), `xone-builder`, `xone-rpc`
 
-The binary is `bin/xone`. Rule specs are in `spec/`, decisions in `docs/adr/`, flags in [docs/cli/flags.md](docs/cli/flags.md).
+The binary is `bin/xone`. Rule specs are in `spec/`, decisions in `docs/adr/`, flags in [docs/cli/flags.md](docs/cli/flags.md), JSON-RPC methods in [docs/rpc/methods.md](docs/rpc/methods.md).
 
 ## Quick start: follow Apothem
 
