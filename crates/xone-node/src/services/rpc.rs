@@ -217,8 +217,15 @@ impl NetApi for RpcNet {
         self.net.add_peer(&e, trusted).map_err(RpcError::server)?;
         Ok(true)
     }
-    fn remove_peer(&self, _: &str, _: bool) -> Result<bool, RpcError> {
-        Ok(false)
+    /// Stops the redial job of the peer; its open session, if any, stays until it ends.
+    fn remove_peer(&self, enode: &str, _: bool) -> Result<bool, RpcError> {
+        let e: Enode = enode
+            .parse()
+            .map_err(|e: crate::enode::EnodeError| RpcError::invalid_params(e.to_string()))?;
+        let id =
+            e.id.parse::<alloy_primitives::B512>()
+                .map_err(|e| RpcError::invalid_params(e.to_string()))?;
+        Ok(self.net.remove_dial(&id))
     }
 }
 

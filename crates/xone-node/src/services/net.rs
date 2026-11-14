@@ -63,6 +63,31 @@ pub struct NetHandle {
     pub genesis: B256,
     rt: Handle,
     tasks: Arc<Mutex<Vec<JoinHandle<()>>>>,
+    /// One redial job per peer identity (#296): the endpoint it dials and its task.
+    dials: Arc<Mutex<Dials>>,
+}
+
+type Dials = HashMap<PeerId, (Enode, JoinHandle<()>)>;
+
+/// At most this many peers are redialled; `admin_addPeer` beyond it is refused.
+const MAX_DIALS: usize = 1024;
+/// Redial backoff: from the first to the last delay, doubling after each failed round, with up to
+/// a quarter of jitter so that peers dropped together do not come back in step.
+const DIAL_FIRST: Duration = Duration::from_secs(5);
+const DIAL_LAST: Duration = Duration::from_secs(300);
+
+/// The delay after `fails` failed rounds, `jitter` in 0..=255 scaling up to +25 %.
+fn dial_backoff(fails: u32, jitter: u8) -> Duration {
+    let base = DIAL_FIRST
+        .saturating_mul(1u32 << fails.min(16))
+        .min(DIAL_LAST);
+    base + base / 4 * u32::from(jitter) / 255
+}
+
+fn jitter() -> u8 {
+    let mut b = [0u8; 1];
+    let _ = getrandom::fill(&mut b);
+    b[0]
 }
 
 fn peer_id(e: &Enode) -> Result<PeerId, String> {
@@ -88,26 +113,65 @@ impl NetHandle {
             .push(self.rt.spawn(f));
     }
 
-    /// Dials `e` now and again every 5 s while it is not connected. A trusted peer also gets the
-    /// trust of `xone_net`.
+    /// Dials `e` now and again while it is not connected, with a bounded, jittered backoff after
+    /// failures. One job per peer identity: adding the same peer again changes nothing, adding it
+    /// with another endpoint replaces the job. A trusted peer also gets the trust of `xone_net`.
     pub fn add_peer(&self, e: &Enode, trusted: bool) -> Result<(), String> {
         let id = peer_id(e)?;
+        let mut dials = self.dials.lock().unwrap_or_else(PoisonError::into_inner);
+        dials.retain(|_, (_, t)| !t.is_finished());
+        let known = dials.get(&id).map(|(old, _)| old == e);
+        if known.is_none() && dials.len() >= MAX_DIALS {
+            return Err(format!("too many dialled peers (at most {MAX_DIALS})"));
+        }
         if trusted {
             self.peers.add_static(id);
         }
-        let (peers, e) = (self.peers.clone(), e.clone());
-        self.spawn(async move {
+        if known == Some(true) {
+            return Ok(());
+        }
+        let (peers, target) = (self.peers.clone(), e.clone());
+        let job = self.rt.spawn(async move {
+            let mut fails = 0u32;
             loop {
-                if !peers.peer_ids().contains(&id) {
-                    if let Some(addr) = resolve(&e).await {
-                        // a failed dial is retried by the loop; the reason is the peer's
-                        let _ = peers.dial(addr, id).await;
-                    }
+                if peers.peer_ids().contains(&id) {
+                    fails = 0;
+                } else {
+                    let ok = match resolve(&target).await {
+                        // a failed dial is retried; the reason is the peer's
+                        Some(addr) => peers.dial(addr, id).await.is_ok(),
+                        None => false,
+                    };
+                    fails = if ok { 0 } else { fails.saturating_add(1) };
                 }
-                sleep(Duration::from_secs(5)).await;
+                sleep(dial_backoff(fails.saturating_sub(1), jitter())).await;
             }
         });
+        if let Some((_, old)) = dials.insert(id, (e.clone(), job)) {
+            old.abort();
+        }
         Ok(())
+    }
+
+    /// Stops redialling `id`. True if a job was running.
+    pub fn remove_dial(&self, id: &PeerId) -> bool {
+        let job = self
+            .dials
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .remove(id);
+        job.map(|(_, t)| t.abort()).is_some()
+    }
+
+    fn abort_dials(&self) {
+        for (_, (_, t)) in self
+            .dials
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .drain()
+        {
+            t.abort();
+        }
     }
 }
 
@@ -184,6 +248,7 @@ impl NetService {
                 peers,
                 rt: rt.handle().clone(),
                 tasks: Arc::default(),
+                dials: Arc::default(),
             },
             rt: Some(rt),
             key,
@@ -328,6 +393,7 @@ impl Service for NetService {
     }
 
     fn stop(&mut self) {
+        self.h.abort_dials();
         for t in self
             .h
             .tasks
@@ -345,5 +411,19 @@ impl Service for NetService {
             });
             rt.shutdown_timeout(Duration::from_secs(1));
         }
+    }
+}
+
+#[cfg(test)]
+mod dial_tests {
+    use super::*;
+
+    #[test]
+    fn backoff_doubles_to_a_ceiling_with_bounded_jitter() {
+        assert_eq!(dial_backoff(0, 0), DIAL_FIRST);
+        assert_eq!(dial_backoff(1, 0), DIAL_FIRST * 2);
+        assert_eq!(dial_backoff(40, 0), DIAL_LAST);
+        assert_eq!(dial_backoff(40, 255), DIAL_LAST + DIAL_LAST / 4);
+        assert!(dial_backoff(0, 128) > DIAL_FIRST && dial_backoff(0, 128) < DIAL_FIRST * 5 / 4);
     }
 }
