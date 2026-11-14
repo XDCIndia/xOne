@@ -828,6 +828,13 @@ async fn ipc_serves_a_json_stream() {
         }
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
+    // #60: the socket serves every namespace, so only its owner may connect (geth `ipc_unix.go`)
+    use std::os::unix::fs::PermissionsExt;
+    let mode = std::fs::metadata(&path)
+        .expect("socket")
+        .permissions()
+        .mode();
+    assert_eq!(mode & 0o777, 0o600, "{mode:o}");
     let mut s = tokio::net::UnixStream::connect(&path)
         .await
         .expect("connect");
@@ -954,6 +961,7 @@ async fn websocket_refuses_methods_outside_its_list_and_a_wrong_origin() {
         xone_rpc::policy::Policy {
             vhosts: vec![],
             origins: vec!["https://app.example".into()],
+            jwt: None,
         },
     );
     let ls = tokio::net::TcpListener::bind("127.0.0.1:0")
@@ -997,5 +1005,273 @@ async fn websocket_refuses_methods_outside_its_list_and_a_wrong_origin() {
     )
     .expect("json");
     assert_eq!(no["error"]["code"], -32601);
+    h.abort();
+}
+
+// --- #60: authentication, WebSocket limits and forwarding headers on the real listeners ---
+
+const JWT_KEY: [u8; 32] = [0x5a; 32];
+
+fn unix_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock")
+        .as_secs()
+}
+
+/// A token as a client builds it: `base64url(header).base64url(claims).base64url(HS256)`.
+fn token(key: &[u8; 32], header: &str, claims: &str) -> String {
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+    use hmac::{Hmac, Mac};
+    let msg = format!(
+        "{}.{}",
+        URL_SAFE_NO_PAD.encode(header),
+        URL_SAFE_NO_PAD.encode(claims)
+    );
+    let mut mac = Hmac::<sha2::Sha256>::new_from_slice(key).expect("key");
+    mac.update(msg.as_bytes());
+    format!(
+        "{msg}.{}",
+        URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes())
+    )
+}
+
+fn good_token() -> String {
+    token(
+        &JWT_KEY,
+        r#"{"alg":"HS256","typ":"JWT"}"#,
+        &format!(r#"{{"iat":{}}}"#, unix_now()),
+    )
+}
+
+fn jwt_policy() -> xone_rpc::policy::Policy {
+    xone_rpc::policy::Policy {
+        jwt: Some(JWT_KEY),
+        ..Default::default()
+    }
+}
+
+/// One POST with extra header lines (each ending in CRLF).
+async fn raw_http_with(addr: std::net::SocketAddr, host: &str, extra: &str, body: &str) -> String {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let mut s = tokio::net::TcpStream::connect(addr).await.expect("connect");
+    let msg = format!("POST / HTTP/1.1\r\nHost: {host}\r\n{extra}Content-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+    s.write_all(msg.as_bytes()).await.expect("write");
+    let mut out = String::new();
+    s.read_to_string(&mut out).await.expect("read");
+    out
+}
+
+#[tokio::test]
+async fn http_with_a_jwt_secret_refuses_every_bad_credential_before_dispatch() {
+    let r = rpc_api(&["eth", "admin"], jwt_policy());
+    let ls = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
+    let addr = ls.local_addr().expect("addr");
+    let h = tokio::spawn(xone_rpc::transport::serve_http(r, ls));
+    let body = req(1, "admin_peers", json!([])).to_string();
+    let now = unix_now();
+    let hs = r#"{"alg":"HS256","typ":"JWT"}"#;
+    let bad: Vec<(&str, String)> = vec![
+        ("missing", String::new()),
+        ("not bearer", format!("Authorization: {}\r\n", good_token())),
+        ("malformed", "Authorization: Bearer abc.def\r\n".into()),
+        ("garbage", "Authorization: Bearer !!!.!!!.!!!\r\n".into()),
+        (
+            "wrong secret",
+            format!(
+                "Authorization: Bearer {}\r\n",
+                token(&[1; 32], hs, &format!(r#"{{"iat":{now}}}"#))
+            ),
+        ),
+        (
+            "stale iat",
+            format!(
+                "Authorization: Bearer {}\r\n",
+                token(&JWT_KEY, hs, &format!(r#"{{"iat":{}}}"#, now - 3600))
+            ),
+        ),
+        (
+            "alg none",
+            format!(
+                "Authorization: Bearer {}\r\n",
+                token(
+                    &JWT_KEY,
+                    r#"{"alg":"none"}"#,
+                    &format!(r#"{{"iat":{now}}}"#)
+                )
+            ),
+        ),
+        (
+            "forwarded headers are not identity",
+            "X-Forwarded-For: 127.0.0.1\r\nForwarded: for=127.0.0.1\r\nX-Real-IP: 127.0.0.1\r\n"
+                .into(),
+        ),
+    ];
+    for (why, hdr) in &bad {
+        let out = raw_http_with(addr, "localhost", hdr, &body).await;
+        assert!(out.starts_with("HTTP/1.1 401"), "{why}: {out}");
+        assert!(!out.contains("jsonrpc"), "{why}: dispatched: {out}");
+    }
+    let ok = raw_http_with(
+        addr,
+        "localhost",
+        &format!("Authorization: Bearer {}\r\n", good_token()),
+        &body,
+    )
+    .await;
+    assert!(
+        ok.starts_with("HTTP/1.1 200") && ok.contains("\"result\""),
+        "{ok}"
+    );
+    // a valid token grants only the listed namespaces
+    let off = raw_http_with(
+        addr,
+        "localhost",
+        &format!("Authorization: Bearer {}\r\n", good_token()),
+        &req(2, "debug_getRawHeader", json!(["0x1"])).to_string(),
+    )
+    .await;
+    assert!(off.contains("-32601"), "{off}");
+    // a wrong Host is refused even with a valid token, and a forwarding header does not help it
+    let host = raw_http_with(
+        addr,
+        "evil.example",
+        &format!(
+            "X-Forwarded-Host: localhost\r\nAuthorization: Bearer {}\r\n",
+            good_token()
+        ),
+        &body,
+    )
+    .await;
+    assert!(host.starts_with("HTTP/1.1 403"), "{host}");
+    h.abort();
+}
+
+#[tokio::test]
+async fn websocket_with_a_jwt_secret_needs_the_token_on_the_upgrade() {
+    use futures_util::{SinkExt, StreamExt};
+    use tokio_tungstenite::tungstenite::{client::IntoClientRequest, Error, Message};
+    let r = rpc_api(&["eth"], jwt_policy());
+    let ls = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
+    let addr = ls.local_addr().expect("addr");
+    let h = tokio::spawn(xone_rpc::transport::serve_ws(r, ls));
+    let connect = |auth: Option<String>| async move {
+        let mut q = format!("ws://{addr}").into_client_request().expect("req");
+        if let Some(a) = auth {
+            q.headers_mut()
+                .insert("authorization", a.parse().expect("hdr"));
+        }
+        tokio_tungstenite::connect_async(q).await
+    };
+    for auth in [
+        None,
+        Some("Bearer x.y.z".to_owned()),
+        Some(format!(
+            "Bearer {}",
+            token(
+                &[2; 32],
+                r#"{"alg":"HS256"}"#,
+                &format!(r#"{{"iat":{}}}"#, unix_now())
+            )
+        )),
+    ] {
+        match connect(auth.clone()).await {
+            Err(Error::Http(resp)) => assert_eq!(resp.status(), 401, "{auth:?}"),
+            other => panic!("{auth:?}: upgrade not refused: {:?}", other.map(|_| ())),
+        }
+    }
+    let (mut ws, _) = connect(Some(format!("Bearer {}", good_token())))
+        .await
+        .expect("valid token");
+    ws.send(Message::text(req(1, "eth_chainId", json!([])).to_string()))
+        .await
+        .expect("send");
+    let ok: Value = serde_json::from_str(
+        ws.next()
+            .await
+            .expect("msg")
+            .expect("ok")
+            .to_text()
+            .expect("text"),
+    )
+    .expect("json");
+    assert_eq!(ok["result"], "0x33");
+    h.abort();
+}
+
+#[tokio::test]
+async fn websocket_shares_the_http_body_and_batch_limits() {
+    use futures_util::{SinkExt, StreamExt};
+    use tokio_tungstenite::tungstenite::Message;
+    let lim = Limits {
+        body_bytes: 4096,
+        ..Limits::default()
+    };
+    let r = rpc_with(lim, 0);
+    let ls = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
+    let addr = ls.local_addr().expect("addr");
+    let h = tokio::spawn(xone_rpc::transport::serve_ws(r, ls));
+    let (mut ws, _) = tokio_tungstenite::connect_async(format!("ws://{addr}"))
+        .await
+        .expect("connect");
+    // 101 items: the batch bound of HTTP holds on WebSocket
+    let batch: Vec<Value> = (0..101).map(|i| req(i, "net_version", json!([]))).collect();
+    let small_batch = serde_json::to_string(&batch).expect("json");
+    assert!(small_batch.len() < 4096 * 2);
+    // a message above body_bytes closes the connection instead of reaching the parser
+    let big = format!(
+        r#"{{"jsonrpc":"2.0","id":1,"method":"net_version","params":["{}"]}}"#,
+        "a".repeat(8192)
+    );
+    ws.send(Message::text(big)).await.expect("send");
+    let next = tokio::time::timeout(Duration::from_secs(5), ws.next())
+        .await
+        .expect("closed in time");
+    assert!(
+        !matches!(&next, Some(Ok(Message::Text(_)))),
+        "an oversized message was answered: {next:?}"
+    );
+    h.abort();
+
+    let r = rpc();
+    let ls = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
+    let addr = ls.local_addr().expect("addr");
+    let h = tokio::spawn(xone_rpc::transport::serve_ws(r, ls));
+    let (mut ws, _) = tokio_tungstenite::connect_async(format!("ws://{addr}"))
+        .await
+        .expect("connect");
+    ws.send(Message::text(small_batch)).await.expect("send");
+    let v: Value = serde_json::from_str(
+        ws.next()
+            .await
+            .expect("msg")
+            .expect("ok")
+            .to_text()
+            .expect("text"),
+    )
+    .expect("json");
+    assert_eq!(v["error"]["code"], -32600, "{v}");
+    h.abort();
+}
+
+#[tokio::test]
+async fn a_plain_http_request_to_the_websocket_port_is_not_dispatched() {
+    let r = rpc();
+    let ls = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
+    let addr = ls.local_addr().expect("addr");
+    let h = tokio::spawn(xone_rpc::transport::serve_ws(r, ls));
+    let out = raw_http(addr, &req(1, "eth_chainId", json!([])).to_string()).await;
+    assert!(!out.contains("result"), "{out}");
+    assert!(out.is_empty() || out.starts_with("HTTP/1.1 4"), "{out}");
     h.abort();
 }

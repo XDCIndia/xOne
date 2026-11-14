@@ -287,6 +287,14 @@ pub const FLAGS: &[Flag] = &[
         "flags.go:910 ; geth",
     ),
     f(
+        "rpc.jwtsecret",
+        P,
+        "unset",
+        "/d/rpc-jwt.hex",
+        "JWT secret file (32 bytes hex): HTTP and WebSocket RPC then require an HS256 bearer token. IPC is not affected.",
+        "reth --rpc.jwtsecret; geth node/jwt_handler.go",
+    ),
+    f(
         "authrpc.addr",
         S,
         "localhost",
