@@ -30,6 +30,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "time", "
 tokio-tungstenite = "0.29"
 xone-chainspec.workspace = true
 xone-consensus.workspace = true
+xone-evm.workspace = true
 xone-executor.workspace = true
 xone-primitives.workspace = true
 xone-state.workspace = true
