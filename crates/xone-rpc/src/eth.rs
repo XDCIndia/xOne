@@ -412,7 +412,14 @@ fn get_logs(c: &Ctx, p: &Params) -> R {
         if c.cancel.load(Ordering::Relaxed) {
             return Err(RpcError::server("request cancelled"));
         }
-        let (Some(b), Some(raw)) = (c.be.chain.block(bh), c.be.chain.receipts(bh)) else {
+        let Some(b) = c.be.chain.block(bh) else {
+            continue;
+        };
+        // The header bloom rules out a block before its receipts are read or decoded.
+        if !filter.may_match(&b.header.bloom) {
+            continue;
+        }
+        let Some(raw) = c.be.chain.receipts(bh) else {
             continue;
         };
         let rc = decode_receipts(&raw)?;
