@@ -1,0 +1,141 @@
+{
+  "date": "2026-11-14",
+  "issues": [
+    {
+      "id": "GAP-0110",
+      "issue_number": 326,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/326",
+      "state": "open",
+      "body_exact": true,
+      "labels": [
+        "gap-audit",
+        "area:storage",
+        "priority:P1"
+      ],
+      "required_labels": [
+        "gap-audit",
+        "area:storage",
+        "priority:P1"
+      ]
+    },
+    {
+      "id": "GAP-0111",
+      "issue_number": 327,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/327",
+      "state": "open",
+      "body_exact": true,
+      "labels": [
+        "gap-audit",
+        "area:storage",
+        "priority:P1"
+      ],
+      "required_labels": [
+        "gap-audit",
+        "area:storage",
+        "priority:P1"
+      ]
+    },
+    {
+      "id": "GAP-0112",
+      "issue_number": 328,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/328",
+      "state": "open",
+      "body_exact": true,
+      "labels": [
+        "gap-audit",
+        "area:storage",
+        "priority:P1"
+      ],
+      "required_labels": [
+        "gap-audit",
+        "area:storage",
+        "priority:P1"
+      ]
+    },
+    {
+      "id": "GAP-0113",
+      "issue_number": 329,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/329",
+      "state": "open",
+      "body_exact": true,
+      "labels": [
+        "gap-audit",
+        "area:storage",
+        "priority:P1"
+      ],
+      "required_labels": [
+        "gap-audit",
+        "area:storage",
+        "priority:P1"
+      ]
+    },
+    {
+      "id": "GAP-0114",
+      "issue_number": 330,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/330",
+      "state": "open",
+      "body_exact": true,
+      "labels": [
+        "gap-audit",
+        "priority:P1",
+        "area:ops"
+      ],
+      "required_labels": [
+        "gap-audit",
+        "area:ops",
+        "priority:P1"
+      ]
+    },
+    {
+      "id": "GAP-0115",
+      "issue_number": 331,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/331",
+      "state": "open",
+      "body_exact": true,
+      "labels": [
+        "gap-audit",
+        "area:storage",
+        "priority:P2"
+      ],
+      "required_labels": [
+        "gap-audit",
+        "area:storage",
+        "priority:P2"
+      ]
+    },
+    {
+      "id": "GAP-0116",
+      "issue_number": 332,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/332",
+      "state": "open",
+      "body_exact": true,
+      "labels": [
+        "gap-audit",
+        "area:storage",
+        "priority:P2"
+      ],
+      "required_labels": [
+        "gap-audit",
+        "area:storage",
+        "priority:P2"
+      ]
+    },
+    {
+      "id": "GAP-0117",
+      "issue_number": 333,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/333",
+      "state": "open",
+      "body_exact": true,
+      "labels": [
+        "gap-audit",
+        "area:rpc",
+        "priority:P2"
+      ],
+      "required_labels": [
+        "gap-audit",
+        "area:rpc",
+        "priority:P2"
+      ]
+    }
+  ]
+}

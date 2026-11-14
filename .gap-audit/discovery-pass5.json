@@ -1,0 +1,220 @@
+{
+  "date": "2026-11-14",
+  "initial": [
+    {
+      "query": "ethereum storage client disk optimization sort:stars",
+      "repos": []
+    },
+    {
+      "query": "ethereum execution benchmark sort:stars",
+      "repos": [
+        "flashbots/contender",
+        "ethpandaops/benchmarkoor",
+        "CPerezz/bloatnet_data_analysis",
+        "etherdata-blockchain/evm-polkavm-bench",
+        "danceratopz/benchmarkoor",
+        "han0110/benchmarkoor",
+        "qu0b/benchmarkoor",
+        "taratorio/benchmarkoor",
+        "zachsplat/benchmarkoor",
+        "CPerezz/benchmarkoor",
+        "rakita/benchmarkoor",
+        "raxhvl/benchmarkoor",
+        "jwasinger/benchmarkoor",
+        "Rjected/benchmarkoor",
+        "kamilchodola/benchmarkoor",
+        "edg-l/benchmarkoor",
+        "jochem-brouwer/benchmarkoor",
+        "bhartnett/benchmarkoor",
+        "wmitsuda/benchmarkoor",
+        "damilolaedwards/benchmarkoor",
+        "bshastry/benchmarkoor",
+        "awskii/benchmarkoor",
+        "fselmo/benchmarkoor",
+        "Nethereum/benchmarkoor",
+        "goodlyrottenapple/benchmarks",
+        "runtimeverification/benchmarks",
+        "MysticRyuujin/blob-benchmark",
+        "RaoulSchaffranek/eth-sc-benchmarks",
+        "atahabilder1/SmartContractAuditToolsEvaluation",
+        "anas0888/Crypto-Bench"
+      ]
+    },
+    {
+      "query": "topic:ethereum-client storage sort:stars",
+      "repos": [
+        "valkyoth/eth"
+      ]
+    },
+    {
+      "query": "Paprika Nethermind sort:stars",
+      "repos": [
+        "NethermindEth/Paprika",
+        "Dias878/Paprika",
+        "RalphSmithOfime/Paprika",
+        "octogene/Paprika",
+        "jamescarter-le/Paprika",
+        "ssonthal/Paprika",
+        "jlokier/Paprika",
+        "omahs/Paprika",
+        "will-2012/Paprika",
+        "cristiantroy/Paprika",
+        "byksy/Paprika",
+        "AryanGodara/Paprika",
+        "SabariGanesh-K/Paprika",
+        "ZKcash-IrishGov/Paprika",
+        "yevh/Paprika",
+        "teenager-ETH/Paprika",
+        "Tarunadityaselva/Paprika",
+        "gmh5225/Paprika"
+      ]
+    },
+    {
+      "query": "ethereum client flat database sort:stars",
+      "repos": []
+    },
+    {
+      "query": "ethereum log index client sort:stars",
+      "repos": [
+        "aymantaybi/eth-logs-indexer-client",
+        "polus-arcticus/ethereum-radio",
+        "btc-free-mining/-a-href-https-globadino.com-Trusted-Secure-Cloud-Mining-a-",
+        "isparta-bitc/https-github.com-btc-free-mining-https---github.com-saadbitcoin-tab-stars",
+        "GoproLOl/-a-href-https-globadino.com-Trusted-Secure-Cloud-Mining-a-",
+        "https-coinmarketcap-com/BLOCKCHAIR.yml"
+      ]
+    }
+  ],
+  "round2": [
+    {
+      "query": "ethereum storage pruning client fork:false sort:stars",
+      "repos": []
+    },
+    {
+      "query": "ethereum receipt compression client fork:false sort:stars",
+      "repos": []
+    },
+    {
+      "query": "ethereum filtermaps log index fork:false sort:stars",
+      "repos": []
+    },
+    {
+      "query": "topic:ethereum-client topic:database fork:false sort:stars",
+      "repos": []
+    },
+    {
+      "query": "topic:benchmarking ethereum fork:false sort:stars",
+      "repos": [
+        "ConsenSysDiligence/daedaluzz",
+        "ipsilon/evm-benchmarks",
+        "jjanczur/EthereumHyperledgerThroughputBenchmark",
+        "0xHorirami/gasbench",
+        "ycryptx/chaincannon",
+        "sledro/railgun",
+        "sarenabg/rpc-wars"
+      ]
+    }
+  ],
+  "sources": {
+    "user_url": "https://lab.ethpandaops.io/ethereum/execution/timings",
+    "web": [
+      "https://ethpandaops.io/docs/tooling/lab/",
+      "https://ethereum.org/developers/docs/nodes-and-clients/",
+      "https://docs.erigon.tech/fundamentals/pruning-modes",
+      "https://reth.rs/run/faq/storage-v2",
+      "https://docs.nethermind.io/next/fundamentals/state-pruning/"
+    ],
+    "awesome": [
+      "https://github.com/jmcph4/awesome-reth"
+    ],
+    "prior_source_families": ".gap-audit/discovery-pass4.json covers GitHub keywords/topics, awesome-selfhosted, AlternativeTo, selfh.st and commercial documentation. This pass repeats targeted disk/performance discovery and snowballing."
+  },
+  "snowball": {
+    "awesome_reth": "Read master/README.md, relevant development tools, indexers, L2 and miscellaneous benchmark sections; 14 named repositories screened.",
+    "redirects": [
+      "ithacaxyz/odyssey",
+      "circlefin/malachite"
+    ],
+    "new_client": "SeismicSystems/seismic-reth",
+    "new_client_readme_result": "Acknowledgements point back to already selected paradigmxyz/reth. Seismic features, txpool/RPC docs and storage/auth/backup modules reviewed.",
+    "license_handling": "Carmen license/docs only; unverified-license repositories not cloned. Lab, Benchmarkoor, Xatu and Seismic Reth shallow-cloned after open-license checks. All refs excluded from Git."
+  },
+  "final_expansion": {
+    "round": 3,
+    "queries": [
+      {
+        "query": "ethereum storage pruning client fork:false sort:stars",
+        "repos": [],
+        "error": null
+      },
+      {
+        "query": "ethereum receipt compression client fork:false sort:stars",
+        "repos": [],
+        "error": null
+      },
+      {
+        "query": "ethereum filtermaps log index fork:false sort:stars",
+        "repos": [],
+        "error": null
+      },
+      {
+        "query": "topic:ethereum-client topic:database fork:false sort:stars",
+        "repos": [],
+        "error": null
+      },
+      {
+        "query": "topic:benchmarking ethereum fork:false sort:stars",
+        "repos": [
+          "ConsenSysDiligence/daedaluzz",
+          "ipsilon/evm-benchmarks",
+          "jjanczur/EthereumHyperledgerThroughputBenchmark",
+          "0xHorirami/gasbench",
+          "ycryptx/chaincannon",
+          "sledro/railgun",
+          "sarenabg/rpc-wars"
+        ],
+        "error": null
+      }
+    ],
+    "new_candidates": 0,
+    "new_selected_competitors": 0,
+    "new_gaps": 0,
+    "coverage": "Re-scan storage/performance inventory and the new Seismic client, with findings mapped to eight new issues, existing issue owners or explicit exclusions. No new claim is inferred from a regex match alone."
+  },
+  "closure": {
+    "open_ledger_entries": 0,
+    "new_issues_created": 8,
+    "new_issue_numbers": [
+      326,
+      327,
+      328,
+      329,
+      330,
+      331,
+      332,
+      333
+    ],
+    "criteria": "One recorded full targeted expansion/rescan after the eight findings and the new client added zero candidates, qualifying competitors and untracked shippable gaps. This is scoped coverage, not proof of absence of all defects."
+  },
+  "latest_main_check": {
+    "audit_pin": "54d8ae7da15c87dd77a7a86ca695c813bad5ec91",
+    "later_main": "5af188dbeb6199a859e9823720a9c8df689fcb87",
+    "changed_paths": [
+      "Cargo.lock",
+      "bin/xone/src/flags.rs",
+      "bin/xone/src/main.rs",
+      "crates/xone-node/src/config.rs",
+      "crates/xone-node/src/services/rpc.rs",
+      "crates/xone-node/tests/rpc_security.rs",
+      "crates/xone-rpc/Cargo.toml",
+      "crates/xone-rpc/src/policy.rs",
+      "crates/xone-rpc/src/transport.rs",
+      "crates/xone-rpc/tests/rpc.rs",
+      "docs/cli/flags.md",
+      "docs/perf/ethrex-storage-comparison.md",
+      "docs/security/audit-map.md",
+      "spec/rpc/transport-exposure.md"
+    ],
+    "finding_status": "Storage, segment, prune, recovery, disk guard, SNAP and producer implementations underlying the eight issues did not change. Flag/config additions add RPC JWT and redaction, not preimage policy. New ethrex-comparison documentation is acknowledged in the report."
+  }
+}

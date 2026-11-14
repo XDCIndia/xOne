@@ -506,3 +506,165 @@ This run stops at the owner’s explicit **50-new-issue batch**. It does not cla
 - The analysis is static source review. No deployed-node reproduction, execution benchmark, competitor build or application test run is claimed. Implementation issues require focused fixtures and repository checks.
 - The ASD-STE100 sections use short imperative sentences and repository technical terms. Full certified controlled-vocabulary compliance has not been assessed.
 - No application source, consensus rule, dependency manifest or deployment configuration was modified by this audit.
+
+## Pass 5 — disk optimization and ethPandaOps comparison (2026-11-14)
+
+Continued the requested audit against source `54d8ae7da15c87dd77a7a86ca695c813bad5ec91`; reconciled later-main changes through `5af188dbeb6199a859e9823720a9c8df689fcb87`. Added **8 issues (#326–#333)** after all-state title searches and local title/body review of 209 issues. All 8 were fetched again: bodies match the saved files and labels are present. There are now **117 issued ledger entries and 0 open ledger entries**; this does not mean those GitHub issues are resolved.
+
+The comparison set grew from 25 to **26 selected clients**, with **132 rejected candidates** in the cumulative register. This pass screened 81 additional candidates and selected Seismic Reth (68/100). Auxiliary benchmark tools remain below the client threshold. Final expansion round 3 found **0 new candidates, 0 new qualifying competitors, and 0 untracked gaps** within the recorded disk/execution scope. All selected reference code remains outside Git.
+
+The actionable analysis is [storage-performance-pass5.md](storage-performance-pass5.md). Start with storage lifecycle/admission fixes; retain existing layout/compression and execution issues; measure exact disk and latency tradeoffs. No application code was changed and no live-node benchmark was run by this audit.
+
+| Gap | Priority | Area | Issue |
+| --- | --- | --- | --- |
+| GAP-0110 — Prune transaction lookup rows with their retained history | P1 | storage | [#326](https://github.com/XDCIndia/xOneRS/issues/326) |
+| GAP-0111 — Bound segment writer handles across chunk rotation | P1 | storage | [#327](https://github.com/XDCIndia/xOneRS/issues/327) |
+| GAP-0112 — Stream segment recovery and quarantine with bounded buffers | P1 | storage | [#328](https://github.com/XDCIndia/xOneRS/issues/328) |
+| GAP-0113 — Bound temporary memory during range deletion and account storage removal | P1 | storage | [#329](https://github.com/XDCIndia/xOneRS/issues/329) |
+| GAP-0114 — Apply disk-space admission before bootstrap and all block writers | P1 | ops | [#330](https://github.com/XDCIndia/xOneRS/issues/330) |
+| GAP-0115 — Make optional preimage retention configurable while preserving wide balances | P2 | storage | [#331](https://github.com/XDCIndia/xOneRS/issues/331) |
+| GAP-0116 — Store compact receipts without redundant per-receipt blooms | P2 | storage | [#332](https://github.com/XDCIndia/xOneRS/issues/332) |
+| GAP-0117 — Add a bounded persistent log index for selective history queries | P2 | rpc | [#333](https://github.com/XDCIndia/xOneRS/issues/333) |
+
+### Counts
+
+| Scope | By area | By priority |
+| --- | --- | --- |
+| Pass 5 | {'ops': 1, 'rpc': 1, 'storage': 6} | {'P1': 5, 'P2': 3} |
+| All ledger entries | {'ci': 1, 'cli': 10, 'docs': 1, 'keys': 1, 'observability': 11, 'ops': 1, 'p2p': 9, 'perf': 7, 'release': 3, 'rpc': 38, 'sdk': 2, 'storage': 14, 'sync': 6, 'tracing': 8, 'txpool': 3, 'xdc-rpc': 2} | {'P0': 1, 'P1': 43, 'P2': 52, 'P3': 21} |
+
+Cumulative skipped findings: 43; this pass adds 5 exclusions or rejected hypotheses.
+
+- **SKIP-P5-01 — Remove the group-commit shutdown flush gap:** Rejected after deeper inspection: Core::drop already calls NodeStore::steady at crates/xone-node/src/services/core.rs:334. The interval is explicitly commit-driven in MdbxStore::Config. No claim of a missing clean-close flush remains.
+- **SKIP-P5-02 — Replace MDBX with Carmen or Paprika:** No matched benchmark establishes a need to change engines. Carmen has a restricted license; Paprika is archived. Existing #135 and #149 own the storage decision and evidence.
+- **SKIP-P5-03 — Copy Seismic shielded transaction and storage semantics:** TxSeismic, private storage flags, TEE decryption and changed storage RPC behavior require a different chain protocol and trust model. They conflict with pinned XDC parity; not an implementation backlog item.
+- **SKIP-P5-04 — Copy Seismic token-denominated gas payment rules:** Registry-backed token selection, private balance modes and fee selectors alter transaction validity and gas-payment rules. XDC protocol compatibility forbids importing these as a client-only optimization.
+- **SKIP-P5-05 — Claim accelerated CRC, preallocation or a storage-engine swap as measured wins:** No matched run exists. Keep these as experiments under #13/#135; static suspicion alone does not establish a new shipped capability or a measured bottleneck.
+
+### Selected competitors at closure
+
+| Repository | Score | Pin |
+| --- | --- | --- |
+| [XinFinOrg/XDPoSChain](https://github.com/XinFinOrg/XDPoSChain) | 86 | `cb1ef79073c0` |
+| [ethereum/go-ethereum](https://github.com/ethereum/go-ethereum) | 80 | `8059ff8beb31` |
+| [bnb-chain/bsc](https://github.com/bnb-chain/bsc) | 79 | `54afaff4da31` |
+| [paradigmxyz/reth](https://github.com/paradigmxyz/reth) | 78 | `36600d5ff962` |
+| [0xPolygon/bor](https://github.com/0xPolygon/bor) | 78 | `ee09efd5dd9e` |
+| [besu-eth/besu](https://github.com/besu-eth/besu) | 77 | `2b839d96863d` |
+| [erigontech/erigon](https://github.com/erigontech/erigon) | 75 | `5b59b99c7389` |
+| [NethermindEth/nethermind](https://github.com/NethermindEth/nethermind) | 75 | `a7dd73052e69` |
+| [lambdaclass/ethrex](https://github.com/lambdaclass/ethrex) | 69 | `7e272ac5075a` |
+| [status-im/nimbus-eth1](https://github.com/status-im/nimbus-eth1) | 68 | `5e3fd7e9d191` |
+| [BuildOnViction/victionchain](https://github.com/BuildOnViction/victionchain) | 83 | `31fe7cb935b4` |
+| [harmony-one/harmony](https://github.com/harmony-one/harmony) | 73 | `a41e194761c8` |
+| [tempoxyz/tempo](https://github.com/tempoxyz/tempo) | 73 | `35d8b937fba8` |
+| [kaiachain/kaia](https://github.com/kaiachain/kaia) | 70 | `0f9ad843d1cc` |
+| [etclabscore/core-geth](https://github.com/etclabscore/core-geth) | 70 | `4720ac33055e` |
+| [autonity/autonity](https://github.com/autonity/autonity) | 64 | `cf1c15ee0bfa` |
+| [0xsoniclabs/sonic](https://github.com/0xsoniclabs/sonic) | 65 | `e12abf3b8405` |
+| [crypto-org-chain/cronos](https://github.com/crypto-org-chain/cronos) | 63 | `0801cdef03b1` |
+| [skalenetwork/skaled](https://github.com/skalenetwork/skaled) | 69 | `6ae2c94a82b2` |
+| [Galxe/gravity-reth](https://github.com/Galxe/gravity-reth) | 65 | `c407bd938013` |
+| [ava-labs/avalanchego](https://github.com/ava-labs/avalanchego) | 69 | `f27fa6712b34` |
+| [KiiChain/kiichain](https://github.com/KiiChain/kiichain) | 63 | `85d9352541cb` |
+| [circlefin/arc-node](https://github.com/circlefin/arc-node) | 69 | `6e764023ee65` |
+| [category-labs/monad](https://github.com/category-labs/monad) | 71 | `83f8bc65ca72` |
+| [sei-protocol/sei-chain](https://github.com/sei-protocol/sei-chain) | 74 | `efa1e663467e` |
+| [SeismicSystems/seismic-reth](https://github.com/SeismicSystems/seismic-reth) | 68 | `faa3a30c4306` |
+
+### Newly screened candidates and score breakdown
+
+Scores are feature overlap / activity / adoption / code accessibility. Full timestamps, metadata links and license evidence are in `competitors.json`; raw screening metadata is in `discovery-pass5-metadata.json`. Previously rejected candidates remain in earlier report sections and the register.
+
+| Candidate | Score | Breakdown | Disposition and reason |
+| --- | --- | --- | --- |
+| `flashbots/contender` | 48 | 12/20/6/10 | rejected: Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned. |
+| `CPerezz/bloatnet_data_analysis` | 16 | 6/10/0/0 | rejected: Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned. |
+| `etherdata-blockchain/evm-polkavm-bench` | 26 | 6/10/0/10 | rejected: Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned. |
+| `danceratopz/benchmarkoor` | 40 | 10/20/0/10 | rejected: Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `han0110/benchmarkoor` | 40 | 10/20/0/10 | rejected: Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `qu0b/benchmarkoor` | 30 | 10/10/0/10 | rejected: Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `taratorio/benchmarkoor` | 40 | 10/20/0/10 | rejected: Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `zachsplat/benchmarkoor` | 40 | 10/20/0/10 | rejected: Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `CPerezz/benchmarkoor` | 30 | 10/10/0/10 | rejected: Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `rakita/benchmarkoor` | 40 | 10/20/0/10 | rejected: Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `raxhvl/benchmarkoor` | 30 | 10/10/0/10 | rejected: Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `jwasinger/benchmarkoor` | 40 | 10/20/0/10 | rejected: Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `Rjected/benchmarkoor` | 30 | 10/10/0/10 | rejected: Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `kamilchodola/benchmarkoor` | 40 | 10/20/0/10 | rejected: Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `edg-l/benchmarkoor` | 40 | 10/20/0/10 | rejected: Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `jochem-brouwer/benchmarkoor` | 40 | 10/20/0/10 | rejected: Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `bhartnett/benchmarkoor` | 40 | 10/20/0/10 | rejected: Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `wmitsuda/benchmarkoor` | 40 | 10/20/0/10 | rejected: Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `damilolaedwards/benchmarkoor` | 40 | 10/20/0/10 | rejected: Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `bshastry/benchmarkoor` | 40 | 10/20/0/10 | rejected: Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `awskii/benchmarkoor` | 40 | 10/20/0/10 | rejected: Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `fselmo/benchmarkoor` | 40 | 10/20/0/10 | rejected: Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `Nethereum/benchmarkoor` | 40 | 10/20/0/10 | rejected: Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `goodlyrottenapple/benchmarks` | 6 | 6/0/0/0 | rejected: Fork of 0xkarmacoma/eth-sc-comp-benchmarks; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `runtimeverification/benchmarks` | 6 | 6/0/0/0 | rejected: Fork of 0xkarmacoma/eth-sc-comp-benchmarks; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `MysticRyuujin/blob-benchmark` | 26 | 6/10/0/10 | rejected: Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned. |
+| `RaoulSchaffranek/eth-sc-benchmarks` | 6 | 6/0/0/0 | rejected: Fork of 0xkarmacoma/eth-sc-comp-benchmarks; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `atahabilder1/SmartContractAuditToolsEvaluation` | 26 | 6/10/0/10 | rejected: Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned. |
+| `anas0888/Crypto-Bench` | 26 | 6/20/0/0 | rejected: Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned. |
+| `valkyoth/eth` | 53 | 18/20/0/15 | rejected: README identifies v0.61 as a library: full execution/storage, networking, sync and integrated node remain planned. Score implemented scope rather than the full-stack aspiration. |
+| `NethermindEth/Paprika` | 33 | 10/10/3/10 | rejected: Archived storage-engine experiment; default-branch commit is 2025-05-29. Not a full execution client and not a replacement recommendation for MDBX. |
+| `Dias878/Paprika` | 20 | 10/0/0/10 | rejected: Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `RalphSmithOfime/Paprika` | 20 | 10/0/0/10 | rejected: Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `octogene/Paprika` | 20 | 10/0/0/10 | rejected: Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `jamescarter-le/Paprika` | 20 | 10/0/0/10 | rejected: Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `ssonthal/Paprika` | 20 | 10/0/0/10 | rejected: Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `jlokier/Paprika` | 20 | 10/0/0/10 | rejected: Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `omahs/Paprika` | 20 | 10/0/0/10 | rejected: Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `will-2012/Paprika` | 20 | 10/0/0/10 | rejected: Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `cristiantroy/Paprika` | 20 | 10/0/0/10 | rejected: Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `byksy/Paprika` | 20 | 10/0/0/10 | rejected: Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `AryanGodara/Paprika` | 20 | 10/0/0/10 | rejected: Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `SabariGanesh-K/Paprika` | 20 | 10/0/0/10 | rejected: Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `ZKcash-IrishGov/Paprika` | 20 | 10/0/0/10 | rejected: Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `yevh/Paprika` | 20 | 10/0/0/10 | rejected: Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `teenager-ETH/Paprika` | 20 | 10/0/0/10 | rejected: Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `Tarunadityaselva/Paprika` | 30 | 10/10/0/10 | rejected: Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `gmh5225/Paprika` | 20 | 10/0/0/10 | rejected: Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `aymantaybi/eth-logs-indexer-client` | 16 | 6/0/0/10 | rejected: Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned. |
+| `polus-arcticus/ethereum-radio` | 36 | 6/20/0/10 | rejected: Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned. |
+| `btc-free-mining/-a-href-https-globadino.com-Trusted-Secure-Cloud-Mining-a-` | 0 | 0/0/0/0 | rejected: Fork of saadbitcoin/-a-href-https-globadino.com-Trusted-Secure-Cloud-Mining-a-; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `isparta-bitc/https-github.com-btc-free-mining-https---github.com-saadbitcoin-tab-stars` | 0 | 0/0/0/0 | rejected: Fork of saadbitcoin/-a-href-https-globadino.com-Trusted-Secure-Cloud-Mining-a-; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `GoproLOl/-a-href-https-globadino.com-Trusted-Secure-Cloud-Mining-a-` | 0 | 0/0/0/0 | rejected: Fork of saadbitcoin/-a-href-https-globadino.com-Trusted-Secure-Cloud-Mining-a-; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `https-coinmarketcap-com/BLOCKCHAIR.yml` | 10 | 0/0/0/10 | rejected: Fork of CoinMarketCapAustraliaNFTs/core.js; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `ConsenSysDiligence/daedaluzz` | 22 | 6/0/6/10 | rejected: Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned. |
+| `ipsilon/evm-benchmarks` | 19 | 6/0/3/10 | rejected: Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned. |
+| `jjanczur/EthereumHyperledgerThroughputBenchmark` | 6 | 6/0/0/0 | rejected: Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned. |
+| `0xHorirami/gasbench` | 26 | 6/20/0/0 | rejected: Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned. |
+| `ycryptx/chaincannon` | 16 | 6/0/0/10 | rejected: Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned. |
+| `sledro/railgun` | 26 | 6/20/0/0 | rejected: Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned. |
+| `sarenabg/rpc-wars` | 36 | 6/20/0/10 | rejected: Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned. |
+| `ethpandaops/lab` | 43 | 5/20/3/15 | rejected: Dashboard and analysis reference, not an execution client. Used to inspect measurement semantics and cohort filters. |
+| `ethpandaops/xatu` | 51 | 10/20/6/15 | rejected: Collection/pipeline tool, not a full client. Used as a licensed observability reference. |
+| `ethpandaops/ethereum-metrics-exporter` | 32 | 6/20/6/0 | rejected: Metrics exporter rather than a client. No license was identified by metadata; no source code inspected or cloned. |
+| `0xsoniclabs/carmen` | 35 | 12/20/3/0 | rejected: Storage engine, not a full client. BUSL-1.1 additional use grant is Sonic-specific until 2028-04-16. License/documentation only; no clone or code inspection, and no proposed adoption. |
+| `paradigmxyz/alphanet` | 46 | 25/0/6/15 | rejected: Archived experimental OP Stack testnet; README redirects to Odyssey. Last commit older than 18 months; experimental EIPs are not XDC feature parity. |
+| `SorellaLabs/ethers-reth` | 24 | 8/0/6/10 | rejected: Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned. |
+| `joshstevens19/reth-indexer` | 29 | 10/0/9/10 | rejected: Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned. |
+| `succinctlabs/sp1-reth` | 0 | 0/0/0/0 | rejected: Repository or default-branch metadata unavailable; no verified current implementation or readable license. Retained as an unavailable discovery lead, not selected. |
+| `risechain/pevm` | 50 | 14/20/6/10 | rejected: Parallel EVM engine, not a standalone full node. Execution parallelism is already owned by #260 and #246; reference-level overlap. |
+| `kkrt-labs/kakarot-rpc` | 33 | 12/0/6/15 | rejected: Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned. |
+| `adizere/rem-poc` | 38 | 20/0/3/15 | rejected: Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned. |
+| `informalsystems/malachite` | 37 | 14/10/3/10 | rejected: Fork of circlefin/malachite; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established. |
+| `Galxe/grevm` | 47 | 14/20/3/10 | rejected: Parallel EVM runtime, not a full node. Execution parallelism is already owned by #260; selected gravity-reth provides the full-node comparison. |
+| `lita-xyz/reva` | 29 | 6/10/3/10 | rejected: Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned. |
+| `SeismicSystems/seismic-reth` | 68 | 27/20/6/15 | selected: Selected: a maintained full Rust execution client with storage, pruning, RPC and operational overlap. Its shielded transaction/storage extensions are substantive differences from Reth; those protocol changes are skipped for XDC, while applicable infrastructure is compared. |
+| `SovaNetwork/sova-reth` | 50 | 25/10/0/15 | rejected: Reth-based Bitcoin-interoperability node; last commit is 2025-11-04. Below threshold. Bitcoin finality and precompiles change XDC protocol semantics. |
+| `ultrasoundmoney/reth-payload-validator` | 19 | 6/0/3/10 | rejected: Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned. |
+| `axiom-crypto/openvm-reth-benchmark` | 0 | 0/0/0/0 | rejected: Repository or default-branch metadata unavailable; no verified current implementation or readable license. Retained as an unavailable discovery lead, not selected. |
+| `ithacaxyz/odyssey` | 51 | 25/10/6/10 | rejected: Experimental L2 testnet; last default-branch commit is July 2025. Below threshold and its rollup semantics do not transfer to XDC. |
+| `circlefin/malachite` | 50 | 14/20/6/10 | rejected: Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned. |
+
+### Verification and stopping condition
+
+- `validation-pass5-remote.json`: all eight issue bodies verified by fetching GitHub after creation, with required labels.
+- `validation-pass5.json`: ledger identity/URL checks, body section and sentence checks, immutable evidence-path validation, reference exclusions, and audit-only file scope.
+- `discovery-pass5.json`: query logs, candidate screening, final zero-addition pass and latest-main reconciliation.
+- `rescan-pass5.json`: all selected-client documentation inventory, new-client evidence and owner map by reviewed area.
+
+No current xOneRS-versus-Lab ranking, disk-saving percentage or claim of implementation completeness is made. The loop stops because the final recorded pass produced no newly untracked applicable unit. It cannot prove that all future competitors or defects have been exhausted.

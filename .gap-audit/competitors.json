@@ -1825,6 +1825,2367 @@
         "https://github.com/getamis/eth-client/blob/e1c84550208d48654ab0f6aa309044cb56fd3aa1/README.md",
         "https://api.github.com/repos/getamis/eth-client"
       ]
+    },
+    {
+      "repo": "flashbots/contender",
+      "url": "https://github.com/flashbots/contender",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 144,
+      "last_commit": "2026-07-31T19:20:25Z",
+      "license": "Apache-2.0",
+      "overlap_score": 48,
+      "score_breakdown": {
+        "feature_overlap_50": 12,
+        "activity_20": 20,
+        "adoption_15": 6,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned.",
+      "forks": 58,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/flashbots/contender",
+      "review_pass": "pass5",
+      "commit": "56825d79cafaa94af0377e7fd619eb650348c1a6",
+      "evidence_urls": [
+        "https://api.github.com/repos/flashbots/contender"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "spam EVM execution nodes over JSON-RPC & run benchmarks",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "CPerezz/bloatnet_data_analysis",
+      "url": "https://github.com/CPerezz/bloatnet_data_analysis",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 1,
+      "last_commit": "2026-04-02T11:09:42Z",
+      "license": "unverified",
+      "overlap_score": 16,
+      "score_breakdown": {
+        "feature_overlap_50": 6,
+        "activity_20": 10,
+        "adoption_15": 0,
+        "code_access_15": 0
+      },
+      "status": "rejected",
+      "reason": "Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/CPerezz/bloatnet_data_analysis",
+      "review_pass": "pass5",
+      "commit": "77262b70ac5bf0dd956844b59c4e0a0930d91269",
+      "evidence_urls": [
+        "https://api.github.com/repos/CPerezz/bloatnet_data_analysis"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "Benchmark analysis comparing Ethereum execution clients on mainnet vs bloatnet",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "etherdata-blockchain/evm-polkavm-bench",
+      "url": "https://github.com/etherdata-blockchain/evm-polkavm-bench",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 1,
+      "last_commit": "2026-03-05T08:18:21Z",
+      "license": "MIT",
+      "overlap_score": 26,
+      "score_breakdown": {
+        "feature_overlap_50": 6,
+        "activity_20": 10,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/etherdata-blockchain/evm-polkavm-bench",
+      "review_pass": "pass5",
+      "commit": "bfcdae09eb439537f39f4ebd1291bc38ecbe37ea",
+      "evidence_urls": [
+        "https://api.github.com/repos/etherdata-blockchain/evm-polkavm-bench"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "A Rust benchmark suite comparing the execution performance of [revm](https://github.com/bluealloy/revm) (Ethereum Virtual Machine) and [PolkaVM](https://github.com/paritytech/polkavm) (Polkadot's RISC-V VM) when running identical Solidity smart contracts.",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "danceratopz/benchmarkoor",
+      "url": "https://github.com/danceratopz/benchmarkoor",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2026-08-21T17:42:13Z",
+      "license": "GPL-3.0",
+      "overlap_score": 40,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 20,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/danceratopz/benchmarkoor",
+      "review_pass": "pass5",
+      "commit": "edb39d43a31cfee4752b50cf67249b330e035696",
+      "evidence_urls": [
+        "https://api.github.com/repos/danceratopz/benchmarkoor"
+      ],
+      "archived": false,
+      "parent": "ethpandaops/benchmarkoor",
+      "description": "Ethereum execution client benchmarking tool",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "han0110/benchmarkoor",
+      "url": "https://github.com/han0110/benchmarkoor",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2026-08-05T08:19:28Z",
+      "license": "GPL-3.0",
+      "overlap_score": 40,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 20,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/han0110/benchmarkoor",
+      "review_pass": "pass5",
+      "commit": "fc1defd890952c55c93ac8614535efdc175b5701",
+      "evidence_urls": [
+        "https://api.github.com/repos/han0110/benchmarkoor"
+      ],
+      "archived": false,
+      "parent": "ethpandaops/benchmarkoor",
+      "description": "Ethereum execution client benchmarking tool",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "qu0b/benchmarkoor",
+      "url": "https://github.com/qu0b/benchmarkoor",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2026-03-12T14:02:39Z",
+      "license": "GPL-3.0",
+      "overlap_score": 30,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 10,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/qu0b/benchmarkoor",
+      "review_pass": "pass5",
+      "commit": "abc75ae9ab1918217e8952cf04f520bb2e25cea2",
+      "evidence_urls": [
+        "https://api.github.com/repos/qu0b/benchmarkoor"
+      ],
+      "archived": false,
+      "parent": "ethpandaops/benchmarkoor",
+      "description": "Ethereum execution client benchmarking tool",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "taratorio/benchmarkoor",
+      "url": "https://github.com/taratorio/benchmarkoor",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2026-09-16T15:45:32Z",
+      "license": "GPL-3.0",
+      "overlap_score": 40,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 20,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/taratorio/benchmarkoor",
+      "review_pass": "pass5",
+      "commit": "ec45d47db99434a143eb80b2486de987819ef7c4",
+      "evidence_urls": [
+        "https://api.github.com/repos/taratorio/benchmarkoor"
+      ],
+      "archived": false,
+      "parent": "ethpandaops/benchmarkoor",
+      "description": "Ethereum execution client benchmarking tool",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "zachsplat/benchmarkoor",
+      "url": "https://github.com/zachsplat/benchmarkoor",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2026-11-04T07:12:45Z",
+      "license": "GPL-3.0",
+      "overlap_score": 40,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 20,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/zachsplat/benchmarkoor",
+      "review_pass": "pass5",
+      "commit": "32a073958e5f031284e59892316308623227135d",
+      "evidence_urls": [
+        "https://api.github.com/repos/zachsplat/benchmarkoor"
+      ],
+      "archived": false,
+      "parent": "ethpandaops/benchmarkoor",
+      "description": "Ethereum execution client benchmarking tool",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "CPerezz/benchmarkoor",
+      "url": "https://github.com/CPerezz/benchmarkoor",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2026-05-07T17:43:30Z",
+      "license": "GPL-3.0",
+      "overlap_score": 30,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 10,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/CPerezz/benchmarkoor",
+      "review_pass": "pass5",
+      "commit": "1e405e399bfbb0ce374636a2dfae852514d4ba77",
+      "evidence_urls": [
+        "https://api.github.com/repos/CPerezz/benchmarkoor"
+      ],
+      "archived": false,
+      "parent": "ethpandaops/benchmarkoor",
+      "description": "Ethereum execution client benchmarking tool",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "rakita/benchmarkoor",
+      "url": "https://github.com/rakita/benchmarkoor",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2026-08-12T07:49:59Z",
+      "license": "GPL-3.0",
+      "overlap_score": 40,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 20,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/rakita/benchmarkoor",
+      "review_pass": "pass5",
+      "commit": "1e0b9d4bd65ff86ef9d6ea594a0cab4b11b6ed2a",
+      "evidence_urls": [
+        "https://api.github.com/repos/rakita/benchmarkoor"
+      ],
+      "archived": false,
+      "parent": "ethpandaops/benchmarkoor",
+      "description": "Ethereum execution client benchmarking tool",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "raxhvl/benchmarkoor",
+      "url": "https://github.com/raxhvl/benchmarkoor",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2026-03-12T14:02:39Z",
+      "license": "GPL-3.0",
+      "overlap_score": 30,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 10,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/raxhvl/benchmarkoor",
+      "review_pass": "pass5",
+      "commit": "abc75ae9ab1918217e8952cf04f520bb2e25cea2",
+      "evidence_urls": [
+        "https://api.github.com/repos/raxhvl/benchmarkoor"
+      ],
+      "archived": false,
+      "parent": "ethpandaops/benchmarkoor",
+      "description": "Ethereum execution client benchmarking tool",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "jwasinger/benchmarkoor",
+      "url": "https://github.com/jwasinger/benchmarkoor",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2026-05-13T13:01:15Z",
+      "license": "GPL-3.0",
+      "overlap_score": 40,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 20,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/jwasinger/benchmarkoor",
+      "review_pass": "pass5",
+      "commit": "7b20a6cc0f66f27314430fc2d7074511984cfa09",
+      "evidence_urls": [
+        "https://api.github.com/repos/jwasinger/benchmarkoor"
+      ],
+      "archived": false,
+      "parent": "ethpandaops/benchmarkoor",
+      "description": "Ethereum execution client benchmarking tool",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "Rjected/benchmarkoor",
+      "url": "https://github.com/Rjected/benchmarkoor",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2026-04-23T13:14:53Z",
+      "license": "GPL-3.0",
+      "overlap_score": 30,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 10,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/Rjected/benchmarkoor",
+      "review_pass": "pass5",
+      "commit": "f2d1c28870d2adfdb29a70983a56466e387d5dbd",
+      "evidence_urls": [
+        "https://api.github.com/repos/Rjected/benchmarkoor"
+      ],
+      "archived": false,
+      "parent": "ethpandaops/benchmarkoor",
+      "description": "Ethereum execution client benchmarking tool",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "kamilchodola/benchmarkoor",
+      "url": "https://github.com/kamilchodola/benchmarkoor",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2026-07-10T15:08:05Z",
+      "license": "GPL-3.0",
+      "overlap_score": 40,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 20,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/kamilchodola/benchmarkoor",
+      "review_pass": "pass5",
+      "commit": "8bdab5d542f3c8019dd9de9115d961104501a96c",
+      "evidence_urls": [
+        "https://api.github.com/repos/kamilchodola/benchmarkoor"
+      ],
+      "archived": false,
+      "parent": "ethpandaops/benchmarkoor",
+      "description": "Ethereum execution client benchmarking tool",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "edg-l/benchmarkoor",
+      "url": "https://github.com/edg-l/benchmarkoor",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2026-08-12T07:49:59Z",
+      "license": "GPL-3.0",
+      "overlap_score": 40,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 20,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/edg-l/benchmarkoor",
+      "review_pass": "pass5",
+      "commit": "1e0b9d4bd65ff86ef9d6ea594a0cab4b11b6ed2a",
+      "evidence_urls": [
+        "https://api.github.com/repos/edg-l/benchmarkoor"
+      ],
+      "archived": false,
+      "parent": "ethpandaops/benchmarkoor",
+      "description": "Ethereum execution client benchmarking tool",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "jochem-brouwer/benchmarkoor",
+      "url": "https://github.com/jochem-brouwer/benchmarkoor",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2026-11-04T07:12:45Z",
+      "license": "GPL-3.0",
+      "overlap_score": 40,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 20,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/jochem-brouwer/benchmarkoor",
+      "review_pass": "pass5",
+      "commit": "32a073958e5f031284e59892316308623227135d",
+      "evidence_urls": [
+        "https://api.github.com/repos/jochem-brouwer/benchmarkoor"
+      ],
+      "archived": false,
+      "parent": "ethpandaops/benchmarkoor",
+      "description": "Ethereum execution client benchmarking tool",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "bhartnett/benchmarkoor",
+      "url": "https://github.com/bhartnett/benchmarkoor",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2026-11-04T07:12:45Z",
+      "license": "GPL-3.0",
+      "overlap_score": 40,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 20,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/bhartnett/benchmarkoor",
+      "review_pass": "pass5",
+      "commit": "32a073958e5f031284e59892316308623227135d",
+      "evidence_urls": [
+        "https://api.github.com/repos/bhartnett/benchmarkoor"
+      ],
+      "archived": false,
+      "parent": "ethpandaops/benchmarkoor",
+      "description": "Ethereum execution client benchmarking tool",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "wmitsuda/benchmarkoor",
+      "url": "https://github.com/wmitsuda/benchmarkoor",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2026-05-21T18:41:26Z",
+      "license": "GPL-3.0",
+      "overlap_score": 40,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 20,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/wmitsuda/benchmarkoor",
+      "review_pass": "pass5",
+      "commit": "fa0518bed441fe467d35f0f4fc62c10189d31fb8",
+      "evidence_urls": [
+        "https://api.github.com/repos/wmitsuda/benchmarkoor"
+      ],
+      "archived": false,
+      "parent": "ethpandaops/benchmarkoor",
+      "description": "Ethereum execution client benchmarking tool",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "damilolaedwards/benchmarkoor",
+      "url": "https://github.com/damilolaedwards/benchmarkoor",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2026-06-16T08:50:10Z",
+      "license": "GPL-3.0",
+      "overlap_score": 40,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 20,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/damilolaedwards/benchmarkoor",
+      "review_pass": "pass5",
+      "commit": "569cfe7879b3780c4c3a53030921bb3b0b3e12f9",
+      "evidence_urls": [
+        "https://api.github.com/repos/damilolaedwards/benchmarkoor"
+      ],
+      "archived": false,
+      "parent": "ethpandaops/benchmarkoor",
+      "description": "Ethereum execution client benchmarking tool",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "bshastry/benchmarkoor",
+      "url": "https://github.com/bshastry/benchmarkoor",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2026-09-25T18:55:57Z",
+      "license": "GPL-3.0",
+      "overlap_score": 40,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 20,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/bshastry/benchmarkoor",
+      "review_pass": "pass5",
+      "commit": "9d71041b3f0abc544fd17009015241d30854586d",
+      "evidence_urls": [
+        "https://api.github.com/repos/bshastry/benchmarkoor"
+      ],
+      "archived": false,
+      "parent": "ethpandaops/benchmarkoor",
+      "description": "Ethereum execution client benchmarking tool",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "awskii/benchmarkoor",
+      "url": "https://github.com/awskii/benchmarkoor",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2026-08-28T19:42:11Z",
+      "license": "GPL-3.0",
+      "overlap_score": 40,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 20,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/awskii/benchmarkoor",
+      "review_pass": "pass5",
+      "commit": "d57b0234f1d41dd7025389cd4216b1d6895bc696",
+      "evidence_urls": [
+        "https://api.github.com/repos/awskii/benchmarkoor"
+      ],
+      "archived": false,
+      "parent": "ethpandaops/benchmarkoor",
+      "description": "Ethereum execution client benchmarking tool",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "fselmo/benchmarkoor",
+      "url": "https://github.com/fselmo/benchmarkoor",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2026-05-22T14:25:00Z",
+      "license": "GPL-3.0",
+      "overlap_score": 40,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 20,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/fselmo/benchmarkoor",
+      "review_pass": "pass5",
+      "commit": "dc0572226c2693ad50f68cfca1b1516c5f096435",
+      "evidence_urls": [
+        "https://api.github.com/repos/fselmo/benchmarkoor"
+      ],
+      "archived": false,
+      "parent": "ethpandaops/benchmarkoor",
+      "description": "Ethereum execution client benchmarking tool",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "Nethereum/benchmarkoor",
+      "url": "https://github.com/Nethereum/benchmarkoor",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2026-09-16T15:45:32Z",
+      "license": "GPL-3.0",
+      "overlap_score": 40,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 20,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of ethpandaops/benchmarkoor; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/Nethereum/benchmarkoor",
+      "review_pass": "pass5",
+      "commit": "ec45d47db99434a143eb80b2486de987819ef7c4",
+      "evidence_urls": [
+        "https://api.github.com/repos/Nethereum/benchmarkoor"
+      ],
+      "archived": false,
+      "parent": "ethpandaops/benchmarkoor",
+      "description": "Ethereum execution client benchmarking tool",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "goodlyrottenapple/benchmarks",
+      "url": "https://github.com/goodlyrottenapple/benchmarks",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2024-08-15T11:01:39Z",
+      "license": "unverified",
+      "overlap_score": 6,
+      "score_breakdown": {
+        "feature_overlap_50": 6,
+        "activity_20": 0,
+        "adoption_15": 0,
+        "code_access_15": 0
+      },
+      "status": "rejected",
+      "reason": "Fork of 0xkarmacoma/eth-sc-comp-benchmarks; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/goodlyrottenapple/benchmarks",
+      "review_pass": "pass5",
+      "commit": "5ca6a4b9f8bff1c7c787b1c20dfa82700f769713",
+      "evidence_urls": [
+        "https://api.github.com/repos/goodlyrottenapple/benchmarks"
+      ],
+      "archived": false,
+      "parent": "0xkarmacoma/eth-sc-comp-benchmarks",
+      "description": "Symbolic Execution Benchmarks for Ethereum Smart Contracts",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "runtimeverification/benchmarks",
+      "url": "https://github.com/runtimeverification/benchmarks",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2024-02-29T16:52:29Z",
+      "license": "unverified",
+      "overlap_score": 6,
+      "score_breakdown": {
+        "feature_overlap_50": 6,
+        "activity_20": 0,
+        "adoption_15": 0,
+        "code_access_15": 0
+      },
+      "status": "rejected",
+      "reason": "Fork of 0xkarmacoma/eth-sc-comp-benchmarks; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/runtimeverification/benchmarks",
+      "review_pass": "pass5",
+      "commit": "2605151b76e0f5c38a83d25226229ed710d5548f",
+      "evidence_urls": [
+        "https://api.github.com/repos/runtimeverification/benchmarks"
+      ],
+      "archived": false,
+      "parent": "0xkarmacoma/eth-sc-comp-benchmarks",
+      "description": "Symbolic Execution Benchmarks for Ethereum Smart Contracts",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "MysticRyuujin/blob-benchmark",
+      "url": "https://github.com/MysticRyuujin/blob-benchmark",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2026-04-02T13:52:32Z",
+      "license": "MIT",
+      "overlap_score": 26,
+      "score_breakdown": {
+        "feature_overlap_50": 6,
+        "activity_20": 10,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/MysticRyuujin/blob-benchmark",
+      "review_pass": "pass5",
+      "commit": "22c546c562d4cfda2939da3231c057d94ddf35e0",
+      "evidence_urls": [
+        "https://api.github.com/repos/MysticRyuujin/blob-benchmark"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "A self-contained benchmark tool for measuring the performance of `engine_getBlobs` RPC calls on Ethereum execution clients",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "RaoulSchaffranek/eth-sc-benchmarks",
+      "url": "https://github.com/RaoulSchaffranek/eth-sc-benchmarks",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2024-08-22T09:19:23Z",
+      "license": "unverified",
+      "overlap_score": 6,
+      "score_breakdown": {
+        "feature_overlap_50": 6,
+        "activity_20": 0,
+        "adoption_15": 0,
+        "code_access_15": 0
+      },
+      "status": "rejected",
+      "reason": "Fork of 0xkarmacoma/eth-sc-comp-benchmarks; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/RaoulSchaffranek/eth-sc-benchmarks",
+      "review_pass": "pass5",
+      "commit": "90e0592c895ada87cb6454df9f24f0404498f011",
+      "evidence_urls": [
+        "https://api.github.com/repos/RaoulSchaffranek/eth-sc-benchmarks"
+      ],
+      "archived": false,
+      "parent": "0xkarmacoma/eth-sc-comp-benchmarks",
+      "description": "Symbolic Execution Benchmarks for Ethereum Smart Contracts",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "atahabilder1/SmartContractAuditToolsEvaluation",
+      "url": "https://github.com/atahabilder1/SmartContractAuditToolsEvaluation",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2025-09-06T23:58:16Z",
+      "license": "MIT",
+      "overlap_score": 26,
+      "score_breakdown": {
+        "feature_overlap_50": 6,
+        "activity_20": 10,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/atahabilder1/SmartContractAuditToolsEvaluation",
+      "review_pass": "pass5",
+      "commit": "cb47255098ea6b684aae0640249b5e9391fdd7a4",
+      "evidence_urls": [
+        "https://api.github.com/repos/atahabilder1/SmartContractAuditToolsEvaluation"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "Benchmark suite for smart contract vulnerability detection tools across 7 categories: static analysis, symbolic execution, fuzzing, formal verification, ML/DL, LLM agents, and hybrid. Evaluates Slither, Mythril, GPTScan & more on accuracy, coverage, and scalability. Supports review paper.",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "anas0888/Crypto-Bench",
+      "url": "https://github.com/anas0888/Crypto-Bench",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2026-08-05T18:35:47Z",
+      "license": "unverified",
+      "overlap_score": 26,
+      "score_breakdown": {
+        "feature_overlap_50": 6,
+        "activity_20": 20,
+        "adoption_15": 0,
+        "code_access_15": 0
+      },
+      "status": "rejected",
+      "reason": "Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/anas0888/Crypto-Bench",
+      "review_pass": "pass5",
+      "commit": "a61849ae57bab0e1783c231cad70063212b22674",
+      "evidence_urls": [
+        "https://api.github.com/repos/anas0888/Crypto-Bench"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "A web-based cryptographic performance analyzer that benchmarks AES, RSA, SHA-256, and SHA-512 algorithms, measures execution time, memory usage, and output size, and stores a SHA-256 hash of the benchmark results on an Ethereum test network using a Solidity smart contract.",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "valkyoth/eth",
+      "url": "https://github.com/valkyoth/eth",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2026-10-09T13:12:50Z",
+      "license": "Apache-2.0",
+      "overlap_score": 53,
+      "score_breakdown": {
+        "feature_overlap_50": 18,
+        "activity_20": 20,
+        "adoption_15": 0,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "README identifies v0.61 as a library: full execution/storage, networking, sync and integrated node remain planned. Score implemented scope rather than the full-stack aspiration.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/valkyoth/eth",
+      "review_pass": "pass5",
+      "commit": "a083057bc1f55c694c9745ffaf5dd691d8a1ea94",
+      "evidence_urls": [
+        "https://api.github.com/repos/valkyoth/eth",
+        "https://github.com/valkyoth/eth/blob/a083057bc1f55c694c9745ffaf5dd691d8a1ea94/README.md"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "Security-first, no_std Rust implementation of the full Ethereum stack, built through audited modular releases: execution, consensus, cryptography, networking, storage, RPC, and node/validator foundations.",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "NethermindEth/Paprika",
+      "url": "https://github.com/NethermindEth/Paprika",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 99,
+      "last_commit": "2025-05-29T10:40:21Z",
+      "license": "LGPL-3.0",
+      "overlap_score": 33,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 10,
+        "adoption_15": 3,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Archived storage-engine experiment; default-branch commit is 2025-05-29. Not a full execution client and not a replacement recommendation for MDBX.",
+      "forks": 17,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/NethermindEth/Paprika",
+      "review_pass": "pass5",
+      "commit": "9307ae3d4d2845e55dfe68e35519b99ce0057748",
+      "evidence_urls": [
+        "https://api.github.com/repos/NethermindEth/Paprika"
+      ],
+      "archived": true,
+      "parent": null,
+      "description": "A custom storage engine of Nethermind, benefiting from the alignment of the underlying data structure with the layout of State & Storage trees of Ethereum.",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "Dias878/Paprika",
+      "url": "https://github.com/Dias878/Paprika",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 1,
+      "last_commit": "2023-07-17T15:02:21Z",
+      "license": "LGPL-3.0",
+      "overlap_score": 20,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 0,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/Dias878/Paprika",
+      "review_pass": "pass5",
+      "commit": "7fdc5280f5c456155055aba56bc4230f520cbd45",
+      "evidence_urls": [
+        "https://api.github.com/repos/Dias878/Paprika"
+      ],
+      "archived": false,
+      "parent": "NethermindEth/Paprika",
+      "description": "An experimental storage for Nethermind, removing the whole Trie abstraction and acting as a Trie and a database at once",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "RalphSmithOfime/Paprika",
+      "url": "https://github.com/RalphSmithOfime/Paprika",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2023-08-10T09:46:47Z",
+      "license": "LGPL-3.0",
+      "overlap_score": 20,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 0,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/RalphSmithOfime/Paprika",
+      "review_pass": "pass5",
+      "commit": "5dc9cb687f97fbd51c1b382d5bec0d153361d912",
+      "evidence_urls": [
+        "https://api.github.com/repos/RalphSmithOfime/Paprika"
+      ],
+      "archived": false,
+      "parent": "NethermindEth/Paprika",
+      "description": "An experimental storage for Nethermind, removing the whole Trie abstraction and acting as a Trie and a database at once",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "octogene/Paprika",
+      "url": "https://github.com/octogene/Paprika",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2023-12-01T14:29:55Z",
+      "license": "LGPL-3.0",
+      "overlap_score": 20,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 0,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/octogene/Paprika",
+      "review_pass": "pass5",
+      "commit": "70c18f05809cab6711e7eccd920c73f55f434a39",
+      "evidence_urls": [
+        "https://api.github.com/repos/octogene/Paprika"
+      ],
+      "archived": false,
+      "parent": "NethermindEth/Paprika",
+      "description": "An experimental storage for Nethermind, removing the whole Trie abstraction and acting as a Trie and a database at once",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "jamescarter-le/Paprika",
+      "url": "https://github.com/jamescarter-le/Paprika",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2023-04-03T16:58:29Z",
+      "license": "LGPL-3.0",
+      "overlap_score": 20,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 0,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/jamescarter-le/Paprika",
+      "review_pass": "pass5",
+      "commit": "2004880fd1f28d9c1e028d7f2899096704a3b327",
+      "evidence_urls": [
+        "https://api.github.com/repos/jamescarter-le/Paprika"
+      ],
+      "archived": false,
+      "parent": "NethermindEth/Paprika",
+      "description": "An experimental storage for Nethermind, removing the whole Trie abstraction and acting as a Trie and a database at once",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "ssonthal/Paprika",
+      "url": "https://github.com/ssonthal/Paprika",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2024-10-04T08:20:28Z",
+      "license": "LGPL-3.0",
+      "overlap_score": 20,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 0,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/ssonthal/Paprika",
+      "review_pass": "pass5",
+      "commit": "c50e45d3cf5f0edb67b3c3778a57a784d18e72c9",
+      "evidence_urls": [
+        "https://api.github.com/repos/ssonthal/Paprika"
+      ],
+      "archived": false,
+      "parent": "NethermindEth/Paprika",
+      "description": "An experimental storage for Nethermind, removing the whole Trie abstraction and acting as a Trie and a database at once",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "jlokier/Paprika",
+      "url": "https://github.com/jlokier/Paprika",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2023-03-30T15:36:56Z",
+      "license": "LGPL-3.0",
+      "overlap_score": 20,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 0,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/jlokier/Paprika",
+      "review_pass": "pass5",
+      "commit": "8ada9fdc44689ba661fbb0019461ccc65f019fbf",
+      "evidence_urls": [
+        "https://api.github.com/repos/jlokier/Paprika"
+      ],
+      "archived": false,
+      "parent": "NethermindEth/Paprika",
+      "description": "An experimental storage for Nethermind, removing the whole Trie abstraction and acting as a Trie and a database at once",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "omahs/Paprika",
+      "url": "https://github.com/omahs/Paprika",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2023-04-17T12:58:30Z",
+      "license": "LGPL-3.0",
+      "overlap_score": 20,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 0,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/omahs/Paprika",
+      "review_pass": "pass5",
+      "commit": "5ffe83f602e3b859633c3b748893791fa3e5d003",
+      "evidence_urls": [
+        "https://api.github.com/repos/omahs/Paprika"
+      ],
+      "archived": false,
+      "parent": "NethermindEth/Paprika",
+      "description": "An experimental storage for Nethermind, removing the whole Trie abstraction and acting as a Trie and a database at once",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "will-2012/Paprika",
+      "url": "https://github.com/will-2012/Paprika",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2024-05-16T08:49:44Z",
+      "license": "LGPL-3.0",
+      "overlap_score": 20,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 0,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/will-2012/Paprika",
+      "review_pass": "pass5",
+      "commit": "0a0ec2f363cf29d26a76c55a3d13ab9f34e9ab29",
+      "evidence_urls": [
+        "https://api.github.com/repos/will-2012/Paprika"
+      ],
+      "archived": false,
+      "parent": "NethermindEth/Paprika",
+      "description": "An experimental storage for Nethermind, removing the whole Trie abstraction and acting as a Trie and a database at once",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "cristiantroy/Paprika",
+      "url": "https://github.com/cristiantroy/Paprika",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2024-12-06T13:06:57Z",
+      "license": "LGPL-3.0",
+      "overlap_score": 20,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 0,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/cristiantroy/Paprika",
+      "review_pass": "pass5",
+      "commit": "3dc0991bbda343c82002770301e22764d4f755ed",
+      "evidence_urls": [
+        "https://api.github.com/repos/cristiantroy/Paprika"
+      ],
+      "archived": false,
+      "parent": "NethermindEth/Paprika",
+      "description": "A custom storage engine of Nethermind, benefiting from the alignment of the underlying data structure with the layout of State & Storage trees of Ethereum.",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "byksy/Paprika",
+      "url": "https://github.com/byksy/Paprika",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2024-05-10T14:32:24Z",
+      "license": "LGPL-3.0",
+      "overlap_score": 20,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 0,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/byksy/Paprika",
+      "review_pass": "pass5",
+      "commit": "d33fd9bfffe7a6835ce3c17f96867c53ce70aeb2",
+      "evidence_urls": [
+        "https://api.github.com/repos/byksy/Paprika"
+      ],
+      "archived": false,
+      "parent": "NethermindEth/Paprika",
+      "description": "An experimental storage for Nethermind, removing the whole Trie abstraction and acting as a Trie and a database at once",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "AryanGodara/Paprika",
+      "url": "https://github.com/AryanGodara/Paprika",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2024-06-24T09:52:09Z",
+      "license": "LGPL-3.0",
+      "overlap_score": 20,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 0,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/AryanGodara/Paprika",
+      "review_pass": "pass5",
+      "commit": "ff631b3279030647f32b0c2a340e3300df64b84f",
+      "evidence_urls": [
+        "https://api.github.com/repos/AryanGodara/Paprika"
+      ],
+      "archived": false,
+      "parent": "NethermindEth/Paprika",
+      "description": "An experimental storage for Nethermind, removing the whole Trie abstraction and acting as a Trie and a database at once",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "SabariGanesh-K/Paprika",
+      "url": "https://github.com/SabariGanesh-K/Paprika",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2024-02-08T13:39:09Z",
+      "license": "LGPL-3.0",
+      "overlap_score": 20,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 0,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/SabariGanesh-K/Paprika",
+      "review_pass": "pass5",
+      "commit": "89cbe6d5b716cbe2b4aae30a42c90ea4d0695252",
+      "evidence_urls": [
+        "https://api.github.com/repos/SabariGanesh-K/Paprika"
+      ],
+      "archived": false,
+      "parent": "NethermindEth/Paprika",
+      "description": "An experimental storage for Nethermind, removing the whole Trie abstraction and acting as a Trie and a database at once",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "ZKcash-IrishGov/Paprika",
+      "url": "https://github.com/ZKcash-IrishGov/Paprika",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2024-10-29T18:19:52Z",
+      "license": "LGPL-3.0",
+      "overlap_score": 20,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 0,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/ZKcash-IrishGov/Paprika",
+      "review_pass": "pass5",
+      "commit": "317e29fda7079a663afb4ca0335df97e08c9ae32",
+      "evidence_urls": [
+        "https://api.github.com/repos/ZKcash-IrishGov/Paprika"
+      ],
+      "archived": false,
+      "parent": "NethermindEth/Paprika",
+      "description": "A custom storage engine of Nethermind, benefiting from the alignment of the underlying data structure with the layout of State & Storage trees of Ethereum.",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "yevh/Paprika",
+      "url": "https://github.com/yevh/Paprika",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2024-09-26T08:59:00Z",
+      "license": "LGPL-3.0",
+      "overlap_score": 20,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 0,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/yevh/Paprika",
+      "review_pass": "pass5",
+      "commit": "22873872ffb21728651d53fb9a4b63cab554ddb3",
+      "evidence_urls": [
+        "https://api.github.com/repos/yevh/Paprika"
+      ],
+      "archived": false,
+      "parent": "NethermindEth/Paprika",
+      "description": "A custom storage engine of Nethermind, benefiting from the alignment of the underlying data structure with the layout of State & Storage trees of Ethereum.",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "teenager-ETH/Paprika",
+      "url": "https://github.com/teenager-ETH/Paprika",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2024-12-18T12:09:17Z",
+      "license": "LGPL-3.0",
+      "overlap_score": 20,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 0,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/teenager-ETH/Paprika",
+      "review_pass": "pass5",
+      "commit": "abfd1186836537d516e4bed6af6a8bfd663270c5",
+      "evidence_urls": [
+        "https://api.github.com/repos/teenager-ETH/Paprika"
+      ],
+      "archived": false,
+      "parent": "NethermindEth/Paprika",
+      "description": "A custom storage engine of Nethermind, benefiting from the alignment of the underlying data structure with the layout of State & Storage trees of Ethereum.",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "Tarunadityaselva/Paprika",
+      "url": "https://github.com/Tarunadityaselva/Paprika",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2025-05-29T10:40:21Z",
+      "license": "LGPL-3.0",
+      "overlap_score": 30,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 10,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/Tarunadityaselva/Paprika",
+      "review_pass": "pass5",
+      "commit": "9307ae3d4d2845e55dfe68e35519b99ce0057748",
+      "evidence_urls": [
+        "https://api.github.com/repos/Tarunadityaselva/Paprika"
+      ],
+      "archived": false,
+      "parent": "NethermindEth/Paprika",
+      "description": "A custom storage engine of Nethermind, benefiting from the alignment of the underlying data structure with the layout of State & Storage trees of Ethereum.",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "gmh5225/Paprika",
+      "url": "https://github.com/gmh5225/Paprika",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2024-10-02T16:42:16Z",
+      "license": "LGPL-3.0",
+      "overlap_score": 20,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 0,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of NethermindEth/Paprika; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/gmh5225/Paprika",
+      "review_pass": "pass5",
+      "commit": "ba6f521cbe8adf2e89c27d95e21cba52b83d0108",
+      "evidence_urls": [
+        "https://api.github.com/repos/gmh5225/Paprika"
+      ],
+      "archived": false,
+      "parent": "NethermindEth/Paprika",
+      "description": "A custom storage engine of Nethermind, benefiting from the alignment of the underlying data structure with the layout of State & Storage trees of Ethereum.",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "aymantaybi/eth-logs-indexer-client",
+      "url": "https://github.com/aymantaybi/eth-logs-indexer-client",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2023-01-07T15:14:44Z",
+      "license": "MIT",
+      "overlap_score": 16,
+      "score_breakdown": {
+        "feature_overlap_50": 6,
+        "activity_20": 0,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/aymantaybi/eth-logs-indexer-client",
+      "review_pass": "pass5",
+      "commit": "05826b59d991ad995399006378d4685200b505ae",
+      "evidence_urls": [
+        "https://api.github.com/repos/aymantaybi/eth-logs-indexer-client"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "Ethereum logs indexer client",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "polus-arcticus/ethereum-radio",
+      "url": "https://github.com/polus-arcticus/ethereum-radio",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2026-09-10T20:45:17Z",
+      "license": "Unlicense",
+      "overlap_score": 36,
+      "score_breakdown": {
+        "feature_overlap_50": 6,
+        "activity_20": 20,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/polus-arcticus/ethereum-radio",
+      "review_pass": "pass5",
+      "commit": "e433f62a4347b2bc2174de604c69b0840a01dfe0",
+      "evidence_urls": [
+        "https://api.github.com/repos/polus-arcticus/ethereum-radio"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "tools for client side event log indexing",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "btc-free-mining/-a-href-https-globadino.com-Trusted-Secure-Cloud-Mining-a-",
+      "url": "https://github.com/btc-free-mining/-a-href-https-globadino.com-Trusted-Secure-Cloud-Mining-a-",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2022-01-29T12:35:49Z",
+      "license": "unverified",
+      "overlap_score": 0,
+      "score_breakdown": {
+        "feature_overlap_50": 0,
+        "activity_20": 0,
+        "adoption_15": 0,
+        "code_access_15": 0
+      },
+      "status": "rejected",
+      "reason": "Fork of saadbitcoin/-a-href-https-globadino.com-Trusted-Secure-Cloud-Mining-a-; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/btc-free-mining/-a-href-https-globadino.com-Trusted-Secure-Cloud-Mining-a-",
+      "review_pass": "pass5",
+      "commit": "9b85c4614a1a0f0ac55cd74bce5ca8f5e6e17847",
+      "evidence_urls": [
+        "https://api.github.com/repos/btc-free-mining/-a-href-https-globadino.com-Trusted-Secure-Cloud-Mining-a-"
+      ],
+      "archived": false,
+      "parent": "saadbitcoin/-a-href-https-globadino.com-Trusted-Secure-Cloud-Mining-a-",
+      "description": "{     // Use IntelliSense to learn about possible attributes.     // Hover to view descriptions of existing attributes.     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387     \"version\": \"0.2.0\",     \"configurations\": [                  {             \"name\": \".NET Core Attach\",             \"type\": \"coreclr\",             \"request\": \"attach\"         },         {             \"name\": \".NET Core Launch (console)\",             \"type\": \"coreclr\",             \"request\": \"l",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "isparta-bitc/https-github.com-btc-free-mining-https---github.com-saadbitcoin-tab-stars",
+      "url": "https://github.com/isparta-bitc/https-github.com-btc-free-mining-https---github.com-saadbitcoin-tab-stars",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2022-01-29T12:35:49Z",
+      "license": "unverified",
+      "overlap_score": 0,
+      "score_breakdown": {
+        "feature_overlap_50": 0,
+        "activity_20": 0,
+        "adoption_15": 0,
+        "code_access_15": 0
+      },
+      "status": "rejected",
+      "reason": "Fork of saadbitcoin/-a-href-https-globadino.com-Trusted-Secure-Cloud-Mining-a-; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/isparta-bitc/https-github.com-btc-free-mining-https---github.com-saadbitcoin-tab-stars",
+      "review_pass": "pass5",
+      "commit": "9b85c4614a1a0f0ac55cd74bce5ca8f5e6e17847",
+      "evidence_urls": [
+        "https://api.github.com/repos/isparta-bitc/https-github.com-btc-free-mining-https---github.com-saadbitcoin-tab-stars"
+      ],
+      "archived": false,
+      "parent": "saadbitcoin/-a-href-https-globadino.com-Trusted-Secure-Cloud-Mining-a-",
+      "description": "{     // Use IntelliSense to learn about possible attributes.     // Hover to view descriptions of existing attributes.     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387     \"version\": \"0.2.0\",     \"configurations\": [                  {             \"name\": \".NET Core Attach\",             \"type\": \"coreclr\",             \"request\": \"attach\"         },         {             \"name\": \".NET Core Launch (console)\",             \"type\": \"coreclr\",             \"request\": \"l",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "GoproLOl/-a-href-https-globadino.com-Trusted-Secure-Cloud-Mining-a-",
+      "url": "https://github.com/GoproLOl/-a-href-https-globadino.com-Trusted-Secure-Cloud-Mining-a-",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2022-08-26T09:15:03Z",
+      "license": "unverified",
+      "overlap_score": 0,
+      "score_breakdown": {
+        "feature_overlap_50": 0,
+        "activity_20": 0,
+        "adoption_15": 0,
+        "code_access_15": 0
+      },
+      "status": "rejected",
+      "reason": "Fork of saadbitcoin/-a-href-https-globadino.com-Trusted-Secure-Cloud-Mining-a-; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/GoproLOl/-a-href-https-globadino.com-Trusted-Secure-Cloud-Mining-a-",
+      "review_pass": "pass5",
+      "commit": "cda02661319c2b29a7b36b97e3293c5624ac8310",
+      "evidence_urls": [
+        "https://api.github.com/repos/GoproLOl/-a-href-https-globadino.com-Trusted-Secure-Cloud-Mining-a-"
+      ],
+      "archived": false,
+      "parent": "saadbitcoin/-a-href-https-globadino.com-Trusted-Secure-Cloud-Mining-a-",
+      "description": "{     // Use IntelliSense to learn about possible attributes.     // Hover to view descriptions of existing attributes.     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387     \"version\": \"0.2.0\",     \"configurations\": [                  {             \"name\": \".NET Core Attach\",             \"type\": \"coreclr\",             \"request\": \"attach\"         },         {             \"name\": \".NET Core Launch (console)\",             \"type\": \"coreclr\",             \"request\": \"l",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "https-coinmarketcap-com/BLOCKCHAIR.yml",
+      "url": "https://github.com/https-coinmarketcap-com/BLOCKCHAIR.yml",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2022-07-08T07:28:35Z",
+      "license": "MIT",
+      "overlap_score": 10,
+      "score_breakdown": {
+        "feature_overlap_50": 0,
+        "activity_20": 0,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of CoinMarketCapAustraliaNFTs/core.js; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/https-coinmarketcap-com/BLOCKCHAIR.yml",
+      "review_pass": "pass5",
+      "commit": "f12ee4930f993931d1466b2029806ab7c4677caf",
+      "evidence_urls": [
+        "https://api.github.com/repos/https-coinmarketcap-com/BLOCKCHAIR.yml"
+      ],
+      "archived": false,
+      "parent": "CoinMarketCapAustraliaNFTs/core.js",
+      "description": "Extendable client for GitHub's REST & GraphQL APIs BLOCKCHAIR.yml Benefits CoinTracker logoCoinTrackerPartnerCoinTracker is a portfolio assistant for cryptocurrency. It is used by over 100,000 cryptocurrency holders and tracks $20B of cryptocurrency transaction volume. CoinTracker supports 300+ exchange & wallet integrations and over 3,000 cryptocurrency integrations.CoinTracker enables seamless tracking of cryptocurrency portfolios, investment performance, DeFi, and taxes. Beyond crypto, CoinTr",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "ConsenSysDiligence/daedaluzz",
+      "url": "https://github.com/ConsenSysDiligence/daedaluzz",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 143,
+      "last_commit": "2023-10-09T10:18:22Z",
+      "license": "Apache-2.0",
+      "overlap_score": 22,
+      "score_breakdown": {
+        "feature_overlap_50": 6,
+        "activity_20": 0,
+        "adoption_15": 6,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned.",
+      "forks": 12,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/ConsenSysDiligence/daedaluzz",
+      "review_pass": "pass5",
+      "commit": "2da4c25caf536e08a28778379906428afb575f75",
+      "evidence_urls": [
+        "https://api.github.com/repos/ConsenSysDiligence/daedaluzz"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "Benchmark Generator for Smart-Contract Fuzzers",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "ipsilon/evm-benchmarks",
+      "url": "https://github.com/ipsilon/evm-benchmarks",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 23,
+      "last_commit": "2022-11-22T13:45:53Z",
+      "license": "Apache-2.0",
+      "overlap_score": 19,
+      "score_breakdown": {
+        "feature_overlap_50": 6,
+        "activity_20": 0,
+        "adoption_15": 3,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned.",
+      "forks": 4,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/ipsilon/evm-benchmarks",
+      "review_pass": "pass5",
+      "commit": "d8b88f4046a87d6b902378cef752591f95427b43",
+      "evidence_urls": [
+        "https://api.github.com/repos/ipsilon/evm-benchmarks"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "A collection of Ethereum Virtual Machine benchmarks",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "jjanczur/EthereumHyperledgerThroughputBenchmark",
+      "url": "https://github.com/jjanczur/EthereumHyperledgerThroughputBenchmark",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 5,
+      "last_commit": "2019-02-11T14:44:28Z",
+      "license": "unverified",
+      "overlap_score": 6,
+      "score_breakdown": {
+        "feature_overlap_50": 6,
+        "activity_20": 0,
+        "adoption_15": 0,
+        "code_access_15": 0
+      },
+      "status": "rejected",
+      "reason": "Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/jjanczur/EthereumHyperledgerThroughputBenchmark",
+      "review_pass": "pass5",
+      "commit": "25285a0c7e72684aac7bdbe43da1d7f9f1987f5f",
+      "evidence_urls": [
+        "https://api.github.com/repos/jjanczur/EthereumHyperledgerThroughputBenchmark"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "Ethereum vs. Hyperledger - throughput benchmarking",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "0xHorirami/gasbench",
+      "url": "https://github.com/0xHorirami/gasbench",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 4,
+      "last_commit": "2026-05-25T15:31:11Z",
+      "license": "unverified",
+      "overlap_score": 26,
+      "score_breakdown": {
+        "feature_overlap_50": 6,
+        "activity_20": 20,
+        "adoption_15": 0,
+        "code_access_15": 0
+      },
+      "status": "rejected",
+      "reason": "Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/0xHorirami/gasbench",
+      "review_pass": "pass5",
+      "commit": "bb52eaf28033f06f4ba2565205e4b930ee6b7a59",
+      "evidence_urls": [
+        "https://api.github.com/repos/0xHorirami/gasbench"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "Gas benchmarking and optimization tool for EVM smart contracts (Rust CLI)",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "ycryptx/chaincannon",
+      "url": "https://github.com/ycryptx/chaincannon",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 2,
+      "last_commit": "2023-12-06T10:05:13Z",
+      "license": "Apache-2.0",
+      "overlap_score": 16,
+      "score_breakdown": {
+        "feature_overlap_50": 6,
+        "activity_20": 0,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/ycryptx/chaincannon",
+      "review_pass": "pass5",
+      "commit": "cb49678da5bc9791dbeb4204c5ff3415831f8d25",
+      "evidence_urls": [
+        "https://api.github.com/repos/ycryptx/chaincannon"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "A blockchain benchmarking tool written in Golang for Cosmos-SDK",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "sledro/railgun",
+      "url": "https://github.com/sledro/railgun",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 1,
+      "last_commit": "2026-07-28T19:46:22Z",
+      "license": "unverified",
+      "overlap_score": 26,
+      "score_breakdown": {
+        "feature_overlap_50": 6,
+        "activity_20": 20,
+        "adoption_15": 0,
+        "code_access_15": 0
+      },
+      "status": "rejected",
+      "reason": "Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/sledro/railgun",
+      "review_pass": "pass5",
+      "commit": "2f7c23917cb3a6b23165402b5304d4f04f14608f",
+      "evidence_urls": [
+        "https://api.github.com/repos/sledro/railgun"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "A fast, efficient, and reliable Ethereum / EVM throughput benchmarking tool.",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "sarenabg/rpc-wars",
+      "url": "https://github.com/sarenabg/rpc-wars",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 0,
+      "last_commit": "2026-07-22T19:33:29Z",
+      "license": "MIT",
+      "overlap_score": 36,
+      "score_breakdown": {
+        "feature_overlap_50": 6,
+        "activity_20": 20,
+        "adoption_15": 0,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned.",
+      "forks": 0,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/sarenabg/rpc-wars",
+      "review_pass": "pass5",
+      "commit": "4436b63d4e6c0882035882cf5a1121a9dcfa20fc",
+      "evidence_urls": [
+        "https://api.github.com/repos/sarenabg/rpc-wars"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "Benchmark EVM RPC providers by latency, reliability, and JSON-RPC workload\u2014from the CLI or a local dashboard.",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "ethpandaops/lab",
+      "url": "https://github.com/ethpandaops/lab",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 25,
+      "last_commit": "2026-11-12T04:13:12Z",
+      "license": "GPL-3.0",
+      "overlap_score": 43,
+      "score_breakdown": {
+        "feature_overlap_50": 5,
+        "activity_20": 20,
+        "adoption_15": 3,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Dashboard and analysis reference, not an execution client. Used to inspect measurement semantics and cohort filters.",
+      "forks": 12,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/ethpandaops/lab",
+      "review_pass": "pass5",
+      "commit": "9f4f88fbe08909fc14b0bcccd4f6d29312a07eff",
+      "evidence_urls": [
+        "https://api.github.com/repos/ethpandaops/lab",
+        "https://github.com/ethpandaops/lab/blob/9f4f88fbe08909fc14b0bcccd4f6d29312a07eff/README.md"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "ethpandaops/xatu",
+      "url": "https://github.com/ethpandaops/xatu",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 101,
+      "last_commit": "2026-11-11T09:24:20Z",
+      "license": "GPL-3.0",
+      "overlap_score": 51,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 20,
+        "adoption_15": 6,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Collection/pipeline tool, not a full client. Used as a licensed observability reference.",
+      "forks": 31,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/ethpandaops/xatu",
+      "review_pass": "pass5",
+      "commit": "dc6d4e30fe2961fb8afefa6a2828dbaae842bf78",
+      "evidence_urls": [
+        "https://api.github.com/repos/ethpandaops/xatu",
+        "https://github.com/ethpandaops/xatu/blob/dc6d4e30fe2961fb8afefa6a2828dbaae842bf78/README.md"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "Ethereum network monitoring with collection clients and a centralized server for data pipelining.",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "ethpandaops/ethereum-metrics-exporter",
+      "url": "https://github.com/ethpandaops/ethereum-metrics-exporter",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 135,
+      "last_commit": "2026-10-21T08:20:37Z",
+      "license": "unverified",
+      "overlap_score": 32,
+      "score_breakdown": {
+        "feature_overlap_50": 6,
+        "activity_20": 20,
+        "adoption_15": 6,
+        "code_access_15": 0
+      },
+      "status": "rejected",
+      "reason": "Metrics exporter rather than a client. No license was identified by metadata; no source code inspected or cloned.",
+      "forks": 22,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/ethpandaops/ethereum-metrics-exporter",
+      "review_pass": "pass5",
+      "commit": "2169954814538a743c8079197873ec9d2b7b7d84",
+      "evidence_urls": [
+        "https://api.github.com/repos/ethpandaops/ethereum-metrics-exporter"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "A Prometheus exporter for Ethereum Execution & Consensus clients",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "0xsoniclabs/carmen",
+      "url": "https://github.com/0xsoniclabs/carmen",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": 10,
+      "last_commit": "2026-11-09T12:19:26Z",
+      "license": "BUSL-1.1",
+      "overlap_score": 35,
+      "score_breakdown": {
+        "feature_overlap_50": 12,
+        "activity_20": 20,
+        "adoption_15": 3,
+        "code_access_15": 0
+      },
+      "status": "rejected",
+      "reason": "Storage engine, not a full client. BUSL-1.1 additional use grant is Sonic-specific until 2028-04-16. License/documentation only; no clone or code inspection, and no proposed adoption.",
+      "forks": 5,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/0xsoniclabs/carmen",
+      "review_pass": "pass5",
+      "commit": "2f40b1b10da4bff5640dfaebe7ace7a20cf34473",
+      "evidence_urls": [
+        "https://api.github.com/repos/0xsoniclabs/carmen",
+        "https://github.com/0xsoniclabs/carmen/blob/2f40b1b10da4bff5640dfaebe7ace7a20cf34473/LICENSE"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "Carmen engine for fast world state storage.",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "paradigmxyz/alphanet",
+      "url": "https://github.com/paradigmxyz/alphanet",
+      "found_via": "awesome-reth relevant development, indexer, L2 and benchmark sections",
+      "stars": 178,
+      "last_commit": "2024-10-19T19:10:54Z",
+      "license": "Apache-2.0",
+      "overlap_score": 46,
+      "score_breakdown": {
+        "feature_overlap_50": 25,
+        "activity_20": 0,
+        "adoption_15": 6,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Archived experimental OP Stack testnet; README redirects to Odyssey. Last commit older than 18 months; experimental EIPs are not XDC feature parity.",
+      "forks": 31,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/paradigmxyz/alphanet",
+      "review_pass": "pass5",
+      "commit": "e6b5d0a1f48fe15434c8f0d70b6b4084fd7bf65c",
+      "evidence_urls": [
+        "https://api.github.com/repos/paradigmxyz/alphanet",
+        "https://github.com/paradigmxyz/alphanet/blob/e6b5d0a1f48fe15434c8f0d70b6b4084fd7bf65c/README.md"
+      ],
+      "archived": true,
+      "parent": null,
+      "description": "Reth AlphaNet is a testnet OP Stack-compatible rollup aimed at enabling experimentation of bleeding edge Ethereum Research.",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "SorellaLabs/ethers-reth",
+      "url": "https://github.com/SorellaLabs/ethers-reth",
+      "found_via": "awesome-reth relevant development, indexer, L2 and benchmark sections",
+      "stars": 269,
+      "last_commit": "2023-10-07T05:46:55Z",
+      "license": "MIT",
+      "overlap_score": 24,
+      "score_breakdown": {
+        "feature_overlap_50": 8,
+        "activity_20": 0,
+        "adoption_15": 6,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned.",
+      "forks": 23,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/SorellaLabs/ethers-reth",
+      "review_pass": "pass5",
+      "commit": "f804c2be500ca9a7339b6b929f64ca92a8948c11",
+      "evidence_urls": [
+        "https://api.github.com/repos/SorellaLabs/ethers-reth"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "An ether-rs middleware to access reth's db directly, bypassing JSON-RPC",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "joshstevens19/reth-indexer",
+      "url": "https://github.com/joshstevens19/reth-indexer",
+      "found_via": "awesome-reth relevant development, indexer, L2 and benchmark sections",
+      "stars": 507,
+      "last_commit": "2024-01-11T19:48:22Z",
+      "license": "MIT",
+      "overlap_score": 29,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 0,
+        "adoption_15": 9,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned.",
+      "forks": 46,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/joshstevens19/reth-indexer",
+      "review_pass": "pass5",
+      "commit": "ab1b041c87badc973d1bc8f0696bf90a995697aa",
+      "evidence_urls": [
+        "https://api.github.com/repos/joshstevens19/reth-indexer"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "reth-indexer reads directly from the reth db and indexes the data into traditional and alternative databases / datastores (postgres, GCP bigquery, etc) all decoded with a simple config file and no extra setup alongside exposing a API ready to query the data.",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "succinctlabs/sp1-reth",
+      "url": "https://github.com/succinctlabs/sp1-reth",
+      "found_via": "targeted disk/execution GitHub search or topic; see discovery-pass5.json",
+      "stars": null,
+      "last_commit": null,
+      "license": "unverified",
+      "overlap_score": 0,
+      "score_breakdown": {
+        "feature_overlap_50": 0,
+        "activity_20": 0,
+        "adoption_15": 0,
+        "code_access_15": 0
+      },
+      "status": "rejected",
+      "reason": "Repository or default-branch metadata unavailable; no verified current implementation or readable license. Retained as an unavailable discovery lead, not selected.",
+      "forks": null,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/succinctlabs/sp1-reth",
+      "review_pass": "pass5",
+      "commit": null,
+      "evidence_urls": [
+        "https://api.github.com/repos/succinctlabs/sp1-reth"
+      ],
+      "archived": null,
+      "parent": null,
+      "description": "",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "risechain/pevm",
+      "url": "https://github.com/risechain/pevm",
+      "found_via": "awesome-reth relevant development, indexer, L2 and benchmark sections",
+      "stars": 356,
+      "last_commit": "2026-06-05T09:40:18Z",
+      "license": "MIT",
+      "overlap_score": 50,
+      "score_breakdown": {
+        "feature_overlap_50": 14,
+        "activity_20": 20,
+        "adoption_15": 6,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Parallel EVM engine, not a standalone full node. Execution parallelism is already owned by #260 and #246; reference-level overlap.",
+      "forks": 102,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/risechain/pevm",
+      "review_pass": "pass5",
+      "commit": "e94b0e3df9c0c1b983ed3e4d78b3aefb0b5b7cc0",
+      "evidence_urls": [
+        "https://api.github.com/repos/risechain/pevm"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "The Ultimate Parallel EVM Engine: Transaction Execution, State Root Calculation, Shred Broadcasting. All in One and at Once!",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "kkrt-labs/kakarot-rpc",
+      "url": "https://github.com/kkrt-labs/kakarot-rpc",
+      "found_via": "awesome-reth relevant development, indexer, L2 and benchmark sections",
+      "stars": 132,
+      "last_commit": "2025-01-08T09:10:21Z",
+      "license": "MIT",
+      "overlap_score": 33,
+      "score_breakdown": {
+        "feature_overlap_50": 12,
+        "activity_20": 0,
+        "adoption_15": 6,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned.",
+      "forks": 100,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/kkrt-labs/kakarot-rpc",
+      "review_pass": "pass5",
+      "commit": "6b48598a85bb2598123e1be7237da9832d0d5eaa",
+      "evidence_urls": [
+        "https://api.github.com/repos/kkrt-labs/kakarot-rpc",
+        "https://github.com/kkrt-labs/kakarot-rpc/blob/6b48598a85bb2598123e1be7237da9832d0d5eaa/README.md"
+      ],
+      "archived": true,
+      "parent": null,
+      "description": "Kakarot ZK EVM Ethereum RPC adapter",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "adizere/rem-poc",
+      "url": "https://github.com/adizere/rem-poc",
+      "found_via": "awesome-reth relevant development, indexer, L2 and benchmark sections",
+      "stars": 20,
+      "last_commit": "2025-01-05T17:25:30Z",
+      "license": "Apache-2.0",
+      "overlap_score": 38,
+      "score_breakdown": {
+        "feature_overlap_50": 20,
+        "activity_20": 0,
+        "adoption_15": 3,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned.",
+      "forks": 1,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/adizere/rem-poc",
+      "review_pass": "pass5",
+      "commit": "c531459b1a4f4b8c71d6d0460dfc42065fb0e388",
+      "evidence_urls": [
+        "https://api.github.com/repos/adizere/rem-poc",
+        "https://github.com/adizere/rem-poc/blob/c531459b1a4f4b8c71d6d0460dfc42065fb0e388/README.md"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "{{{ rem = reth + malachite }}} {{{ proof of concept }}}",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "informalsystems/malachite",
+      "url": "https://github.com/informalsystems/malachite",
+      "found_via": "awesome-reth relevant development, indexer, L2 and benchmark sections",
+      "stars": 11,
+      "last_commit": "2025-10-21T15:47:44Z",
+      "license": "Apache-2.0",
+      "overlap_score": 37,
+      "score_breakdown": {
+        "feature_overlap_50": 14,
+        "activity_20": 10,
+        "adoption_15": 3,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Fork of circlefin/malachite; the discovered parent is an auxiliary tool/library rather than an applicable independent full-node client. No additional applicable client capability was established.",
+      "forks": 4,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/informalsystems/malachite",
+      "review_pass": "pass5",
+      "commit": "bcac2b2dbd369a6c29b9151fcd0889b133d7221a",
+      "evidence_urls": [
+        "https://api.github.com/repos/informalsystems/malachite"
+      ],
+      "archived": false,
+      "parent": "circlefin/malachite",
+      "description": "Flexible BFT consensus engine in Rust",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "Galxe/grevm",
+      "url": "https://github.com/Galxe/grevm",
+      "found_via": "awesome-reth relevant development, indexer, L2 and benchmark sections",
+      "stars": 38,
+      "last_commit": "2026-08-18T14:38:56Z",
+      "license": "Apache-2.0",
+      "overlap_score": 47,
+      "score_breakdown": {
+        "feature_overlap_50": 14,
+        "activity_20": 20,
+        "adoption_15": 3,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Parallel EVM runtime, not a full node. Execution parallelism is already owned by #260; selected gravity-reth provides the full-node comparison.",
+      "forks": 19,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/Galxe/grevm",
+      "review_pass": "pass5",
+      "commit": "ee9d4e2e4c17b22a44974ee321b6386aed4b3e71",
+      "evidence_urls": [
+        "https://api.github.com/repos/Galxe/grevm"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "Parallel EVM inspired by BlockSTM",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "lita-xyz/reva",
+      "url": "https://github.com/lita-xyz/reva",
+      "found_via": "awesome-reth relevant development, indexer, L2 and benchmark sections",
+      "stars": 13,
+      "last_commit": "2025-07-01T09:30:53Z",
+      "license": "Apache-2.0",
+      "overlap_score": 29,
+      "score_breakdown": {
+        "feature_overlap_50": 6,
+        "activity_20": 10,
+        "adoption_15": 3,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned.",
+      "forks": 5,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/lita-xyz/reva",
+      "review_pass": "pass5",
+      "commit": "d70b7ca2351d42baaf4bef276f11fa38424e61f6",
+      "evidence_urls": [
+        "https://api.github.com/repos/lita-xyz/reva"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "A minimal implementation of ZKPs of Ethereum block execution using Reth. Supports both Ethereum and OP Stack.",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "SeismicSystems/seismic-reth",
+      "url": "https://github.com/SeismicSystems/seismic-reth",
+      "found_via": "awesome-reth relevant development, indexer, L2 and benchmark sections",
+      "stars": 144,
+      "last_commit": "2026-11-09T11:50:56Z",
+      "license": "Apache-2.0",
+      "overlap_score": 68,
+      "score_breakdown": {
+        "feature_overlap_50": 27,
+        "activity_20": 20,
+        "adoption_15": 6,
+        "code_access_15": 15
+      },
+      "status": "selected",
+      "reason": "Selected: a maintained full Rust execution client with storage, pruning, RPC and operational overlap. Its shielded transaction/storage extensions are substantive differences from Reth; those protocol changes are skipped for XDC, while applicable infrastructure is compared.",
+      "forks": 70,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/SeismicSystems/seismic-reth",
+      "review_pass": "pass5",
+      "commit": "faa3a30c430676dfc2d0224fe2bcce18bf0e1e88",
+      "evidence_urls": [
+        "https://api.github.com/repos/SeismicSystems/seismic-reth",
+        "https://github.com/SeismicSystems/seismic-reth/blob/faa3a30c430676dfc2d0224fe2bcce18bf0e1e88/README.md"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "Execution client for Seismic",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15.",
+      "license_evidence": [
+        "https://github.com/SeismicSystems/seismic-reth/blob/faa3a30c430676dfc2d0224fe2bcce18bf0e1e88/LICENSE-APACHE"
+      ]
+    },
+    {
+      "repo": "SovaNetwork/sova-reth",
+      "url": "https://github.com/SovaNetwork/sova-reth",
+      "found_via": "awesome-reth relevant development, indexer, L2 and benchmark sections",
+      "stars": 1,
+      "last_commit": "2025-11-04T15:43:31Z",
+      "license": "Apache-2.0",
+      "overlap_score": 50,
+      "score_breakdown": {
+        "feature_overlap_50": 25,
+        "activity_20": 10,
+        "adoption_15": 0,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Reth-based Bitcoin-interoperability node; last commit is 2025-11-04. Below threshold. Bitcoin finality and precompiles change XDC protocol semantics.",
+      "forks": 2,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/SovaNetwork/sova-reth",
+      "review_pass": "pass5",
+      "commit": "e6568db3f70f1d8bf65a9b7c97313c25afc01027",
+      "evidence_urls": [
+        "https://api.github.com/repos/SovaNetwork/sova-reth",
+        "https://github.com/SovaNetwork/sova-reth/blob/e6568db3f70f1d8bf65a9b7c97313c25afc01027/README.md"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "An EVM execution client designed to interact with Bitcoin",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "ultrasoundmoney/reth-payload-validator",
+      "url": "https://github.com/ultrasoundmoney/reth-payload-validator",
+      "found_via": "awesome-reth relevant development, indexer, L2 and benchmark sections",
+      "stars": 43,
+      "last_commit": "2024-03-16T14:25:49Z",
+      "license": "MIT",
+      "overlap_score": 19,
+      "score_breakdown": {
+        "feature_overlap_50": 6,
+        "activity_20": 0,
+        "adoption_15": 3,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned.",
+      "forks": 12,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/ultrasoundmoney/reth-payload-validator",
+      "review_pass": "pass5",
+      "commit": "b655dd59a12b953ba601c5d49e45aeebeda46b39",
+      "evidence_urls": [
+        "https://api.github.com/repos/ultrasoundmoney/reth-payload-validator"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "Reth rpc api extension to enable block validation",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "axiom-crypto/openvm-reth-benchmark",
+      "url": "https://github.com/axiom-crypto/openvm-reth-benchmark",
+      "found_via": "awesome-reth relevant development, indexer, L2 and benchmark sections",
+      "stars": null,
+      "last_commit": null,
+      "license": "unverified",
+      "overlap_score": 0,
+      "score_breakdown": {
+        "feature_overlap_50": 0,
+        "activity_20": 0,
+        "adoption_15": 0,
+        "code_access_15": 0
+      },
+      "status": "rejected",
+      "reason": "Repository or default-branch metadata unavailable; no verified current implementation or readable license. Retained as an unavailable discovery lead, not selected.",
+      "forks": null,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/axiom-crypto/openvm-reth-benchmark",
+      "review_pass": "pass5",
+      "commit": null,
+      "evidence_urls": [
+        "https://api.github.com/repos/axiom-crypto/openvm-reth-benchmark"
+      ],
+      "archived": null,
+      "parent": null,
+      "description": "",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "ithacaxyz/odyssey",
+      "url": "https://github.com/ithacaxyz/odyssey",
+      "found_via": "README/parent snowball",
+      "stars": 316,
+      "last_commit": "2025-07-12T06:26:35Z",
+      "license": "Apache-2.0",
+      "overlap_score": 51,
+      "score_breakdown": {
+        "feature_overlap_50": 25,
+        "activity_20": 10,
+        "adoption_15": 6,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Experimental L2 testnet; last default-branch commit is July 2025. Below threshold and its rollup semantics do not transfer to XDC.",
+      "forks": 80,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/ithacaxyz/odyssey",
+      "review_pass": "pass5",
+      "commit": "28a421bc27c2d2aa3820dec71ce4f7b7cf0e1777",
+      "evidence_urls": [
+        "https://api.github.com/repos/ithacaxyz/odyssey"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "A testnet open-source Layer 2 from the future, co-designed with the developer tools stack.",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
+    },
+    {
+      "repo": "circlefin/malachite",
+      "url": "https://github.com/circlefin/malachite",
+      "found_via": "README/parent snowball",
+      "stars": 464,
+      "last_commit": "2026-10-19T17:58:59Z",
+      "license": "Apache-2.0",
+      "overlap_score": 50,
+      "score_breakdown": {
+        "feature_overlap_50": 14,
+        "activity_20": 20,
+        "adoption_15": 6,
+        "code_access_15": 10
+      },
+      "status": "rejected",
+      "reason": "Auxiliary benchmark, library, provider test, indexer or RPC adapter; limited overlap with the full-node product. Metadata/documentation screening only; no code cloned.",
+      "forks": 173,
+      "contributors": null,
+      "metadata_url": "https://api.github.com/repos/circlefin/malachite",
+      "review_pass": "pass5",
+      "commit": "a453b32155f4ba9f959724279b52f601bae92e09",
+      "evidence_urls": [
+        "https://api.github.com/repos/circlefin/malachite"
+      ],
+      "archived": false,
+      "parent": null,
+      "description": "Flexible BFT consensus engine in Rust",
+      "adoption_note": "Same star-band proxy as pass4; forks recorded, contributor count not fetched. Open-license metadata without a reviewed layout earns 10/15 accessibility, not 15/15."
     }
   ],
   "pass3": {
@@ -1871,5 +4232,15 @@
       "crypto-org-chain/cronos": "0801cdef03b15788a81698cef368a44a6f60c031"
     },
     "limitations": "Selection is an engineering relevance judgment, not a maturity ranking. Code presence does not establish runtime correctness. No non-commercial or unresolved-licence code was cloned."
+  },
+  "pass5": {
+    "date": "2026-11-14",
+    "ours_commit": "54d8ae7da15c87dd77a7a86ca695c813bad5ec91",
+    "new_candidates": 81,
+    "new_selected": [
+      "SeismicSystems/seismic-reth"
+    ],
+    "source_scope": "Disk, storage and execution timing expansion; benchmark tools remain references below the client-selection threshold.",
+    "activity_note": "Default-branch commit timestamps, not repository updatedAt/push events. Months approximated by 184 and 548 days; no boundary-adjacent selection relies on that approximation."
   }
 }

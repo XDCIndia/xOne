@@ -51,3 +51,11 @@ The implemented modules above describe source structure, not a production-readin
 [Issue #214](https://github.com/XDCIndia/xOneRS/issues/214) adds Ethereum-profile work. Historical exclusions of Engine API, DNS discovery, Ethereum wire versions, blobs and era files must therefore be read as XDC-profile exclusions, not permanent product-wide prohibitions. Consensus behavior must remain selected by chain profile.
 
 This is a headless node product. Graphical admin/client screens, invoicing, tax, refunds, translated storefronts and billing cron jobs are not applicable. Its equivalent surfaces are RPC methods, CLI commands, protocol messages, configuration, metrics and runtime timers; see [module-map-pass4.md](module-map-pass4.md).
+
+## Pass 5 — current storage and performance focus
+
+Re-pinned main to `54d8ae7da15c87dd77a7a86ca695c813bad5ec91`. The product category remains a Rust XDC execution/consensus full node. Existing core-capability evidence is above; the current persistence implementation is mapped in `module-map-pass5.md`.
+
+Additional search terms: Ethereum storage pruning client; Ethereum receipt compression client; transaction lookup pruning; static-file writer rotation; bounded database cursor deletion; log address/topic inverted index; Ethereum execution benchmark; Ethereum client flat database; state database preimages; low-disk admission; engine_newPayload latency; benchmark hardware cohorts; reference-node timings; storage write amplification; Nethermind Paprika; Ethereum client database topic.
+
+Retain MDBX plus XSEG while measuring #135/#149. Do not infer node performance from Engine API rankings or copy a different chain's consensus semantics.

@@ -26,7 +26,8 @@
     "Galxe/gravity-reth": "c407bd938013a4250544c303ac294a36482dcd98",
     "autonity/autonity": "cf1c15ee0bfae7cd1eff7b9b2c3a69f70b4b951f",
     "KiiChain/kiichain": "85d9352541cb7d600e8312bbe0cd51bbe3ca2c0d",
-    "crypto-org-chain/cronos": "0801cdef03b15788a81698cef368a44a6f60c031"
+    "crypto-org-chain/cronos": "0801cdef03b15788a81698cef368a44a6f60c031",
+    "SeismicSystems/seismic-reth": "faa3a30c430676dfc2d0224fe2bcce18bf0e1e88"
   },
   "gaps": [
     {
@@ -2596,6 +2597,148 @@
       "issue_state": "open",
       "new_issue": true,
       "issue_state_checked": "2026-11-14"
+    },
+    {
+      "id": "GAP-0110",
+      "title": "Prune transaction lookup rows with their retained history",
+      "area": "storage",
+      "status": "issued",
+      "sources": [
+        "paradigmxyz/reth:crates/prune/prune/src/segments/user/transaction_lookup.rs",
+        "ethereum/go-ethereum:core/txindexer.go"
+      ],
+      "ours": "crates/xone-sync/src/mdbx/mod.rs, crates/xone-db/src/mdbx.rs",
+      "priority": "P1",
+      "seen_in_count": 2,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/326",
+      "review_pass": "pass5",
+      "ours_commit": "54d8ae7da15c87dd77a7a86ca695c813bad5ec91",
+      "dedupe_note": "Related: #177 owns configurable history retention; #135 owns storage layout. This issue repairs the existing prune_to lifecycle, including obsolete lookup rows left by earlier runs. It does not add another retention-policy UI.",
+      "issue_number": 326
+    },
+    {
+      "id": "GAP-0111",
+      "title": "Bound segment writer handles across chunk rotation",
+      "area": "storage",
+      "status": "issued",
+      "sources": [
+        "paradigmxyz/reth:crates/storage/provider/src/providers/static_file/writer.rs"
+      ],
+      "ours": "crates/xone-db/src/segments.rs, crates/xone-sync/src/mdbx/mod.rs",
+      "priority": "P1",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/327",
+      "review_pass": "pass5",
+      "ours_commit": "54d8ae7da15c87dd77a7a86ca695c813bad5ec91",
+      "dedupe_note": "Related: #16 defines resource bounds, #152 adds archive mode, and #194 adds frozen-segment compression. This is an independent handle-lifetime repair for the current uncompressed writer.",
+      "issue_number": 327
+    },
+    {
+      "id": "GAP-0112",
+      "title": "Stream segment recovery and quarantine with bounded buffers",
+      "area": "storage",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:core/rawdb/freezer_table.go"
+      ],
+      "ours": "crates/xone-db/src/segments.rs, crates/xone-db/src/recover.rs, crates/xone-sync/src/mdbx/mod.rs",
+      "priority": "P1",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/328",
+      "review_pass": "pass5",
+      "ours_commit": "54d8ae7da15c87dd77a7a86ca695c813bad5ec91",
+      "dedupe_note": "Related: #11 owns crash-safe publication and the existing fault matrix. This issue replaces whole-tail allocations in the implemented recovery and quarantine paths without changing which manifest is authoritative.",
+      "issue_number": 328
+    },
+    {
+      "id": "GAP-0113",
+      "title": "Bound temporary memory during range deletion and account storage removal",
+      "area": "storage",
+      "status": "issued",
+      "sources": [
+        "paradigmxyz/reth:crates/storage/db-api/src/cursor.rs",
+        "paradigmxyz/reth:crates/prune/prune/src/segments/user/transaction_lookup.rs"
+      ],
+      "ours": "crates/xone-db/src/mdbx.rs, crates/xone-sync/src/mdbx/mod.rs",
+      "priority": "P1",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/329",
+      "review_pass": "pass5",
+      "ours_commit": "54d8ae7da15c87dd77a7a86ca695c813bad5ec91",
+      "dedupe_note": "Related: #145 owns disk-backed state and streamed snap installation; #177 owns history retention policy. This issue repairs remaining unbounded mutation helpers used by pruning, migration and account deletion. Preserve consensus transaction atomicity.",
+      "issue_number": 329
+    },
+    {
+      "id": "GAP-0114",
+      "title": "Apply disk-space admission before bootstrap and all block writers",
+      "area": "ops",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:cmd/utils/cmd.go"
+      ],
+      "ours": "crates/xone-node/src/diskguard.rs, crates/xone-node/src/services/mod.rs, crates/xone-node/src/services/snapsync.rs, crates/xone-node/src/services/producer.rs, crates/xone-node/src/services/core.rs",
+      "priority": "P1",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/330",
+      "review_pass": "pass5",
+      "ours_commit": "54d8ae7da15c87dd77a7a86ca695c813bad5ec91",
+      "dedupe_note": "Related: closed #16 introduced disk/resource bounds; PR #318 added the current guard. This issue closes uncovered entry points and sampling lifecycle gaps in that implementation. #225 separately owns moving history to another filesystem.",
+      "issue_number": 330
+    },
+    {
+      "id": "GAP-0115",
+      "title": "Make optional preimage retention configurable while preserving wide balances",
+      "area": "storage",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:cmd/utils/flags.go",
+        "ethereum/go-ethereum:triedb/preimages.go"
+      ],
+      "ours": "crates/xone-sync/src/mdbx/mod.rs, crates/xone-node/src/services/core.rs, crates/xone-node/src/services/snapsync.rs, crates/xone-node/src/config.rs, bin/xone/src/flags.rs",
+      "priority": "P2",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/331",
+      "review_pass": "pass5",
+      "ours_commit": "54d8ae7da15c87dd77a7a86ca695c813bad5ec91",
+      "dedupe_note": "Related: closed #134 moved state to hashed keys and #149 measures datadir waste. This issue adds a supported retention policy and coverage contract, rather than changing the hashed-state architecture or deleting mandatory wide-account information.",
+      "issue_number": 331
+    },
+    {
+      "id": "GAP-0116",
+      "title": "Store compact receipts without redundant per-receipt blooms",
+      "area": "storage",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:core/types/receipt.go"
+      ],
+      "ours": "crates/xone-sync/src/mdbx/codec.rs, crates/xone-db/src/segments.rs, crates/xone-executor/src/lib.rs, crates/xone-rpc/src/json.rs",
+      "priority": "P2",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/332",
+      "review_pass": "pass5",
+      "ours_commit": "54d8ae7da15c87dd77a7a86ca695c813bad5ec91",
+      "dedupe_note": "Related: #194 adds compression of frozen segment frames. This issue changes the logical receipt representation and can operate on active uncompressed segments. #276 addresses RPC serialization complexity, not persistent receipt size.",
+      "issue_number": 332
+    },
+    {
+      "id": "GAP-0117",
+      "title": "Add a bounded persistent log index for selective history queries",
+      "area": "rpc",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:core/filtermaps/indexer.go",
+        "ethereum/go-ethereum:core/filtermaps/matcher_backend.go",
+        "erigontech/erigon:execution/state/rw_v3.go",
+        "erigontech/erigon:db/kv/tables.go"
+      ],
+      "ours": "crates/xone-rpc/src/eth.rs, crates/xone-rpc/src/api.rs, crates/xone-db/src/mdbx.rs, crates/xone-sync/src/mdbx/mod.rs",
+      "priority": "P2",
+      "seen_in_count": 2,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/333",
+      "review_pass": "pass5",
+      "ours_commit": "54d8ae7da15c87dd77a7a86ca695c813bad5ec91",
+      "dedupe_note": "Related: #258 adds cheap header-bloom rejection and explicitly excludes a persistent index; #177 owns retained history; #232 exports data externally. This issue is an in-node candidate index, not another exporter or an increase in RPC range limits.",
+      "issue_number": 333
     }
   ],
   "skipped": [
@@ -2944,6 +3087,62 @@
       ],
       "ours": "README.md",
       "pass": "pass4"
+    },
+    {
+      "id": "SKIP-P5-01",
+      "title": "Remove the group-commit shutdown flush gap",
+      "status": "skipped",
+      "review_pass": "pass5",
+      "reason": "Rejected after deeper inspection: Core::drop already calls NodeStore::steady at crates/xone-node/src/services/core.rs:334. The interval is explicitly commit-driven in MdbxStore::Config. No claim of a missing clean-close flush remains.",
+      "sources": [
+        "XDCIndia/xOneRS:crates/xone-node/src/services/core.rs",
+        "XDCIndia/xOneRS:crates/xone-sync/src/mdbx/mod.rs"
+      ]
+    },
+    {
+      "id": "SKIP-P5-02",
+      "title": "Replace MDBX with Carmen or Paprika",
+      "status": "skipped",
+      "review_pass": "pass5",
+      "reason": "No matched benchmark establishes a need to change engines. Carmen has a restricted license; Paprika is archived. Existing #135 and #149 own the storage decision and evidence.",
+      "sources": [
+        "https://github.com/0xsoniclabs/carmen/blob/2f40b1b10da4bff5640dfaebe7ace7a20cf34473/LICENSE",
+        "https://api.github.com/repos/NethermindEth/Paprika",
+        "https://github.com/XDCIndia/xOneRS/issues/135"
+      ]
+    },
+    {
+      "id": "SKIP-P5-03",
+      "title": "Copy Seismic shielded transaction and storage semantics",
+      "status": "skipped",
+      "review_pass": "pass5",
+      "reason": "TxSeismic, private storage flags, TEE decryption and changed storage RPC behavior require a different chain protocol and trust model. They conflict with pinned XDC parity; not an implementation backlog item.",
+      "sources": [
+        "SeismicSystems/seismic-reth:docs/seismic/features.md",
+        "SeismicSystems/seismic-reth:crates/seismic/rpc/README.md"
+      ]
+    },
+    {
+      "id": "SKIP-P5-04",
+      "title": "Copy Seismic token-denominated gas payment rules",
+      "status": "skipped",
+      "review_pass": "pass5",
+      "reason": "Registry-backed token selection, private balance modes and fee selectors alter transaction validity and gas-payment rules. XDC protocol compatibility forbids importing these as a client-only optimization.",
+      "sources": [
+        "SeismicSystems/seismic-reth:crates/seismic/txpool/README.md",
+        "SeismicSystems/seismic-reth:crates/seismic/rpc/README.md"
+      ]
+    },
+    {
+      "id": "SKIP-P5-05",
+      "title": "Claim accelerated CRC, preallocation or a storage-engine swap as measured wins",
+      "status": "skipped",
+      "review_pass": "pass5",
+      "reason": "No matched run exists. Keep these as experiments under #13/#135; static suspicion alone does not establish a new shipped capability or a measured bottleneck.",
+      "sources": [
+        "XDCIndia/xOneRS:crates/xone-db/src/segments.rs",
+        "https://github.com/XDCIndia/xOneRS/issues/13"
+      ]
     }
   ],
   "priority_rule_advantages": "Second pass (strengths): priority by impact for an XDC node operator, not by competitor count. P1 = operators are blocked or forced into a workaround today; P2 = large cost or capability gain for many operators; P3 = integrators, private networks or maintainers.",
@@ -2960,5 +3159,6 @@
     "rechecked_main": "a0dc523827c9ce8bdd305e9d8470f023aa2c7fba",
     "closure_note": "Requested batch of 50 new issues completed. This is issue coverage, not implementation completion or proof that no possible feature gap remains.",
     "priority_rule": "Impact first: P1 correctness, availability or uncontrolled resource growth; P2 operator capability or common efficiency improvement; P3 optional platform and integration improvements. seen_in_count is a lower bound from cited independent repositories, not an inferred market total."
-  }
+  },
+  "priority_rule_pass5": "P1: concrete disk-growth, resource-exhaustion or uncovered admission lifecycle; P2: optional storage/read-amplification improvements requiring benchmark acceptance. seen_in_count counts verified implementations only, not inferred support across all clients."
 }
