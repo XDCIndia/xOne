@@ -48,6 +48,10 @@ jobs:
             target
           key: assurance-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
       - run: ci/check-fixtures.sh
+      - run: python3 -I ci/loc.py --budget ci/loc-budget.toml   # ceilings, issue #201
+      - name: Per-crate line and dependency delta
+        if: github.event_name == 'pull_request'
+        run: python3 -I ci/loc.py --base "origin/${{ github.base_ref }}" >> "$GITHUB_STEP_SUMMARY"
       - run: ci/check-layering.sh
       - run: ci/check-layering.sh --fixtures
       - run: command -v cargo-deny || cargo install cargo-deny --locked --version 0.20.2
