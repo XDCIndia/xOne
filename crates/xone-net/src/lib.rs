@@ -10,6 +10,7 @@
 pub mod bft_gossip;
 pub mod discv4;
 pub mod eth;
+pub mod netrestrict;
 pub mod peers;
 pub mod rlpx;
 
@@ -50,6 +51,8 @@ pub enum NetError {
     Shutdown,
     #[error("rejected: {0:?}")]
     Rejected(DisconnectReason),
+    #[error("{0} is outside --netrestrict")]
+    NetRestricted(std::net::IpAddr),
     #[error("unknown peer")]
     UnknownPeer,
     #[error("peer send queue is full")]

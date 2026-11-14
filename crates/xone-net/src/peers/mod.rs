@@ -83,6 +83,8 @@ pub struct Config {
     /// Time one required-block header may take (geth: 15 s).
     pub required_timeout: Duration,
     pub limits: PeerLimits,
+    /// `--netrestrict`: connections to and from other networks are refused.
+    pub restrict: Option<crate::netrestrict::NetRestrict>,
 }
 
 impl Config {
@@ -108,6 +110,7 @@ impl Config {
             required_blocks: Vec::new(),
             required_timeout: Duration::from_secs(15),
             limits: PeerLimits::default(),
+            restrict: None,
         }
     }
 }
@@ -279,10 +282,24 @@ impl Peers {
         if lock(&self.state).closed {
             return Err(NetError::Shutdown);
         }
+        // geth `errNetRestrict`: static and trusted peers too
+        if !crate::netrestrict::allowed(self.cfg.restrict.as_ref(), addr.ip()) {
+            return Err(NetError::NetRestricted(addr.ip()));
+        }
         let tcp = timeout(self.cfg.dial_timeout, TcpStream::connect(addr))
             .await
             .map_err(|_| NetError::Timeout("dial"))??;
         self.attach(tcp, Some(remote)).await
+    }
+
+    /// An inbound TCP connection: refused before the handshake when its address is outside
+    /// `--netrestrict` (geth `checkInboundConn`), else [`Peers::attach`].
+    pub async fn accept(&self, tcp: TcpStream) -> Result<PeerId, NetError> {
+        let ip = tcp.peer_addr()?.ip();
+        if !crate::netrestrict::allowed(self.cfg.restrict.as_ref(), ip) {
+            return Err(NetError::NetRestricted(ip));
+        }
+        self.attach(tcp, None).await
     }
 
     /// Take an inbound connection (`remote` is `None`) or finish an outbound one: handshake

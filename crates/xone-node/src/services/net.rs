@@ -120,6 +120,7 @@ pub struct NetService {
     targets: Vec<(Enode, bool)>,
     boots: Vec<Enode>,
     max_peers: usize,
+    restrict: Option<xone_net::netrestrict::NetRestrict>,
 }
 
 impl NetService {
@@ -192,6 +193,7 @@ impl NetService {
             targets,
             boots,
             max_peers: cfg.p2p.max_peers as usize,
+            restrict: cfg.netrestrict()?,
         })
     }
 
@@ -209,7 +211,7 @@ async fn accept_loop(l: TcpListener, peers: Peers) {
         let peers = peers.clone();
         tokio::spawn(async move {
             // a refused or failed handshake is the peer's; `Peers` has already answered it
-            let _ = peers.attach(tcp, None).await;
+            let _ = peers.accept(tcp).await;
         });
     }
 }
@@ -305,7 +307,8 @@ impl Service for NetService {
             let sock = rt
                 .block_on(UdpSocket::bind(addr))
                 .map_err(|e| err(format!("discovery listen {addr}: {e}")))?;
-            let d = Discv4::new(self.key, addr, self.listen.port());
+            let d = Discv4::new(self.key, addr, self.listen.port())
+                .with_restrict(self.restrict.clone());
             let mut boots = vec![];
             for b in &self.boots {
                 if let Some(a) = rt.block_on(resolve(b)) {

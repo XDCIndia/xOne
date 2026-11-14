@@ -118,6 +118,8 @@ pub struct P2p {
     pub max_peers: u32,
     pub no_discover: bool,
     pub nat: Option<String>,
+    /// `--netrestrict`: CIDR masks this node discovers, dials and accepts (geth `Netlist`).
+    pub netrestrict: Option<String>,
     pub bootnodes: Vec<String>,
     /// `--eth.requiredblocks`: `<n>=<0x hash>` entries the operator adds to, or uses to replace,
     /// the built-in ones of the network ([`Config::required_blocks`]).
@@ -300,6 +302,7 @@ defaults!(P2p {
     max_peers: 50,
     no_discover: false,
     nat: None,
+    netrestrict: None,
     bootnodes: vec![],
     required_blocks: vec![]
 });
@@ -444,6 +447,15 @@ impl Config {
         Ok(c)
     }
 
+    /// `--netrestrict` parsed; `None` without it.
+    pub fn netrestrict(&self) -> Result<Option<xone_net::netrestrict::NetRestrict>, String> {
+        self.p2p
+            .netrestrict
+            .as_deref()
+            .map(|s| s.parse().map_err(|e| format!("--netrestrict: {e}")))
+            .transpose()
+    }
+
     /// The heights whose hash every peer and every chain must carry: the built-in entries of
     /// `net` with the operator's laid over them (an operator entry replaces a built-in one at the
     /// same height).
@@ -567,6 +579,16 @@ impl Config {
             "maxpeers" => self.p2p.max_peers = num(key, v)?,
             "nodiscover" => self.p2p.no_discover = flag(key, v)?,
             "nat" => self.p2p.nat = Some(v.to_owned()),
+            "netrestrict" => {
+                let r: xone_net::netrestrict::NetRestrict = v.parse().map_err(|_| {
+                    invalid(
+                        key,
+                        v,
+                        "comma-separated CIDR masks, e.g. 10.0.0.0/8,fd00::/8",
+                    )
+                })?;
+                self.p2p.netrestrict = Some(r.to_string());
+            }
             "bootnodes" => self.p2p.bootnodes = list(v),
             "eth.requiredblocks" => {
                 let r = xone_chainspec::parse_required_blocks(v)

@@ -175,6 +175,14 @@ pub const FLAGS: &[Flag] = &[
         "flags.go:997",
     ),
     f(
+        "netrestrict",
+        S,
+        "unset",
+        "10.0.0.0/8,fd00::/8",
+        "Restricts network communication to the given IP networks (CIDR masks): discovery drops packets and neighbours from other networks, and connections to or from them are refused, static and trusted peers included.",
+        "flags.go:1015",
+    ),
+    f(
         "nat",
         S,
         "unset",
