@@ -111,7 +111,13 @@ pub struct Limits {
     pub bucket_per_sec: u64,
     pub logs_blocks: u64,
     pub logs_results: usize,
+    /// `eth_call`/`eth_estimateGas` gas cap (geth `--rpc.gascap`); 0 is no cap.
     pub call_gas_cap: u64,
+    /// Fee cap in ether for a sent transaction (geth `--rpc.txfeecap`); 0 is no cap.
+    pub tx_fee_cap: f64,
+    /// Deadline of a message holding `eth_call` (geth `--rpc.evmtimeout`); zero keeps the class
+    /// deadline.
+    pub evm_timeout: Duration,
 }
 
 impl Default for Limits {
@@ -140,6 +146,8 @@ impl Default for Limits {
             logs_blocks: 5_000,
             logs_results: 10_000,
             call_gas_cap: 50_000_000,
+            tx_fee_cap: 1.0,
+            evm_timeout: Duration::from_secs(5),
         }
     }
 }
@@ -269,6 +277,16 @@ impl Rpc {
             )),
             in_flight: Arc::new(Semaphore::new(in_flight)),
             id: *n,
+        }
+    }
+
+    /// The time budget of one method: the class deadline, or `evm_timeout` for `eth_call` when
+    /// set (geth applies `RPCEVMTimeout` to `eth_call` only). A batch gets the largest.
+    fn deadline_of(&self, method: &str, cost: Cost) -> Duration {
+        if method == "eth_call" && !self.limits.evm_timeout.is_zero() {
+            self.limits.evm_timeout
+        } else {
+            self.limits.deadline[cost.index()]
         }
     }
 
@@ -407,10 +425,12 @@ impl Rpc {
         if methods.len() > self.limits.batch_items {
             return self.rejected(RpcError::invalid_request("batch too large"), None);
         }
+        let mut deadline = Duration::ZERO;
         for m in &methods {
             let c = self.cost_of(m);
             cost = cost.max(c);
             units += c.units();
+            deadline = deadline.max(self.deadline_of(m, c));
             classes[c.index()] = true;
         }
         // The batch counts as the sum of its parts (ADR-007 section 4).
@@ -447,7 +467,7 @@ impl Rpc {
             drop(permits);
             out
         });
-        let out = match tokio::time::timeout(self.limits.deadline[cost.index()], job).await {
+        let out = match tokio::time::timeout(deadline, job).await {
             Ok(Ok(v)) => v,
             Ok(Err(_)) => Some(
                 json!({"jsonrpc": "2.0", "id": null, "error": RpcError::internal("handler panicked").to_value()}),
