@@ -1,9 +1,10 @@
-//! `xone import` and `xone export`: geth-compatible block files through the staged pipeline.
+//! `xone import` and `xone export`: geth-compatible block files.
 //!
-//! ponytail: the datadir has no block database yet (the MDBX binding of ADR-005 is not written), so
-//! both commands run on an in-memory chain started from the network's genesis. `import` verifies a
-//! file end to end with the real executor and reports; `export` reads its range from the chain it
-//! has just imported from `--input`. They move to the datadir with the store.
+//! By default both work on the node's datadir ([`datadir`]): the same chain marker, genesis and
+//! exclusive lock as a node start, `import` through `Core::import` (the follower's validation and
+//! durable commit) from the persisted head on, `export` from the stored canonical blocks. The
+//! verification forms (`import --verify-only`, `export --input`) run the file through the staged
+//! pipeline on an in-memory chain from the network's genesis and keep nothing.
 
 mod export;
 mod import;
@@ -22,8 +23,8 @@ use xone_sync::{
     xdc::{genesis, XdcExecutor},
 };
 
-pub use export::export;
-pub use import::import;
+pub use export::{export, export_datadir};
+pub use import::{import, import_datadir};
 pub use snapshot::snapshot;
 
 type Accept = fn(
@@ -57,6 +58,27 @@ fn open(net: Network) -> Result<Mem, String> {
     let store = MemStore::with_anchor(g, flat, 128, 100_000);
     let exec = XdcExecutor::new(net).map_err(|e| e.to_string())?;
     Ok(Chain::new(net.spec(), store, exec, accept as Accept))
+}
+
+/// The node's chain over its datadir, opened as a node start opens it (marker, genesis, lock).
+/// Every block is committed to the device before the next (no group commit).
+fn datadir(cfg: &xone_node::Config) -> Result<xone_node::services::core::Core, String> {
+    let (marker, spec, genesis) =
+        xone_node::datadir::prepare_chain(cfg).map_err(|e| e.to_string())?;
+    let core = xone_node::services::core::Core::open_full(
+        spec,
+        &genesis,
+        &cfg.datadir.join("xone"),
+        xone_node::services::CHECKPOINT_EVERY,
+        cfg.sync.minimal,
+        false,
+        cfg.sync.state_disk,
+    )
+    .map_err(|e| e.to_string())?;
+    if core.genesis.to_string() != marker.genesis_hash {
+        return Err("the genesis hash of the node differs from the chain marker".into());
+    }
+    Ok(core)
 }
 
 /// Imports the block file `path` into `chain`.

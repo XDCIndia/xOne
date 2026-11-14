@@ -305,7 +305,7 @@ fn import_and_export_run_the_pipeline_and_write_geth_block_files() {
     std::fs::write(&input, blocks.concat()).unwrap_or_else(|e| panic!("{e}"));
     let input = input.to_str().unwrap_or_default();
 
-    let o = xone(&["import", input]);
+    let o = xone(&["import", input, "--verify-only"]);
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
     assert!(out(&o).starts_with("imported 200 blocks"), "{}", out(&o));
     assert!(out(&o).contains("head 200 0x"), "{}", out(&o));
@@ -331,7 +331,43 @@ fn import_and_export_run_the_pipeline_and_write_geth_block_files() {
     let o = xone(&["export", part, "0", "201", "--input", input]);
     assert_eq!(o.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&o.stderr).contains("larger than head block 200"));
-    let o = xone(&["import", "/nonexistent/blocks.rlp"]);
+    let o = xone(&["import", "/nonexistent/blocks.rlp", "--verify-only"]);
+    assert_eq!(o.status.code(), Some(1));
+}
+
+#[test]
+fn import_fills_the_datadir_and_export_reads_it_back() {
+    let dir = scratch("datadir-import");
+    std::fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("{e}"));
+    let blocks = vector_blocks(200);
+    let input = dir.join("in.rlp");
+    std::fs::write(&input, blocks.concat()).unwrap_or_else(|e| panic!("{e}"));
+    let input = input.to_str().unwrap_or_default();
+    let data = dir.join("data");
+    let data = data.to_str().unwrap_or_default();
+    let node = |args: &[&str]| {
+        let mut a = vec!["--apothem", "--datadir", data];
+        a.extend_from_slice(args);
+        xone(&a)
+    };
+    let o = node(&["import", input]);
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    assert!(out(&o).starts_with("imported 200 blocks"), "{}", out(&o));
+    assert!(out(&o).contains("head 200 0x"), "{}", out(&o));
+    // a second run resumes from the persisted head: nothing left to import
+    let o = node(&["import", input]);
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    assert!(out(&o).starts_with("imported 0 blocks"), "{}", out(&o));
+    // export reads the datadir, byte for byte, without --input
+    let part = dir.join("part.rlp");
+    let part = part.to_str().unwrap_or_default();
+    let o = node(&["export", part, "50", "99"]);
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    assert_eq!(
+        std::fs::read(part).unwrap_or_else(|e| panic!("{e}")),
+        blocks[50..100].concat()
+    );
+    let o = node(&["export", part, "0", "201"]);
     assert_eq!(o.status.code(), Some(1));
 }
 

@@ -54,8 +54,9 @@ fn run(args: impl IntoIterator<Item = OsString>) -> ExitCode {
         };
     }
     match m.subcommand() {
-        Some(("import", s)) => return cmd::import(s),
-        Some(("export", s)) => return cmd::export(s),
+        // the verification-only forms run on an in-memory chain and read no config
+        Some(("import", s)) if s.get_flag("verify-only") => return cmd::import(s),
+        Some(("export", s)) if s.contains_id("input") => return cmd::export(s),
         Some(("snapshot", s)) => return cmd::snapshot(s),
         _ => {}
     }
@@ -100,6 +101,8 @@ fn run(args: impl IntoIterator<Item = OsString>) -> ExitCode {
             }
             Err(e) => fail(e),
         },
+        Some(("import", s)) => cmd::import_datadir(s, &cfg),
+        Some(("export", s)) => cmd::export_datadir(s, &cfg),
         Some(("init", s)) => {
             let path = s.get_one::<String>("genesis").map_or("", String::as_str);
             let marker = std::fs::read_to_string(path)

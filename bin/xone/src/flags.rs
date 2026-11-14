@@ -646,25 +646,25 @@ pub fn command() -> Command {
         .subcommand(
             Command::new("import")
                 .about(
-                    "Import a geth block file through the staged pipeline with the real executor.",
+                    "Import a geth block file into the datadir (--datadir and the network flags), through the node's block validation and durable commit, from the datadir's head on. --verify-only runs the file through the staged pipeline on an in-memory chain instead and keeps nothing.",
                 )
                 .arg(Arg::new("file").value_name("file").required(true))
+                .arg(
+                    Arg::new("verify-only")
+                        .long("verify-only")
+                        .action(ArgAction::SetTrue),
+                )
                 .arg(Arg::new("network").long("network").value_parser(
                     clap::builder::PossibleValuesParser::new(xone_chainspec::Network::NAMES),
                 )),
         )
         .subcommand(
             Command::new("export")
-                .about("Write blocks of the chain imported from --input as a geth block file.")
+                .about("Write canonical blocks of the datadir as a geth block file. With --input, of an in-memory chain imported from that file instead (verification).")
                 .arg(Arg::new("file").value_name("file").required(true))
                 .arg(Arg::new("from").value_name("from"))
                 .arg(Arg::new("to").value_name("to"))
-                .arg(
-                    Arg::new("input")
-                        .long("input")
-                        .required(true)
-                        .value_name("blockfile"),
-                )
+                .arg(Arg::new("input").long("input").value_name("blockfile"))
                 .arg(Arg::new("network").long("network").value_parser(
                     clap::builder::PossibleValuesParser::new(xone_chainspec::Network::NAMES),
                 )),
@@ -740,5 +740,5 @@ Source column: file:line in geth-XDC (`XDCIndia/go-ethereum` at `6fc8e8c2`; `fla
             x.source
         );
     }
-    s + "\nSubcommands: `init <genesis.json>`, `version`, `dumpconfig`, `genesis-hash --network <name>`, `import <file>`, `export <file> [from] [to] --input <blockfile>`, `snapshot export --datadir <dir> --out <file> [--at <block>]`, `snapshot import --datadir <dir> --in <file> --pins <file>`.\n"
+    s + "\nSubcommands: `init <genesis.json>`, `version`, `dumpconfig`, `genesis-hash --network <name>`, `import <file> [--verify-only]`, `export <file> [from] [to] [--input <blockfile>]`, `snapshot export --datadir <dir> --out <file> [--at <block>]`, `snapshot import --datadir <dir> --in <file> --pins <file>`.\n"
 }
