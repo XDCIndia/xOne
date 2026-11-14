@@ -9,15 +9,11 @@ mod export;
 mod import;
 mod snapshot;
 
-use std::{
-    fs::File,
-    io::BufReader,
-    process::ExitCode,
-    time::{Instant, SystemTime, UNIX_EPOCH},
-};
+use std::{fs::File, io::BufReader, process::ExitCode, time::Instant};
 
 use clap::ArgMatches;
 use xone_chainspec::Network;
+use xone_node::services::core::now;
 use xone_sync::{
     chain::{Chain, ChainRead},
     import::FileSource,
@@ -61,12 +57,6 @@ fn open(net: Network) -> Result<Mem, String> {
     let store = MemStore::with_anchor(g, flat, 128, 100_000);
     let exec = XdcExecutor::new(net).map_err(|e| e.to_string())?;
     Ok(Chain::new(net.spec(), store, exec, accept as Accept))
-}
-
-fn now() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs())
 }
 
 /// Imports the block file `path` into `chain`.

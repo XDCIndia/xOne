@@ -12,7 +12,7 @@ workspace = true
 # snap/1 (XB-17): the message codec, range proofs over alloy-trie, the server over a state snapshot
 # and the client state-sync driver. No I/O, no clock, no threads: the transport (RLPx) and the
 # peer set are behind `client::PeerSource`, and every clock reading is an argument.
-# Rank: same as xone-net and xone-sync (ci/layering.py), so it depends on neither.
+# Rank: 5, below xone-sync (ci/layering.py): sync depends on snap, snap depends on neither sync nor net.
 [dependencies]
 alloy-primitives.workspace = true
 alloy-rlp.workspace = true
@@ -25,3 +25,8 @@ xone-state.workspace = true
 proptest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+xone-snap = { path = ".", features = ["testkit"] }
+
+[features]
+# In-memory peer and state generator for tests. Not for a release artifact.
+testkit = []

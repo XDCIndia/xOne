@@ -18,6 +18,7 @@ use alloy_primitives::{Address, U256};
 use xone_primitives::EXTRA_SEAL;
 
 use super::gosort::sort_slice;
+use crate::penalty::same_set;
 use crate::verify::HeaderError;
 
 /// Length of the vanity prefix of `extraData` (geth `extraVanity`).
@@ -34,14 +35,6 @@ pub fn addresses(bytes: &[u8]) -> Vec<Address> {
         .chunks_exact(Address::len_bytes())
         .map(Address::from_slice)
         .collect()
-}
-
-/// geth `compareSignersLists` (`xdpos.go:2687`): equal as multisets.
-pub fn same_set(a: &[Address], b: &[Address]) -> bool {
-    let (mut a, mut b) = (a.to_vec(), b.to_vec());
-    a.sort();
-    b.sort();
-    a == b
 }
 
 /// The masternodes in the `extraData` of a V1 checkpoint (`GetMasternodesFromCheckpointHeader`,

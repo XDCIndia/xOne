@@ -7,8 +7,7 @@ is run locally; `.github/workflows/ci.yml` runs the same commands. Toolchain: st
 ## R3 rule 1 and 2: mechanism per rule
 
 Lints live in `[workspace.lints]` (root `Cargo.toml`). A crate opts in with `[lints] workspace = true`.
-Opted in: `xone-chainspec`, `xone-consensus`, `xone-evm`, `xone-state`, `xone-primitives`, `xone-signer`.
-Opted in: `xone-chainspec`, `xone-consensus`, `xone-evm`, `xone-state`, `xone-primitives`, `xone-net`.
+Opted in (the `RULE_CRATES` of `ci/check-fixtures.sh`): `xone-chainspec`, `xone-consensus`, `xone-evm`, `xone-state`, `xone-primitives`, `xone-signer`, `xone-net`, `xone-executor`, `xone-sync`, `xone-snap`, `xone-builder`, `xone-rpc`.
 `disallowed-*` lists are in `clippy.toml` of each opted-in crate; `ci/rule2.clippy.toml` is the master copy
 and `ci/check-fixtures.sh` fails if a copy differs. (A root `clippy.toml` would also hit `build.rs`,
 `sim` and the spikes, which read the environment on purpose.)
@@ -101,7 +100,7 @@ reth git URL used by `spikes/net` (pinned by revision).
 ## Unsafe and FFI audit
 
 Command: `ci/unsafe-audit.sh > docs/assurance/unsafe-ffi-audit-2026-11-11.md`. `cargo geiger` is not used
-(see the script). Table: [unsafe-ffi-audit-2026-11-11.md](unsafe-ffi-audit-2026-11-11.md). Owner review: pending for every row.
+(see the script). Table: [unsafe-ffi-audit-2026-11-11.md](unsafe-ffi-audit-2026-11-11.md). Owner review: pending for every row. `ci/unsafe-audit-drift.py` (CI, `assurance` job) fails when a fresh run lists other packages, versions, unsafe counts or FFI flags than this table; regenerate and keep any owner-review marks.
 The FFI column is a text heuristic; the two hits (`alloy-primitives`, `crypto-bigint`) are a wasm-only
 `extern "C"` import block and a fuzz entry point, not native libraries linked on Linux.
 
@@ -120,15 +119,19 @@ Command: `cargo +nightly miri test -p xone-primitives --lib` (needs `rustup comp
 CI pins `nightly-2026-03-24`, the nightly installed locally (1.96.0-nightly). Local result: 8 passed, 0 failed,
 850 s (the k256 sign and recover test is most of it). The integration tests (`tests/vectors.rs`, `tests/wide_balance.rs`)
 were NOT run under miri: they open vector files, which miri isolation rejects (`open not available when isolation is enabled`),
-and a run with `-Zmiri-disable-isolation` was not attempted because of the time. `xone-consensus` miri is not in CI yet.
+and a run with `-Zmiri-disable-isolation` was not attempted because of the time. `xone-consensus` miri is not in CI yet. The CI miri job runs nightly only, 60 min cap (#203).
 
 ## Not covered
 
-SBOM and build provenance (#15 last box), the reproducible-build hash on a second builder (#22), CI on GitHub
-(billing hold), `cargo auditable` (see below), `fuzz/`, the sanitizer or `loom` runs of rule 5, rules 3 and 4 as checks.
+SBOM and build provenance are done by `ci/release.sh` (see Release build below); the reproducible-build hash on a second builder (#22), CI on GitHub
+(billing hold), `fuzz/`, the sanitizer or `loom` runs of rule 5, rules 3 and 4 as checks.
 `cargo auditable build` embeds the dependency list in the binary: it needs `cargo install cargo-auditable --locked`,
 the release build to go through it, and `cargo audit bin target/release/xone` in CI. An SBOM needs `cargo cyclonedx`
 or `cargo sbom`, and provenance needs a signed attestation from the CI runner, so both wait for CI.
+
+## Mutants and fault hooks (issue #15)
+
+`mutants.toml` scopes `cargo mutants` to `xone-consensus`, `xone-primitives` and `xone-signer`, unit tests only. The `mutants` job of `.github/workflows/ci.yml` runs it nightly in 8 shards of at most 60 minutes and uploads `mutants.out`; surviving mutants are a report, not a failure. It has NOT been run yet (`cargo-mutants` is not installed on the build host and a full run is long). Nothing ships: `cargo-mutants` edits a scratch copy and adds no feature or symbol, and `ci/check-release-tree.sh` check (a) rejects a `mutants` or `fault-injection` feature in `cargo tree -p xone`. The failing cases for that check are `ReleaseTreeFeatureCheck` in `ci/tests/test_gates.py`.
 
 ## Release build (XB-26, issue #46)
 
@@ -140,3 +143,7 @@ different paths (equal binary and tarball hashes on 2026-11-12), `ci/test-packag
 Records: `docs/ops/release.md`, `docs/ops/release-rehearsal.md`. Gaps: two builders on separate machines,
 a different `CARGO_HOME`, signing key custody (owner), SBOM and provenance not signed beyond `SHA256SUMS`,
 no aarch64, no CI run on a tag.
+
+## Code-size budget (issue #201)
+
+`python3 -I ci/loc.py --budget ci/loc-budget.toml` counts non-blank, non-comment Rust lines per crate (tests and generated files excluded) and fails when `xone-consensus`, `xone-evm`, `xone-signer` or `xone-primitives` is above its ceiling (main plus 15 percent). On a pull request the `assurance` job also writes a per-crate line and dependency delta against the merge base to the job summary (`ci/loc.py --base REF`). The failing case is `LocBudgetGate` in `ci/tests/test_gates.py`. Raise a ceiling with a one-line change of `ci/loc-budget.toml`.
