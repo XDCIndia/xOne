@@ -69,6 +69,13 @@ Source column: file:line in geth-XDC (`XDCIndia/go-ethereum` at `6fc8e8c2`; `fla
 | `--pprof` |  | false | Enable the profiling endpoint. | internal/debug/flags.go:106 |
 | `--pprof.addr <string>` |  | 127.0.0.1 | Profiling listen address. | internal/debug/flags.go:117 |
 | `--pprof.port <n>` |  | 6060 | Profiling listen port. | internal/debug/flags.go:111 |
+| `--txpool.pricelimit <n>` |  | 1 | Minimum gas price tip to enter the pool (wei). Config: [txpool] price_limit. | flags.go:487 |
+| `--txpool.pricebump <n>` |  | 10 | Percent a replacement must raise both fee cap and tip. Config: [txpool] price_bump. | flags.go:493 |
+| `--txpool.accountslots <n>` |  | 16 | Executable slots per account kept from fairness eviction. Config: [txpool] account_slots. | flags.go:499 |
+| `--txpool.globalslots <n>` |  | 5120 | Executable transactions in the whole pool. Config: [txpool] global_slots. | flags.go:505 |
+| `--txpool.accountqueue <n>` |  | 64 | Non-executable transactions per account. Config: [txpool] account_queue. | flags.go:511 |
+| `--txpool.globalqueue <n>` |  | 1024 | Non-executable transactions in the whole pool. Config: [txpool] global_queue. | flags.go:517 |
+| `--txpool.lifetime <duration>` |  | 3h0m0s | How long an account may stay idle in the queue, such as 3h0m0s. Config: [txpool] lifetime_secs. | flags.go:523 |
 | `--version` | `-V` | false | Print the version stamp and exit; never opens the datadir. Short form -V. | join.sh:481 (xOneGo lesson) |
 
 Subcommands: `init <genesis.json>`, `version`, `dumpconfig`, `genesis-hash --network <name>`, `import <file>`, `export <file> [from] [to] --input <blockfile>`, `snapshot export --datadir <dir> --out <file> [--at <block>]`, `snapshot import --datadir <dir> --in <file> --pins <file>`.
