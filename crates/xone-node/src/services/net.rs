@@ -63,6 +63,8 @@ pub struct NetHandle {
     pub genesis: B256,
     rt: Handle,
     tasks: Arc<Mutex<Vec<JoinHandle<()>>>>,
+    /// The redial loop of each peer added by `add_peer`, so `remove_peer` can end it.
+    dialers: Arc<Mutex<std::collections::HashMap<PeerId, JoinHandle<()>>>>,
 }
 
 fn peer_id(e: &Enode) -> Result<PeerId, String> {
@@ -96,7 +98,7 @@ impl NetHandle {
             self.peers.add_static(id);
         }
         let (peers, e) = (self.peers.clone(), e.clone());
-        self.spawn(async move {
+        let task = self.rt.spawn(async move {
             loop {
                 if !peers.peer_ids().contains(&id) {
                     if let Some(addr) = resolve(&e).await {
@@ -107,6 +109,35 @@ impl NetHandle {
                 sleep(Duration::from_secs(5)).await;
             }
         });
+        if let Some(old) = self
+            .dialers
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(id, task)
+        {
+            old.abort();
+        }
+        Ok(())
+    }
+
+    /// geth `admin_removePeer` (`trusted` false): ends the redial loop of `e`, drops it from the
+    /// static set and disconnects it. `admin_removeTrustedPeer` (`trusted` true): drops the trusted
+    /// mark only, the session stays (geth `p2p/server.go` `RemoveTrustedPeer`).
+    pub fn remove_peer(&self, e: &Enode, trusted: bool) -> Result<(), String> {
+        let id = peer_id(e)?;
+        if trusted {
+            self.peers.remove_trusted(&id);
+            return Ok(());
+        }
+        if let Some(t) = self
+            .dialers
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .remove(&id)
+        {
+            t.abort();
+        }
+        self.peers.remove_static(&id);
         Ok(())
     }
 }
@@ -184,6 +215,7 @@ impl NetService {
                 peers,
                 rt: rt.handle().clone(),
                 tasks: Arc::default(),
+                dialers: Arc::default(),
             },
             rt: Some(rt),
             key,
@@ -333,6 +365,15 @@ impl Service for NetService {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .drain(..)
+        {
+            t.abort();
+        }
+        for (_, t) in self
+            .h
+            .dialers
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .drain()
         {
             t.abort();
         }

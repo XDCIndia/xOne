@@ -269,6 +269,25 @@ impl Peers {
         lock(&self.state).trust.add_static(id);
     }
 
+    /// Drops the trusted mark of `id` (geth `RemoveTrustedPeer`); a connected peer stays.
+    pub fn remove_trusted(&self, id: &PeerId) {
+        lock(&self.state).trust.remove_trusted(id);
+    }
+
+    /// Drops `id` from the static set and closes its session with `Requested` (geth `RemovePeer`).
+    /// True when a session was closed.
+    pub fn remove_static(&self, id: &PeerId) -> bool {
+        let mut st = lock(&self.state);
+        st.trust.remove_static(id);
+        let Some(e) = st.peers.remove(id) else {
+            return false;
+        };
+        // a full queue drops `tx` right after, which ends the session too
+        let _ = e.tx.try_send(Cmd::Close(DisconnectReason::Requested));
+        st.gossip.remove_peer(id);
+        true
+    }
+
     /// The head we announce in the Status of new sessions.
     pub fn set_head(&self, head: B256, td: U256) {
         lock(&self.state).head = (head, td);

@@ -24,6 +24,14 @@ impl Trust {
         self.statics.insert(id);
     }
 
+    pub fn remove_trusted(&mut self, id: &PeerId) {
+        self.trusted.remove(id);
+    }
+
+    pub fn remove_static(&mut self, id: &PeerId) {
+        self.statics.remove(id);
+    }
+
     pub fn remove(&mut self, id: &PeerId) {
         self.trusted.remove(id);
         self.statics.remove(id);
