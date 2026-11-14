@@ -79,6 +79,8 @@ pub struct Node {
     stopped: bool,
     /// Asked by a service (the disk guard), as opposed to the operator's signal.
     internal_stop: Shutdown,
+    /// Set when [`Node::stop`] begins, before any service drains: readiness reads it.
+    draining: Shutdown,
     per_service: Duration,
     total: Duration,
 }
@@ -91,6 +93,7 @@ impl Node {
             started: 0,
             stopped: false,
             internal_stop: Shutdown::default(),
+            draining: Shutdown::default(),
             per_service,
             total,
         }
@@ -99,6 +102,12 @@ impl Node {
     /// A handle a service can use to stop the node: `run` then stops and returns [`NodeError::DiskFull`].
     pub fn internal_stop(&self) -> Shutdown {
         self.internal_stop.clone()
+    }
+
+    /// Requested once [`Node::stop`] starts (operator signal, internal stop or a failed start),
+    /// before the first service stops. `/readyz` turns 503 on it while the listeners still run.
+    pub fn draining(&self) -> Shutdown {
+        self.draining.clone()
     }
 
     pub fn add(&mut self, s: Box<dyn Service>) {
@@ -126,6 +135,7 @@ impl Node {
         if std::mem::replace(&mut self.stopped, true) {
             return Ok(());
         }
+        self.draining.request();
         self.services.truncate(self.started);
         let begin = Instant::now();
         let mut late = vec![];
@@ -295,6 +305,18 @@ mod tests {
         assert_eq!(n.run(&Shutdown::default()), Err(NodeError::DiskFull));
         assert_eq!(snapshot(&log), ["start a", "stop a"]);
         assert_eq!(NodeError::DiskFull.exit_code(), 4);
+    }
+
+    #[test]
+    fn draining_is_set_before_the_first_service_stops() {
+        let log = Arc::new(Mutex::new(vec![]));
+        let mut n = node();
+        n.add(Box::new(fake("a", &log)));
+        let draining = n.draining();
+        n.start().unwrap();
+        assert!(!draining.is_requested());
+        n.stop().unwrap();
+        assert!(draining.is_requested());
     }
 
     #[test]
