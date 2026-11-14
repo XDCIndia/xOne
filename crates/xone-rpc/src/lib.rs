@@ -15,6 +15,7 @@ pub mod eth;
 pub mod json;
 pub mod net;
 pub mod policy;
+pub mod record;
 pub mod server;
 pub mod subscriptions;
 pub mod transport;

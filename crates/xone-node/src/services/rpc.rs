@@ -362,6 +362,7 @@ fn rpc_for(
     lim: &Limits,
     namespaces: &[String],
     policy: Policy,
+    (transport, recorder): (&'static str, &Option<Arc<xone_rpc::record::Recorder>>),
 ) -> Result<Arc<Rpc>, String> {
     let reg = registry(namespaces).map_err(|e| e.to_string())?;
     let mut rpc = Rpc::new(be.clone(), lim.clone());
@@ -369,6 +370,8 @@ fn rpc_for(
     if let Some(r) = Arc::get_mut(&mut rpc) {
         r.reg = reg;
         r.policy = policy;
+        r.transport = transport;
+        r.recorder = recorder.clone();
     }
     Ok(rpc)
 }
@@ -399,6 +402,10 @@ pub fn load_jwt_secret(path: &Path) -> Result<[u8; 32], String> {
             )
         })
 }
+
+/// `--rpc.record`: one file's size before it rotates, and the files kept.
+const RECORD_FILE_BYTES: u64 = 64 << 20;
+const RECORD_FILES: usize = 4;
 
 pub struct RpcService {
     rt: Handle,
@@ -431,6 +438,15 @@ impl RpcService {
             consensus: Arc::new(RpcConsensus { core: core.clone() }),
         };
         let lim = limits(&cfg.limits);
+        let rec = cfg
+            .rpc_record
+            .as_deref()
+            .map(|d| {
+                xone_rpc::record::Recorder::open(d, RECORD_FILE_BYTES, RECORD_FILES)
+                    .map(Arc::new)
+                    .map_err(|e| format!("--rpc.record {}: {e}", d.display()))
+            })
+            .transpose()?;
         let addr = |a: &str, p: u16| {
             let host = if a == "localhost" { "127.0.0.1" } else { a };
             format!("{host}:{p}")
@@ -457,6 +473,7 @@ impl RpcService {
                                 .map(load_jwt_secret)
                                 .transpose()?,
                         },
+                        ("http", &rec),
                     )?,
                 ))
             })
@@ -481,6 +498,7 @@ impl RpcService {
                                 .map(load_jwt_secret)
                                 .transpose()?,
                         },
+                        ("ws", &rec),
                     )?,
                 ))
             })
@@ -499,6 +517,7 @@ impl RpcService {
                         &["eth", "net", "web3", "txpool", "admin", "debug", "XDPoS"]
                             .map(String::from),
                         Policy::default(),
+                        ("ipc", &rec),
                     )?,
                 ))
             })
