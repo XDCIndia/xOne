@@ -40,6 +40,8 @@ pub struct Snapshot {
     pub now: u64,
     pub syncing: bool,
     pub peers: u64,
+    /// Peers dropped for another hash (or no answer) at a required block.
+    pub peers_required_block_refused_total: u64,
     pub txpool_pending: u64,
     pub txpool_queued: u64,
     pub blocks_imported_total: u64,
@@ -129,6 +131,13 @@ pub fn encode(s: &Snapshot) -> String {
         u64::from(s.syncing),
     );
     g(&mut o, "xone_peers", "gauge", "Connected peers.", s.peers);
+    g(
+        &mut o,
+        "xone_peers_required_block_refused_total",
+        "counter",
+        "Peers disconnected for another hash at a required block (--eth.requiredblocks).",
+        s.peers_required_block_refused_total,
+    );
     g(
         &mut o,
         "xone_txpool_pending",
@@ -453,6 +462,7 @@ mod tests {
             "xone_head_block_hash_info",
             "xone_head_block_age_seconds",
             "xone_peers",
+            "xone_peers_required_block_refused_total",
             "xone_txpool_pending",
             "xone_txpool_queued",
             "xone_blocks_imported_total",

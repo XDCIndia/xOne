@@ -172,6 +172,68 @@ fn a_closed_fence_signs_nothing() {
     u.sign(Intent::new(Kind::Propose, 5, d(1))).unwrap();
 }
 
+/// #118, ADR-010 section 8 with two hosts on one key: B starts beside a live A with its own record and the net2040
+/// window (`ChainSpec::quiet_window`, 2 * 60 s). B signs nothing inside the window; each unexplained sighting of A's
+/// signatures raises B's record, is written, and restarts the window; after A goes quiet B opens `W` ticks after the
+/// last sighting and cannot sign another digest for a round A signed.
+#[test]
+fn a_second_signer_on_the_key_is_refused_inside_the_quiet_window() {
+    const W: u32 = 120;
+    let (mut a, _, _) = open();
+    let log: Log = Rc::default();
+    let mut b = SafetyUnit::open_or_init(Shared(Rc::default(), log.clone()), key(&log), W).unwrap();
+    log.borrow_mut().clear();
+    assert!(matches!(
+        b.sign(Intent::new(Kind::Timeout, 1, d(9))),
+        Err(UnitError::FenceClosed)
+    ));
+    // A signs a timeout and a proposal; B sees them inside its window
+    a.sign(Intent::new(Kind::Timeout, 1, d(1))).unwrap();
+    a.sign(Intent::new(Kind::Propose, 2, d(2))).unwrap();
+    for _ in 1..W {
+        b.fence_mut().tick();
+    }
+    assert!(b.sight(Kind::Timeout, 1, d(1)).unwrap());
+    assert!(!b.fence_mut().open());
+    for _ in 1..W {
+        b.fence_mut().tick();
+    }
+    assert!(b.sight(Kind::Propose, 2, d(2)).unwrap());
+    assert_eq!(*log.borrow(), ["persisted", "persisted"]);
+    // the record now explains both: a repeat changes nothing and writes nothing
+    assert!(!b.sight(Kind::Timeout, 1, d(1)).unwrap());
+    assert_eq!(log.borrow().len(), 2);
+    for _ in 1..W {
+        b.fence_mut().tick();
+    }
+    assert!(matches!(
+        b.sign(Intent::new(Kind::Timeout, 3, d(3))),
+        Err(UnitError::FenceClosed)
+    ));
+    // A is gone: one more quiet tick opens B, whose record is A's
+    b.fence_mut().tick();
+    assert_eq!(b.signed_up_to(Kind::Timeout), 1);
+    assert_eq!(b.signed_up_to(Kind::Propose), 2);
+    assert!(matches!(
+        b.sign(Intent::new(Kind::Timeout, 1, d(9))),
+        Err(UnitError::Refused(Refusal::Conflict {
+            kind: Kind::Timeout,
+            round: 1
+        }))
+    ));
+    assert!(matches!(
+        b.sign(Intent::new(Kind::Propose, 2, d(9))),
+        Err(UnitError::Refused(_))
+    ));
+    b.sign(Intent::new(Kind::Timeout, 3, d(3))).unwrap();
+    // a sighting after the window closes it again
+    assert!(b.sight(Kind::Timeout, 4, d(4)).unwrap());
+    assert!(matches!(
+        b.sign(Intent::new(Kind::Timeout, 5, d(5))),
+        Err(UnitError::FenceClosed)
+    ));
+}
+
 #[test]
 fn a_record_of_another_key_is_not_adopted() {
     let log: Log = Rc::default();

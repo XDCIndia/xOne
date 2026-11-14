@@ -191,6 +191,14 @@ pub const FLAGS: &[Flag] = &[
         "flags.go:975 ; geth,xone",
     ),
     f(
+        "eth.requiredblocks",
+        L,
+        "built-in for the profile (Apothem: 83665617)",
+        "83665617=0x2432ce6433608954ef6eaf2feba8f9a2fe90f5a913401eb07d5fa2f1bb499c3f",
+        "Comma-separated `<number>=<0x hash>` entries. A peer that serves another hash at one of these heights is disconnected (reason 0x03) within 15 seconds of the handshake, and a header chain through another hash is refused before import or pivot choice. A peer that has not reached the height is kept. An entry replaces the built-in one at the same height. Apothem has one built-in entry, the first canonical block after the September 2026 reset; stale v2.8.2 peers still serve the abandoned branch. dumpconfig prints the merged list.",
+        "flags.go:2265 (apothemResetBlockNum) ; geth,xone",
+    ),
+    f(
         "identity",
         S,
         "unset",
@@ -287,6 +295,14 @@ pub const FLAGS: &[Flag] = &[
         "flags.go:910 ; geth",
     ),
     f(
+        "rpc.jwtsecret",
+        P,
+        "unset",
+        "/d/rpc-jwt.hex",
+        "JWT secret file (32 bytes hex): HTTP and WebSocket RPC then require an HS256 bearer token. IPC is not affected.",
+        "reth --rpc.jwtsecret; geth node/jwt_handler.go",
+    ),
+    f(
         "authrpc.addr",
         S,
         "localhost",
@@ -373,6 +389,14 @@ pub const FLAGS: &[Flag] = &[
         "/d/ks.json",
         "Keystore file of the validator key. Block production (--mine) needs it with --password, and is refused on chain id 50 in this build.",
         "flags.go:124 ; xone",
+    ),
+    f(
+        "miner.quietwindow",
+        N,
+        "the network's",
+        "300",
+        "ADR-010 signer quiet window in seconds (`ChainSpec::quiet_window`: 120 on mainnet, Apothem and net2040, 20 on the devnets). Only a larger value is accepted.",
+        "xone",
     ),
     f(
         "ethstats",
