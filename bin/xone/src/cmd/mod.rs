@@ -7,6 +7,7 @@
 
 mod export;
 mod import;
+mod network;
 mod snapshot;
 
 use std::{fs::File, io::BufReader, process::ExitCode, time::Instant};
@@ -24,6 +25,7 @@ use xone_sync::{
 
 pub use export::export;
 pub use import::import;
+pub use network::{dumpgenesis, network as network_cmd};
 pub use snapshot::snapshot;
 
 type Accept = fn(

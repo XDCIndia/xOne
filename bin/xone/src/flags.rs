@@ -607,6 +607,28 @@ pub fn normalise(args: impl IntoIterator<Item = OsString>) -> (Vec<OsString>, Ve
     (out, warns)
 }
 
+/// `xone network init` (issue #223): the files of a private XDPoS network on one host.
+fn network() -> Command {
+    let n = |name: &'static str, default: &'static str| {
+        Arg::new(name)
+            .long(name)
+            .value_name("n")
+            .default_value(default)
+    };
+    Command::new("network")
+        .about("Private XDPoS network tools (issue #223).")
+        .subcommand_required(true)
+        .subcommand(
+            Command::new("init")
+                .about("Write genesis.json, forks.json and per-node config.toml, node key, static nodes and masternode key for a local private network.")
+                .arg(Arg::new("out").long("out").required(true).value_name("dir"))
+                .arg(n("masternodes", "4"))
+                .arg(n("period", "2"))
+                .arg(n("chain-id", "1337"))
+                .arg(n("base-port", "30303")),
+        )
+}
+
 fn snapshot() -> Command {
     let net =
         || {
@@ -686,6 +708,19 @@ pub fn command() -> Command {
                 )),
         )
         .subcommand(snapshot())
+        .subcommand(network())
+        .subcommand(
+            Command::new("dumpgenesis")
+                .about("Print the genesis JSON of a built-in network (geth dumpgenesis).")
+                .arg(
+                    Arg::new("network")
+                        .long("network")
+                        .required(true)
+                        .value_parser(clap::builder::PossibleValuesParser::new(
+                            xone_chainspec::Network::NAMES,
+                        )),
+                ),
+        )
         .subcommand(
             Command::new("genesis-hash")
                 .about("Print the genesis block hash of a built-in network.")

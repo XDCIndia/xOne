@@ -40,28 +40,47 @@ fn word(a: Address) -> U256 {
 /// The genesis json and the fork table (the format of `generated/forks.json`, one network) of a dev chain
 /// whose only masternode is `validator`, with a block every `period` seconds.
 pub fn chain(validator: Address, period: u64) -> Result<(String, String), String> {
+    chain_with(&[validator], period, CHAIN_ID)
+}
+
+/// [`chain`] for a private network (issue #223): `validators` are the masternodes, in order, in the
+/// V1 checkpoint list (`extraData`) and the candidate list of the 0x88 contract (each its own owner,
+/// 10,000,000 XDC cap), as `ops/devnet/gen.py` lays out one. The same inputs give the same bytes.
+pub fn chain_with(
+    validators: &[Address],
+    period: u64,
+    chain_id: u64,
+) -> Result<(String, String), String> {
+    if validators.is_empty() {
+        return Err("at least one masternode".into());
+    }
     let period = period.max(1);
     let mut g: Value =
         serde_json::from_str(Network::Devnet.genesis_json()).map_err(|e| e.to_string())?;
-    g["config"]["chainId"] = json!(CHAIN_ID);
+    g["config"]["chainId"] = json!(chain_id);
     let x = &mut g["config"]["XDPoS"];
     x["period"] = json!(period);
     x["v2"]["config"]["minePeriod"] = json!(period);
     x["v2"]["allConfigs"]["0"]["minePeriod"] = json!(period);
-    let me = alloy_primitives::hex::encode(validator.as_slice());
-    g["extraData"] = json!(format!("0x{}{me}{}", "00".repeat(32), "00".repeat(65)));
-    // 0x88: the candidate array (slot 8) has one entry, `validator`; validatorsState[validator] (slot 1
-    // mapping) is (owner = validator, cap = 10,000,000 XDC). gen.py lines 44-51.
+    let signers: String = validators
+        .iter()
+        .map(|v| alloy_primitives::hex::encode(v.as_slice()))
+        .collect();
+    g["extraData"] = json!(format!("0x{}{signers}{}", "00".repeat(32), "00".repeat(65)));
+    // 0x88: the candidate array (slot 8) holds `validators`; validatorsState[v] (slot 1 mapping) is
+    // (owner = v, cap = 10,000,000 XDC). gen.py lines 44-51.
     let v = &mut g["alloc"]["0000000000000000000000000000000000000088"]["storage"];
-    v[slot(U256::from(8))] = json!(slot(U256::from(1)));
+    v[slot(U256::from(8))] = json!(slot(U256::from(validators.len())));
     let first = U256::from_be_bytes(keccak256(U256::from(8).to_be_bytes::<32>()).0);
-    v[slot(first)] = json!(slot(word(validator)));
-    let mut key = [0u8; 64];
-    key[..32].copy_from_slice(&word(validator).to_be_bytes::<32>());
-    key[32..].copy_from_slice(&U256::from(1).to_be_bytes::<32>());
-    let owner = U256::from_be_bytes(keccak256(key).0);
-    v[slot(owner)] = json!(slot(word(validator)));
-    v[slot(owner + U256::from(1))] = json!(slot(U256::from(10_000_000u128 * 10u128.pow(18))));
+    for (i, val) in validators.iter().enumerate() {
+        v[slot(first + U256::from(i))] = json!(slot(word(*val)));
+        let mut key = [0u8; 64];
+        key[..32].copy_from_slice(&word(*val).to_be_bytes::<32>());
+        key[32..].copy_from_slice(&U256::from(1).to_be_bytes::<32>());
+        let owner = U256::from_be_bytes(keccak256(key).0);
+        v[slot(owner)] = json!(slot(word(*val)));
+        v[slot(owner + U256::from(1))] = json!(slot(U256::from(10_000_000u128 * 10u128.pow(18))));
+    }
     g["alloc"][alloy_primitives::hex::encode(DEV_ACCOUNT.as_slice())] =
         json!({ "balance": format!("{:#x}", U256::from(DEV_BALANCE)) });
     let genesis_json = serde_json::to_string_pretty(&g).map_err(|e| e.to_string())?;
@@ -69,7 +88,7 @@ pub fn chain(validator: Address, period: u64) -> Result<(String, String), String
     let mut t: Value =
         serde_json::from_str(xone_chainspec::FORKS_JSON).map_err(|e| e.to_string())?;
     let mut n = t["networks"]["devnet"].take();
-    n["chainId"] = json!(CHAIN_ID.to_string());
+    n["chainId"] = json!(chain_id.to_string());
     n["xdpos"]["period"] = json!(period);
     n["xdpos"]["v2"]["allConfigs"]["0"]["minePeriod"] = json!(period);
     let genesis = Genesis::from_json(&genesis_json).map_err(|e| e.to_string())?;
