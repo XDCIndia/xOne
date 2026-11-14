@@ -330,6 +330,7 @@ impl Rpc {
             &Params {
                 v,
                 head: self.be.chain.head().0,
+                finalized: self.be.chain.finalized(),
             },
         )
     }

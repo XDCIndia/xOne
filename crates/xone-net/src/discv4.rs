@@ -37,6 +37,10 @@ const BUCKETS: usize = 17;
 const MIN_DISTANCE: usize = 239;
 /// Pings and findnodes in flight; more are dropped, not queued.
 pub const MAX_PENDING: usize = 256;
+/// Public entries one subnet ([`subnet`]) may hold in one bucket and in the whole table (geth
+/// `p2p/discover/table.go` `bucketIPLimit`, `tableIPLimit`).
+pub const BUCKET_SUBNET_LIMIT: usize = 2;
+pub const TABLE_SUBNET_LIMIT: usize = 10;
 const HEAD: usize = 32 + 65;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -344,9 +348,37 @@ fn log_dist(a: &B256, b: &B256) -> usize {
     256 - lz
 }
 
+/// The diversity group of a public address: its /24 for IPv4, its /48 for IPv6. `None` for a
+/// loopback, private, link-local or unique-local address: geth's `DistinctNetSet.Add` admits
+/// LAN addresses without counting them, so a private network can bootstrap from one subnet. The
+/// exception grants no trust: such a node still needs a pong and is only relayed to LAN hosts.
+/// IPv6 uses /48 (an end-site allocation) where geth applies its 24-bit mask to both families.
+fn subnet(ip: IpAddr) -> Option<[u8; 7]> {
+    match ip {
+        IpAddr::V4(a) if a.is_loopback() || a.is_private() || a.is_link_local() => None,
+        IpAddr::V4(a) => {
+            let o = a.octets();
+            Some([4, o[0], o[1], o[2], 0, 0, 0])
+        }
+        IpAddr::V6(a) => {
+            if let Some(v4) = a.to_ipv4_mapped() {
+                return subnet(IpAddr::V4(v4));
+            }
+            let seg = a.segments();
+            if a.is_loopback() || (seg[0] & 0xfe00) == 0xfc00 || (seg[0] & 0xffc0) == 0xfe80 {
+                return None;
+            }
+            let o = a.octets();
+            Some([6, o[0], o[1], o[2], o[3], o[4], o[5]])
+        }
+    }
+}
+
 /// Nodes by log distance from us: 17 buckets of at most 16, so at most 272 nodes. A node is in
 /// the table only after a pong proved its endpoint. A full bucket keeps its old nodes and
-/// refuses the new one. ponytail: no revalidation or eviction of dead entries; add it with the
+/// refuses the new one. One public subnet holds at most [`BUCKET_SUBNET_LIMIT`] entries of a
+/// bucket and [`TABLE_SUBNET_LIMIT`] of the table; the counts are derived from the entries, so
+/// insert, refresh and an endpoint change can never leave them stale. ponytail: no revalidation or eviction of dead entries; add it with the
 /// periodic refresh when the discovery loop is wired.
 #[derive(Debug)]
 pub struct Table {
@@ -369,20 +401,30 @@ impl Table {
         }
     }
 
-    /// Adds or refreshes. `false`: the node is us or its bucket is full.
+    /// Adds or refreshes. `false`: the node is us, its bucket is full, or its subnet already has
+    /// its share of the bucket or table. A refused endpoint change keeps the old entry as it is.
     pub fn insert(&mut self, node: Node) -> bool {
         let Some(b) = self.bucket(&keccak256(node.id)) else {
             return false;
         };
-        let bucket = &mut self.buckets[b];
-        if let Some(e) = bucket.iter_mut().find(|e| e.id == node.id) {
-            *e = node;
-            return true;
-        }
-        if bucket.len() >= BUCKET_SIZE {
+        let known = self.buckets[b].iter().any(|e| e.id == node.id);
+        if !known && self.buckets[b].len() >= BUCKET_SIZE {
             return false;
         }
-        bucket.push(node);
+        if let Some(net) = subnet(node.addr.ip()) {
+            // Count the others: a refresh of the same node does not compete with itself.
+            let same = |e: &&Node| e.id != node.id && subnet(e.addr.ip()) == Some(net);
+            if self.buckets[b].iter().filter(same).count() >= BUCKET_SUBNET_LIMIT
+                || self.buckets.iter().flatten().filter(same).count() >= TABLE_SUBNET_LIMIT
+            {
+                return false;
+            }
+        }
+        let bucket = &mut self.buckets[b];
+        match bucket.iter_mut().find(|e| e.id == node.id) {
+            Some(e) => *e = node,
+            None => bucket.push(node),
+        }
         true
     }
 
@@ -1004,5 +1046,90 @@ mod tests {
         assert!(!relay_ok(wan, lo) && !relay_ok(wan, lan));
         assert!(!relay_ok(wan, IpAddr::V4(Ipv4Addr::UNSPECIFIED)));
         assert!(!relay_ok(wan, IpAddr::V4(Ipv4Addr::new(224, 0, 0, 1))));
+    }
+
+    fn pub_node(i: u32, ip: [u8; 4]) -> Node {
+        let mut id = [0u8; 64];
+        id[..4].copy_from_slice(&i.to_be_bytes());
+        id[63] = 1;
+        Node {
+            id: B512::from(id),
+            addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::from(ip)), 30_303),
+            tcp: 30_303,
+        }
+    }
+
+    #[test]
+    fn one_subnet_cannot_fill_the_table() {
+        let me = peer_id(&key(1));
+        let mut t = Table::new(&me);
+        for i in 0..2000u32 {
+            t.insert(pub_node(i, [8, 8, 8, 1]));
+        }
+        assert_eq!(t.len(), TABLE_SUBNET_LIMIT);
+        for b in &t.buckets {
+            assert!(b.len() <= BUCKET_SUBNET_LIMIT);
+        }
+        // another address in the same /24 counts against the same group
+        assert!(!(2000..3000u32).any(|i| t.insert(pub_node(i, [8, 8, 8, 200]))));
+        // diverse endpoints are still admitted
+        let diverse = (0..200u32)
+            .filter(|i| t.insert(pub_node(10_000 + i, [9, u8::try_from(*i).unwrap(), 0, 1])))
+            .count();
+        // (bounded only by bucket capacity: the ids crowd into the farthest buckets)
+        assert!(diverse >= 40, "{diverse}");
+        assert!(t.len() <= BUCKETS * BUCKET_SIZE);
+    }
+
+    #[test]
+    fn refresh_and_endpoint_change_keep_subnet_counts() {
+        let me = peer_id(&key(1));
+        let mut t = Table::new(&me);
+        let ins: Vec<Node> = (0..2000u32)
+            .map(|i| pub_node(i, [8, 8, 8, 1]))
+            .filter(|n| t.insert(n.clone()))
+            .collect();
+        assert_eq!(ins.len(), TABLE_SUBNET_LIMIT);
+        // re-inserting a member (same or a new address in its subnet) is a refresh, not a new entry
+        assert!(t.insert(ins[0].clone()));
+        let mut moved = ins[0].clone();
+        moved.addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 9)), 30_303);
+        assert!(t.insert(moved.clone()));
+        assert_eq!(t.get(&moved.id).map(|n| n.addr), Some(moved.addr));
+        assert_eq!(t.len(), TABLE_SUBNET_LIMIT);
+        // moving out of the subnet frees a slot for a new member
+        moved.addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(1, 2, 3, 4)), 30_303);
+        assert!(t.insert(moved));
+        assert!((5000..7000u32).any(|i| t.insert(pub_node(i, [8, 8, 8, 1]))));
+        // a member of a full subnet cannot move into another full subnet; it stays as it was
+        let full: Vec<Node> = (7000..9000u32)
+            .map(|i| pub_node(i, [7, 7, 7, 1]))
+            .filter(|n| t.insert(n.clone()))
+            .collect();
+        assert_eq!(full.len(), TABLE_SUBNET_LIMIT);
+        let mut jump = ins[1].clone();
+        jump.addr = full[0].addr;
+        assert!(!t.insert(jump));
+        assert_eq!(t.get(&ins[1].id).map(|n| n.addr), Some(ins[1].addr));
+    }
+
+    #[test]
+    fn lan_addresses_are_exempt_and_v6_groups_by_48() {
+        assert_eq!(subnet(IpAddr::V4(Ipv4Addr::new(10, 1, 2, 3))), None);
+        assert_eq!(subnet(IpAddr::V4(Ipv4Addr::LOCALHOST)), None);
+        assert_eq!(subnet("fd00::1".parse().unwrap()), None);
+        assert_eq!(subnet("fe80::1".parse().unwrap()), None);
+        assert_eq!(
+            subnet("::ffff:8.8.8.8".parse().unwrap()),
+            subnet(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 9)))
+        );
+        assert_eq!(
+            subnet("2001:db8:1::1".parse().unwrap()),
+            subnet("2001:db8:1:ffff::2".parse().unwrap())
+        );
+        assert_ne!(
+            subnet("2001:db8:1::1".parse().unwrap()),
+            subnet("2001:db8:2::1".parse().unwrap())
+        );
     }
 }
