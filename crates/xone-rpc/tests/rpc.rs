@@ -1338,3 +1338,37 @@ async fn a_plain_http_request_to_the_websocket_port_is_not_dispatched() {
     assert!(out.is_empty() || out.starts_with("HTTP/1.1 4"), "{out}");
     h.abort();
 }
+
+#[test]
+fn eip1898_selectors_are_validated() {
+    let r = rpc();
+    let a = format!("{ACCT:#x}");
+    let h = format!("{:#x}", header(100).hash());
+    let both = ask(
+        &r,
+        req(
+            1,
+            "eth_getBalance",
+            json!([a, {"blockHash": h, "blockNumber": "0x64"}]),
+        ),
+    );
+    assert_eq!(both["error"]["code"], -32602, "{both}");
+    let bad = ask(
+        &r,
+        req(
+            2,
+            "eth_getBalance",
+            json!([a, {"blockHash": h, "requireCanonical": "yes"}]),
+        ),
+    );
+    assert_eq!(bad["error"]["code"], -32602, "{bad}");
+    let ok = ask(
+        &r,
+        req(
+            3,
+            "eth_getBalance",
+            json!([a, {"blockHash": h, "requireCanonical": true}]),
+        ),
+    );
+    assert!(ok.get("result").is_some(), "{ok}");
+}
