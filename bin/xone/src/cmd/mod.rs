@@ -9,7 +9,7 @@ mod export;
 mod import;
 mod snapshot;
 
-use std::{fs::File, io::BufReader, process::ExitCode, time::Instant};
+use std::{process::ExitCode, time::Instant};
 
 use clap::ArgMatches;
 use xone_chainspec::Network;
@@ -61,15 +61,11 @@ fn open(net: Network) -> Result<Mem, String> {
 
 /// Imports the block file `path` into `chain`.
 fn load(chain: &Mem, path: &str) -> Result<(Summary, f64), String> {
-    let f = File::open(path).map_err(|e| format!("{path}: {e}"))?;
+    let f = xone_sync::archive::open_block_file(std::path::Path::new(path))
+        .map_err(|e| format!("{path}: {e}"))?;
     let t0 = Instant::now();
-    let sum = stages::sync(
-        chain,
-        &mut FileSource::new(BufReader::new(f)),
-        &Limits::default(),
-        now(),
-    )
-    .map_err(|e| e.to_string())?;
+    let sum = stages::sync(chain, &mut FileSource::new(f), &Limits::default(), now())
+        .map_err(|e| e.to_string())?;
     Ok((sum, t0.elapsed().as_secs_f64()))
 }
 

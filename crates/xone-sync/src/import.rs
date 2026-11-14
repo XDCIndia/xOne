@@ -3,7 +3,8 @@
 //! the RLP of each block back to back, `[header, [transactions], [uncles]]`, ascending, no
 //! framing. Block 0 is skipped (`cmd/utils/cmd.go:245-249`) and blocks the chain already holds
 //! are skipped (`missingBlocks`, `:377-393`). The batch is the staged window, not geth's 2,500.
-//! A `.gz` file is not read (geth wraps it in gzip, `:213-222`). Spec: `spec/sync/import-export.md`.
+//! A `.gz` archive is decompressed to a seekable spool first ([`crate::archive`], geth `:213-222`).
+//! Spec: `spec/sync/import-export.md`.
 
 use crate::stages::{Source, SourceError};
 use alloy_primitives::Bytes;

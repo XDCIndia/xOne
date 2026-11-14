@@ -9,7 +9,7 @@ The block file is the geth `export` format: the RLP of each block, one after the
 3. **After a restart** the source scans the file by item lengths to the block it needs (it does not decode). Stage checkpoints decide where the pipeline continues (`stages.md`).
 4. **Export** writes blocks `first..=last` of the canonical chain, ascending, and fails when a block is missing or does not link to the one before (geth "chain reorg during export"). Genesis is block 0 and is written when asked for. `export` then `import` of the output is byte equal to the input: the typed transaction is an RLP string around the consensus encoding and the legacy one the RLP list, which is exactly how the block was read.
 5. **CLI.** `xone import <file> [--network n]` prints blocks, rate, head and peak RSS. `xone export <file> [from] [to] --input <blockfile>` writes the range (the whole chain without `from` and `to`). The datadir has no block database yet (the MDBX binding of ADR-005), so both run on an in-memory chain from the network's genesis, and `export` takes its chain from `--input`. They move to the datadir with the store.
-6. `.gz` files are not read or written (geth wraps them in gzip). An era-style chunked variant is not implemented.
+6. gzip archives, as geth (`:213-222`, `:479-499`): import detects gzip by its magic bytes (a `.gz` name without it is refused) and streams the archive once through a CRC-checking multi-member decoder into a spool file in `TMPDIR`, removed afterwards and on failure; the import reads the spool as a plain file, so a truncated or corrupt archive fails before one block is imported. Export writes gzip when the file name ends in `.gz` and reports success only after the gzip trailer is written and the file synced. An era-style chunked variant is not implemented.
 
 ## Source
 
@@ -33,4 +33,4 @@ All; the executor runs V1 blocks (`stages.md`).
 ## Not covered
 
 - Round trip of 1,000,000 blocks (the vectors hold 1,801; the harness cache of 20,000 blocks is not present and is fetched from the archive, which was not needed for this slice).
-- `.gz`, era1 or an era-style chunk layout; resuming after `kill -9` of the CLI process (the CLI store is in memory; the ten kill points run on `MemStore` in the tests).
+- era1 or an era-style chunk layout; resuming after `kill -9` of the CLI process (the CLI store is in memory; the ten kill points run on `MemStore` in the tests).

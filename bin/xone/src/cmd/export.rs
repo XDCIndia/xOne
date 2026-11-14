@@ -1,4 +1,4 @@
-use std::{fs::File, io::BufWriter, process::ExitCode};
+use std::process::ExitCode;
 
 use clap::ArgMatches;
 use xone_sync::export::export as write;
@@ -22,10 +22,13 @@ pub fn export(m: &ArgMatches) -> ExitCode {
             return Err(format!("block number {last} larger than head block {head}"));
         }
         let path = m.get_one::<String>("file").map_or("", String::as_str);
-        let mut w = BufWriter::new(File::create(path).map_err(|e| format!("{path}: {e}"))?);
+        // `.gz`: a gzip archive, as geth writes it
+        let mut w = xone_sync::archive::create_block_file(std::path::Path::new(path))
+            .map_err(|e| format!("{path}: {e}"))?;
         let n = chain
             .with_store(|s| write(s, first, last, &mut w))
             .map_err(|e| e.to_string())?;
+        w.finish().map_err(|e| format!("{path}: {e}"))?;
         Ok(format!("exported {n} blocks, {first}..={last}, to {path}"))
     };
     match run() {
