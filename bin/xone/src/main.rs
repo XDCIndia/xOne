@@ -113,18 +113,29 @@ fn run(args: impl IntoIterator<Item = OsString>) -> ExitCode {
                 Err(e) => fail(e),
             }
         }
-        _ => start(&cfg),
+        _ if cfg.dev.enabled => {
+            let given = m.value_source("datadir") == Some(ValueSource::CommandLine)
+                || cfg.datadir != Config::default().datadir;
+            match xone_node::dev::prepare(&mut cfg, given) {
+                Ok(d) => {
+                    println!("{}", d.banner);
+                    start(&cfg, Some(d))
+                }
+                Err(e) => fail(e),
+            }
+        }
+        _ => start(&cfg, None),
     }
 }
 
 /// Check the datadir marker, open the chain (a restart replays what is stored), then run net, chain,
 /// pool and rpc until SIGTERM or SIGINT.
-fn start(cfg: &Config) -> ExitCode {
+fn start(cfg: &Config, dev: Option<xone_node::dev::Started>) -> ExitCode {
     let mut logs = match logs(cfg) {
         Ok(l) => l,
         Err(e) => return fail(e),
     };
-    let code = run_node(cfg);
+    let code = run_node(cfg, dev);
     logs.stop();
     code
 }
@@ -146,7 +157,7 @@ fn note(cfg: &Config, m: &str) {
     }
 }
 
-fn run_node(cfg: &Config) -> ExitCode {
+fn run_node(cfg: &Config, dev: Option<xone_node::dev::Started>) -> ExitCode {
     let (marker, spec, genesis) = match datadir::prepare_chain(cfg) {
         Ok(m) => m,
         Err(e) => return fail(e),
@@ -163,7 +174,11 @@ fn run_node(cfg: &Config) -> ExitCode {
         }
         Err(e) => return fail(format!("snap sync: {e}")),
     }
-    let mut node = match services::build(cfg, &marker, spec, &genesis, stamp()) {
+    let built = match dev {
+        Some(d) => services::build_dev(cfg, &marker, spec, &genesis, stamp(), d.key),
+        None => services::build(cfg, &marker, spec, &genesis, stamp()),
+    };
+    let mut node = match built {
         Ok(b) => b.node,
         Err(e) => return fail(e),
     };

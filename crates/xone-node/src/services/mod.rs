@@ -104,15 +104,54 @@ pub fn build(
     genesis: &xone_chainspec::Genesis,
     stamp: &str,
 ) -> Result<Built, String> {
+    build_with(cfg, marker, spec, genesis, stamp, None)
+}
+
+/// [`build`] for `--dev`: the producer signs with `key`, made in memory by [`crate::dev::prepare`].
+/// Refused on any chain but the dev chain id.
+pub fn build_dev(
+    cfg: &crate::Config,
+    marker: &crate::datadir::Marker,
+    spec: xone_chainspec::ChainSpec,
+    genesis: &xone_chainspec::Genesis,
+    stamp: &str,
+    key: xone_signer::LocalSigner,
+) -> Result<Built, String> {
+    if spec.chain_id != crate::dev::CHAIN_ID {
+        return Err(format!(
+            "the in-memory dev key signs on chain {} only, not {}",
+            crate::dev::CHAIN_ID,
+            spec.chain_id
+        ));
+    }
+    build_with(cfg, marker, spec, genesis, stamp, Some(key))
+}
+
+fn build_with(
+    cfg: &crate::Config,
+    marker: &crate::datadir::Marker,
+    spec: xone_chainspec::ChainSpec,
+    genesis: &xone_chainspec::Genesis,
+    stamp: &str,
+    dev_key: Option<xone_signer::LocalSigner>,
+) -> Result<Built, String> {
     use std::{sync::Arc, time::Duration};
 
     // the producer's checks come first: a refused `--mine` opens nothing
-    let producer_plan = cfg
-        .mining
-        .mine
-        .then(|| producer::plan(cfg, &spec))
-        .transpose()
-        .map_err(|e| e.to_string())?;
+    let producer_key = match dev_key {
+        Some(k) => Some(k),
+        None => cfg
+            .mining
+            .mine
+            .then(|| producer::plan(cfg, &spec))
+            .transpose()
+            .map_err(|e| e.to_string())?
+            .map(|p| {
+                xone_signer::local_keystore::load(&p.keystore, &p.password, None)
+                    .map_err(|e| format!("keystore: {e}"))
+            })
+            .transpose()?,
+    };
 
     let open = |minimal: bool| {
         core::Core::open_full(
@@ -122,7 +161,7 @@ pub fn build(
             CHECKPOINT_EVERY,
             minimal,
             // a node that signs commits every block to the device before it goes on
-            producer_plan.is_none(),
+            producer_key.is_none(),
             cfg.sync.state_disk,
         )
     };
@@ -175,15 +214,15 @@ pub fn build(
         nh.clone(),
         pool.clone(),
         events,
-        producer_plan.is_some().then_some(bft_tx),
+        producer_key.is_some().then_some(bft_tx),
     )
     .with_gate(gate.clone());
     let progress = chain_svc.progress.clone();
     let pool_svc = pool::PoolService::new(pool.clone(), rth.clone());
-    let producer_svc = producer_plan
-        .map(|p| {
+    let producer_svc = producer_key
+        .map(|k| {
             producer::ProducerService::new(
-                &p,
+                k,
                 cfg,
                 core.clone(),
                 pool.clone(),

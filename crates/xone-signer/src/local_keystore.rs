@@ -112,6 +112,18 @@ impl LocalSigner {
         Ok(Self { key, address })
     }
 
+    /// A fresh random key that lives in memory only (`xone --dev`). Nothing is written.
+    pub fn generate() -> Result<Self, KeystoreError> {
+        let mut key = KeyBytes::zeroed();
+        loop {
+            getrandom::fill(key.as_mut_bytes())
+                .map_err(|_| KeystoreError::Malformed("no system randomness"))?;
+            if let Ok(s) = Self::from_key_bytes(&key) {
+                return Ok(s);
+            }
+        }
+    }
+
     pub fn address(&self) -> Address {
         self.address
     }
