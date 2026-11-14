@@ -12,7 +12,8 @@
 //! header (`xdpos.go:1713-1717`, `engine_v2/engine.go:798-801`).
 
 use std::{
-    collections::{BTreeMap, VecDeque},
+    cmp::Ordering,
+    collections::{BTreeMap, BinaryHeap, VecDeque},
     sync::Arc,
 };
 
@@ -56,10 +57,59 @@ pub struct Params {
     pub max_sign_txs: usize,
 }
 
-/// Heads of the accounts' queues, best first: effective tip, then earliest seen, then lowest address.
+/// The order of account heads: higher effective tip first, then earlier seen, then lower address
+/// (geth `txorder` price-and-time heap). Addresses are unique among heads, so the order is total
+/// and the pick is the one a scan with the same comparison makes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Key {
+    tip: u128,
+    seen: u64,
+    addr: Address,
+}
+
+impl Ord for Key {
+    /// `Greater` is better: `BinaryHeap` pops the greatest.
+    fn cmp(&self, o: &Self) -> Ordering {
+        self.tip
+            .cmp(&o.tip)
+            .then(o.seen.cmp(&self.seen))
+            .then(o.addr.cmp(&self.addr))
+    }
+}
+
+impl PartialOrd for Key {
+    fn partial_cmp(&self, o: &Self) -> Option<Ordering> {
+        Some(self.cmp(o))
+    }
+}
+
+struct Head {
+    key: Key,
+    cand: Cand,
+}
+
+impl PartialEq for Head {
+    fn eq(&self, o: &Self) -> bool {
+        self.key == o.key
+    }
+}
+impl Eq for Head {}
+impl Ord for Head {
+    fn cmp(&self, o: &Self) -> Ordering {
+        self.key.cmp(&o.key)
+    }
+}
+impl PartialOrd for Head {
+    fn partial_cmp(&self, o: &Self) -> Option<Ordering> {
+        Some(self.cmp(o))
+    }
+}
+
+/// Heads of the accounts' queues in a binary heap (#297): the best is read in O(1), and `pop` and
+/// `shift` cost O(log n) instead of a scan of every sender.
 struct Heap {
     rest: BTreeMap<Address, VecDeque<Cand>>,
-    heads: Vec<(Address, Cand, u128)>,
+    heads: BinaryHeap<Head>,
 }
 
 fn tip(c: &Cand, base_fee: Option<u128>) -> Option<u128> {
@@ -73,48 +123,61 @@ fn tip(c: &Cand, base_fee: Option<u128>) -> Option<u128> {
     }
 }
 
+fn head(addr: Address, cand: Cand, tip: u128) -> Head {
+    Head {
+        key: Key {
+            tip,
+            seen: cand.seen,
+            addr,
+        },
+        cand,
+    }
+}
+
 impl Heap {
     fn new(pending: BTreeMap<Address, Vec<Cand>>, base_fee: Option<u128>) -> Self {
-        let mut h = Self {
-            rest: BTreeMap::new(),
-            heads: Vec::new(),
-        };
+        let mut rest = BTreeMap::new();
+        let mut heads = Vec::new();
         for (a, txs) in pending {
             let mut q: VecDeque<Cand> = txs.into();
             if let Some(first) = q.pop_front() {
                 if let Some(t) = tip(&first, base_fee) {
-                    h.heads.push((a, first, t));
-                    h.rest.insert(a, q);
+                    heads.push(head(a, first, t));
+                    rest.insert(a, q);
                 }
             }
         }
-        h
+        Self {
+            rest,
+            heads: BinaryHeap::from(heads),
+        }
     }
 
-    // ponytail: a linear scan per pick; a binary heap when pending sets reach tens of thousands.
-    fn best(&self) -> Option<usize> {
-        (0..self.heads.len()).min_by(|&i, &j| {
-            let (a, x, tx) = &self.heads[i];
-            let (b, y, ty) = &self.heads[j];
-            ty.cmp(tx).then(x.seen.cmp(&y.seen)).then(a.cmp(b))
-        })
+    /// The best head.
+    fn best(&self) -> Option<&Cand> {
+        self.heads.peek().map(|h| &h.cand)
     }
 
-    fn pop(&mut self, i: usize) {
-        let (a, _, _) = self.heads.swap_remove(i);
-        self.rest.remove(&a);
+    /// `Pop`: the best account leaves.
+    fn pop(&mut self) {
+        if let Some(h) = self.heads.pop() {
+            self.rest.remove(&h.key.addr);
+        }
     }
 
-    /// `Shift`: the sender's next transaction takes the place, when it is admissible.
-    fn shift(&mut self, i: usize, base_fee: Option<u128>) {
-        let a = self.heads[i].0;
+    /// `Shift`: the best account's next transaction takes its place, when it is admissible.
+    fn shift(&mut self, base_fee: Option<u128>) {
+        let Some(h) = self.heads.pop() else {
+            return;
+        };
+        let a = h.key.addr;
         if let Some(next) = self.rest.get_mut(&a).and_then(VecDeque::pop_front) {
             if let Some(t) = tip(&next, base_fee) {
-                self.heads[i] = (a, next, t);
+                self.heads.push(head(a, next, t));
                 return;
             }
         }
-        self.pop(i);
+        self.rest.remove(&a);
     }
 }
 
@@ -161,10 +224,10 @@ impl<F: FnMut(&PoolTx) -> Commit> Fill<'_, F> {
             if self.p.soft_gas_cap > 0 && self.used >= self.p.soft_gas_cap {
                 return;
             }
-            let Some(i) = heap.best() else { return };
-            let t = heap.heads[i].1.tx.clone();
+            let Some(best) = heap.best() else { return };
+            let t = best.tx.clone();
             if self.gas_left < t.tx.gas {
-                heap.pop(i);
+                heap.pop();
                 continue;
             }
             if t.tx.to == Some(xone_evm::route::BLOCK_SIGNERS) {
@@ -176,7 +239,7 @@ impl<F: FnMut(&PoolTx) -> Commit> Fill<'_, F> {
                     || signed.is_none_or(|n| n >= self.p.number)
                     || self.signs >= self.p.max_sign_txs
                 {
-                    heap.pop(i);
+                    heap.pop();
                     continue;
                 }
             }
@@ -187,10 +250,10 @@ impl<F: FnMut(&PoolTx) -> Commit> Fill<'_, F> {
                     self.gas_left = self.gas_left.saturating_sub(g);
                     self.used += g;
                     self.signs += usize::from(t.tx.to == Some(xone_evm::route::BLOCK_SIGNERS));
-                    heap.shift(i, fee);
+                    heap.shift(fee);
                 }
-                Commit::NonceTooLow => heap.shift(i, fee),
-                Commit::Invalid => heap.pop(i),
+                Commit::NonceTooLow => heap.shift(fee),
+                Commit::Invalid => heap.pop(),
             }
         }
     }
@@ -275,6 +338,42 @@ pub fn assemble(mut h: Header, r: &Roots) -> Header {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The heap pops heads in the order of the scan it replaced (`min_by` on tip descending, seen
+    /// ascending, address ascending), on pseudo-random keys with many ties of tip and time.
+    #[test]
+    fn heap_order_matches_the_linear_scan() {
+        let mut x = 0x9e37_79b9_7f4a_7c15u64;
+        let mut next = || {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            x
+        };
+        for _ in 0..50 {
+            let mut keys: Vec<Key> = (0..200u8)
+                .map(|i| Key {
+                    tip: u128::from(next() % 5),
+                    seen: next() % 4,
+                    addr: Address::with_last_byte(i),
+                })
+                .collect();
+            let mut heap: BinaryHeap<Key> = keys.iter().copied().collect();
+            while !keys.is_empty() {
+                let i = (0..keys.len())
+                    .min_by(|&i, &j| {
+                        let (a, b) = (&keys[i], &keys[j]);
+                        b.tip
+                            .cmp(&a.tip)
+                            .then(a.seen.cmp(&b.seen))
+                            .then(a.addr.cmp(&b.addr))
+                    })
+                    .expect("non-empty");
+                assert_eq!(heap.pop(), Some(keys.swap_remove(i)));
+            }
+            assert!(heap.is_empty());
+        }
+    }
 
     fn roots(bal_hash: Option<B256>) -> Roots {
         Roots {
