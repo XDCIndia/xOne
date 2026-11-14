@@ -31,7 +31,7 @@ use xone_rpc::{
     },
     policy::{registry, Policy},
     server::{Limits, Rpc},
-    transport::{serve_http, serve_ipc, serve_ws},
+    transport::{bind_ipc, serve_http, serve_ipc_on, serve_ws},
     types::RpcError,
 };
 use xone_state::StateRead;
@@ -544,10 +544,24 @@ impl Service for RpcService {
             }
         }
         if let Some((path, rpc)) = self.ipc.clone() {
-            // a socket file left by a killed node would fail the bind
-            let _ = std::fs::remove_file(&path);
+            // Bound here, not in the task: an unusable path fails the start, and the listeners
+            // already started are stopped, so no partial RPC service reports success.
+            let bound = {
+                let _rt = self.rt.enter();
+                bind_ipc(&path)
+            };
+            let l = match bound {
+                Ok(l) => l,
+                Err(e) => {
+                    for t in self.tasks.drain(..) {
+                        t.abort();
+                    }
+                    return Err(err(format!("ipc listen {}: {e}", path.display())));
+                }
+            };
+            eprintln!("rpc: ipc listening on {}", path.display());
             self.tasks.push(self.rt.spawn(async move {
-                if let Err(e) = serve_ipc(rpc, &path).await {
+                if let Err(e) = serve_ipc_on(rpc, l).await {
                     eprintln!("rpc: ipc stopped: {e}");
                 }
             }));
