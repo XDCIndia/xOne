@@ -1,0 +1,552 @@
+{
+  "source_commit": "54d8ae7da15c87dd77a7a86ca695c813bad5ec91",
+  "findings": [
+    {
+      "id": "GAP-0110",
+      "slug": "prune-txlookup",
+      "title": "Prune transaction lookup rows with their retained history",
+      "area": "storage",
+      "priority": "P1",
+      "ours": [
+        "crates/xone-sync/src/mdbx/mod.rs",
+        "crates/xone-db/src/mdbx.rs"
+      ],
+      "sources": [
+        [
+          "paradigmxyz/reth",
+          "crates/prune/prune/src/segments/user/transaction_lookup.rs"
+        ],
+        [
+          "ethereum/go-ethereum",
+          "core/txindexer.go"
+        ]
+      ],
+      "what": "put_tx_lookup writes a hash-to-block-and-position row for every canonical transaction. prune_to removes canonical headers, segment indices, changesets and chunk files, but does not remove TxLookup rows. del_tx_lookup is used on unwind, not history pruning. A node that prunes history can therefore retain lookup rows for discarded history.",
+      "why": "The lookup table can grow with all executed transactions even when the history window is bounded. Retention must cover the index as well as its underlying records. Reth explicitly prunes TransactionHashNumbers; Geth maintains and removes transaction lookup history in its transaction indexer.",
+      "related": "Related: #177 owns configurable history retention; #135 owns storage layout. This issue repairs the existing prune_to lifecycle, including obsolete lookup rows left by earlier runs. It does not add another retention-policy UI.",
+      "steps": [
+        "Define a transaction-lookup retention floor consistent with body and receipt availability. Keep archive retention unchanged.",
+        "Delete lookup rows below that floor in bounded cursor pages before or with history publication. Check the stored block number before deleting a hash that may now name retained data.",
+        "Provide a bounded, resumable repair scan for existing rows whose bodies have already been removed. Do not require those missing bodies to discover stale rows.",
+        "Persist repair progress and retention changes safely with the MDBX transaction and manifest rules. Resume safely after interruption; retain the existing prune recovery ordering.",
+        "Extend pruning and recovery fixtures in crates/xone-sync/tests and document lookup behavior at the retention boundary."
+      ],
+      "acceptance": [
+        "Repeated import/prune cycles leave no lookup row below the declared retained-history floor after cleanup completes.",
+        "Retained transaction and receipt lookups return the same data before and after pruning; archive mode retains its lookups.",
+        "A legacy datadir containing only stale lookup rows and no corresponding bodies is repaired with bounded temporary memory.",
+        "Crash injection at cleanup, metadata commit and unlink boundaries recovers a consistent retention floor and can resume cleanup.",
+        "Record table row counts, live pages and reusable pages separately; deletion alone must not be reported as filesystem shrinkage."
+      ],
+      "actor": "Retention worker",
+      "trigger": "History floor advances",
+      "service": "Prune coordinator",
+      "data": "MDBX and segments",
+      "check": "Floor is safe for state and history",
+      "action": "Remove obsolete lookup rows",
+      "success": "Retained lookups stay valid",
+      "failure": "Keep the previous committed floor",
+      "loop": "Run with history pruning. Resume the legacy repair from its persisted cursor. Back off on storage errors; never advance coverage on a failed commit.",
+      "layout": [
+        [
+          "Configuration",
+          "Existing history retention settings; no second conflicting floor."
+        ],
+        [
+          "Progress",
+          "Retained floor, repair cursor, examined rows and deleted rows."
+        ],
+        [
+          "Errors",
+          "Storage failure and recovery state; do not report a completed repair before commit."
+        ]
+      ],
+      "ste": [
+        "Use the retained block number to select rows.",
+        "Keep rows that refer to retained blocks.",
+        "Delete obsolete rows before you discard their required data.",
+        "Save the repair position after each successful batch.",
+        "Test recovery at each commit boundary."
+      ]
+    },
+    {
+      "id": "GAP-0111",
+      "slug": "segment-writer-lifetime",
+      "title": "Bound segment writer handles across chunk rotation",
+      "area": "storage",
+      "priority": "P1",
+      "ours": [
+        "crates/xone-db/src/segments.rs",
+        "crates/xone-sync/src/mdbx/mod.rs"
+      ],
+      "sources": [
+        [
+          "paradigmxyz/reth",
+          "crates/storage/provider/src/providers/static_file/writer.rs"
+        ]
+      ],
+      "what": "Segs.writers is keyed by segment and chunk. stage inserts a file handle whenever a new chunk is opened. Normal chunk rotation does not remove the previous handle; only truncate and remove_chunk remove entries. An unpruned long-running store therefore retains writer handles for old chunks.",
+      "why": "Open writer handles should scale with active work, not total chain history. Otherwise long archive imports can exhaust process file descriptors. Reth keeps one cached writer per static-file segment and advances that writer when its range changes. This is evidence for writer lifetime management, not a claim that every Reth read handle is bounded by the same count.",
+      "related": "Related: #16 defines resource bounds, #152 adds archive mode, and #194 adds frozen-segment compression. This is an independent handle-lifetime repair for the current uncompressed writer.",
+      "steps": [
+        "Retire inactive writer handles on chunk transition, with a documented cap per segment. Do not retain a handle merely because its file remains readable.",
+        "Preserve deferred group-commit ordering. Track dirty chunk identities independently of cached handles and reopen a retired chunk when sync_deferred requires it.",
+        "Keep unwind, truncate, quarantine and remove_chunk behavior correct when a writer was already retired.",
+        "Add test instrumentation for peak open handles and a many-chunk fixture using small per_file values. Include durable and follower group-commit modes.",
+        "Run a subprocess fixture with a low descriptor limit and record its import/restart result. Keep foreground reads and write publication semantics unchanged."
+      ],
+      "acceptance": [
+        "Thousands of chunk transitions keep writer-handle count within a documented constant bound independent of retained history.",
+        "A deliberately low descriptor limit does not cause the many-chunk import to fail.",
+        "A deferred batch spanning multiple chunks synchronizes every dirty file before MDBX becomes steady.",
+        "Unwind, restart and prune at a chunk boundary retain identical canonical blocks and receipts.",
+        "A failed reopen or sync follows the existing fail-stop path and does not silently publish durable status."
+      ],
+      "actor": "Block importer",
+      "trigger": "A block crosses a chunk boundary",
+      "service": "Segment writer",
+      "data": "Chunk files",
+      "check": "Previous writes have a tracked sync obligation",
+      "action": "Retire the inactive handle",
+      "success": "Append with bounded open handles",
+      "failure": "Stop publication on file error",
+      "loop": "Rotate on chunk boundaries. Deferred sync reopens dirty files as needed; handle eviction must not erase durability obligations.",
+      "layout": [
+        [
+          "Runtime",
+          "No new user-facing screen or flag is required."
+        ],
+        [
+          "Diagnostics",
+          "Active writer count and peak writer count in the storage test harness."
+        ],
+        [
+          "Failure",
+          "Existing typed file and synchronization errors."
+        ]
+      ],
+      "ste": [
+        "Close each inactive writer when its chunk changes.",
+        "Keep the sync record until the file is durable.",
+        "Open the file again when a sync needs it.",
+        "Stop publication if the file operation fails.",
+        "Test rotation with a low file limit."
+      ]
+    },
+    {
+      "id": "GAP-0112",
+      "slug": "bounded-segment-recovery",
+      "title": "Stream segment recovery and quarantine with bounded buffers",
+      "area": "storage",
+      "priority": "P1",
+      "ours": [
+        "crates/xone-db/src/segments.rs",
+        "crates/xone-db/src/recover.rs",
+        "crates/xone-sync/src/mdbx/mod.rs"
+      ],
+      "sources": [
+        [
+          "ethereum/go-ethereum",
+          "core/rawdb/freezer_table.go"
+        ]
+      ],
+      "what": "Segs.scan allocates buffers from the complete committed-tail span and from file_len minus the committed length. quarantine allocates a buffer for the entire discarded suffix. A large or damaged tail can therefore make restart allocate memory proportional to file size before recovery decides what to retain.",
+      "why": "Recovery must remain usable on a large datadir and under memory pressure. Geth freezer repair reads fixed-size index entries while reconciling file boundaries instead of copying the whole data-file tail into memory. Its repair policy differs from ADR-005; only the bounded-access technique is the comparison here.",
+      "related": "Related: #11 owns crash-safe publication and the existing fault matrix. This issue replaces whole-tail allocations in the implemented recovery and quarantine paths without changing which manifest is authoritative.",
+      "steps": [
+        "Read frame headers first, validate lengths and checked arithmetic, and scan complete frames with fixed-size buffers. Keep MAX_PAYLOAD enforcement before payload allocation.",
+        "Compute the committed-tail digest incrementally or validate a bounded frame representation that preserves the exact existing digest definition.",
+        "Copy quarantine suffixes with a fixed buffer and durable completion metadata. Preserve ADR-005 evidence before destructive repair; never silently truncate evidence because space is low.",
+        "Handle sparse files, truncated headers, invalid lengths, short reads and ENOSPC with typed recovery results. Leave the authoritative data untouched when quarantine cannot complete.",
+        "Use a synthetic SegFile with very large reported lengths to test requested allocation/read sizes without allocating a huge real file. Add crash tests around quarantine completion and truncation."
+      ],
+      "acceptance": [
+        "Recovery and quarantine temporary buffers have a documented bound independent of the suffix length.",
+        "A huge sparse or synthetic suffix cannot trigger an allocation proportional to file size.",
+        "The streamed scan reports the same committed-tail digest validity and complete-frame count as the existing decoder on valid fixtures.",
+        "Quarantine preserves the exact suffix bytes; interrupted or failed copies never authorize truncation of the only evidence.",
+        "Malformed lengths, integer overflow, short reads and insufficient free space produce deterministic errors without a panic or OOM."
+      ],
+      "actor": "Node startup",
+      "trigger": "Recovery finds an extra or damaged tail",
+      "service": "Recovery scanner",
+      "data": "Segments and quarantine",
+      "check": "Frame bounds and evidence budget are valid",
+      "action": "Scan and copy bounded chunks",
+      "success": "Apply the existing recovery decision",
+      "failure": "Refuse destructive repair with a typed error",
+      "loop": "Continue until the committed tail and suffix are checked. A restart retries incomplete quarantine safely; successful completion must be identifiable before truncation.",
+      "layout": [
+        [
+          "Recovery log",
+          "Segment, chunk, committed length, scanned bytes and decision."
+        ],
+        [
+          "Quarantine status",
+          "Source range, copied bytes and durable completion marker."
+        ],
+        [
+          "Failure",
+          "Malformed length, short read or insufficient space; retain original evidence."
+        ]
+      ],
+      "ste": [
+        "Check each frame length before you allocate memory.",
+        "Read the file with a fixed buffer.",
+        "Keep the original data until the copy is complete.",
+        "Make the copy durable before you cut the source.",
+        "Report each failed read or write."
+      ]
+    },
+    {
+      "id": "GAP-0113",
+      "slug": "bounded-range-deletion",
+      "title": "Bound temporary memory during range deletion and account storage removal",
+      "area": "storage",
+      "priority": "P1",
+      "ours": [
+        "crates/xone-db/src/mdbx.rs",
+        "crates/xone-sync/src/mdbx/mod.rs"
+      ],
+      "sources": [
+        [
+          "paradigmxyz/reth",
+          "crates/storage/db-api/src/cursor.rs"
+        ],
+        [
+          "paradigmxyz/reth",
+          "crates/prune/prune/src/segments/user/transaction_lookup.rs"
+        ]
+      ],
+      "what": "Tx::range delegates to range_limit with usize::MAX. del_range materializes that complete key/value vector before deleting rows. write_diff also obtains every storage slot for a removed account through prefix before recording changesets and deleting slots. These temporary vectors grow with the entire selected range, including on the disk-backed state path.",
+      "why": "Disk-backed state cannot provide bounded temporary memory if maintenance or account removal copies a huge range into RAM. Reth exposes mutable cursor deletion and bounded pruning iteration. The issue concerns application-side row buffering; MDBX dirty-page and transaction memory must be measured separately.",
+      "related": "Related: #145 owns disk-backed state and streamed snap installation; #177 owns history retention policy. This issue repairs remaining unbounded mutation helpers used by pruning, migration and account deletion. Preserve consensus transaction atomicity.",
+      "steps": [
+        "Add a bounded mutation iterator or cursor-delete API in xone-db. Define safe cursor advancement after deleting the current key and at prefix boundaries.",
+        "Replace del_range and the removed-account storage loop with cursor or byte-bounded page processing. Use clear for a complete table only where semantics allow it.",
+        "Keep changeset generation and each block state transition in its original atomic write transaction. Do not split a consensus-visible transition into independently published batches.",
+        "For background pruning and schema migration, use bounded resumable transactions only when existing publication rules permit them.",
+        "Add fixtures for empty ranges, all-0xff prefixes, adjacent accounts, large values, millions of slots via generated data, unwind and interrupted migration. Report temporary-buffer and MDBX memory separately."
+      ],
+      "acceptance": [
+        "Temporary row buffers remain within a documented byte bound as the deleted range grows.",
+        "Every selected row is deleted exactly once and no adjacent-prefix row is deleted.",
+        "Account removal records the prior storage values needed for an exact unwind.",
+        "Crash injection preserves atomic block publication and the previous committed state.",
+        "Retained state roots and receipts match the pinned XDC oracle fixtures; no new limit rejects an otherwise valid block."
+      ],
+      "actor": "State or maintenance writer",
+      "trigger": "A range must be deleted",
+      "service": "MDBX mutation layer",
+      "data": "Rows and changesets",
+      "check": "Cursor is inside the requested range",
+      "action": "Process a bounded set of rows",
+      "success": "Commit the same atomic transition",
+      "failure": "Abort the uncommitted transaction",
+      "loop": "Advance the cursor until the range ends. Keep block transactions atomic; persist maintenance checkpoints only at valid transaction boundaries.",
+      "layout": [
+        [
+          "Internal API",
+          "Range start, exclusive end or prefix, and byte-bounded iteration."
+        ],
+        [
+          "Test output",
+          "Rows visited, peak copied bytes, dirty-page memory and final roots."
+        ],
+        [
+          "Failure",
+          "Typed database error; original committed state remains authoritative."
+        ]
+      ],
+      "ste": [
+        "Copy only the rows needed for the current step.",
+        "Keep the cursor inside the selected range.",
+        "Save each prior value required for an unwind.",
+        "Commit the block as one atomic change.",
+        "Test the first and last keys of each range."
+      ]
+    },
+    {
+      "id": "GAP-0114",
+      "slug": "disk-admission-all-writers",
+      "title": "Apply disk-space admission before bootstrap and all block writers",
+      "area": "ops",
+      "priority": "P1",
+      "ours": [
+        "crates/xone-node/src/diskguard.rs",
+        "crates/xone-node/src/services/mod.rs",
+        "crates/xone-node/src/services/snapsync.rs",
+        "crates/xone-node/src/services/producer.rs",
+        "crates/xone-node/src/services/core.rs"
+      ],
+      "sources": [
+        [
+          "ethereum/go-ethereum",
+          "cmd/utils/cmd.go"
+        ]
+      ],
+      "what": "The new DiskGuard passes an ImportGate to ChainService only. snap_sync runs before build creates the guard, and ProducerService receives no gate. DiskGuard.start reads total space but discards the first available-space result, then opens its sampling thread while the default gate is open. A failed sampler retains the previous gate state; df has no execution timeout.",
+      "why": "The low-space policy must cover writers that can fill the filesystem during bootstrap and block production, as well as follower import. Geth sends a process-wide shutdown signal when its disk monitor crosses the critical threshold. That source supports whole-node coverage; it does not prove that Geth implements all the startup and sampler-staleness requirements proposed here.",
+      "related": "Related: closed #16 introduced disk/resource bounds; PR #318 added the current guard. This issue closes uncovered entry points and sampling lifecycle gaps in that implementation. #225 separately owns moving history to another filesystem.",
+      "steps": [
+        "Create one shared admission policy before SNAP bootstrap or persistent core initialization. Apply the first valid free-space sample synchronously before enabling writes.",
+        "Check admission at the common block/storage boundary and at bounded SNAP write batches. Cover follower import, local production and snapshot installation without stopping permitted reads.",
+        "Use a bounded filesystem-space probe or a subprocess with a timeout and bounded output. Define the maximum age of a usable sample; stop new discretionary writes when no valid sample remains.",
+        "Reserve enough space for required commit completion, signer safety state and clean shutdown. Never interrupt an atomic commit halfway or let a producer sign a block it cannot safely persist.",
+        "Test startup below the stop threshold, low disk during SNAP, local production while stopped, failed/hung probes, resume hysteresis and bounded shutdown. Extend existing Guard tests through actual service entry points."
+      ],
+      "acceptance": [
+        "No SNAP batch or new block import starts before the initial admission decision.",
+        "Low-space admission covers both locally produced blocks and peer-imported blocks.",
+        "A hung or repeatedly failed probe cannot leave a stale open gate indefinitely or block shutdown indefinitely.",
+        "An in-flight atomic commit completes or takes the existing fail-stop path; the guard does not bypass signer durability.",
+        "Recovery above the resume line restores allowed work with one transition alarm; tests exercise the real node lifecycle."
+      ],
+      "actor": "Node operator",
+      "trigger": "Start or continue a disk-writing operation",
+      "service": "Shared disk admission",
+      "data": "Filesystem and store",
+      "check": "A fresh sample permits this write",
+      "action": "Admit the next atomic write unit",
+      "success": "Continue with monitored disk reserve",
+      "failure": "Pause new writes and report the cause",
+      "loop": "Sample on a bounded schedule. Re-evaluate at write-unit boundaries, retain hysteresis, and request clean exit at the existing critical threshold.",
+      "layout": [
+        [
+          "Configuration",
+          "Existing disk stop, resume, exit and sample settings; documented sample-age/probe timeout."
+        ],
+        [
+          "Status",
+          "Admission state, free bytes, sample age and last probe error."
+        ],
+        [
+          "Logs",
+          "One transition event with operation class: bootstrap, import or production."
+        ]
+      ],
+      "ste": [
+        "Read free space before you start new writes.",
+        "Use one admission state for all block writers.",
+        "Stop new writes when the sample is too old.",
+        "Finish each accepted atomic operation safely.",
+        "Keep the shutdown wait within its time limit."
+      ]
+    },
+    {
+      "id": "GAP-0115",
+      "slug": "preimage-retention-policy",
+      "title": "Make optional preimage retention configurable while preserving wide balances",
+      "area": "storage",
+      "priority": "P2",
+      "ours": [
+        "crates/xone-sync/src/mdbx/mod.rs",
+        "crates/xone-node/src/services/core.rs",
+        "crates/xone-node/src/services/snapsync.rs",
+        "crates/xone-node/src/config.rs",
+        "bin/xone/src/flags.rs"
+      ],
+      "sources": [
+        [
+          "ethereum/go-ethereum",
+          "cmd/utils/flags.go"
+        ],
+        [
+          "ethereum/go-ethereum",
+          "triedb/preimages.go"
+        ]
+      ],
+      "what": "put_preimage unconditionally upserts address and slot preimages during execution; there is no preimage-retention option in node configuration. Most preimages serve export/debug/xpre capabilities, but XDC accounts above 2^256 require their address preimage when the executor rebuilds wide balances. A blanket preimage-off switch would therefore be incorrect.",
+      "why": "Operators should be able to reduce optional storage and write traffic with an explicit capability tradeoff. Geth exposes cache.preimages and buffers duplicate preimages. xOneRS must retain the additional XDC information that its execution and SNAP paths require. No disk-saving percentage is asserted before measurement.",
+      "related": "Related: closed #134 moved state to hashed keys and #149 measures datadir waste. This issue adds a supported retention policy and coverage contract, rather than changing the hashed-state architecture or deleting mandatory wide-account information.",
+      "steps": [
+        "Define explicit keep-all and minimal-optional-preimage policies. Preserve the current default for compatibility; separate mandatory wide-account addresses from optional slot/address history.",
+        "Persist the policy and available coverage in metadata. Enforce it for execution, genesis, migration and snapshot installation, including accounts that become wide after an unwind or later execution.",
+        "Suppress repeated optional upserts with a bounded deduplication strategy. Measure any extra read cost before retaining a read-before-write path.",
+        "Make export/dump/xpre responses report missing coverage accurately. A later keep-all setting collects future evidence and must not claim historical preimages were reconstructed.",
+        "Add configuration/docs and fixtures for wide balances, restart, snap install, unwind, repeated writes and coverage-limited export. Keep destructive cleanup of old preimages out of this unit unless explicitly resumable and separately reviewed."
+      ],
+      "acceptance": [
+        "Default policy preserves existing export and execution behavior.",
+        "Minimal mode omits optional preimages but retains every address required for wide-balance reconstruction across restart, unwind and SNAP.",
+        "State roots, receipts and block acceptance are identical in both modes.",
+        "Missing preimage coverage is explicit; enabling keep-all later does not imply complete historical coverage.",
+        "A repeated-write workload reports logical preimage bytes, table pages and write operations for both modes, without a fabricated savings target."
+      ],
+      "actor": "Node operator",
+      "trigger": "Select a supported preimage policy",
+      "service": "State store",
+      "data": "Preimages and coverage metadata",
+      "check": "Mandatory XDC addresses remain available",
+      "action": "Retain only the configured optional evidence",
+      "success": "Preserve execution with explicit coverage",
+      "failure": "Reject an unsafe policy or incomplete required state",
+      "loop": "Apply the policy to each state write and snapshot batch. Keep mandatory addresses through history transitions; never infer old coverage from a new flag.",
+      "layout": [
+        [
+          "Configuration",
+          "One documented retention option with the existing behavior as default."
+        ],
+        [
+          "Inspect output",
+          "Policy, coverage start and mandatory-address availability."
+        ],
+        [
+          "Export errors",
+          "Explicit unavailable-preimage result with the affected capability."
+        ]
+      ],
+      "ste": [
+        "Keep each address required for a wide balance.",
+        "Save the selected policy with the database metadata.",
+        "Do not report missing history as complete.",
+        "Keep each cache within its size limit.",
+        "Compare state roots in both modes."
+      ]
+    },
+    {
+      "id": "GAP-0116",
+      "slug": "compact-receipt-codec",
+      "title": "Store compact receipts without redundant per-receipt blooms",
+      "area": "storage",
+      "priority": "P2",
+      "ours": [
+        "crates/xone-sync/src/mdbx/codec.rs",
+        "crates/xone-db/src/segments.rs",
+        "crates/xone-executor/src/lib.rs",
+        "crates/xone-rpc/src/json.rs"
+      ],
+      "sources": [
+        [
+          "ethereum/go-ethereum",
+          "core/types/receipt.go"
+        ]
+      ],
+      "what": "receipts_rlp persists the complete consensus receipt bytes in each receipt segment frame. Those bytes contain a bloom that can be derived from the receipt logs. The store currently has no compact logical receipt representation distinct from the consensus wire encoding.",
+      "why": "Geth ReceiptForStorage omits the bloom and reconstructs it in DeriveFields. A compact receipt codec can reduce logical bytes written in active and frozen segments. The net disk and latency effects require measurement, especially when whole-frame compression is also enabled.",
+      "related": "Related: #194 adds compression of frozen segment frames. This issue changes the logical receipt representation and can operate on active uncompressed segments. #276 addresses RPC serialization complexity, not persistent receipt size.",
+      "steps": [
+        "Introduce an explicitly versioned storage-only receipt codec that preserves status or post-state, cumulative gas, transaction type and ordered logs. Omit only information proven reconstructible from retained data.",
+        "Reconstruct the exact existing consensus receipt bytes at store-reader boundaries. Keep peer responses, receipt roots, RPC bloom fields and XDC-specific receipt semantics unchanged.",
+        "Add format negotiation and mixed-version reads or a restart-safe migration. Old binaries must refuse an unsupported format instead of decoding it as the old RLP list.",
+        "Coordinate the version envelope with #194 so compression and compact encoding remain independently identifiable. Preserve manifest digests, CRCs, publication and crash recovery.",
+        "Measure raw logical bytes, allocated segment bytes, decode CPU and receipt-read latency for legacy, compact, compressed and combined variants on the same pinned workload."
+      ],
+      "acceptance": [
+        "Round trips reconstruct byte-identical consensus receipts and identical receipt roots for every supported XDC receipt type.",
+        "RPC and peer output remains identical, including blooms, log ordering and legacy status/post-state behavior.",
+        "Restart, migration interruption, truncated frames and unsupported versions are handled by the storage recovery contract.",
+        "Compact decoding does not depend on pruned transaction bodies to recover required type information.",
+        "Publish measured byte savings and latency/CPU cost; retain the existing representation if acceptance budgets are not met."
+      ],
+      "actor": "Block writer",
+      "trigger": "Persist a verified receipt set",
+      "service": "Versioned receipt codec",
+      "data": "Receipt segments",
+      "check": "Every omitted field is reconstructible",
+      "action": "Encode the compact storage representation",
+      "success": "Read back identical consensus receipts",
+      "failure": "Reject malformed or unsupported storage data",
+      "loop": "Encode per committed block. Migrations process bounded chunks with restart checkpoints; no background format rewrite without an explicit migration state.",
+      "layout": [
+        [
+          "Storage metadata",
+          "Receipt codec version separate from compression version."
+        ],
+        [
+          "Inspect output",
+          "Logical receipt bytes, encoded segment bytes and codec coverage."
+        ],
+        [
+          "Compatibility",
+          "Existing RPC schemas and wire payloads remain unchanged."
+        ]
+      ],
+      "ste": [
+        "Keep the receipt type in the stored record.",
+        "Remove only data that you can reconstruct exactly.",
+        "Check the format version before you decode a record.",
+        "Keep the order of all logs.",
+        "Compare the reconstructed receipt bytes with the original bytes."
+      ]
+    },
+    {
+      "id": "GAP-0117",
+      "slug": "persistent-log-index",
+      "title": "Add a bounded persistent log index for selective history queries",
+      "area": "rpc",
+      "priority": "P2",
+      "ours": [
+        "crates/xone-rpc/src/eth.rs",
+        "crates/xone-rpc/src/api.rs",
+        "crates/xone-db/src/mdbx.rs",
+        "crates/xone-sync/src/mdbx/mod.rs"
+      ],
+      "sources": [
+        [
+          "ethereum/go-ethereum",
+          "core/filtermaps/indexer.go"
+        ],
+        [
+          "ethereum/go-ethereum",
+          "core/filtermaps/matcher_backend.go"
+        ],
+        [
+          "erigontech/erigon",
+          "execution/state/rw_v3.go"
+        ],
+        [
+          "erigontech/erigon",
+          "db/kv/tables.go"
+        ]
+      ],
+      "what": "eth_getLogs enumerates every canonical block in the requested range and loads block/receipt data before exact filtering. The storage table registry has no persistent address/topic candidate index. Header-bloom rejection in #258 still requires inspecting every block in the range.",
+      "why": "Selective explorer queries should locate candidate blocks without scanning all headers and receipts in the range. Geth FilterMaps maintains indexed coverage and a matcher backend; Erigon writes log address and topic inverted-index entries. The proposed index trades additional disk and write work for lower query read amplification and must be optional and measured.",
+      "related": "Related: #258 adds cheap header-bloom rejection and explicitly excludes a persistent index; #177 owns retained history; #232 exports data externally. This issue is an in-node candidate index, not another exporter or an increase in RPC range limits.",
+      "steps": [
+        "Choose a compact address/topic-to-block or log-position index after measuring candidate layouts. Use MDBX/static-segment facilities already selected by the repository; do not add a new database engine merely to copy a competitor.",
+        "Persist canonical hash/range coverage and a resumable index checkpoint. Backfill in bounded batches with an I/O budget; index only committed receipts.",
+        "Invalidate or unwind affected entries before reporting reorg coverage. Prune index ranges with receipt retention and recover safely after a crash.",
+        "Extend the ChainReader query surface to return candidates plus authoritative covered ranges. Use the bounded bloom/receipt fallback for uncovered retained data; never treat missing coverage as no matches.",
+        "Preserve topic-position semantics, OR alternatives, wildcards, blockHash queries, result ordering, cancellation and existing limits. Expose index coverage and size for operators."
+      ],
+      "acceptance": [
+        "Indexed and unindexed queries return identical ordered logs across generated wildcard, OR-topic, address and blockHash cases.",
+        "Partial backfill, restart and reorg during a query cannot produce false negatives or mix canonical views.",
+        "Pruned required receipts return the defined history-unavailable behavior, not an empty result caused by absent index rows.",
+        "A sparse-query fixture records fewer candidate header/receipt reads; the benchmark also reports extra index bytes and write cost.",
+        "Backfill memory and per-batch work remain bounded, and the feature can be disabled without changing chain validity."
+      ],
+      "actor": "RPC caller",
+      "trigger": "Request selective historical logs",
+      "service": "Log query planner",
+      "data": "Index coverage and receipts",
+      "check": "Requested ranges have valid canonical coverage",
+      "action": "Read candidates and verify exact matches",
+      "success": "Return ordered complete logs",
+      "failure": "Use bounded fallback or report unavailable history",
+      "loop": "A background worker catches up in bounded batches, pauses under resource pressure, resumes from its checkpoint and unwinds on reorg.",
+      "layout": [
+        [
+          "Configuration",
+          "Optional index enablement, storage budget and backfill batch budget."
+        ],
+        [
+          "Status",
+          "Indexed from/to blocks, canonical anchor, lag, size and last error."
+        ],
+        [
+          "RPC",
+          "Existing eth_getLogs request and response shapes; unchanged range and result limits."
+        ]
+      ],
+      "ste": [
+        "Index only committed canonical receipts.",
+        "Record the range covered by each index.",
+        "Scan uncovered retained ranges with the existing bounded path.",
+        "Check each candidate with the exact log filter.",
+        "Remove stale coverage before you serve a changed branch."
+      ]
+    }
+  ]
+}

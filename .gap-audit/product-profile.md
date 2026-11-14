@@ -1,6 +1,6 @@
 # Product profile: xOneRS
 
-Audited source: `XDCIndia/xOneRS` `main` at `8b047da` (2026-11-14). Paths are relative to the repository root.
+Audited source: `XDCIndia/xOneRS` at `330b742bfa1ef1401c1b9b9be0cf0bd344255cca` (2026-11-14), with subsequent main `a0dc523827c9ce8bdd305e9d8470f023aa2c7fba` reviewed for overlap. Paths are relative to the repository root.
 
 ## Category
 
@@ -21,15 +21,15 @@ XDC Network execution client with built-in XDPoS consensus (a "full node" in the
 11. Staged full sync (headers, bodies, senders, execute, finish) and live follow: `crates/xone-sync/src/{stages,follow.rs}`.
 12. Snap sync (snap/1 client and server, range proofs, xpre/1 pre-pivot data, gap-RPC proof checks): `crates/xone-snap/src/`, `crates/xone-node/src/services/snapsync.rs`.
 13. Bootstrap: snapshot export/import with pins and anchored minimal mode: `bin/xone/src/cmd/snapshot.rs`, `spec/bootstrap/`.
-14. Chain import/export of RLP block files: `bin/xone/src/cmd/{import.rs,export.rs}`, `crates/xone-sync/src/{import.rs,export.rs}`.
+14. Library and CLI import/export of RLP block files; current commands use transient memory rather than persistent datadir storage (GAP-0099): `bin/xone/src/cmd/{import.rs,export.rs}`, `crates/xone-sync/src/{import.rs,export.rs}`.
 15. Fork choice, reorg, set-head, restart recovery: `crates/xone-sync/src/chain/`, `spec/chain/`.
 16. devp2p: discv4 (XDC ping), RLPx, eth/100 and eth/101, BFT message gossip, peer scoring, static and trusted peers: `crates/xone-net/src/`, `crates/xone-node/src/enode.rs`.
 17. Txpool: geth legacypool port, special-tx admission, propagation, eviction: `crates/xone-builder/src/txpool/`.
 18. Block producer: leader schedule, build, seal V1/V2, sign transactions, slot timing: `crates/xone-builder/src/producer/`.
-19. Keys: keystore v3 read, remote signer with fencing, node key, secret zeroization: `crates/xone-signer/src/`.
+19. Keys: keystore v3 read, remote-signer interface with fencing and test implementations, node key, secret zeroization; production remote-signing integration remains #40: `crates/xone-signer/src/`.
 20. JSON-RPC over HTTP, WebSocket and IPC with quotas, classes, deadlines and load shedding: `crates/xone-rpc/src/{server.rs,transport.rs,policy.rs}`, `spec/rpc/scope-adr-008.md`.
-21. RPC namespaces: eth subset (29 methods), net, web3, txpool (status/content/inspect), admin (5), debug (raw header/block, callTracer/prestateTracer traces), XDPoS (14), XDC eth extensions (7), subscriptions newHeads/logs/newPendingTransactions: `crates/xone-rpc/src/*.rs`.
-22. Observability: Prometheus metrics, /livez and /readyz, ethstats, SkyNet heartbeat, budgeted rotating logs: `crates/xone-node/src/observe/`.
+21. Registered RPC namespaces (registration does not prove production adapter completion; see #42): eth subset (29 methods), net, web3, txpool (status/content/inspect), admin (5), debug (raw header/block, callTracer/prestateTracer traces), XDPoS (14), XDC eth extensions (7), subscriptions newHeads/logs/newPendingTransactions: `crates/xone-rpc/src/*.rs`.
+22. Observability modules (production integration remains #41; readiness and counter defects are recorded in pass4): Prometheus metrics, /livez and /readyz, ethstats, SkyNet heartbeat, budgeted rotating logs: `crates/xone-node/src/observe/`.
 23. CLI and config compatible with geth-XDC/join.sh flags, TOML config, dumpconfig, genesis-hash: `bin/xone/src/flags.rs`, `docs/cli/flags.md`.
 24. Operator packaging: Dockerfile, systemd unit, install and upgrade/rollback runbooks, bootnode lists: `Dockerfile`, `ops/`.
 25. Conformance: replay harness against the geth-XDC archive, golden vectors, fuzzing, simulator: `conformance/`, `fuzz/`, `sim/`.
@@ -43,3 +43,19 @@ XDC Network execution client with built-in XDPoS consensus (a "full node" in the
 ## Search keywords and synonyms
 
 ethereum execution client; ethereum client rust; ethereum full node; ethereum node implementation; evm blockchain client; XDC network client; XDC blockchain; XinFin node; XDPoS; XDPoS v2; HotStuff BFT EVM chain; DPoS EVM client; PoSA client; proof of authority ethereum fork; geth fork; reth fork; revm node; devp2p; snap sync; staged sync; MDBX blockchain storage; JSON-RPC ethereum node; masternode client; validator client EVM; archive node; execution layer client; ethereum client go; ethereum client java; ethereum client dotnet; ethereum client nim.
+
+## Runtime qualification and scope correction (pass 4)
+
+The implemented modules above describe source structure, not a production-readiness assertion. `crates/xone-node/src/services/rpc.rs` still supplies unsupported or placeholder adapter behavior for several registered calls, tracing and admin operations. `crates/xone-node/src/services/pool.rs` must connect accepted transactions to pending events. Those broad integration tasks remain owned by [#42](https://github.com/XDCIndia/xOneRS/issues/42); this pass records separately shippable defects, not duplicate umbrella issues.
+
+[Issue #214](https://github.com/XDCIndia/xOneRS/issues/214) adds Ethereum-profile work. Historical exclusions of Engine API, DNS discovery, Ethereum wire versions, blobs and era files must therefore be read as XDC-profile exclusions, not permanent product-wide prohibitions. Consensus behavior must remain selected by chain profile.
+
+This is a headless node product. Graphical admin/client screens, invoicing, tax, refunds, translated storefronts and billing cron jobs are not applicable. Its equivalent surfaces are RPC methods, CLI commands, protocol messages, configuration, metrics and runtime timers; see [module-map-pass4.md](module-map-pass4.md).
+
+## Pass 5 — current storage and performance focus
+
+Re-pinned main to `54d8ae7da15c87dd77a7a86ca695c813bad5ec91`. The product category remains a Rust XDC execution/consensus full node. Existing core-capability evidence is above; the current persistence implementation is mapped in `module-map-pass5.md`.
+
+Additional search terms: Ethereum storage pruning client; Ethereum receipt compression client; transaction lookup pruning; static-file writer rotation; bounded database cursor deletion; log address/topic inverted index; Ethereum execution benchmark; Ethereum client flat database; state database preimages; low-disk admission; engine_newPayload latency; benchmark hardware cohorts; reference-node timings; storage write amplification; Nethermind Paprika; Ethereum client database topic.
+
+Retain MDBX plus XSEG while measuring #135/#149. Do not infer node performance from Engine API rankings or copy a different chain's consensus semantics.

@@ -1,0 +1,2885 @@
+{
+  "scan": "Selected-client README and storage/performance documentation inventory; matches are discovery leads, not automatic presence claims.",
+  "clients": [
+    {
+      "repo": "XinFinOrg/XDPoSChain",
+      "commit": "cb1ef79073c05f50b9df75b1e740387b9d72af99",
+      "matching_document_count": 15,
+      "reviewed_documents": []
+    },
+    {
+      "repo": "ethereum/go-ethereum",
+      "commit": "8059ff8beb3170eb8b977169ac51bb0423c97ee1",
+      "matching_document_count": 12,
+      "reviewed_documents": [
+        {
+          "path": "README.md",
+          "matches": [
+            {
+              "line": 59,
+              "text": "* High-performance SSD with at least 2TB of free space"
+            },
+            {
+              "line": 66,
+              "text": "* High-performance NVMe SSD with 2TB-4TB of space for long term growth and maintenance headroom"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "repo": "bnb-chain/bsc",
+      "commit": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+      "matching_document_count": 20,
+      "reviewed_documents": [
+        {
+          "path": "README.md",
+          "matches": [
+            {
+              "line": 109,
+              "text": "- IMPORTANT 3 TB(Dec 2023) of free disk space, solid-state drive(SSD), gp3, 8k IOPS, 500 MB/S throughput, read latency <1ms. (if node is started with snap sync, it will need NVMe SSD)"
+            },
+            {
+              "line": 145,
+              "text": "#### 3. Download snapshot"
+            },
+            {
+              "line": 146,
+              "text": "Download latest chaindata snapshot from [here](https://github.com/bnb-chain/bsc-snapshots). Follow the guide to structure your files."
+            },
+            {
+              "line": 150,
+              "text": "## It will run with Path-Base Storage Scheme by default and enable inline state prune, keeping the latest 600000 blocks' history state."
+            },
+            {
+              "line": 153,
+              "text": "## It is recommend to run fullnode with `--tries-verify-mode none` if you want high performance and care little about state consistency."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "repo": "paradigmxyz/reth",
+      "commit": "36600d5ff9628465475dd4c7608e2e9f2fe24273",
+      "matching_document_count": 22,
+      "reviewed_documents": [
+        {
+          "path": "README.md",
+          "matches": [
+            {
+              "line": 23,
+              "text": "Reth (short for Rust Ethereum, [pronunciation](https://x.com/kelvinfichter/status/1597653609411268608)) is a production-ready Ethereum execution layer client focused on modularity, performance, and user-friendliness. Reth is compatible with all Ethereum Consensus Layer (CL) implementations that support the [Engine API](https://github.com/ethereum/e"
+            },
+            {
+              "line": 29,
+              "text": "1. **Modularity**: Every component is built to be used as a library: well-tested, documented and benchmarked. Import crates, mix and match, and innovate on top of them. Learn more about the project's components [here](./docs/repo/layout.md)."
+            },
+            {
+              "line": 30,
+              "text": "2. **Performance**: Built with Rust, [Alloy](https://github.com/alloy-rs/alloy/), evm2, and [Foundry](https://github.com/foundry-rs/foundry/) \u2014 battle-tested and optimized for speed. Check the [ethPandaOps Lab Dashboard](https://lab.ethpandaops.io/ethereum/execution/timings) for a third-party comparison against other Ethereum clients."
+            },
+            {
+              "line": 33,
+              "text": "![](./assets/reth-perf.png)"
+            },
+            {
+              "line": 38,
+              "text": "6. **Configurability**: Profiles for different use cases \u2014 from high-performance RPC operators to hobbyists on consumer hardware."
+            },
+            {
+              "line": 42,
+              "text": "Reth is production ready, and suitable for usage in mission-critical environments such as staking or high-uptime services. We also actively recommend professional node operators to switch to Reth in production for performance and cost reasons in use cases where high performance with great margins is required such as RPC, MEV, Indexing, Simulations,"
+            },
+            {
+              "line": 54,
+              "text": "Storage V2 is the default for new nodes in Reth 2.0. Existing V1 nodes continue to work, but V1 support will be removed in a future release \u2014 all users are encouraged to migrate. V2 snapshots are available at [snapshots.reth.rs](https://snapshots.reth.rs/)."
+            },
+            {
+              "line": 137,
+              "text": "- [Erigon](https://github.com/ledgerwatch/erigon) (fka Turbo-Geth): Erigon pioneered the [\"Staged Sync\" architecture](https://erigon.substack.com/p/erigon-stage-sync-and-control-flows) that Reth is using, as well as [introduced MDBX](https://github.com/ledgerwatch/erigon/wiki/Choice-of-storage-engine) as the database of choice. We thank Erigon for "
+            },
+            {
+              "line": 144,
+              "text": "The `NippyJar` and `Compact` encoding formats and their implementations are designed for storing and retrieving data internally. They are not hardened to safely read potentially malicious data."
+            }
+          ]
+        },
+        {
+          "path": "docs/design/database.md",
+          "matches": [
+            {
+              "line": 11,
+              "text": "- To achieve that, we created the [Encode/Decode/Compress/Decompress traits](https://github.com/paradigmxyz/reth/blob/main/crates/storage/db-api/src/table.rs) to make the (de)serialization of database `Table::Key` and `Table::Values` generic."
+            },
+            {
+              "line": 14,
+              "text": "  - [Ethereum-specific Compact Encoding](https://github.com/paradigmxyz/reth-core/blob/main/crates/codecs-derive/src/compact/mod.rs): A lot of Ethereum datatypes have unnecessary zeros when serialized, or optional (e.g. on empty hashes) which would be nice not to pay in storage costs."
+            },
+            {
+              "line": 16,
+              "text": "    - [Akula](https://github.com/akula-bft/akula/) expanded it for other tables and datatypes manually. It also saved some more space by storing the length of certain types (U256, u64) using the [`modular_bitfield`](https://docs.rs/modular-bitfield/latest/modular_bitfield/) crate, which compacts this information."
+            },
+            {
+              "line": 21,
+              "text": "- We made implementation of these traits easy via a derive macro called [`reth_codec`](https://github.com/paradigmxyz/reth-core/blob/main/crates/codecs-derive/src/lib.rs) that delegates to one of Compact (default), Scale, Postcard or Passthrough encoding. This is [derived on every struct we need](https://github.com/search?q=repo%3Aparadigmxyz%2Fret"
+            },
+            {
+              "line": 25,
+              "text": "Historical state changes are indexed by `BlockNumber`. This means that `reth` stores the state for every account after every block that touched it, and it provides indexes for accessing that data quickly. While this may make the database size bigger (needs benchmark once `reth` is closer to prod), it provides fast access to the historical state."
+            },
+            {
+              "line": 68,
+              "text": "Receipts {"
+            },
+            {
+              "line": 70,
+              "text": "    Receipt Data"
+            },
+            {
+              "line": 116,
+              "text": "    BranchNodeCompact Node"
+            },
+            {
+              "line": 138,
+              "text": "Transactions ||--|| Receipts : \"each tx has a receipt\""
+            }
+          ]
+        },
+        {
+          "path": "crates/storage/rpc-provider/README.md",
+          "matches": [
+            {
+              "line": 52,
+              "text": "- `reth_rpc_support`: When enabled (default), uses Reth-specific RPC methods for better performance:"
+            }
+          ]
+        },
+        {
+          "path": "crates/storage/nippy-jar/tests/fixtures/zstd-0.13/README.md",
+          "matches": [
+            {
+              "line": 12,
+              "text": "`dictionary.block` separately exercises a frame compressed with the first trained"
+            },
+            {
+              "line": 36,
+              "text": "            jar.prepare_compression(vec![col1.clone(), col2.clone()]).unwrap();"
+            },
+            {
+              "line": 37,
+              "text": "            let Compressors::Zstd(zstd) = jar.compressor().unwrap() else { unreachable!() };"
+            },
+            {
+              "line": 38,
+              "text": "            let encoded = zstd.compressors().unwrap().unwrap()[0].compress(&col1[5]).unwrap();"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "repo": "0xPolygon/bor",
+      "commit": "ee09efd5dd9ef75917368990b272581b0e2c2665",
+      "matching_document_count": 28,
+      "reviewed_documents": [
+        {
+          "path": "README.md",
+          "matches": [
+            {
+              "line": 127,
+              "text": "* High-performance SSD with at least 1TB of free space"
+            }
+          ]
+        },
+        {
+          "path": "docs/cli/snapshot_inspect-ancient-db.md",
+          "matches": [
+            {
+              "line": 1,
+              "text": "# Inspect ancient DB for block pruning"
+            },
+            {
+              "line": 3,
+              "text": "The ```bor snapshot inspect-ancient-db``` command will inspect few fields in the ancient datastore using the given datadir location."
+            },
+            {
+              "line": 6,
+              "text": "This command prints the following information which is useful for block-pruning rounds:"
+            }
+          ]
+        },
+        {
+          "path": "docs/cli/snapshot_prune-state.md",
+          "matches": [
+            {
+              "line": 1,
+              "text": "# Prune state"
+            },
+            {
+              "line": 3,
+              "text": "The ```bor snapshot prune-state``` command will prune historical state data"
+            },
+            {
+              "line": 4,
+              "text": "with the help of the state snapshot. All trie nodes and contract codes that do not belong to the"
+            },
+            {
+              "line": 5,
+              "text": "specified\tversion state will be deleted from the database. After pruning, only two version states"
+            }
+          ]
+        },
+        {
+          "path": "docs/cli/snapshot.md",
+          "matches": [
+            {
+              "line": 1,
+              "text": "# snapshot"
+            },
+            {
+              "line": 3,
+              "text": "The ```snapshot``` command groups snapshot related actions:"
+            },
+            {
+              "line": 5,
+              "text": "- [```snapshot prune-state```](./snapshot_prune-state.md): Prune state databases at the given datadir location."
+            },
+            {
+              "line": 7,
+              "text": "- [```snapshot prune-block```](./snapshot_prune-block.md): Prune ancient chaindata at the given datadir location."
+            },
+            {
+              "line": 9,
+              "text": "- [```snapshot inspect-ancient-db```](./snapshot_inspect-ancient-db.md): Inspect few fields in ancient datastore."
+            }
+          ]
+        },
+        {
+          "path": "docs/cli/snapshot_prune-block.md",
+          "matches": [
+            {
+              "line": 1,
+              "text": "# Prune ancient blockchain"
+            },
+            {
+              "line": 3,
+              "text": "The ```bor snapshot prune-block``` command will prune historical blockchain data stored in the ancientdb. The amount of blocks expected for remaining after prune can be specified via `block-amount-reserved` in this command, will prune and only remain the specified amount of old block data in ancientdb."
+            },
+            {
+              "line": 8,
+              "text": "1. backup the number of specified number of blocks backward in original ancientdb into new ancient_backup,"
+            },
+            {
+              "line": 9,
+              "text": "2. then delete the original ancientdb dir and rename the ancient_backup to original one for replacement,"
+            },
+            {
+              "line": 12,
+              "text": "The purpose of doing it is because the block data will be moved into the ancient store when it becomes old enough (exceed the Threshold 90000), the disk usage will be very large over time, and is occupied mainly by ancientdb, so it's very necessary to do block data pruning, this feature will handle it."
+            },
+            {
+              "line": 18,
+              "text": "- ```block-amount-reserved```: Sets the expected reserved number of blocks for offline block prune (default: 1024)"
+            },
+            {
+              "line": 22,
+              "text": "- ```check-snapshot-with-mpt```: Enable checking between snapshot and MPT (default: false)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "repo": "besu-eth/besu",
+      "commit": "2b839d96863d01210f45a6f62127e6229e5b0889",
+      "matching_document_count": 14,
+      "reviewed_documents": [
+        {
+          "path": "README.md",
+          "matches": [
+            {
+              "line": 29,
+              "text": "* [Troubleshoot performance](https://docs.besu-eth.org/public-networks/how-to/troubleshoot/performance)"
+            },
+            {
+              "line": 100,
+              "text": "Besu supports performance profiling using [Async Profiler](https://github.com/async-profiler/async-profiler), a low-overhead sampling profiler.  "
+            },
+            {
+              "line": 103,
+              "text": "Profiling can help identify performance bottlenecks in block processing, transaction validation, and EVM execution.  "
+            }
+          ]
+        },
+        {
+          "path": "ethereum/core/src/main/java/org/hyperledger/besu/ethereum/trie/pathbased/bonsai/storage/cache/Versioned-cache-doc.md",
+          "matches": [
+            {
+              "line": 3,
+              "text": "This package implements the **versioned cross-block cache** used by Bonsai world state storage when `bonsaiCrossBlockCacheEnabled` is on. The design keeps a **single shared cache** (accounts and storage slots) correct across **reorgs**, **snapshots**, and **head** reads, without tying versions to block numbers."
+            },
+            {
+              "line": 26,
+              "text": "## Pinned version per storage view (head vs snapshot)"
+            },
+            {
+              "line": 31,
+              "text": "- **Snapshot storage**: when a snapshot is created (`BonsaiSnapshotWorldStateKeyValueStorage`), it copies the parent\u2019s `getCurrentVersion()` at creation time and **keeps that value**. The parent can commit again and advance its own `cacheVersion` and `globalVersion`; **the snapshot\u2019s pinned version stays immutable**."
+            },
+            {
+              "line": 33,
+              "text": "So the snapshot is tied to a **logical cache epoch** taken at snapshot time, not to \u201cwhatever the cache says later\u201d."
+            },
+            {
+              "line": 37,
+              "text": "| Step | Head `cacheVersion` | Snapshot (taken at step 1) `cacheVersion` | `globalVersion` |"
+            },
+            {
+              "line": 39,
+              "text": "| 1 Snapshot of head | 5 | 5 | 5 |"
+            },
+            {
+              "line": 43,
+              "text": "The snapshot always reads with **version 5**; the head reads with **7**. Cache rules below ensure the snapshot does not observe newer cache-only state that belongs to epochs **after** its pin."
+            },
+            {
+              "line": 74,
+              "text": "   i.e. only the view that is still aligned with the **current** global epoch may **insert** results of a read through this path. Snapshots pinned to an older version typically fail this equality once the head has committed again, so they **read storage** but **do not warm the cache** from their misses."
+            },
+            {
+              "line": 78,
+              "text": "**Brief window after snapshot creation:** until the head commits again, a snapshot\u2019s pinned version may still **equal** `globalVersion`. In that window, read-path inserts are still allowed for that snapshot (same epoch as the head). As soon as the head commits and bumps `globalVersion`, the snapshot stays on the old pin and **stops** populating the"
+            },
+            {
+              "line": 80,
+              "text": "**Example: snapshot after head moved**"
+            },
+            {
+              "line": 82,
+              "text": "- Snapshot pinned at `5`, cache entry for key `K` was written at `7` (head activity)."
+            },
+            {
+              "line": 83,
+              "text": "- Snapshot reads `K` with `readerVersion = 5`: condition `7 <= 5` is false \u2192 **miss**, read from snapshot DB."
+            },
+            {
+              "line": 97,
+              "text": "Because the version counter advances on **every commit** along the actually executed chain state, **different committed histories do not share the same version line** in the sense of cache staleness across incompatible branches: a reader pinned to an older `cacheVersion` will not accept a cached value produced at a **newer** cache version (`cached."
+            },
+            {
+              "line": 118,
+              "text": "| `BonsaiSnapshotWorldStateKeyValueStorage` | Constructor passes parent `getCurrentVersion()` into `super(...)` so snapshot pins version |"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "repo": "erigontech/erigon",
+      "commit": "5b59b99c73893b4a21cc1cea175e6263cf914912",
+      "matching_document_count": 252,
+      "reviewed_documents": [
+        {
+          "path": "README.md",
+          "matches": [
+            {
+              "line": 17,
+              "text": "flags, pruning modes, ports, monitoring, staking \u2014 is on the documentation site."
+            },
+            {
+              "line": 25,
+              "text": "* [Hardware requirements](https://docs.erigon.tech/get-started/hardware-requirements) \u2014 disk, RAM, CPU, bandwidth"
+            },
+            {
+              "line": 26,
+              "text": "* [Pruning modes](https://docs.erigon.tech/fundamentals/pruning-modes) \u2014 `archive`, `full`, `blocks`, `minimal`"
+            },
+            {
+              "line": 31,
+              "text": "* [Upgrading](https://docs.erigon.tech/get-started/installation/upgrading) \u2014 versions and snapshot formats"
+            },
+            {
+              "line": 45,
+              "text": "    - Erigon3 doesn't store Logs (aka Receipts) - it always re-executing historical txn (but it's cheaper)"
+            },
+            {
+              "line": 47,
+              "text": "- **Store most of data in immutable files (segments/snapshots):**"
+            },
+            {
+              "line": 50,
+              "text": "- **`--prune` flags changed**: see `--prune.mode` (default: `full`, archive: `archive`, EIP-4444: `minimal`)"
+            },
+            {
+              "line": 52,
+              "text": "    - ExecutionStage included many E2 stages: stage_hash_state, stage_trie, log_index, history_index, trace_index"
+            },
+            {
+              "line": 125,
+              "text": "| `downloader` | Snapshot downloader, and verification of webseed metainfos against the preverified set            |"
+            },
+            {
+              "line": 130,
+              "text": "`caplin`, `capcli`, `snapshots`, `rpctest` and `pics` are also built by `make all`."
+            },
+            {
+              "line": 157,
+              "text": "- [db/downloader/README.md](./db/downloader/README.md) \u2014 snapshot downloader internals"
+            },
+            {
+              "line": 158,
+              "text": "- [cmd/downloader/readme.md](./cmd/downloader/readme.md) \u2014 snapshots overview: what they are, when they are created and pulled"
+            },
+            {
+              "line": 165,
+              "text": "Most of Erigon's components (txpool, rpcdaemon, snapshots downloader, sentry, ...) can run inside Erigon or as"
+            }
+          ]
+        },
+        {
+          "path": "execution/rlp/PERFBENCH.md",
+          "matches": [
+            {
+              "line": 1,
+              "text": "# RLP layer performance harness"
+            },
+            {
+              "line": 3,
+              "text": "Independent, repeatable benchmark + escape-analysis harness for the RLP"
+            },
+            {
+              "line": 12,
+              "text": "(`/home/erigon/perf_results/amsterdam-bench-pd3/step2c-aclshortcut-sload-v2/heap-post.pprof`)"
+            },
+            {
+              "line": 29,
+              "text": "| `streambench_test.go` | Synthetic benchmarks of `Stream.Bytes`, `Stream.ReadBytes`, `DecodeBytes` \u2014 no Header dependency |"
+            },
+            {
+              "line": 30,
+              "text": "| `../types/headerbench_test.go` | Real-header benchmarks using captured mainnet headers \u2014 measures the full Header decode/encode/hash path |"
+            },
+            {
+              "line": 41,
+              "text": "### Benchmarks"
+            },
+            {
+              "line": 44,
+              "text": "go test -run=^$ -bench='BenchmarkDecodeHeader|BenchmarkEncodeHeader|BenchmarkHeaderHash|BenchmarkStreamBytes|BenchmarkStreamReadBytes|BenchmarkDecodeBytes_Tiny' \\"
+            },
+            {
+              "line": 56,
+              "text": "`benchstat` is available via `go install golang.org/x/perf/cmd/benchstat@latest`."
+            },
+            {
+              "line": 70,
+              "text": "  `db/snapshotsync/freezeblocks` package involving the Header walker"
+            }
+          ]
+        },
+        {
+          "path": "execution/commitment/qmtree/PRUNE_POLICY.md",
+          "matches": [
+            {
+              "line": 1,
+              "text": "# QMTree Prune Policy Design"
+            },
+            {
+              "line": 10,
+              "text": "| Entry snapshots (.kv + .kvi) | ~237 GB | `v1.0-qmtree-entries.<from>-<to>.{kv,kvi}` |"
+            },
+            {
+              "line": 14,
+              "text": "Entry snapshots dominate storage. Root files are negligible."
+            },
+            {
+              "line": 34,
+              "text": "## Prune Policy: Follow Existing `--prune.mode`"
+            },
+            {
+              "line": 36,
+              "text": "QMTree entries are treated the same as other snapshot domain history"
+            },
+            {
+              "line": 37,
+              "text": "(accounts, storage, code, commitment). The existing prune infrastructure"
+            },
+            {
+              "line": 38,
+              "text": "in `db/kv/prune/` applies:"
+            },
+            {
+              "line": 41,
+              "text": "--prune.mode=archive    \u2192 keep all qmtree entries (full proof history)"
+            },
+            {
+              "line": 42,
+              "text": "--prune.mode=full       \u2192 keep entries within DefaultPruneDistance (262,144 blocks)"
+            },
+            {
+              "line": 43,
+              "text": "--prune.mode=blocks     \u2192 keep entries within DefaultPruneDistance (matches full for qmtree)"
+            },
+            {
+              "line": 44,
+              "text": "--prune.mode=minimal    \u2192 keep entries within MinimalPruneDistance (100,000 blocks)"
+            },
+            {
+              "line": 47,
+              "text": "The `History` distance in `prune.Mode` controls how many blocks of qmtree"
+            },
+            {
+              "line": 50,
+              "text": "**Root files (.v) are never pruned** regardless of mode \u2014 they're needed"
+            },
+            {
+              "line": 56,
+              "text": "`DefaultPruneDistance` = 262,144 blocks (EIP-8252's `REORG_RETENTION_WINDOW`,"
+            },
+            {
+              "line": 57,
+              "text": "~36.4 days); minimal mode uses `MinimalPruneDistance` = 100,000 blocks"
+            }
+          ]
+        },
+        {
+          "path": "docs/plans/20260711-caplin-state-snapshot-tiering-and-prune.md",
+          "matches": [
+            {
+              "line": 1,
+              "text": "# Caplin state snapshotting: merge-tier + indexing-DB prune \u2014 handoff"
+            },
+            {
+              "line": 9,
+              "text": "1. **Prune** the caplin indexing DB after freezing (the load-bearing fix \u2014 nothing"
+            },
+            {
+              "line": 10,
+              "text": "   prunes state today; converged design below, ready to implement)."
+            },
+            {
+              "line": 11,
+              "text": "2. **Re-tier** state snapshots `10k \u2192 100k \u2192 1m` (replaces the underthought flat"
+            },
+            {
+              "line": 12,
+              "text": "   50k; shrinks the DB floor prune leaves and keeps steady-state file count low)."
+            },
+            {
+              "line": 21,
+              "text": "- The reader `GetValFnTxAndSnapshot` (`cl/persistence/state/state_accessors.go:32-43`)"
+            },
+            {
+              "line": 25,
+              "text": "  indexing DB **112 GB** shadowing **79 GB** of snapshots, still climbing."
+            },
+            {
+              "line": 26,
+              "text": "- Only beacon **blocks** are pruned (`pruneBeaconBlocksAndWriteProgress`,"
+            },
+            {
+              "line": 27,
+              "text": "  `cl/antiquary/antiquary.go:327` \u2192 `PruneBlocksLimit`). State tables: no prune"
+            },
+            {
+              "line": 32,
+              "text": "## Ground truth: how state snapshotting works today"
+            },
+            {
+              "line": 36,
+              "text": "  (`db/snapshotsync/caplin_state_snapshots.go:779`) tiles fixed `blocksPerFile`"
+            },
+            {
+              "line": 37,
+              "text": "  jobs across missing ranges. `RemoveOverlaps` (caplin_state_snapshots.go:474)"
+            },
+            {
+              "line": 40,
+              "text": "- **One file per type per range.** 33 types on disk (`MakeCaplinStateSnapshotsTypes`,"
+            },
+            {
+              "line": 41,
+              "text": "  caplin_state_snapshots.go:97-137 lists 34; one has no data yet). gnosis: 9,669"
+            },
+            {
+              "line": 44,
+              "text": "  `BalancesDump` 20 MB, `SlotData` 7.7 MB, everything else \u22726 MB. Both snapshot"
+            }
+          ]
+        },
+        {
+          "path": "docs/plans/20260711-caplin-state-prune-impl.md",
+          "matches": [
+            {
+              "line": 1,
+              "text": "# Plan: prune the caplin indexing DB after state freezing"
+            },
+            {
+              "line": 4,
+              "text": "`docs/plans/20260711-caplin-state-snapshot-tiering-and-prune.md` (the handoff)."
+            },
+            {
+              "line": 8,
+              "text": "Scope: the **prune** piece only. The `10k\u2192100k\u21921m` re-tier is a separate later PR"
+            },
+            {
+              "line": 11,
+              "text": "Branch: `awskii/caplin-state-prune` (off `origin/main`). Repo build/test:"
+            },
+            {
+              "line": 18,
+              "text": "(`GetValFnTxAndSnapshot`, `cl/persistence/state/state_accessors.go:32`) always"
+            },
+            {
+              "line": 26,
+              "text": "Add the per-table prune-progress marker."
+            },
+            {
+              "line": 28,
+              "text": "- [x] `db/kv/tables.go`: add `StatesPruneProgress = \"StatesPruneProgress\"` next to"
+            },
+            {
+              "line": 34,
+              "text": "  `ReadStatePruneProgress(tx kv.Tx, table string) (uint64, error)` and"
+            },
+            {
+              "line": 35,
+              "text": "  `SetStatePruneProgress(tx kv.RwTx, table string, slot uint64) error`. Key ="
+            },
+            {
+              "line": 49,
+              "text": "Expose the safe prune boundary per type."
+            },
+            {
+              "line": 51,
+              "text": "- [x] `db/snapshotsync/caplin_state_snapshots.go`: add"
+            },
+            {
+              "line": 52,
+              "text": "  `(s *CaplinStateSnapshots) ContiguousCoverageEnd(typeName string) uint64`. Use"
+            },
+            {
+              "line": 57,
+              "text": "TDD: unit test in `db/snapshotsync` \u2014 drive `coveredRangesForType` via the existing"
+            },
+            {
+              "line": 68,
+              "text": "### Task 3: prune core"
+            },
+            {
+              "line": 70,
+              "text": "New file `cl/antiquary/state_prune.go`."
+            }
+          ]
+        },
+        {
+          "path": "docs/site/versioned_docs/version-v3.4/fundamentals/prune-modes.md",
+          "matches": [
+            {
+              "line": 2,
+              "text": "title: \"Prune Modes\""
+            },
+            {
+              "line": 3,
+              "text": "description: \"Full, minimal, blocks, and archive prune modes explained \u2014 choose the right mode for your use case.\""
+            },
+            {
+              "line": 8,
+              "text": "# Prune Modes"
+            },
+            {
+              "line": 10,
+              "text": "Erigon 3 supports four prune modes that control how much chain history your node retains. Choose based on your use case \u2014 most users should run a Full Node."
+            },
+            {
+              "line": 12,
+              "text": "| **Prune Mode**                                                        | **Flag**               | **Data Retained**                                                                                   | **Primary Use Case**                                                                     |"
+            },
+            {
+              "line": 14,
+              "text": "| <p>* <a href=\"#full-node\">Full Node</a><br />(Default)</p> | `--prune.mode=full`    | Retains latest state, necessary blocks, and prunes ancient blocks and state (EIP-4444 enabled)      | General users, DApp interaction, fastest sync.                                           |"
+            },
+            {
+              "line": 15,
+              "text": "| \\* [Minimal Node](#minimal-node)                         | `--prune.mode=minimal` | Only recent blocks and latest state                                                                 | Solo staking, users with constrained hardware, maximum privacy for sending transactions. |"
+            },
+            {
+              "line": 16,
+              "text": "| Historical Blocks                                                     | `--prune.mode=blocks`  | Retains the full block/transaction history, but still prunes the historical state before the merge. | Users needing historical block data for research or indexing.                            |"
+            },
+            {
+              "line": 17,
+              "text": "| [Archive Node](#archive-node)                            | `--prune.mode=archive` | All historical state and all blocks                                                                 | Developers, researchers, and RPC providers requiring full historical state access.       |"
+            },
+            {
+              "line": 19,
+              "text": "By **default**, Erigon run as a [full node](#full-node), to change its behavior use the flag `--prune.mode <value>`."
+            },
+            {
+              "line": 24,
+              "text": "**\\* Persisting receipts**, which are pre-calculated receipts, increase the requests-per-second (RPS) and improve the latency and throughput of all receipts and logs-related RPC calls."
+            },
+            {
+              "line": 26,
+              "text": "They are enabled by default for **Minimal** and **Full Node.** They can be activated or deactivated with the flag `--persist.receipts <value>` ."
+            },
+            {
+              "line": 31,
+              "text": "Ethereum's state refers to account balances, contracts, and consensus data. Archive nodes retain all historical state and require more **disk space.** However, Erigon 3 has consistently reduced the [disk space](../get-started/hardware-requirements.mdx#disk-size-and-ram-requirements) requirements for running an archive node, rendering it more afford"
+            },
+            {
+              "line": 37,
+              "text": "The default configuration in Erigon 3 is a Full Node. This setup is designed to offer significantly **faster sync times and reduced resource consumption** for daily operations compared to other clients. It achieves this by maintaining all essential data while intelligently pruning old, unnecessary historical data (blocks and receipts prior to The M"
+            },
+            {
+              "line": 39,
+              "text": "We strongly recommend running a Full Node whenever possible, as its reduced disk space requirements make it suitable for the majority of users. By running a Full Node, you directly support the network's **decentralization, resilience, and robustness**, aligning with Ethereum's distributed ethos."
+            }
+          ]
+        },
+        {
+          "path": "docs/site/docs/fundamentals/optimizing-storage.md",
+          "matches": [
+            {
+              "line": 3,
+              "text": "description: \"Pruning, snapshots, and techniques to minimize disk footprint.\""
+            },
+            {
+              "line": 9,
+              "text": "For optimal performance, store the datadir on a single fast NVMe device formatted with ext4 or XFS \u2014 see [Filesystem](../get-started/hardware-requirements#filesystem). If that is not feasible, you can keep the history on a cheaper disk and still achieve good performance."
+            },
+            {
+              "line": 13,
+              "text": "**Store datadir on the slow disk**"
+            },
+            {
+              "line": 15,
+              "text": "Place the `datadir` on the slower disk. Then, create symbolic links (using `ln -s`) to the **fast disk** for the following sub-folders:"
+            },
+            {
+              "line": 18,
+              "text": "* `snapshots/domain`"
+            },
+            {
+              "line": 22,
+              "text": "On the **slow disk** place the `datadir` folder with the following structure:"
+            },
+            {
+              "line": 24,
+              "text": "* `chaindata` (linked to fast disk)"
+            },
+            {
+              "line": 25,
+              "text": "* `snapshots`"
+            },
+            {
+              "line": 26,
+              "text": "  * `domain` (linked to fast disk)"
+            },
+            {
+              "line": 36,
+              "text": "If you need to further improve performance try the following improvements step by step:"
+            },
+            {
+              "line": 38,
+              "text": "1. Store the `snapshots/accessor` folder on the fast disk. This should provide a noticeable speed boost."
+            },
+            {
+              "line": 39,
+              "text": "2. If the speed is still not satisfactory, move the `snapshots/idx` folder to the fast disk."
+            },
+            {
+              "line": 40,
+              "text": "3. If performance is still an issue, consider moving the entire `snapshots/history` folder to the fast disk."
+            },
+            {
+              "line": 44,
+              "text": "By following these steps, you can optimize your Erigon 3 storage setup to achieve a good balance between performance and cost."
+            }
+          ]
+        },
+        {
+          "path": "docs/site/docs/fundamentals/performance-tricks.md",
+          "matches": [
+            {
+              "line": 2,
+              "text": "title: \"Performance Tricks\""
+            },
+            {
+              "line": 7,
+              "text": "# Performance Tricks"
+            },
+            {
+              "line": 9,
+              "text": "These instructions are designed to improve the performance of Erigon 3, particularly for synchronization and memory management, on cloud drives and other systems with specific performance characteristics."
+            },
+            {
+              "line": 27,
+              "text": "* Set `ERIGON_SNAPSHOT_MADV_RND=false` to enable the operating system's cache prefetching for better performance on cloud drives with good throughput but bad latency."
+            },
+            {
+              "line": 30,
+              "text": "export ERIGON_SNAPSHOT_MADV_RND=false"
+            },
+            {
+              "line": 35,
+              "text": "* Use `vmtouch -vdlw /mnt/erigon/snapshots/domain/*bt` to lock the latest state in RAM, preventing it from being evicted due to high historical RPC traffic."
+            },
+            {
+              "line": 38,
+              "text": "vmtouch -vdlw /mnt/erigon/snapshots/domain/*bt"
+            },
+            {
+              "line": 41,
+              "text": "* Run `ls /mnt/erigon/snapshots/domain/*.kv | parallel vmtouch -vdlw` to apply the same locking to all relevant files."
+            },
+            {
+              "line": 54,
+              "text": "echo 1 > /proc/sys/vm/compact_memory"
+            }
+          ]
+        },
+        {
+          "path": "docs/site/versioned_docs/version-v3.5/fundamentals/optimizing-storage.md",
+          "matches": [
+            {
+              "line": 3,
+              "text": "description: \"Pruning, snapshots, and techniques to minimize disk footprint.\""
+            },
+            {
+              "line": 9,
+              "text": "For optimal performance, store the datadir on a single fast NVMe device formatted with ext4 or XFS \u2014 see [Filesystem](../get-started/hardware-requirements#filesystem). If that is not feasible, you can keep the history on a cheaper disk and still achieve good performance."
+            },
+            {
+              "line": 13,
+              "text": "**Store datadir on the slow disk**"
+            },
+            {
+              "line": 15,
+              "text": "Place the `datadir` on the slower disk. Then, create symbolic links (using `ln -s`) to the **fast disk** for the following sub-folders:"
+            },
+            {
+              "line": 18,
+              "text": "* `snapshots/domain`"
+            },
+            {
+              "line": 22,
+              "text": "On the **slow disk** place `datadir` folder with the following structure:"
+            },
+            {
+              "line": 24,
+              "text": "* `chaindata` (linked to fast disk)"
+            },
+            {
+              "line": 25,
+              "text": "* `snapshots`"
+            },
+            {
+              "line": 26,
+              "text": "  * `domain` (linked to fast disk)"
+            },
+            {
+              "line": 36,
+              "text": "If you need to further improve performance try the following improvements step by step:"
+            },
+            {
+              "line": 38,
+              "text": "1. Store the `snapshots/accessor` folder on the fast disk. This should provide a noticeable speed boost."
+            },
+            {
+              "line": 39,
+              "text": "2. If the speed is still not satisfactory, move the `snapshots/idx` folder to the fast disk."
+            },
+            {
+              "line": 40,
+              "text": "3. If performance is still an issue, consider moving the entire `snapshots/history` folder to the fast disk."
+            },
+            {
+              "line": 44,
+              "text": "By following these steps, you can optimize your Erigon 3 storage setup to achieve a good balance between performance and cost."
+            }
+          ]
+        },
+        {
+          "path": "docs/site/versioned_docs/version-v3.4/fundamentals/optimizing-storage.md",
+          "matches": [
+            {
+              "line": 3,
+              "text": "description: \"Pruning, snapshots, and techniques to minimize disk footprint.\""
+            },
+            {
+              "line": 9,
+              "text": "For optimal performance, it's recommended to store the datadir on a fast NVMe-RAID disk. However, if this is not feasible, you can store the history on a cheaper disk and still achieve good performance."
+            },
+            {
+              "line": 13,
+              "text": "**Store datadir on the slow disk**"
+            },
+            {
+              "line": 15,
+              "text": "Place the `datadir` on the slower disk. Then, create symbolic links (using `ln -s`) to the **fast disk** for the following sub-folders:"
+            },
+            {
+              "line": 18,
+              "text": "* `snapshots/domain`"
+            },
+            {
+              "line": 22,
+              "text": "On the **slow disk** place `datadir` folder with the following structure:"
+            },
+            {
+              "line": 24,
+              "text": "* `chaindata` (linked to fast disk)"
+            },
+            {
+              "line": 25,
+              "text": "* `snapshots`"
+            },
+            {
+              "line": 26,
+              "text": "  * `domain` (linked to fast disk)"
+            },
+            {
+              "line": 36,
+              "text": "If you need to further improve performance try the following improvements step by step:"
+            },
+            {
+              "line": 38,
+              "text": "1. Store the `snapshots/accessor` folder on the fast disk. This should provide a noticeable speed boost."
+            },
+            {
+              "line": 39,
+              "text": "2. If the speed is still not satisfactory, move the `snapshots/idx` folder to the fast disk."
+            },
+            {
+              "line": 40,
+              "text": "3. If performance is still an issue, consider moving the entire `snapshots/history` folder to the fast disk."
+            },
+            {
+              "line": 44,
+              "text": "By following these steps, you can optimize your Erigon 3 storage setup to achieve a good balance between performance and cost."
+            }
+          ]
+        },
+        {
+          "path": "docs/site/docs/fundamentals/pruning-modes.md",
+          "matches": [
+            {
+              "line": 2,
+              "text": "title: \"Pruning Modes\""
+            },
+            {
+              "line": 3,
+              "text": "description: \"Full, minimal, blocks, and archive pruning modes explained \u2014 choose the right mode for your use case.\""
+            },
+            {
+              "line": 8,
+              "text": "# Pruning Modes"
+            },
+            {
+              "line": 10,
+              "text": "Erigon 3 supports four pruning modes that control how much chain history your node retains. Choose based on your use case \u2014 most users should run a Full Node."
+            },
+            {
+              "line": 12,
+              "text": "| **Pruning Mode**                                                        | **Flag**               | **Data Retained**                                                                                   | **Primary Use Case**                                                                     |"
+            },
+            {
+              "line": 14,
+              "text": "| <p><a href=\"#full-node\">Full Node</a><br />(Default)</p> | `--prune.mode=full`    | State and block data within the EIP-8252 window (last 262,144 blocks, ~36 days)                     | General users, DApp interaction, fastest sync.                                           |"
+            },
+            {
+              "line": 15,
+              "text": "| [Minimal Node](#minimal-node)                         | `--prune.mode=minimal` | State and block data within the last 100,000 blocks (~14 days)                                      | Solo staking, users with constrained hardware, maximum privacy for sending transactions. |"
+            },
+            {
+              "line": 16,
+              "text": "| [Historical Blocks](#blocks-node)                                     | `--prune.mode=blocks`  | All block/transaction history, plus state within the EIP-8252 window                                | Users needing historical block data for research or indexing.                            |"
+            },
+            {
+              "line": 17,
+              "text": "| [Archive Node](#archive-node)                            | `--prune.mode=archive` | All historical state and all blocks                                                                 | Developers, researchers, and RPC providers requiring full historical state access.       |"
+            },
+            {
+              "line": 19,
+              "text": "By **default**, Erigon runs as a [full node](#full-node). To change its behavior, use the flag `--prune.mode <value>`."
+            },
+            {
+              "line": 21,
+              "text": "In order to switch the type of node, you must first delete the `/chaindata` folder in the chosen `--datadir` directory and re-sync from scratch. Pruning is not reversible \u2014 data a mode has already discarded can only be recovered by re-syncing \u2014 so pick the mode that covers the history you need before you start."
+            },
+            {
+              "line": 24,
+              "text": "**Persisting receipts**, which are pre-calculated receipts, increase the requests-per-second (RPS) and improve the latency and throughput of all receipts and logs-related RPC calls."
+            },
+            {
+              "line": 26,
+              "text": "They are enabled by default in every pruning mode on **fresh datadirs**; turn them off with"
+            },
+            {
+              "line": 27,
+              "text": "`--prune.include-receipts=false` (the former `--persist.receipts` still works as an alias). An **existing datadir keeps the setting it was created with**: if the"
+            },
+            {
+              "line": 29,
+              "text": "datadir. Without the cache, receipts and logs are re-derived on demand from state history, so the related RPC calls keep"
+            }
+          ]
+        },
+        {
+          "path": "docs/site/versioned_docs/version-v3.5/fundamentals/database.md",
+          "matches": [
+            {
+              "line": 3,
+              "text": "description: \"How Erigon stores chain data \u2014 MDBX engine, datadir layout, snapshot files, and real mainnet sizing numbers.\""
+            },
+            {
+              "line": 9,
+              "text": "Erigon stores all chain data under a single **datadir**. Understanding what lives where is useful when you size hardware, debug disk-usage issues, or split storage across fast and slow drives."
+            },
+            {
+              "line": 11,
+              "text": "This page covers the *what* and *where* of Erigon's data. For the *why* \u2014 flat KV state, immutable snapshots \u2014 see [Architecture](architecture). For operational tuning (symlinks, multi-disk layout), see [Optimizing Storage](optimizing-storage)."
+            },
+            {
+              "line": 18,
+              "text": "\u251c\u2500\u2500 snapshots/        # Historical data as immutable .seg files. Large, cold."
+            },
+            {
+              "line": 19,
+              "text": "\u2502   \u251c\u2500\u2500 domain/         # Latest value per domain (4 state domains + 2 receipt domains)"
+            },
+            {
+              "line": 28,
+              "text": "The split between **`chaindata/`** (mutable) and **`snapshots/`** (immutable) is the central design decision. It is what makes Erigon's archive node 10\u00d7 smaller than other clients while staying fast."
+            },
+            {
+              "line": 36,
+              "text": "- **No background compaction.** Writes go directly into the B+ tree; there is no compaction thread that can spike CPU mid-RPC-call. This is why Erigon's RPC latency does not degrade under load the way LSM-based engines (LevelDB, RocksDB) can."
+            },
+            {
+              "line": 40,
+              "text": "## Snapshots: immutable history"
+            },
+            {
+              "line": 42,
+              "text": "Older blocks and history are not stored in MDBX. They are written to **`.seg` files** in `snapshots/` and **never modified after creation**."
+            },
+            {
+              "line": 44,
+              "text": "Once a snapshot file is finalised it is the same bytes on every Erigon node in the world, identified by content hash. This unlocks two things:"
+            },
+            {
+              "line": 46,
+              "text": "- **BitTorrent distribution.** New nodes fetch snapshots from peers in parallel rather than re-executing history from genesis. This is what OtterSync does."
+            },
+            {
+              "line": 47,
+              "text": "- **Backup / disaster recovery costs ~10\u00d7 less.** Most of your datadir is content-addressed and can be re-downloaded from any peer if a disk fails. You only need to back up `chaindata/`."
+            },
+            {
+              "line": 49,
+              "text": "Snapshots are organised into several subdirectories. The main ones are:"
+            },
+            {
+              "line": 53,
+              "text": "| `snapshots/domain/` | Latest value per (domain, key). 6 domains: the 4 state domains (`account`, `storage`, `code`, `commitment`) plus 2 receipt domains (`receipt`, `rcache`) | Sequential + point lookup |"
+            },
+            {
+              "line": 54,
+              "text": "| `snapshots/history/` | Every historical value per (domain, key, txn) | Point lookup keyed by transaction |"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "repo": "NethermindEth/nethermind",
+      "commit": "a7dd73052e696ad934d228aad3f33e660701fdb7",
+      "matching_document_count": 20,
+      "reviewed_documents": [
+        {
+          "path": "README.md",
+          "matches": [
+            {
+              "line": 14,
+              "text": "Nethermind is a high-performance Ethereum execution client built on .NET. It provides fast sync, high-throughput JSON-RPC, and a plugin system for extending the client without forking. In production since 2017."
+            },
+            {
+              "line": 28,
+              "text": "Nethermind connects operators to the Ethereum network via JSON-RPC over HTTP, WebSocket, and IPC. Snap sync, enabled by default, reaches the chain tip up to 10x faster than traditional fast sync. Node health and performance are exposed through a built-in UI and Prometheus metrics."
+            },
+            {
+              "line": 30,
+              "text": "- **Performance:** The EVM is optimized for low-overhead block processing: direct opcode dispatch, hardware-accelerated bitwise operations, and zero heap allocation on the execution stack. A parallel pre-execution system warms state reads before a block's main loop, cutting block processing time roughly in half."
+            }
+          ]
+        },
+        {
+          "path": "src/Nethermind/Nethermind.State.Flat/PersistedSnapshots/Sorted/FORMAT.md",
+          "matches": [
+            {
+              "line": 1,
+              "text": "# Persisted-snapshot sorted-table format"
+            },
+            {
+              "line": 3,
+              "text": "A persisted snapshot's metadata blob is a single **two-level sorted table** (`SortedTable`), laid out"
+            },
+            {
+              "line": 30,
+              "text": "  (default **8**) records \u2014 a build-time knob, **not stored on disk** \u2014 to bound scan length, and one"
+            },
+            {
+              "line": 72,
+              "text": "  data block and the index are held in memory. Producers (`PersistedSnapshotBuilder`,"
+            },
+            {
+              "line": 73,
+              "text": "  `PersistedSnapshotMerger`) therefore emit in ascending key order (see Keys below)."
+            },
+            {
+              "line": 77,
+              "text": "## Keys (`PersistedSnapshotKey`)"
+            },
+            {
+              "line": 86,
+              "text": "| Storage node | `FA` + addrHash(20) + `{FF top, FE compact, FD fallback}` + path | `NodeRef` (6) |"
+            },
+            {
+              "line": 87,
+              "text": "| State node | `{FD top, FC compact, FB fallback}` + path | `NodeRef` (6) |"
+            },
+            {
+              "line": 95,
+              "text": "(`PersistedSnapshot`'s ref-id enumerator stops at the first non-`00` record). Within an address:"
+            },
+            {
+              "line": 96,
+              "text": "account \u2192 self-destruct \u2192 slots. Within an addressHash: fallback \u2192 compact \u2192 top. Across columns:"
+            },
+            {
+              "line": 98,
+              "text": "per-bucket ordering are unchanged from the columnar builder/compacter so a future proper columnar serializer"
+            },
+            {
+              "line": 101,
+              "text": "## Compaction (`PersistedSnapshotMerger`)"
+            },
+            {
+              "line": 103,
+              "text": "Each input snapshot is one sorted run. The merge walks them in ascending key order (O(N) find-min),"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "repo": "lambdaclass/ethrex",
+      "commit": "7e272ac5075aec832304909b376bada4eca52e77",
+      "matching_document_count": 118,
+      "reviewed_documents": [
+        {
+          "path": "docs/perf/README.md",
+          "matches": [
+            {
+              "line": 1,
+              "text": "# Performance Optimization"
+            },
+            {
+              "line": 3,
+              "text": "This directory is the source of truth for ethrex performance optimization work."
+            },
+            {
+              "line": 9,
+              "text": "| [methodology.md](methodology.md) | Complete benchmarking workflow |"
+            },
+            {
+              "line": 10,
+              "text": "| [ideas.md](ideas.md) | All performance ideas with status tracking |"
+            },
+            {
+              "line": 14,
+              "text": "| [zkvm-guidelines.md](zkvm-guidelines.md) | zkVM-specific benchmarking guidance |"
+            },
+            {
+              "line": 19,
+              "text": "docs/perf/"
+            },
+            {
+              "line": 21,
+              "text": "\u251c\u2500\u2500 methodology.md               # Full benchmarking workflow"
+            },
+            {
+              "line": 49,
+              "text": "| **Inline Hot Opcodes** | 20-40% gains in benchmarks | `vm.rs:554-629` |"
+            },
+            {
+              "line": 96,
+              "text": "### 4. Run Benchmarks"
+            },
+            {
+              "line": 99,
+              "text": "# Quick synthetic benchmark"
+            },
+            {
+              "line": 100,
+              "text": "cargo run -p ethrex-benches --bin perf_bench --release"
+            },
+            {
+              "line": 102,
+              "text": "# With hyperfine for statistical rigor"
+            },
+            {
+              "line": 103,
+              "text": "hyperfine --warmup 3 --runs 10 'cargo run -p ethrex-benches --bin perf_bench --release'"
+            },
+            {
+              "line": 106,
+              "text": "samply record --save-only target/release/perf_bench"
+            },
+            {
+              "line": 123,
+              "text": "| **Block time** | Time to execute + merkleize | perf_bench output |"
+            }
+          ]
+        },
+        {
+          "path": "docs/perf/methodology.md",
+          "matches": [
+            {
+              "line": 1,
+              "text": "# Benchmarking & Optimization Methodology"
+            },
+            {
+              "line": 3,
+              "text": "A standardized workflow for running benchmarks, testing optimizations, and tracking results. Designed for reproducibility across sessions and team members."
+            },
+            {
+              "line": 12,
+              "text": "**This section is for Claude (the AI assistant) to follow when commanded to do benchmarking work.**"
+            },
+            {
+              "line": 17,
+              "text": "- \"Run benchmarks on [feature]\""
+            },
+            {
+              "line": 19,
+              "text": "- \"Profile and improve performance\""
+            },
+            {
+              "line": 21,
+              "text": "- \"Start a benchmarking session\""
+            },
+            {
+              "line": 25,
+              "text": "When starting a benchmarking session:"
+            },
+            {
+              "line": 30,
+              "text": "4. **Check for existing TRACKER.md** in `docs/perf/experiments/` - Resume if exists"
+            },
+            {
+              "line": 37,
+              "text": "| Run benchmarks | `Bash` (with `run_in_background: true` for long runs) |"
+            },
+            {
+              "line": 38,
+              "text": "| Read benchmark output | `Read` or `TaskOutput` for background tasks |"
+            },
+            {
+              "line": 42,
+              "text": "| Profile code | `Bash` with samply/perf commands |"
+            },
+            {
+              "line": 47,
+              "text": "All benchmarking artifacts go in `docs/perf/`:"
+            },
+            {
+              "line": 48,
+              "text": "- `docs/perf/experiments/NNN-name/` - Per-experiment data"
+            },
+            {
+              "line": 49,
+              "text": "- `docs/perf/experiments/TRACKER.md` - Current session tracking"
+            },
+            {
+              "line": 50,
+              "text": "- `docs/perf/HISTORY.yaml` - Cross-session history"
+            }
+          ]
+        },
+        {
+          "path": "docs/perf/templates/plan.md",
+          "matches": [
+            {
+              "line": 107,
+              "text": "*Optional: rough timeline for the benchmarking session*"
+            }
+          ]
+        },
+        {
+          "path": "docs/crate_reviews/ethrex_storage_review.md",
+          "matches": [
+            {
+              "line": 7,
+              "text": "## 1. Quantitative Snapshot"
+            },
+            {
+              "line": 26,
+              "text": "  - Other noteworthy primitives: hand-rolled `Box::leak`/`Drop` pairs to provide `'static` RocksDB snapshots; libmdbx dupsort tables"
+            },
+            {
+              "line": 29,
+              "text": "- [crates/storage/store_db/rocksdb.rs:439](https://github.com/lambdaclass/ethrex/blob/25ee6a95a6ccf329be87aecf903483fbc34796d0/crates/storage/store_db/rocksdb.rs#L439) \u2014 `Store::apply_updates` funnels all trie, block, and receipt writes through one 90+ line `spawn_blocking` closure; error handling is coarse and the composite-key assembly is duplica"
+            },
+            {
+              "line": 35,
+              "text": "- The public `Store` facade exposes async APIs backed by synchronous locks (`Arc<RwLock<_>>`) and snapshot tries; no actor-based isolation yet, so concurrent callers share DB handles directly."
+            },
+            {
+              "line": 36,
+              "text": "- Locked trie variants obtain `'static` snapshots by leaking database Arcs; while Drop repairs the leak, panics before Drop or future refactors could strand snapshots and exhaust file handles."
+            },
+            {
+              "line": 39,
+              "text": "- **Score: 4 / 5** \u2014 Dual backends, large batch-write closures, and custom snapshot lifetimes introduce significant surface area for subtle data corruption or performance regressions despite modest file counts."
+            },
+            {
+              "line": 44,
+              "text": "3. Replace the `Box::leak`/`Drop` pattern with a lifetime-safe wrapper (e.g., owning struct with explicit snapshot handle) or document invariants and add debug assertions to detect mismatched Arc counts."
+            },
+            {
+              "line": 47,
+              "text": "- Add targeted integration tests that replay concurrent block/receipt writes against both backends to detect divergence in composite-key layout."
+            }
+          ]
+        },
+        {
+          "path": "docs/perf/templates/experiment.md",
+          "matches": [
+            {
+              "line": 59,
+              "text": "### Benchmark Configuration"
+            },
+            {
+              "line": 61,
+              "text": "- **Benchmark:** Mainnet replay / perf_bench / other"
+            },
+            {
+              "line": 70,
+              "text": "[Baseline benchmark output - include raw hyperfine or benchmark output]"
+            },
+            {
+              "line": 81,
+              "text": "[New benchmark output]"
+            },
+            {
+              "line": 120,
+              "text": "- [ ] Benchmark correctness checks pass"
+            },
+            {
+              "line": 143,
+              "text": "Did any benchmarks get worse? Which ones and by how much?"
+            }
+          ]
+        },
+        {
+          "path": "docs/perf/ideas.md",
+          "matches": [
+            {
+              "line": 1,
+              "text": "# Performance Improvement Ideas"
+            },
+            {
+              "line": 3,
+              "text": "This document tracks performance optimization ideas for ethrex."
+            },
+            {
+              "line": 5,
+              "text": "See [methodology.md](methodology.md) for the full benchmarking workflow."
+            },
+            {
+              "line": 13,
+              "text": "- **Benches**: Benchmarking in progress"
+            },
+            {
+              "line": 24,
+              "text": "| Last Tested | Date of last benchmark |"
+            },
+            {
+              "line": 56,
+              "text": "| Use Arena Allocator for Substate Backups | Review | 15-20% (CHAINID, SDIV, Swap) | 25-30% (CODECOPY, CALLDATACOPY) | | | | Analyze jumpdest noise, then server |"
+            },
+            {
+              "line": 59,
+              "text": "| Mempool Lock Contention | To do | | | | | | mempool pruning O(n^2), parking_lot::RWLock, DashMap |"
+            },
+            {
+              "line": 79,
+              "text": "| Jumpdest with stored bitmaps | Worsened performance | | | Tested multiple times |"
+            },
+            {
+              "line": 94,
+              "text": "| Disklayer memory accumulator | To do | | | | | | |"
+            },
+            {
+              "line": 104,
+              "text": "| State pruning | To do | | | | | | |"
+            }
+          ]
+        },
+        {
+          "path": "docs/perf/observability.md",
+          "matches": [
+            {
+              "line": 3,
+              "text": "This document covers dashboard generation, live monitoring, and notification setup for benchmarking sessions."
+            },
+            {
+              "line": 9,
+              "text": "Generate a static HTML report for visibility into benchmark progress:"
+            },
+            {
+              "line": 12,
+              "text": "docs/perf/report/"
+            },
+            {
+              "line": 104,
+              "text": "If generating charts, show performance trend:"
+            },
+            {
+              "line": 106,
+              "text": "- Y-axis: performance metric (time or throughput)"
+            },
+            {
+              "line": 139,
+              "text": "For live monitoring during active benchmarking:"
+            },
+            {
+              "line": 173,
+              "text": "# Simple HTTP server on the benchmark machine"
+            },
+            {
+              "line": 174,
+              "text": "cd docs/perf/report && python3 -m http.server 8080"
+            },
+            {
+              "line": 198,
+              "text": "python3 docs/perf/scripts/generate_report.py"
+            },
+            {
+              "line": 201,
+              "text": "python3 docs/perf/scripts/generate_report.py \\"
+            },
+            {
+              "line": 202,
+              "text": "  --experiments docs/perf/experiments \\"
+            },
+            {
+              "line": 203,
+              "text": "  --output docs/perf/report"
+            },
+            {
+              "line": 215,
+              "text": "# On the benchmark server, create:"
+            },
+            {
+              "line": 216,
+              "text": "mkdir -p ~/.config/benchmarks"
+            },
+            {
+              "line": 217,
+              "text": "echo \"SLACK_WEBHOOK=https://hooks.slack.com/...\" > ~/.config/benchmarks/secrets.env"
+            }
+          ]
+        },
+        {
+          "path": "docs/perf/tracking.md",
+          "matches": [
+            {
+              "line": 1,
+              "text": "# Performance Tracking Formats"
+            },
+            {
+              "line": 3,
+              "text": "This document defines the formats for tracking benchmarking progress within a session and across sessions."
+            },
+            {
+              "line": 9,
+              "text": "Maintain a living document for each benchmarking session:"
+            },
+            {
+              "line": 51,
+              "text": "# docs/perf/HISTORY.yaml"
+            },
+            {
+              "line": 160,
+              "text": "The [ideas.md](ideas.md) file is the canonical list of all performance ideas. When tracking:"
+            },
+            {
+              "line": 179,
+              "text": "After a benchmarking session is complete:"
+            },
+            {
+              "line": 181,
+              "text": "1. Commit TRACKER.md to `docs/perf/sessions/YYYY-MM-DD.md`"
+            },
+            {
+              "line": 187,
+              "text": "docs/perf/"
+            }
+          ]
+        },
+        {
+          "path": "docs/perf_reports/2025-04-03.md",
+          "matches": [
+            {
+              "line": 5,
+              "text": "This PR addresses a performance bottleneck in our Merkle-Patricia Trie implementation caused by redundant RLP (Recursive Length Prefix) encoding operations. By refactoring the encoding logic to avoid double-encoding, we achieved **1.5x\u20132x faster trie insertions** for workloads of 1k and 10k nodes."
+            },
+            {
+              "line": 9,
+              "text": "The trie structure is critical for Ethereum state management, and its performance directly impacts node synchronization and block processing times. RLP encoding is used extensively to serialize trie nodes for hashing and storage. Profiling revealed that a significant portion of insertion time was spent on unnecessary RLP re-encoding."
+            },
+            {
+              "line": 19,
+              "text": "   - Provided reproducible benchmarks for trie insertions (1k/10k nodes)."
+            },
+            {
+              "line": 21,
+              "text": "### Benchmark Setup"
+            },
+            {
+              "line": 23,
+              "text": "- **Code Location**: Benchmarks are defined in `crates/common/trie/benches/trie_bench.rs`."
+            },
+            {
+              "line": 30,
+              "text": "   # Run benchmarks (includes warmup and simple statistics with cargo-bench)"
+            },
+            {
+              "line": 38,
+              "text": "## Benchmark Results"
+            }
+          ]
+        },
+        {
+          "path": "docs/perf/sessions/2026-01-19-mainnet-trie-analysis.md",
+          "matches": [
+            {
+              "line": 51,
+              "text": "**Gini Coefficient: 0.9544** (0 = perfect equality, 1 = max inequality)"
+            },
+            {
+              "line": 197,
+              "text": "The analysis was performed using `benches/src/trie_analyzer.rs`:"
+            }
+          ]
+        },
+        {
+          "path": "docs/perf_reports/README.md",
+          "matches": [
+            {
+              "line": 1,
+              "text": "# Performance optimization reports"
+            },
+            {
+              "line": 3,
+              "text": "This section includes reports on performance problems encountered and how we solved them."
+            }
+          ]
+        },
+        {
+          "path": "docs/perf/zkvm-guidelines.md",
+          "matches": [
+            {
+              "line": 1,
+              "text": "# zkVM-Specific Benchmarking Guidelines"
+            },
+            {
+              "line": 3,
+              "text": "When benchmarking zkVM provers (ZisK, SP1, RISC0, etc.), additional considerations apply beyond standard LEVM benchmarking."
+            },
+            {
+              "line": 7,
+              "text": "## Claude Instructions for zkVM Benchmarking"
+            },
+            {
+              "line": 9,
+              "text": "**When the user asks to benchmark zkVM proving (ZisK, SP1, RISC0):**"
+            },
+            {
+              "line": 36,
+              "text": "### Running zkVM Benchmarks"
+            },
+            {
+              "line": 93,
+              "text": "# docs/perf/experiments/NNN-zkvm-experiment/baseline.yaml"
+            },
+            {
+              "line": 171,
+              "text": "# For zkVM proving benchmarks"
+            },
+            {
+              "line": 221,
+              "text": "| **Deserialization** | 5-15% of cost | Zero-copy, compression |"
+            },
+            {
+              "line": 228,
+              "text": "Before benchmarking, verify patches are active:"
+            },
+            {
+              "line": 247,
+              "text": "| Result | L1 Benchmark | zkVM Benchmark |"
+            },
+            {
+              "line": 265,
+              "text": "# docs/perf/experiments/NNN-zkvm-experiment/environment.yaml"
+            },
+            {
+              "line": 293,
+              "text": "## GPU Monitoring During Benchmarks"
+            },
+            {
+              "line": 304,
+              "text": "# Log to file during benchmark"
+            },
+            {
+              "line": 307,
+              "text": "# Run benchmark"
+            },
+            {
+              "line": 314,
+              "text": "Before running benchmarks, ensure GPU is cool:"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "repo": "status-im/nimbus-eth1",
+      "commit": "5e3fd7e9d19177980cc1c086c46c4e1dcf38eced",
+      "matching_document_count": 15,
+      "reviewed_documents": [
+        {
+          "path": "README.md",
+          "matches": [
+            {
+              "line": 123,
+              "text": "* [Rasbian Buster Lite](https://www.raspberrypi.org/downloads/raspbian/) - Lite version is enough to get going and will save some disk space!"
+            }
+          ]
+        },
+        {
+          "path": "portal/docs/the_fluffy_book/docs/db_pruning.md",
+          "matches": [
+            {
+              "line": 1,
+              "text": "# Database pruning"
+            },
+            {
+              "line": 3,
+              "text": "Default the Nimbus Portal client runs with a specific storage capacity (`--storage-capacity=x`, default set to 2GB). This means that the node's radius is dynamically adjusted to not exceed the configured capacity. As soon as the storage capacity is to be exceeded the pruning of content takes place and a new smaller radius is set."
+            },
+            {
+              "line": 5,
+              "text": "As long as the configured storage capacity remains the same, pruning is done"
+            },
+            {
+              "line": 15,
+              "text": "This requires no manual steps as no pruning will be required. On the restart of the Nimbus Portal client with a higher configured storage capacity, the initial radius will be increased to the maximum radius until the new storage capacity is reached. Then the automatic pruning will take place and the radius will be decreased."
+            },
+            {
+              "line": 19,
+              "text": "When a Nimbus Portal client is restarted with a lower storage capacity, pruning will take"
+            },
+            {
+              "line": 20,
+              "text": "place automatically. The database will be pruned in intervals until the storage"
+            },
+            {
+              "line": 21,
+              "text": "drops under the newly configured storage capacity. The radius will also be adjusted with each pruning cycle."
+            },
+            {
+              "line": 23,
+              "text": "However, on disk the database will not lower in size. This is because empty"
+            },
+            {
+              "line": 25,
+              "text": "To do this you can run the `--force-prune` option at start-up. Note that this will temporarily double the database storage capacity as a temporary copy of the database needs to be made."
+            },
+            {
+              "line": 26,
+              "text": "Because of this, the vacuum is not executed automatically but requires you to manually enable the `--force-prune` flag."
+            },
+            {
+              "line": 28,
+              "text": "You can also use the `fcli_db` tool its  `prune` command on the database directly to force this vacuuming."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "repo": "BuildOnViction/victionchain",
+      "commit": "31fe7cb935b46b8b5b115d070e64b30d6b8165b1",
+      "matching_document_count": 2,
+      "reviewed_documents": [
+        {
+          "path": "README.md",
+          "matches": [
+            {
+              "line": 24,
+              "text": "    Vic-Geth is a new Viction implementation with higher performance, include bug fixes and better compabilities with modern EVM libraries and toolings."
+            },
+            {
+              "line": 162,
+              "text": "STORE_REWARD: Snapshot masternodes reward for each epoch. Empty for disable."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "repo": "harmony-one/harmony",
+      "commit": "a41e194761c81fe846994864e789a7d306bbc439",
+      "matching_document_count": 4,
+      "reviewed_documents": []
+    },
+    {
+      "repo": "tempoxyz/tempo",
+      "commit": "35d8b937fba89ae0bfdea1edf735fb6f8aa41c23",
+      "matching_document_count": 61,
+      "reviewed_documents": [
+        {
+          "path": "README.md",
+          "matches": [
+            {
+              "line": 19,
+              "text": "Tempo nodes use published [network identities](#network-identities) to verify consensus finalisation and authenticate snapshots."
+            },
+            {
+              "line": 45,
+              "text": "- Performance and finality"
+            },
+            {
+              "line": 47,
+              "text": "  - Built on the [Reth SDK](https://github.com/paradigmxyz/reth), the most performant and flexible EVM (Ethereum Virtual Machine) execution client."
+            },
+            {
+              "line": 165,
+              "text": "These BLS threshold public keys are built into Tempo nodes and used by both follow/RPC nodes and validators to verify consensus finalisation certificates, including those used to authenticate snapshots."
+            },
+            {
+              "line": 189,
+              "text": "The [`tempoup`](./tempoup) installer performs these checks automatically on every install. To verify manually, pick **one** of the two paths below \u2014 both prove the archive came from the tagged commit, signed by tempoxyz."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "repo": "kaiachain/kaia",
+      "commit": "0f9ad843d1ccb7381cc43070ce13002cca7b1ed9",
+      "matching_document_count": 11,
+      "reviewed_documents": []
+    },
+    {
+      "repo": "etclabscore/core-geth",
+      "commit": "4720ac33055e8e5482ce2fb6c5ff800aad8a5889",
+      "matching_document_count": 17,
+      "reviewed_documents": []
+    },
+    {
+      "repo": "autonity/autonity",
+      "commit": "cf1c15ee0bfae7cd1eff7b9b2c3a69f70b4b951f",
+      "matching_document_count": 7,
+      "reviewed_documents": []
+    },
+    {
+      "repo": "0xsoniclabs/sonic",
+      "commit": "e12abf3b8405af4c382c0bb4f0d81d543a7264da",
+      "matching_document_count": 4,
+      "reviewed_documents": []
+    },
+    {
+      "repo": "crypto-org-chain/cronos",
+      "commit": "0801cdef03b15788a81698cef368a44a6f60c031",
+      "matching_document_count": 15,
+      "reviewed_documents": []
+    },
+    {
+      "repo": "skalenetwork/skaled",
+      "commit": "6ae2c94a82b2349faad2f2c02a75cc1d78fc2116",
+      "matching_document_count": 11,
+      "reviewed_documents": [
+        {
+          "path": "README.md",
+          "matches": [
+            {
+              "line": 62,
+              "text": "sudo apt-get install -y make pkg-config libgnutls28-dev libssl-dev unzip zlib1g-dev libgcrypt20-dev docker.io gcc-11 g++-11 gperf"
+            },
+            {
+              "line": 63,
+              "text": "sudo apt-get install -y nettle-dev libhiredis-dev redis-server google-perftools libgoogle-perftools-dev lcov"
+            }
+          ]
+        },
+        {
+          "path": "docs/databases-info.md",
+          "matches": [
+            {
+              "line": 119,
+              "text": "    \"block_proposal.db_disk_usage\": 47061467,"
+            },
+            {
+              "line": 120,
+              "text": "    \"block_sigshare.db_disk_usage\": 123,"
+            },
+            {
+              "line": 121,
+              "text": "    \"blocks.db_disk_usage\": 253165303,"
+            },
+            {
+              "line": 122,
+              "text": "    \"consensus_state.db_disk_usage\": 123,"
+            },
+            {
+              "line": 123,
+              "text": "    \"da_proof.db_disk_usage\": 5746940,"
+            },
+            {
+              "line": 124,
+              "text": "    \"da_sigshare.db_disk_usage\": 7168259,"
+            },
+            {
+              "line": 125,
+              "text": "    \"incoming_msg.db_disk_usage\": 123,"
+            },
+            {
+              "line": 126,
+              "text": "    \"internal_info.db_disk_usage\": 166,"
+            },
+            {
+              "line": 127,
+              "text": "    \"outgoing_msg.db_disk_usage\": 1639766,"
+            },
+            {
+              "line": 128,
+              "text": "    \"price.db_disk_usage\": 1007933,"
+            },
+            {
+              "line": 129,
+              "text": "    \"proposal_hash.db_disk_usage\": 6750622,"
+            },
+            {
+              "line": 130,
+              "text": "    \"proposal_vector.db_disk_usage\": 1523550,"
+            },
+            {
+              "line": 131,
+              "text": "    \"random.db_disk_usage\": 123"
+            },
+            {
+              "line": 134,
+              "text": "    \"blocks.db_disk_usage\": 333332200,"
+            },
+            {
+              "line": 137,
+              "text": "    \"state.db_disk_usage\": 2396572785"
+            }
+          ]
+        },
+        {
+          "path": "docs/features/snapshots.md",
+          "matches": [
+            {
+              "line": 3,
+              "text": "# Snapshots"
+            },
+            {
+              "line": 5,
+              "text": "- [Snapshots](#snapshots)"
+            },
+            {
+              "line": 8,
+              "text": "  - [JSON-RPC Snapshot Methods](#json-rpc-snapshot-methods)"
+            },
+            {
+              "line": 9,
+              "text": "    - [skale\\_getSnapshot](#skale_getsnapshot)"
+            },
+            {
+              "line": 10,
+              "text": "    - [skale\\_downloadSnapshotFragment](#skale_downloadsnapshotfragment)"
+            },
+            {
+              "line": 11,
+              "text": "    - [skale\\_getSnapshotSignature](#skale_getsnapshotsignature)"
+            },
+            {
+              "line": 12,
+              "text": "    - [skale\\_getLatestSnapshotBlockNumber](#skale_getlatestsnapshotblocknumber)"
+            },
+            {
+              "line": 16,
+              "text": "One of the main features of SKALE Network is node rotation, and this is performed through a BLS Snapshot process. Briefly, if node `A` leaves a SKALE Chain for any reason (e.g. random rotation, node exit, etc.), another node `B` will be chosen to replace it.  Once node `B` is chosen, it needs all the information about previous blocks, transactions,"
+            },
+            {
+              "line": 18,
+              "text": "SKALE Network solves this by periodically performing snapshots of the SKALE chain file system on each node so that nodes can share the latest snapshot with incoming node `B`."
+            },
+            {
+              "line": 20,
+              "text": "Additionally, a node can be restarted from a snapshot it the node was offline for a long period of time, if it cannot catch up with other nodes using SKALE Consensus' catch-up algorithm."
+            },
+            {
+              "line": 24,
+              "text": "Skaled uses the btrfs file system to create snapshots."
+            },
+            {
+              "line": 28,
+              "text": "2. node does snapshot every T<sub>snapshotInterval</sub> seconds (configurable number, stored in SKALE chain config, so it is similar for all nodes in SKALE chain )"
+            },
+            {
+              "line": 30,
+              "text": "Assume `k` snapshots were already done. Lets see when `k+1`-th will be done and ready to be used:"
+            },
+            {
+              "line": 31,
+              "text": "1. `k+1`-th snapshot will be done once another block\u2019s B timestamp crosses boundary (\\[T<sub>firstBlock</sub> / T<sub>snapshotInterval</sub>] + 1) \\* T<sub>snapshotInterval</sub>."
+            },
+            {
+              "line": 32,
+              "text": "2. Node updates `last_snapshoted_block_with_hash` with `k`-th snapshot block number."
+            }
+          ]
+        },
+        {
+          "path": "docs/features/snapshots-functionality.md",
+          "matches": [
+            {
+              "line": 2,
+              "text": "# Snapshots Functionality"
+            },
+            {
+              "line": 6,
+              "text": "As known, node rotation is one of the main features of the SKALE Network. Briefly, if node A leaves a schain S for any reason, another node B will be chosen to replace it. Once node B is chosen, it needs all the information about previous blocks, transactions, etc., on schain S. SKALE solves this issue by periodically taking snapshots of the file s"
+            },
+            {
+              "line": 10,
+              "text": "Firstly, all nodes in the SKALE NETWORK support the Btrfs file system, and we use Btrfs to take snapshots."
+            },
+            {
+              "line": 15,
+              "text": "- A node takes a snapshot every `TsnapshotInterval` seconds (a configurable number stored in the schain config, so it is similar for all nodes in the schain)"
+            },
+            {
+              "line": 17,
+              "text": "Assume `k` snapshots were already taken. Let's see when the `k+1`-th snapshot will be done and ready to be used:"
+            },
+            {
+              "line": 19,
+              "text": "The `k+1`-th snapshot will be done once another block\u2019s timestamp crosses a boundary."
+            },
+            {
+              "line": 21,
+              "text": "![Snapshot Timing](https://github.com/skalenetwork/internal-support/blob/main/docs/specifications/.doc-images-diagrams/images/skaled_snapshot.png)"
+            },
+            {
+              "line": 23,
+              "text": "- The node updates `last_snapshoted_block_with_hash` with the `k-th` snapshot block number"
+            },
+            {
+              "line": 24,
+              "text": "- If it is time to take a snapshot and the node already has 3 snapshots stored, it deletes the oldest one"
+            },
+            {
+              "line": 25,
+              "text": "- The node creates a snapshot `S_latest`"
+            },
+            {
+              "line": 26,
+              "text": "- The node updates `last_snapshot_creation_time` with the block\u2019s timestamp"
+            },
+            {
+              "line": 27,
+              "text": "- The node calculates the hash of `S_latest` in a separate thread (computing the hash of every file in this snapshot, including filestorage), assuming it will be successfully calculated before the next snapshot is done. So the `k+1`-th snapshot will be ready to be used only when the `k+2`-th snapshot is being performed"
+            },
+            {
+              "line": 28,
+              "text": "- The node updates the `stateRoot` field with the `k-th` snapshot hash"
+            },
+            {
+              "line": 32,
+              "text": "#### Snapshot Downloading"
+            },
+            {
+              "line": 34,
+              "text": "To start from a snapshot, a node must be sure that the snapshot is valid. To prevent downloading snapshots from malicious nodes, the following procedure was designed:"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "repo": "Galxe/gravity-reth",
+      "commit": "c407bd938013a4250544c303ac294a36482dcd98",
+      "matching_document_count": 50,
+      "reviewed_documents": [
+        {
+          "path": "README.md",
+          "matches": [
+            {
+              "line": 4,
+              "text": "significant performance bottleneck that limits on-chain throughput and raises transaction costs. While modern clients"
+            },
+            {
+              "line": 5,
+              "text": "like Reth have made substantial strides in performance, their architectures are **not** primarily optimized for"
+            },
+            {
+              "line": 6,
+              "text": "high-performance Layer 1s and Layer 2 roll-ups, which target **sub-second finality and massive scalability**, require a"
+            },
+            {
+              "line": 10,
+              "text": "We introduce Gravity Reth, an open-source, performance-engineered fork of Reth, designed to push the upper bounds of EVM"
+            },
+            {
+              "line": 12,
+              "text": "**fully parallelized merklization** framework, a **high-performance caching** layer, an **optimized mempool,** and **a"
+            },
+            {
+              "line": 13,
+              "text": "pipelined execution architecture**\u2014Gravity Reth achieves state-of-the-art performance."
+            },
+            {
+              "line": 16,
+              "text": "_ERC20 Transfer Performance Comparison Across Different Account Scales_"
+            },
+            {
+              "line": 18,
+              "text": "In an ERC20 transfers benchmark across 100,000 accounts, Gravity Reth sustains ~**41,000 transactions per second (TPS)**, equivalent to ~**1.5 Gigagas/s**. This represents a greater than **4x performance boost** over the baseline `Reth 1.4.8` client."
+            },
+            {
+              "line": 26,
+              "text": "   bottom-up MPT generation with a 16-way, top-down parallel framework that delivers a 3-10x performance increase."
+            },
+            {
+              "line": 28,
+              "text": "   view\" of the state, drastically reducing I/O pressure and resolving performance degradation associated with managing"
+            },
+            {
+              "line": 68,
+              "text": "Reth (short for Rust Ethereum, [pronunciation](https://x.com/kelvinfichter/status/1597653609411268608)) is a production-ready Ethereum execution layer client focused on modularity, performance, and user-friendliness. Reth is compatible with all Ethereum Consensus Layer (CL) implementations that support the [Engine API](https://github.com/ethereum/e"
+            },
+            {
+              "line": 74,
+              "text": "1. **Modularity**: Every component is built to be used as a library: well-tested, documented and benchmarked. Import crates, mix and match, and innovate on top of them. Learn more about the project's components [here](./docs/repo/layout.md)."
+            },
+            {
+              "line": 75,
+              "text": "2. **Performance**: Built with Rust, [Alloy](https://github.com/alloy-rs/alloy/), [revm](https://github.com/bluealloy/revm/), and [Foundry](https://github.com/foundry-rs/foundry/) \u2014 battle-tested and optimized for speed. Check the [ethPandaOps Lab Dashboard](https://lab.ethpandaops.io/ethereum/execution/timings) for a third-party comparison against"
+            },
+            {
+              "line": 78,
+              "text": "![](./assets/reth-perf.png)"
+            },
+            {
+              "line": 83,
+              "text": "6. **Configurability**: Profiles for different use cases \u2014 from high-performance RPC operators to hobbyists on consumer hardware."
+            }
+          ]
+        },
+        {
+          "path": "docs/reth-2.3.x-improvements/storage.md",
+          "matches": [
+            {
+              "line": 3,
+              "text": "> \u5bf9\u6bd4\u8303\u56f4: \u4e0a\u6e38 reth `branch-1.8.3` (4219741510) \u2192 `branch-2.3.0` (9384bc53d8),`git log branch-1.8.3..branch-2.3.0 -- crates/storage` \u5171 374 commits(\u53e6\u542b `crates/static-file`\u3001`crates/prune`\u3001`crates/chain-state`)\u3002"
+            },
+            {
+              "line": 12,
+              "text": "2. **Static file \u5927\u6269\u5bb9**:headers/transactions \u53d8\u4e3a**\u53ea\u8bfb\u53ea\u5199 static file**;\u65b0\u589e `TransactionSenders`/`Receipts`/`AccountChangeSets`/`StorageChangeSets` \u6bb5;\u5f15\u5165\u53d8\u957f\u6587\u4ef6\u3001per-segment blocks-per-file\u3001changeset \u504f\u79fb sidecar(`.csoff`)\u3001\u4e24\u9636\u6bb5 commit(`sync_all`+`finalize`)\u3002"
+            },
+            {
+              "line": 15,
+              "text": "5. **\u6301\u4e45\u5316/\u88c1\u526a\u5de5\u7a0b\u5316**:`save_blocks` \u53cc\u7ebf\u7a0b\u5e76\u884c + \u7ebf\u7a0b\u6c60 + \u8de8\u5757\u6279\u91cf trie \u5199;\u53ef\u914d\u7f6e\u6700\u5c0f\u88c1\u526a\u8ddd\u79bb + Receipts/Bodies \u5f3a\u5236\u7559 64 \u5757(reorg \u5b89\u5168);init-state \u5927\u5bfc\u5165 OOM \u7f13\u89e3 + \u975e\u96f6 genesis\u3002"
+            },
+            {
+              "line": 27,
+              "text": "  - \u65b0\u589e\u72ec\u7acb `RocksDBProvider`(`Arc<RocksDBProviderInner>` \u5305\u4e00\u4e2a `rocksdb::DB`),\u590d\u7528 reth \u73b0\u6709\u7684 `Table`/`Encode`/`Compress` trait:\u6bcf\u4e2a\u903b\u8f91\u8868 = \u4e00\u4e2a\u540d\u4e3a `T::NAME` \u7684 column family,`get/put/delete/write_batch` \u6cdb\u578b over `T: Table`\u3002\u5171\u4eab 128MB LRU block cache\u3001bloom filter\u3001LZ4+ZSTD \u538b\u7f29\u3002datadir \u4e0b\u65b0\u589e `<datadir>/<chain>/rocksdb`\u3002"
+            },
+            {
+              "line": 29,
+              "text": "  - `Metadata` \u8868(`Key=String, Value=Vec<u8>`)+ `StorageSettings` Compact \u6a21\u578b + \u4e09\u4e2a trait `MetadataProvider`/`MetadataWriter`/`StorageSettingsCache`(\u5de5\u5382\u4e0a `RwLock<StorageSettings>` \u7f13\u5b58)\u3002`StorageSettings` \u4e00\u5ea6\u81a8\u80c0\u5230 8 \u4e2a bool,\u540e `#22042` **\u574d\u7f29\u6210\u5355\u4e2a `storage_v2: bool`**,`b9969c5b1c(#22954)` \u79fb\u9664 `rocksdb`/`edge` feature gate\u3001\u9ed8\u8ba4\u5f00\u542f\u3002"
+            },
+            {
+              "line": 30,
+              "text": "  - **\u53ea\u6709 3 \u4e2a history/index \u8868\u8fc1\u5230 RocksDB**:`AccountsHistory`(`ShardedKey<Address>\u2192BlockNumberList`)\u3001`StoragesHistory`(`StorageShardedKey\u2192BlockNumberList`)\u3001`TransactionHashNumbers`(`TxHash\u2192TxNumber`)\u3002\u5176\u4f59(headers/bodies/trie/hashed state)\u7559\u5728 MDBX;receipts/senders/changesets \u5728 v2 \u4e0b\u8fc1 static file\u3002"
+            },
+            {
+              "line": 31,
+              "text": "  - `EitherWriter{Database|StaticFile|RocksDB(WriteBatch)}` / `EitherReader{Database|StaticFile|RocksDB(RocksReadSnapshot)}` \u6309 `storage_v2` \u9010\u8868\u8def\u7531\u3002RocksDB history \u8bfb\u7528 raw iterator `history_info`,\u4e0e MDBX \u5171\u4eab `compute_history_rank`/`needs_prev_shard_check`,\u5e76\u7528 **`visible_tip`** \u8ba9 RocksDB \u5feb\u7167\u5ffd\u7565\u6bd4 MDBX \u5feb\u7167\u66f4\u65b0\u7684\u6761\u76ee\u4ee5\u4fdd\u6301\u4e00\u81f4\u3002"
+            },
+            {
+              "line": 38,
+              "text": "### 2. hashed-state-as-canonical(\u4ec5 *state* \u8868,changeset \u4ecd\u4e3a\u660e\u6587) + slot preimage \u4fa7\u4fe1\u9053"
+            },
+            {
+              "line": 46,
+              "text": "  - `#22379` **slot preimage DB**\u2014\u2014\u76ee\u7684\u6070\u6070\u662f**\u8ba9 changeset \u4fdd\u6301\u660e\u6587 slot**\u3002\u56e0\u4e3a v2 \u4e0b\u5f53\u524d storage \u53ea\u5728 `HashedStorages`(\u4ec5 hashed slot),pre-Cancun `SELFDESTRUCT`+recreate(\"wipe\")revert \u9700\u8981\u679a\u4e3e\u8d26\u6237\u5168\u90e8\u65e7 slot \u7684**\u660e\u6587**\u952e;\u82e5\u4ece `HashedStorages` walk \u53ea\u80fd\u62ff\u5230 hashed\u3002\u4e8e\u662f\u65b0\u589e\u72ec\u7acb MDBX \u73af\u5883 `db/preimage/`(`keccak256(slot)\u2192slot`,append-only\u3001\u4e0d unwind),`ExecutionStage` \u7684 `inject_plain_wipe_slots`(`"
+            },
+            {
+              "line": 48,
+              "text": "- **\u6d89\u53ca\u6587\u4ef6**:`crates/storage/provider/src/providers/database/provider.rs`(`use_hashed_state()` \u8def\u7531)\u3001`crates/stages/stages/src/stages/execution/slot_preimages.rs`(preimage env + `inject_plain_wipe_slots`)\u3002(\u6ce8:`primitives-traits/src/storage.rs` \u4ec5\u5b58\u5728\u4e8e #21115..#22379 \u4e4b\u95f4,`branch-2.3.0` \u5df2\u65e0\u3002)"
+            },
+            {
+              "line": 49,
+              "text": "- **\u4e0e gravity-reth \u7684\u5173\u7cfb**:**\u5f31\u51b2\u7a81/\u601d\u60f3\u76f8\u5173**\u3002gravity nested-trie \u6709\u81ea\u5df1\u7684 hashed \u8868\u4f53\u7cfb\u4e0e state root \u8bed\u4e49,\u4e0d\u91c7\u7528\u4e0a\u6e38\u7684 `use_hashed_state()` \u8fd0\u884c\u65f6\u95e8\u63a7\u4e0e plain-state-skip\u3002\u4f46 **slot preimage \u4fa7\u4fe1\u9053\u89e3\u51b3\u7684\u95ee\u9898(self-destruct+recreate \u7684 wipe \u9700\u8981\u65e7 slot \u660e\u6587\u952e)\u4e0e gravity MEMORY \u8bb0\u5f55\u7684 `#715 nested-trie wipe+recreate` \u4fee\u590d\u540c\u6e90**\u2014\u2014\u4e0a\u6e38\u843d\u6210\u72ec\u7acb preimage MDBX env,gravity \u8d70 cache trie-node tombstone\u3002"
+            },
+            {
+              "line": 55,
+              "text": "  - **\u6bb5\u6269\u5bb9**:`058ffdc21e(#18681)` + `e9598ba5ac(#18788)` \u628a headers/transactions \u53d8\u4e3a**\u53ea\u8bfb\u53ea\u5199 static file**(\u5220\u6389 `StorageLocation::Both` \u53cc\u5199\u4e0e DB \u8bfb fallback,header by hash \u7b7e\u540d `&BlockHash\u2192BlockHash`);\u65b0\u589e\u6bb5 `TransactionSenders(#19508)`\u3001`Receipts` \u9ed8\u8ba4\u5199 static file `(#19399)`\u3001\u4ee5\u53ca change-based \u6bb5 `AccountChangeSets(#18882)`/`StorageChangeSets(#20896)`\u3002"
+            },
+            {
+              "line": 59,
+              "text": "  - **\u4e24\u9636\u6bb5 commit(`#20984`)**:`NippyJarWriter::commit` \u62c6\u6210 `sync_all`(fsync `.dat`/`.idx`,\u4e0d\u5199 config)+ `finalize`(\u5199 `.conf`),config \u5199\u5165\u662f\u539f\u5b50 commit \u70b9\u3001healing \u4ee5\u6b64\u4e3a\u57fa\u51c6\u3002"
+            },
+            {
+              "line": 62,
+              "text": "- **\u4e0e gravity-reth \u7684\u5173\u7cfb**:**\u90e8\u5206\u6b63\u4ea4\u3001\u90e8\u5206\u8026\u5408**\u3002gravity baseline `StaticFileSegment` \u53ea\u6709 `Headers/Transactions/Receipts`(\u5df2\u6838\u5b9e),changesets/senders \u90fd\u5728 gravity \u7684 RocksDB \u5168\u91cf\u540e\u7aef\u91cc\u3002\u65b0\u589e changeset/senders \u6bb5\u4f9d\u8d56 `EitherWriter`(storage-v2 \u57fa\u5efa)\u2192**\u8026\u5408**;\u4f46 headers/txs \u53ea\u8bfb\u53ea\u5199 static file \u8fd9\u4e00\u6b65 gravity \u5df2\u7ecf\u7b49\u4ef7\u5177\u5907(baseline \u4e5f\u662f static-file headers/txs)\u3002**\u53d8\u957f\u6587\u4ef6\u3001per-segment blocks-per-file\u3001\u4e24\u9636\u6bb5 "
+            },
+            {
+              "line": 64,
+              "text": "  - \u6bb5\u6269\u5bb9(senders/receipts/changesets \u8fc1 static file):**\u5426**\u2014\u2014\u4e0e gravity rocksdb \u5168\u91cf\u540e\u7aef\u6b63\u4ea4\u51b2\u7a81,gravity \u5df2\u628a\u8fd9\u4e9b\u653e rocksdb\u3002"
+            }
+          ]
+        },
+        {
+          "path": "docs/design/database.md",
+          "matches": [
+            {
+              "line": 11,
+              "text": "- To achieve that, we created the [Encode/Decode/Compress/Decompress traits](https://github.com/paradigmxyz/reth/blob/main/crates/storage/db-api/src/table.rs) to make the (de)serialization of database `Table::Key` and `Table::Values` generic."
+            },
+            {
+              "line": 12,
+              "text": "  - This allows for [out-of-the-box benchmarking](https://github.com/paradigmxyz/reth/blob/main/crates/storage/db/benches/criterion.rs) (using [Criterion](https://github.com/bheisler/criterion.rs))"
+            },
+            {
+              "line": 15,
+              "text": "  - [Ethereum-specific Compact Encoding](https://github.com/paradigmxyz/reth/blob/main/crates/storage/codecs/derive/src/compact/mod.rs): A lot of Ethereum datatypes have unnecessary zeros when serialized, or optional (e.g. on empty hashes) which would be nice not to pay in storage costs."
+            },
+            {
+              "line": 17,
+              "text": "    - [Akula](https://github.com/akula-bft/akula/) expanded it for other tables and datatypes manually. It also saved some more space by storing the length of certain types (U256, u64) using the [`modular_bitfield`](https://docs.rs/modular-bitfield/latest/modular_bitfield/) crate, which compacts this information."
+            },
+            {
+              "line": 22,
+              "text": "- We made implementation of these traits easy via a derive macro called [`reth_codec`](https://github.com/paradigmxyz/reth/blob/main/crates/storage/codecs/derive/src/lib.rs) that delegates to one of Compact (default), Scale, Postcard or Passthrough encoding. This is [derived on every struct we need](https://github.com/search?q=repo%3Aparadigmxyz%2F"
+            },
+            {
+              "line": 26,
+              "text": "Historical state changes are indexed by `BlockNumber`. This means that `reth` stores the state for every account after every block that touched it, and it provides indexes for accessing that data quickly. While this may make the database size bigger (needs benchmark once `reth` is closer to prod), it provides fast access to the historical state."
+            },
+            {
+              "line": 69,
+              "text": "Receipts {"
+            },
+            {
+              "line": 71,
+              "text": "    Receipt Data"
+            },
+            {
+              "line": 117,
+              "text": "    BranchNodeCompact Node"
+            },
+            {
+              "line": 139,
+              "text": "Transactions ||--|| Receipts : \"each tx has a receipt\""
+            }
+          ]
+        },
+        {
+          "path": "docs/reth-2.3.x-improvements/storage-v2-deep-dive.md",
+          "matches": [
+            {
+              "line": 20,
+              "text": " receipts            MDBX \u8868                   \u2192   static file(\u987a\u5e8f append + Lz4)"
+            },
+            {
+              "line": 60,
+              "text": "   B-tree \u9875\u4e5f\u6ca1\u6709\u538b\u7f29,\u51b7\u6570\u636e(receipts)\u5b58\u5728\u5176\u4e2d\u6d6a\u8d39\u663e\u8457\u3002"
+            },
+            {
+              "line": 61,
+              "text": "3. **\u51b7\u70ed\u4e0d\u5206**\u3002receipts/senders/changesets \u5199\u540e\u51e0\u4e4e\u53ea\u88ab\u987a\u5e8f\u8303\u56f4\u8bfb"
+            },
+            {
+              "line": 63,
+              "text": "   compact/\u62f7\u8d1d\u6210\u672c\u3002"
+            },
+            {
+              "line": 75,
+              "text": "  (`receipts_in_static_files()` / `*_in_rocksdb()` /"
+            },
+            {
+              "line": 77,
+              "text": "  \u52a8\u673a\u5199\u5728\u6ce8\u91ca\u91cc:\u4e94\u7c7b\u6570\u636e\u7684\u642c\u8fc1\u5fc5\u987b**\u539f\u5b50**,\u4e0d\u5141\u8bb8\u300creceipts \u5df2\u642c\u3001"
+            },
+            {
+              "line": 88,
+              "text": "  \u4e03\u9636\u6bb5:changesets\u2192SF\u3001receipts\u2192SF\u3001\u4e09\u8868\u2192RocksDB\u3001\u7ffb metadata\u3001"
+            },
+            {
+              "line": 90,
+              "text": "  SenderRecovery/Merkle checkpoint \u8ba9 pipeline \u91cd\u5efa)\u3001MDBX compact"
+            },
+            {
+              "line": 91,
+              "text": "  (`MDBX_CP_COMPACT`)\u3001\u76ee\u5f55\u70ed\u4ea4\u6362\u3002"
+            },
+            {
+              "line": 97,
+              "text": "### 3.1 receipts \u2192 static file"
+            },
+            {
+              "line": 98,
+              "text": "\u8def\u7531 `EitherWriter::receipts_destination`(`either_writer.rs:182-196`)\u3002"
+            },
+            {
+              "line": 100,
+              "text": "receipt pruning \u6216 `receipts_log_filter` \u65f6\u7559 MDBX(\u5c1a\u4e0d\u652f\u6301\u5e26"
+            },
+            {
+              "line": 146,
+              "text": "  `StateWriteConfig{write_receipts, write_account_changesets,"
+            },
+            {
+              "line": 169,
+              "text": "   \u5199\u7b49\u4ef7\u4e8e\u6ca1\u5199,\u8bfb\u8005\u6c38\u8fdc\u770b\u5230\u4e00\u81f4\u89c6\u56fe,\u65e0\u9700 fsync \u987a\u5e8f\u4fdd\u8bc1\u3002"
+            },
+            {
+              "line": 172,
+              "text": "   \u5bf9\u9f50\u622a\u65ad)\u2192 RocksDB vs MDBX checkpoint \u4fee\u590d(\u9886\u5148\u5219 prune\u3001\u843d\u540e\u5219"
+            }
+          ]
+        },
+        {
+          "path": "docs/merge-v2.3.0/storage-providers-and-writers.md",
+          "matches": [
+            {
+              "line": 22,
+              "text": "  - `ff103f976a` fix(unwind): commit view + prune distance for execution unwind (#313)"
+            },
+            {
+              "line": 71,
+              "text": "| static_file/manager.rs | mechanical-merge | baseline **+36/-3** | gravity `check_consistency_pipe_execution`/`has_receipt_pruning` \u5206\u652f\u4fdd\u7559 \u2713;\u4e0a\u6e38 fallback \u91cd\u5199(`segments_to_check`/`instrument`)\u672a\u91c7;**\u65b0\u589e 7 \u5904\u6865\u63a5**:\u4e0a\u6e38 static-file \u5f15\u64ce(auto-merged \u4e3a v2.3.0)\u7ed9 `StaticFileSegment` \u52a0\u4e86 storage-v2 \u65b0\u53d8\u4f53,baseline provider \u7684 match/iter \u975e\u7a77\u5c3d \u2192 3 \u5904 `iter().filter(Headers|Tra"
+            },
+            {
+              "line": 122,
+              "text": "  - `#22379` \u2014 slot preimage DB,\u65b0\u589e `StaticFileSegment::TransactionSenders` \u7b49\u5bfc\u5165\u3002"
+            },
+            {
+              "line": 161,
+              "text": "**\u4e0a\u6e38\u53d8\u66f4 (v1.8.3 \u2192 v2.3.0):** \u7ea6 24 \u4e2a\u4e0a\u6e38 commit \u89e6\u78b0\u672c\u6587\u4ef6 \u2014 \u4e3b\u8981\u662f `#23656` (encapsulate state fetching)\u3001`#24494` (tx-hash identity)\u3001`#22918`/`#22906`/`#22742` (\u79fb\u9664 changeset readers \u7684\u514b\u9686)\u3001`#22876` (`ensure_canonical_block` \u5b88\u536b\u4e0b\u6c89\u5230\u672c\u5904)\u3001`#23187` (tx-range \u67e5\u8be2\u907f\u514d receipt \u514b\u9686)\u3001`#23310` (\u79fb\u9664 `changeset count` API)\u3001`#22379` (slot preimage / `PlainStorageRevert`)\u3001`#23009` ("
+            },
+            {
+              "line": 214,
+              "text": "  - **\u65b0\u5b57\u6bb5** (v2.3.0):`storage_settings: Arc<RwLock<StorageSettings>>`\u3001`rocksdb_provider: RocksDBProvider` (`#20253`\u3001`#22954`)\u3001`changeset_cache: ChangesetCache` (\u4e0e `#21115`/`#23667` \u4e00\u8d77)\u3001`bal_store: BalStoreHandle` (`#23710`)\u3001`runtime: reth_tasks::Runtime` (`#23357`\u3001`#21934`)\u3001`minimum_pruning_distance: u64` (`#23082`)\u3001`read_only_sync: Option<Arc<Read"
+            },
+            {
+              "line": 215,
+              "text": "  - **\u65b0\u65b9\u6cd5:** `new_checked`\u3001`assert_consistent`\u3001`check_consistency` (\u4e09\u6b65:\u6587\u4ef6\u7ea7 \u2192 rocksdb \u2192 static-file checkpoint \u2192 `heal_chain_state_block_numbers`)\u3001`unwind_provider_rw` (`#21311` CommitOrder)\u3001`sync_providers_if_needed`\u3001`caught_up_static_file_provider`\u3001`MetadataProvider` impl\u3001`with_minimum_pruning_distance`\u3001`with_read_only_sync`\u3002"
+            },
+            {
+              "line": 222,
+              "text": "  - \u6784\u9020\u51fd\u6570\u4ecd\u662f 5 \u53c2 (`db, chain_spec, static_file_provider, prune_modes, storage`),\u65e0 `rocksdb_provider`/`runtime` \u5b57\u6bb5\u3002"
+            },
+            {
+              "line": 230,
+              "text": "  - **\u91c7\u7eb3\u4e0a\u6e38** struct \u5e03\u5c40:`storage_settings`\u3001`rocksdb_provider`\u3001`changeset_cache`\u3001`runtime`\u3001`minimum_pruning_distance`\u3001`read_only_sync`\u3002Gravity \u5df2\u6709\u7684 RocksDB sharding (#225 `c64bd613e4`) \u5728 `crates/engine/tree/src/persistence.rs` \u2014 \u9700\u8981\u628a\u90a3\u4e00\u5c42 sharding \u91cd\u63a5\u5230\u4e0a\u6e38 `RocksDBProvider` \u4e4b\u4e0a (\u5b83\u652f\u6301 `clone()`)\u3002"
+            },
+            {
+              "line": 250,
+              "text": "  - `#23082` `MINIMUM_UNWIND_SAFE_DISTANCE` + `with_minimum_pruning_distance`\u3002"
+            },
+            {
+              "line": 258,
+              "text": "  - `#22379` slot preimage / `HashedAccount` keying\u3002"
+            },
+            {
+              "line": 273,
+              "text": "  - **\u91c7\u7eb3\u4e0a\u6e38** \u6b63\u4ea4\u65b0\u80fd\u529b:`ReaderTxnTracker`\u3001`with_minimum_pruning_distance`\u3001`disable_long_read_transaction_safety`\u3001`new_unwind_rw`(\u53ef\u8003\u8651\u5728\u5176\u5b9e\u73b0\u5185\u90e8\u8c03\u7528 gravity \u7684 `commit_view()`,\u89c1\u5f00\u653e\u95ee\u9898 3)\u3002"
+            },
+            {
+              "line": 290,
+              "text": "**\u4e0a\u6e38\u53d8\u66f4 (v1.8.3 \u2192 v2.3.0):** 12 \u4e2a\u4e0a\u6e38 commit\u3002`#23657`/`#23667` `OverlayBuilder` \u5386\u53f2\u72b6\u6001\u8def\u5f84\u91cd\u6784;`#22289` stateless witness \u6309 spec \u5b9e\u73b0;`#22922` `Use proof v2 in TrieWitness`;`#23067` \u53ea\u8bfb\u4f7f\u7528 `RocksReadSnapshot`;`#22564` \u79fb\u9664 `DatabaseTrieWitness` trait,\u65b0\u589e `MaskedTrieCursorFactory`;`#22379` slot preimage / `HashedAccount` keying;`#22158` \u6253\u5305 `StoredNibblesSubKey`;`Ei"
+            },
+            {
+              "line": 305,
+              "text": "**\u4e0a\u6e38\u53d8\u66f4 (v1.8.3 \u2192 v2.3.0):** \u4e0e `historical.rs` \u540c\u65cf \u2014 `#22922` proof v2\u3001`#22564` `MaskedTrieCursorFactory`\u3001`#22158` \u6253\u5305 nibble keys\u3001`#22289` stateless witness\u3001`#22379` slot preimage\u3001`#21115` hashed-state-as-canonical\u3002\u5916\u52a0 `StorageSettingsCache` \u95e8\u63a7\u7684 `hashed_storage_lookup` (v2 vs v1 storage key \u5f62\u72b6)\u3002\u5f15\u5165 `DbStateRoot`/`DbStorageRoot`/`DbStorageProof`/`DbProo"
+            },
+            {
+              "line": 318,
+              "text": "**\u6a21\u5757:** `StaticFileProvider` (jar manager \u2014 header / tx / receipt segments)"
+            },
+            {
+              "line": 320,
+              "text": "**\u4e0a\u6e38\u53d8\u66f4 (v1.8.3 \u2192 v2.3.0):** 30+ \u4e0a\u6e38 commit\u3002`#23310` \u79fb\u9664 changeset count API;`#22379` slot preimage,\u65b0\u589e `StorageBeforeTx`\u3001`StorageChangesetMask`\u3001`TransactionSenderMask`;`#22497` \u8ba9 span context \u8de8 rayon \u8fb9\u754c\u4f20\u64ad;`#24126` storage-v2 init-state \u5bfc\u5165;`#24494` `tx_hash` \u7528\u4e8e\u4ea4\u6613\u8eab\u4efd;`#23357` `caught_up_static_file_provider` \u7ba1\u7ebf\u63a5\u901a;\u65b0 `changeset_walker` \u6a21\u5757;\u65b0 `EitherWriter`\u3001"
+            }
+          ]
+        },
+        {
+          "path": "docs/merge-v2.3.0/storage-api-and-traits.md",
+          "matches": [
+            {
+              "line": 9,
+              "text": "1. **Gravity \u79c1\u6709 trait \u6269\u5c55**:Galxe baseline \u5728 storage-api \u4e0e db-api \u4e2d\u52a0\u5165\u4e86 `+ Send + Sync` \u7ea6\u675f\u3001`commit_view`\u3001`recover_block_number`\u3001`subkey_compress_length` \u7b49\u6210\u5458,\u8fd9\u4e9b\u90fd\u662f\u4e3a\u652f\u6491 `ParallelStateProvider`(#26/#27/#28)\u3001cache \u5c42(#75/#109)\u3001\u5e76\u884c trie(#105/#113)\u3001\u5d4c\u5957 trie(`AccountsTrieV2`/`StoragesTrieV2`,#112/#122/#134)\u4ee5\u53ca RocksDB \u540e\u7aef(#212)\u6240\u5fc5\u9700\u7684\u3002"
+            },
+            {
+              "line": 10,
+              "text": "2. **Gravity \u79c1\u6709\u6570\u636e\u6a21\u578b\u6269\u5c55**:`impl_compression_for_compact!` / `impl_compression_for_value_with_subkey!` \u4e24\u4e2a\u5b8f\u88ab\u642c\u5230 `db-api/src/models/mod.rs` \u91cc,\u628a storage v2 (nested trie) \u7684 `StorageNodeEntry`\u3001`SubkeyContainedValue` \u5168\u90e8\u7eb3\u5165\u3002\u4e0a\u6e38 v2.3.0 \u628a\u8fd9\u4e9b\u5b8f\u642c\u53bb\u4e86 `reth-codecs`,\u53ea\u4fdd\u7559 `impl_compression_for_compact!(StoredBlockOmmers<H>, CompactU256)` \u4e24\u6761\u672c\u5730\u5b9e\u73b0\u3002"
+            },
+            {
+              "line": 56,
+              "text": "`ValueWithSubKey`\u3001`Compress/Decompress` \u8fc1\u79fb reth-codecs\u3002\u4ee5\u4e0a\u7b26\u53f7\u5728"
+            },
+            {
+              "line": 133,
+              "text": "- `815037e27` (#22379): storage v2 slot preimage\u3002"
+            },
+            {
+              "line": 178,
+              "text": "- `prune_modes: PruneModes::none()` \u5f62\u5f0f(upstream \u6539\u4e3a `PruneModes::default()`)\u3002"
+            },
+            {
+              "line": 187,
+              "text": "- `prune_modes: PruneModes::default()` \u8ddf\u968f\u4e0a\u6e38\u3002"
+            },
+            {
+              "line": 203,
+              "text": "- `815037e27` (#22379): storage v2 slot preimage \u8def\u5f84\u3002"
+            },
+            {
+              "line": 214,
+              "text": "- \u5176\u5b83 hashed state / slot preimage \u8def\u5f84\u65e0\u6587\u4ef6\u7ea7\u51b2\u7a81\u3002"
+            },
+            {
+              "line": 228,
+              "text": "- `1e734936d` (#21468) / `5b1010322` (#22299): \u5f15\u5165 `StateWriteConfig` \u7ed3\u6784,\u63a7\u5236\u662f\u5426\u5199 receipts / storage-changeset \u5230 MDBX(vs static files)\u3002"
+            },
+            {
+              "line": 231,
+              "text": "\u65b0\u7684 trait \u7b7e\u540d:`write_state(impl Into<WriteStateInput<'a, Self::Receipt>>, OriginalValuesKnown, StateWriteConfig)`,`write_state_reverts(.., config: StateWriteConfig)`,`remove_state_above(block)`,`take_state_above(block)` \u7b49\u3002`Receipt` \u4e0a\u52a0\u4e86 `'static` bound\u3002"
+            },
+            {
+              "line": 234,
+              "text": "- gravity baseline `StateWriter` \u7b7e\u540d\u662f:`write_state_with_indices(execution_outcome, is_value_known, write_receipts_to, body_indices)` + `write_state(execution_outcome, is_value_known, write_receipts_to)` \u517c\u5bb9\u5305\u88c5,`StorageLocation` \u53c2\u6570\u8d2f\u7a7f\u3002"
+            },
+            {
+              "line": 242,
+              "text": "- `StorageLocation` \u2192 `StateWriteConfig::receipts_to_db` \u6620\u5c04:gravity \u7528 `StorageLocation::Database` / `::StaticFiles` \u4e8c\u9009\u4e00\u8868\u8fbe receipts \u843d\u70b9,upstream \u7528 `config.receipts_to_db: bool` + \u53e6\u4e00\u6bb5 storage-changeset \u914d\u7f6e;\u8bed\u4e49\u53ef\u5bf9\u5e94\u3002"
+            },
+            {
+              "line": 243,
+              "text": "- \u540c\u6b65\u5220\u9664 `remove_state_above` / `take_state_above` \u7684 `remove_receipts_from: StorageLocation` \u53c2\u6570,upstream \u6539\u4e3a\u65e0\u53c2(receipts \u843d\u70b9\u5df2\u7531\u5168\u5c40 settings \u51b3\u5b9a)\u3002"
+            },
+            {
+              "line": 269,
+              "text": "**\u5f71\u54cd\u8303\u56f4**: \u6781\u5e7f \u2014 trie \u5199\u5165\u662f state root \u8ba1\u7b97 / sync \u6d41\u6c34\u7ebf\u7684\u6838\u5fc3\u3002`TrieWriterV2` \u662f gravity nested trie \u7684\u72ec\u6709\u8def\u5f84(`AccountsTrieV2`/`StoragesTrieV2` \u8868\u914d\u5957);\u4e0a\u6e38 `write_trie_updates_sorted` \u662f perf \u4f18\u5316(\u9884\u6392\u5e8f\u51cf\u5c11 MDBX \u5199\u653e\u5927)\u3002"
+            },
+            {
+              "line": 309,
+              "text": "**\u6a21\u5757**: \u8868 key/value \u7f16\u89e3\u7801 + `Compress`/`Decompress` \u5b8f\u5b9e\u73b0"
+            }
+          ]
+        },
+        {
+          "path": "docs/merge-v2.3.0/STORAGE-RESOLUTION-TODO.md",
+          "matches": [
+            {
+              "line": 59,
+              "text": "## \u8ffd\u52a0(\u7b2c\u4e8c\u8f6e):trie / prune / static-file"
+            },
+            {
+              "line": 61,
+              "text": "\u7528\u6237\u51b3\u7b56:trie \u7528 keep-gravity(nested-trie);static-file \u4e0e prune \u5c3d\u91cf\u91c7\u7528\u4e0a\u6e38\u4f18\u5316(gravity \u5728\u8fd9\u4e24\u5757\u51e0\u4e4e\u672a\u6539)\u3002"
+            },
+            {
+              "line": 68,
+              "text": "### Prune(\u4f18\u5316\u5df2\u4ea4\u4ed8,\u65e0\u9700 bridging)"
+            },
+            {
+              "line": 69,
+              "text": "- **`crates/prune/types` \u5df2\u662f\u4e0a\u6e38 2.3.0**(auto-merged,\u65e0\u6807\u8bb0):`MINIMUM_DISTANCE`(Receipts/Bodies \u5f3a\u5236\u7559 64 \u5757,#21520)+ `min_blocks_override`(\u53ef\u914d\u7f6e\u6700\u5c0f\u88c1\u526a\u8ddd\u79bb,#23082)\u5df2\u5c31\u4f4d\u3002"
+            },
+            {
+              "line": 70,
+              "text": "- `prune_target_block(tip, segment, purpose)` \u516c\u5171\u7b7e\u540d baseline \u4e0e\u4e0a\u6e38**\u5b8c\u5168\u4e00\u81f4**,retain-64/min-distance \u5728\u5176\u5185\u90e8\u7ecf `segment.min_blocks()` \u5f3a\u5236\u6267\u884c \u2192 baseline `prune/prune` \u8c03\u7528\u4e0d\u53d8\u5373\u514d\u8d39\u83b7\u5f97\u4f18\u5316\u3002"
+            },
+            {
+              "line": 71,
+              "text": "- `crates/prune/prune/src/` \u8fd8\u539f\u4e3a gravity baseline,\u4fdd\u7559 rocksdb \u4e13\u5c5e `delete_by_key(RawKey)`(#212/#246,rocksdb cursor \u8bed\u4e49\u4e0e mdbx `delete_current` \u4e0d\u540c)+ `commit_view`\u3002"
+            },
+            {
+              "line": 72,
+              "text": "- \u672a\u91c7\u7eb3\u7684\u4e0a\u6e38 segment \u7ea7\u6539\u52a8(`delete_current` mdbx \u4e13\u5c5e\u3001`#21767` \u4e0a\u6e38\u539f\u751f rocksdb \u6279\u91cf prune\u3001`PruneProgress` \u5bcc\u62a5\u544a)\u2014\u2014\u4e0e gravity rocksdb \u65e0\u5173\u6216\u51b2\u7a81\u3002"
+            },
+            {
+              "line": 77,
+              "text": "  - 3 \u4e2a `StaticFileSegment::iter()` \u5faa\u73af\u52a0 gravity-segment \u8fc7\u6ee4(\u53ea\u4fdd Headers/Transactions/Receipts);"
+            },
+            {
+              "line": 79,
+              "text": "- \u4fdd\u7559 gravity `check_consistency_pipe_execution` + `has_receipt_pruning`(#253/#255 pipe-exec \u6062\u590d\u5951\u7ea6)\u3002"
+            },
+            {
+              "line": 83,
+              "text": "- WIP \u6811\u4ecd\u6709\u5176\u5b83\u7ec4(engine/rpc/node/cli \u7b49)\u7684\u51b2\u7a81\u6807\u8bb0,**\u65e0\u6cd5\u6574\u4ed3 `cargo build`**\u3002trie/prune \u7684\u89e3\u51b3\u662f\u7ed3\u6784\u6027\u8fd8\u539f(baseline \u5df2\u77e5\u53ef\u7f16);static-file provider \u7684 7 \u5904 bridging \u7f16\u8f91**\u9700\u5728\u6574\u6811\u53ef\u7f16\u540e\u9a8c\u8bc1**(\u5c24\u5176 `matches!(&StaticFileSegment,...)` \u8fc7\u6ee4\u4e0e 4 \u4e2a wildcard \u7684\u8fd4\u56de\u7c7b\u578b)\u3002`metrics.rs` \u4e24\u5904 `StaticFileSegment::iter()` \u672a\u8fc7\u6ee4\u2014\u2014\u65e0 match\u3001\u4ec5\u591a 3 \u4e2a\u7a7a metric \u6761\u76ee,\u65e0\u5bb3\u3002"
+            },
+            {
+              "line": 87,
+              "text": "> \u89e6\u53d1:`git pull --rebase upstream gravity-reth-merge-v2.3.0` \u540e\u590d\u6838 static-file + prune\u3002"
+            },
+            {
+              "line": 90,
+              "text": "- **`crates/prune/prune/src/segments/user/bodies.rs`** \u2014\u2014 reth 2.3.0 \u7684\u6587\u4ef6,squash checkpoint \u5e26\u5165,`user/mod.rs` **\u65e0** `mod bodies;` \u58f0\u660e(\u672a\u7f16\u8bd1\u5b64\u513f),gravity baseline \u65e0\u6b64\u6587\u4ef6\u3002\u5df2 `git rm`\u3002\u5220\u9664\u540e `crates/prune/prune/src/` \u6587\u4ef6\u96c6\u4e0e gravity baseline **\u9010\u4e00\u81f4**\u3002"
+            },
+            {
+              "line": 91,
+              "text": "- \u8bf4\u660e:`crates/prune/prune/src/segments/static_file/{headers,receipts,transactions,mod}.rs` \u4e4b\u6240\u4ee5\u5728 diff \u91cc\"\u50cf\u65b0\u589e\",\u662f\u56e0\u4e3a reth 2.3.0 \u91cd\u6784 prune \u65f6**\u5220\u6389\u4e86\u6574\u4e2a `static_file/` \u5b50\u76ee\u5f55**,squash checkpoint \u5403\u4e86\u8be5\u5220\u9664,keep-gravity \u8fd8\u539f\u65f6\u628a\u5b83\u4eec\u6062\u590d\u56de\u6765\u2014\u2014\u662f\u5fe0\u5b9e\u8fd8\u539f(`headers.rs` \u4e0e baseline \u5b57\u8282\u4e00\u81f4),\u975e\u51ed\u7a7a\u65b0\u589e\u3002"
+            },
+            {
+              "line": 98,
+              "text": "| `reth-prune` | `reth-chainspec`\u3001`alloy-eips` | `builder.rs`/`set.rs`/`user/transaction_lookup.rs` | Cargo.toml \u6574\u4f53\u8fd8\u539f baseline(src 100% baseline)\u3002\u987a\u5e26\u5220\u6389\u672a\u7528\u7684 `reth-storage-api`/`reth-stages-types` |"
+            },
+            {
+              "line": 107,
+              "text": "- `cargo metadata` \u5931\u8d25\u4e8e `reth-primitives was not found in workspace.dependencies`\u2014\u2014\u6839 `[workspace.dependencies]` \u7f3a\u5931\u7ea6 20 \u4e2a\u88ab\u5f15\u7528\u7684 dep \u5b9a\u4e49:\u6838\u5fc3\u7684 `reth-primitives`\u3001`reth-trie-sparse-parallel`\u3001`reth-engine-service`\u3001`reth-ress-protocol`\u3001`alloy-sol-macro`,\u4ee5\u53ca\u6574\u5957 optimism/op-alloy(`op-revm`/`reth-optimism-*`/`op-alloy-*`)\u3002\u8fd9\u662f workspace/Cargo.lock \u89e3\u51b3(`7490ae4ca6` + \""
+            }
+          ]
+        },
+        {
+          "path": "docs/merge-v2.3.0/storage-db-and-mdbx.md",
+          "matches": [
+            {
+              "line": 25,
+              "text": "  - `671680af37` perf(state_root): nested-trie + `NestedStateRoot` (#149) \u2014 init.rs \u5f15\u5165 `TrieWriterV2` + `reth_trie_parallel::nested_hash`"
+            },
+            {
+              "line": 59,
+              "text": "| db-models/accounts.rs | keep-gravity + \u53e0\u52a0 | =baseline \u9010\u5b57\u8282 | \u4e3b\u4f53\u4e00\u81f4 \u2713;\u5efa\u8bae\u53e0\u52a0\u7684 `ValueWithSubKey` \u5e76\u5b58\u4e0e\u5c3e\u90e8 `impl_compression_for_compact!` \u672a\u505a(\u4e0a\u6e38\u7248\u7559\u5728\u5b64\u513f `db-models/src/storage.rs`) |"
+            },
+            {
+              "line": 115,
+              "text": "- `a12454d2e` (#23654, perf: prebind cursor operation metrics) \u5c06 `metrics` \u5b57\u6bb5\u7531 `Option<Arc<DatabaseEnvMetrics>>` \u6539\u4e3a `Option<TableOperationMetrics>`\uff1b`record_operation` \u6539\u4e3a\u6309 `operation.index()` \u76f4\u63a5\u7d22\u5f15\uff1b\u4ece `std::` import \u4e2d\u79fb\u9664 `sync::Arc`\u3002"
+            },
+            {
+              "line": 310,
+              "text": "- \u5728\u6587\u4ef6\u5c3e\u8ffd\u52a0 `#[cfg(any(test, feature = \"reth-codec\"))] reth_codecs::impl_compression_for_compact!(AccountBeforeTx);`\u3002"
+            },
+            {
+              "line": 314,
+              "text": "- baseline \u6587\u4ef6\u5c3e**\u6ca1\u6709** `impl_compression_for_compact!`\u3002"
+            },
+            {
+              "line": 318,
+              "text": "**\u89e3\u51b3\u65b9\u6848\u5efa\u8bae\uff1a** **keep-gravity**\uff08\u5916\u52a0\u4e0a\u6e38 `impl_compression_for_compact!` \u884c\uff09"
+            },
+            {
+              "line": 322,
+              "text": "- \u91c7\u7eb3\u4e0a\u6e38\u5c3e\u90e8 `#[cfg(any(test, feature = \"reth-codec\"))] reth_codecs::impl_compression_for_compact!(AccountBeforeTx);` \u2014 \u7eaf\u53e0\u52a0\uff0c\u542f\u7528 db-api codec \u6d4b\u8bd5\u6240\u9700 Compact-compression \u94a9\u5b50\uff1b\u4e0a\u6e38 worktree \u5df2\u5408\u5165\u8be5\u884c\uff0cverify via `tail crates/storage/db-models/src/accounts.rs`\u3002"
+            },
+            {
+              "line": 337,
+              "text": "8. `crates/storage/db-models/src/accounts.rs` \u2014 \u540c\u65f6\u5b9e\u73b0 `SubkeyContainedValue`\uff08gravity\uff09\u4e0e `ValueWithSubKey`\uff08\u4e0a\u6e38\uff09\uff1b\u63a5\u7eb3\u5c3e\u90e8 `impl_compression_for_compact!`\u3002"
+            }
+          ]
+        },
+        {
+          "path": "docs/merge-v2.3.0/net-prune-misc-crates.md",
+          "matches": [
+            {
+              "line": 1,
+              "text": "# net-prune-misc-crates"
+            },
+            {
+              "line": 9,
+              "text": "> \u672c\u6587\u5199\u4e8e f89d9d4e23(storage/trie/prune \u6574\u4f53\u8fd8\u539f baseline)\u4e4b\u524d\u3002\u6309 2026-07-05"
+            },
+            {
+              "line": 17,
+              "text": "| `prune/segments/mod.rs` | **0**(diff-vs-baseline = 0) | \u2705 \u5df2\u7531 f89d9d4e23 \u6574\u4f53\u8fd8\u539f\u843d\u5730,\u672c\u6587\u5efa\u8bae\u88ab\"\u7eaf baseline\"\u53d6\u4ee3(\u00a7\u89c1\u4e0b) |"
+            },
+            {
+              "line": 18,
+              "text": "| `prune/segments/user/history.rs` | **0**(diff = 0) | \u2705 \u540c\u4e0a,`delete_by_key`+`seek` \u4fdd\u7559\u5373\u6210\u4e8b\u5b9e |"
+            },
+            {
+              "line": 35,
+              "text": "- **\u51b2\u7a81\u5206\u5e03\uff1a** 2 \u4e2a Cargo manifest\uff081 UU + 1 AU \"rename \u5e7b\u5f71\"\uff09\u30015 \u4e2a net crates\uff08discv4\u3001nat\u3001tx fetcher\u3001tx gossip \u6d4b\u8bd5\uff09\u30012 \u4e2a prune segments\u30011 \u4e2a exex \u6d4b\u8bd5\u30012 \u4e2a era \u6587\u4ef6\u30013 \u4e2a stages/api \u6838\u5fc3\u6587\u4ef6"
+            },
+            {
+              "line": 37,
+              "text": "  - `a1d7365bd6` `feat(rocksdb): Integrating RocksDB into Reth (#212)` \u2014 gravity-storage v1 RocksDB \u63a5\u5165\uff1b\u5e26\u6765 `UnifiedStorageWriter::commit*`\u3001`insert_historical_block` + `commit_view` \u6d4b\u8bd5\u5f62\u6001\u3001prune cursor \u7ed5\u8fc7\u7684\u96cf\u5f62\u3002"
+            },
+            {
+              "line": 38,
+              "text": "  - `3ee6ac039e` `fix(trie): fix merkle stage of history sync (#246)` \u2014 \u5728 `prune/segments/user/history.rs` \u4e2d\u628a `cursor.delete_current()` \u66ff\u6362\u4e3a `cursor.delete_by_key(RawKey::new(prev_key))` + `cursor.seek(...)` \u6062\u590d\uff0c\u662f RocksDB WriteBatch cursor \u8bed\u4e49\u7684\u5173\u952e\u7ed5\u8fc7\u3002"
+            },
+            {
+              "line": 47,
+              "text": "  3. `crates/prune/prune/src/segments/mod.rs` \u9876\u5c42 `pub use` / import \u96c6\u5408 \u2192 `crates/prune/prune/src/segments/user/history.rs`\uff08\u4ec5\u6a21\u5757\u5185\uff09\u3002"
+            },
+            {
+              "line": 70,
+              "text": "- \u4fdd\u7559 `reth-primitives.workspace = true`\uff08gravity-storage RocksDB provider \u4ecd\u7136 import `reth_primitives::Account` / `Receipt` \u7684 re-export\uff09\u3002"
+            },
+            {
+              "line": 104,
+              "text": "- `e7da50a502` perf(discv4): trigger immediate lookup on first bootnode pong (#22551) \u2014\u2014 \u65b0\u589e `pending_lookup_reset` \u5b57\u6bb5 + \u9996\u4e2a bootnode pong \u65f6\u91cd\u7f6e lookup interval"
+            },
+            {
+              "line": 108,
+              "text": "- `390def905d` perf: use sort_unstable in CLI, networking, and RPC hot paths (#23364) \u2014\u2014 `sort_by_key` \u2192 `sort_unstable_by_key`"
+            },
+            {
+              "line": 135,
+              "text": "- `0363b5cce6` perf(network): use FbBuildHasher for transaction manager maps (#24497) \u2014\u2014 \u6240\u6709 `LruCache<TxHash>` / `LruMap<TxHash, ...>` / `LruCache<PeerId>` \u5207\u5230 `FbBuildHasher<32>` / `FbBuildHasher<64>`\uff0c`LruMap::new(...)` \u2192 `LruMap::with_hasher(..., Default::default())`"
+            },
+            {
+              "line": 170,
+              "text": "### `crates/prune/prune/src/segments/mod.rs`"
+            },
+            {
+              "line": 171,
+              "text": "**\u6a21\u5757\uff1a** Prune segment trait + static_file pruning re-export + \u6d4b\u8bd5\u811a\u624b\u67b6\u3002"
+            },
+            {
+              "line": 174,
+              "text": "- `058ffdc21d` feat(storage): write headers and transactions only to static files (#18681) + `3883df3e69` chore: remove db pruning of header/txs segments (#19260) + `5a9c7703d3` chore: rm `StaticFileReceipts` pruner (#19265) + `b9969c5b1c` (#22954) \u2014\u2014 \u5220\u9664 `static_file` \u5b50\u6a21\u5757\u7684 `pub use Headers/Receipts/Transactions` re-export"
+            }
+          ]
+        },
+        {
+          "path": "crates/storage/rpc-provider/README.md",
+          "matches": [
+            {
+              "line": 52,
+              "text": "- `reth_rpc_support`: When enabled (default), uses Reth-specific RPC methods for better performance:"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "repo": "ava-labs/avalanchego",
+      "commit": "f27fa6712b340a552376fd7ecdf2de15307cd7bd",
+      "matching_document_count": 56,
+      "reviewed_documents": []
+    },
+    {
+      "repo": "KiiChain/kiichain",
+      "commit": "85d9352541cb7d600e8312bbe0cd51bbe3ca2c0d",
+      "matching_document_count": 10,
+      "reviewed_documents": [
+        {
+          "path": "README.md",
+          "matches": [
+            {
+              "line": 38,
+              "text": "- **High Performance** - Up to 12,000 TPS with ~1 second block times"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "repo": "circlefin/arc-node",
+      "commit": "6e764023ee6515fe70573e123ed2db912a7207b4",
+      "matching_document_count": 19,
+      "reviewed_documents": [
+        {
+          "path": "crates/snapshots/README.md",
+          "matches": [
+            {
+              "line": 1,
+              "text": "# arc-snapshots"
+            },
+            {
+              "line": 3,
+              "text": "Download and restore Arc node snapshots."
+            },
+            {
+              "line": 8,
+              "text": "`arc-snapshots` restores both."
+            },
+            {
+              "line": 10,
+              "text": "Published snapshots use reth's storage v2 format. Rather than shipping the"
+            },
+            {
+              "line": 11,
+              "text": "execution layer as one compressed archive, it publishes a manifest listing each"
+            },
+            {
+              "line": 13,
+              "text": "snapshot instead of all of it. The consensus layer is still a single `.tar.lz4`"
+            },
+            {
+              "line": 14,
+              "text": "archive. The rest of this document simply calls these snapshots."
+            },
+            {
+              "line": 20,
+              "text": "- **Manifest** \u2014 when the execution snapshot is a reth manifest (a URL whose"
+            },
+            {
+              "line": 25,
+              "text": "- **Archive** \u2014 when the execution snapshot is a single `.tar.lz4` archive,"
+            },
+            {
+              "line": 26,
+              "text": "  both layers are restored by arc-snapshots itself, with no dependency on"
+            },
+            {
+              "line": 41,
+              "text": "## `arc-snapshots` CLI"
+            },
+            {
+              "line": 43,
+              "text": "Restore both layers, resolving the latest snapshot for the chain automatically:"
+            },
+            {
+              "line": 46,
+              "text": "arc-snapshots download --chain arc-testnet --el-profile full"
+            },
+            {
+              "line": 52,
+              "text": "deployment that omits it fails with an error naming the missing `v2Snapshots`"
+            },
+            {
+              "line": 56,
+              "text": "To point at specific snapshots instead of resolving them, pass both URLs. The"
+            }
+          ]
+        },
+        {
+          "path": "README.md",
+          "matches": [
+            {
+              "line": 19,
+              "text": "Arc is an open EVM-compatible layer 1 built on [Malachite](https://github.com/circlefin/malachite) consensus, delivering the performance and reliability needed to meet the new demands of the global internet economy. "
+            },
+            {
+              "line": 202,
+              "text": "[Reth / Paradigm](https://github.com/paradigmxyz/reth) - Reth is an EVM execution client that is used in Arc\u2019s execution layer via the Reth SDK. We thank the Paradigm team for continuing to push the envelope with Reth and for their continued emphasis on performance, extensibility, and customization, as well as their commitment to open source. Addit"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "repo": "category-labs/monad",
+      "commit": "83f8bc65ca725a77f7b6ead50756eed90fa28691",
+      "matching_document_count": 6,
+      "reviewed_documents": []
+    },
+    {
+      "repo": "sei-protocol/sei-chain",
+      "commit": "efa1e663467ee973e95f844f7505a6d218cadab0",
+      "matching_document_count": 43,
+      "reviewed_documents": [
+        {
+          "path": "sei-cosmos/snapshots/README.md",
+          "matches": [
+            {
+              "line": 1,
+              "text": "# State Sync Snapshotting"
+            },
+            {
+              "line": 3,
+              "text": "The `snapshots` package implements automatic support for Tendermint state sync"
+            },
+            {
+              "line": 5,
+              "text": "to simply fetch a recent snapshot of the application state instead of fetching"
+            },
+            {
+              "line": 23,
+              "text": "Briefly, the Cosmos SDK takes state snapshots at regular height intervals given"
+            },
+            {
+              "line": 24,
+              "text": "by `state-sync.snapshot-interval` and stores them as binary files in the"
+            },
+            {
+              "line": 25,
+              "text": "filesystem under `<node_home>/data/snapshots/`, with metadata in a LevelDB database"
+            },
+            {
+              "line": 26,
+              "text": "`<node_home>/data/snapshots/metadata.db`. The number of recent snapshots to keep are given by"
+            },
+            {
+              "line": 27,
+              "text": "`state-sync.snapshot-keep-recent`."
+            },
+            {
+              "line": 29,
+              "text": "Snapshots are taken asynchronously, i.e. new blocks will be applied concurrently"
+            },
+            {
+              "line": 30,
+              "text": "with snapshots being taken. This is possible because IAVL supports querying"
+            },
+            {
+              "line": 31,
+              "text": "immutable historical heights. However, this requires `state-sync.snapshot-interval`"
+            },
+            {
+              "line": 32,
+              "text": "to be a multiple of `pruning-keep-every`, to prevent a height from being removed"
+            },
+            {
+              "line": 33,
+              "text": "while it is being snapshotted."
+            },
+            {
+              "line": 36,
+              "text": "`ListSnapshots` to list available local snapshots and `LoadSnapshotChunk` to"
+            },
+            {
+              "line": 37,
+              "text": "load a binary snapshot chunk. When the local node is being state synced,"
+            }
+          ]
+        },
+        {
+          "path": "README.md",
+          "matches": [
+            {
+              "line": 8,
+              "text": "**Sei** is a high-performance, low-fee, delegated proof-of-stake blockchain designed for developers. It supports optimistic parallel execution of both EVM and CosmWasm, opening up new design possibilities. With unique optimizations like twin turbo consensus and SeiDB, Sei ensures consistent 400ms block times and a transaction throughput that\u2019s orde"
+            },
+            {
+              "line": 20,
+              "text": "- SeiDB: This major upgrade allows Sei to handle the much higher rate of data storage, reads and writes which become extremely important for a high performance blockchain."
+            },
+            {
+              "line": 21,
+              "text": "- Interoperable EVM: This allows existing developers in the Ethereum ecosystem to deploy their applications, tooling and infrastructure to Sei with no changes, while benefiting from the 100x performance improvements offered by Sei."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "repo": "SeismicSystems/seismic-reth",
+      "commit": "faa3a30c430676dfc2d0224fe2bcce18bf0e1e88",
+      "reviewed_paths": [
+        "README.md",
+        "docs/seismic/features.md",
+        "crates/seismic/txpool/README.md",
+        "crates/seismic/rpc/README.md",
+        "crates/prune/prune/src/segments/user/transaction_lookup.rs",
+        "crates/storage/provider/src/providers/static_file/writer.rs",
+        "crates/storage/db-api/src/cursor.rs",
+        "crates/ethereum/primitives/src/receipt.rs",
+        "crates/engine/tree/src/backup.rs",
+        "crates/rpc/rpc-builder/src/body_auth.rs"
+      ],
+      "disposition": "Applicable storage mechanisms corroborate #326/#327/#329/#332; auth/backup/pool persistence map to #60/#135/#165; privacy and token gas rules skipped as protocol conflicts."
+    }
+  ],
+  "closing_area_map": [
+    {
+      "area": "pruning and retention",
+      "owners": [
+        326,
+        177
+      ],
+      "result": "No additional unit after lookup pruning was isolated."
+    },
+    {
+      "area": "static files, compression and logical codecs",
+      "owners": [
+        327,
+        328,
+        332,
+        194
+      ],
+      "result": "Writer lifetime/recovery/receipt codec filed; frozen compression already tracked."
+    },
+    {
+      "area": "state layout, caches, pages and compaction",
+      "owners": [
+        329,
+        331,
+        135,
+        145,
+        149,
+        176,
+        311
+      ],
+      "result": "Bounded mutations and optional preimages filed; duplication and engine tuning retain existing owners."
+    },
+    {
+      "area": "log query read amplification",
+      "owners": [
+        333,
+        258,
+        276
+      ],
+      "result": "Persistent index distinct from bloom rejection and serialization work; no additional index variant issue."
+    },
+    {
+      "area": "disk admission, backup and shutdown",
+      "owners": [
+        330,
+        11,
+        12,
+        135,
+        200,
+        225
+      ],
+      "result": "Shared admission filed; clean-close flush verified present; backup engine consistency already tracked."
+    },
+    {
+      "area": "execution pipeline and resource telemetry",
+      "owners": [
+        13,
+        41,
+        226,
+        244,
+        245,
+        246,
+        247,
+        248,
+        249,
+        250,
+        259,
+        260
+      ],
+      "result": "Existing issues own these improvements and measurement; no duplicate created."
+    },
+    {
+      "area": "new client protocol extensions",
+      "owners": [],
+      "result": "Seismic confidential storage, encrypted transactions and token gas choices conflict with XDC; two explicit exclusions."
+    }
+  ],
+  "final_pass": {
+    "new_gaps": 0,
+    "new_candidates": 0,
+    "new_selected_competitors": 0,
+    "open_ledger_entries": 0
+  }
+}

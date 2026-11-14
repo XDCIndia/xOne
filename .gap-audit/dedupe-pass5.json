@@ -1,0 +1,171 @@
+{
+  "date": "2026-11-14",
+  "snapshot": "322 issue/PR records; 209 issues searched locally by title and body",
+  "queries": [
+    {
+      "query": "TxLookup in:title",
+      "searched_states": "all",
+      "results": []
+    },
+    {
+      "query": "segment writer in:title",
+      "searched_states": "all",
+      "results": []
+    },
+    {
+      "query": "quarantine in:title",
+      "searched_states": "all",
+      "results": []
+    },
+    {
+      "query": "bounded deletion in:title",
+      "searched_states": "all",
+      "results": []
+    },
+    {
+      "query": "preimage in:title",
+      "searched_states": "all",
+      "results": []
+    },
+    {
+      "query": "group commit in:title",
+      "searched_states": "all",
+      "results": []
+    },
+    {
+      "query": "disk guard in:title",
+      "searched_states": "all",
+      "results": []
+    },
+    {
+      "query": "receipt storage in:title",
+      "searched_states": "all",
+      "results": []
+    },
+    {
+      "query": "log index in:title",
+      "searched_states": "all",
+      "results": [
+        {
+          "number": 276,
+          "title": "[GAP-0079] Serialize block receipts with one cumulative log-index pass",
+          "url": "https://github.com/XDCIndia/xOneRS/issues/276"
+        },
+        {
+          "number": 232,
+          "title": "[GAP-0059] Chain-data exporter: stream blocks, receipts, logs and traces to Kafka (reorg-aware, resumable), for explorers and indexers",
+          "url": "https://github.com/XDCIndia/xOneRS/issues/232"
+        }
+      ]
+    },
+    {
+      "query": "pruning in:title",
+      "searched_states": "all",
+      "results": [
+        {
+          "number": 177,
+          "title": "[GAP-0026] History pruning: configurable retention of bodies, receipts and logs, and pruning of an existing datadir",
+          "url": "https://github.com/XDCIndia/xOneRS/issues/177"
+        }
+      ]
+    },
+    {
+      "query": "disk in:title",
+      "searched_states": "all",
+      "results": [
+        {
+          "number": 145,
+          "title": "state: disk-backed state (flat, trie, streamed snap install) for bounded memory on Apothem",
+          "url": "https://github.com/XDCIndia/xOneRS/issues/145"
+        },
+        {
+          "number": 225,
+          "title": "[GAP-0053] Separate directory for frozen history segments (--datadir.ancient / --datadir.static-files) so history can sit on cheaper disk",
+          "url": "https://github.com/XDCIndia/xOneRS/issues/225"
+        },
+        {
+          "number": 200,
+          "title": "[GAP-0045] Resource budgets as measured targets: RSS, CPU and disk ceilings per node type, a low-resource profile and a CI regression soak",
+          "url": "https://github.com/XDCIndia/xOneRS/issues/200"
+        },
+        {
+          "number": 16,
+          "title": "ops: bounded queues, priority isolation, RPC/peer budgets and log/disk limits",
+          "url": "https://github.com/XDCIndia/xOneRS/issues/16"
+        }
+      ]
+    },
+    {
+      "query": "recovery in:title",
+      "searched_states": "all",
+      "results": [
+        {
+          "number": 11,
+          "title": "storage: crash-safe publication and recovery across MDBX and static files, with fault injection",
+          "url": "https://github.com/XDCIndia/xOneRS/issues/11"
+        },
+        {
+          "number": 250,
+          "title": "perf: sender recovery in decode_all on every core, without the 8-thread and 256-chunk limits",
+          "url": "https://github.com/XDCIndia/xOneRS/issues/250"
+        },
+        {
+          "number": 33,
+          "title": "chain: block import, fork choice, reorg, set-head and restart recovery (no head=0 start, committed-block floor)",
+          "url": "https://github.com/XDCIndia/xOneRS/issues/33"
+        },
+        {
+          "number": 97,
+          "title": "node: acquire exclusive datadir ownership before recovery can truncate live files",
+          "url": "https://github.com/XDCIndia/xOneRS/issues/97"
+        },
+        {
+          "number": 243,
+          "title": "perf: ecrecover on libsecp256k1 (recovery is 71% of replay time on k256)",
+          "url": "https://github.com/XDCIndia/xOneRS/issues/243"
+        },
+        {
+          "number": 139,
+          "title": "Full sync throughput on dense ranges: header and QC verified twice, per-block recovery threads, full-state checkpoint every 1,000 blocks, no fetch overlap (geth 22.2 blocks/s on 13,000..45,974)",
+          "url": "https://github.com/XDCIndia/xOneRS/issues/139"
+        }
+      ]
+    },
+    {
+      "query": "cursor in:title",
+      "searched_states": "all",
+      "results": []
+    },
+    {
+      "query": "preimage in:title",
+      "searched_states": "all",
+      "results": []
+    },
+    {
+      "query": "compact receipt in:title",
+      "searched_states": "all",
+      "results": []
+    },
+    {
+      "query": "log index in:title",
+      "searched_states": "all",
+      "results": [
+        {
+          "number": 276,
+          "title": "[GAP-0079] Serialize block receipts with one cumulative log-index pass",
+          "url": "https://github.com/XDCIndia/xOneRS/issues/276"
+        },
+        {
+          "number": 232,
+          "title": "[GAP-0059] Chain-data exporter: stream blocks, receipts, logs and traces to Kafka (reorg-aware, resumable), for explorers and indexers",
+          "url": "https://github.com/XDCIndia/xOneRS/issues/232"
+        }
+      ]
+    },
+    {
+      "query": "file handles in:title",
+      "searched_states": "all",
+      "results": []
+    }
+  ]
+}

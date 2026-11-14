@@ -1,0 +1,1739 @@
+[
+  {
+    "key": "finality-tags",
+    "title": "Resolve finalized block queries from the committed XDPoS head",
+    "area": "rpc",
+    "priority": "P1",
+    "ours": [
+      "crates/xone-rpc/src/types.rs",
+      "crates/xone-rpc/src/eth.rs",
+      "crates/xone-rpc/src/api.rs",
+      "crates/xone-node/src/services/rpc.rs"
+    ],
+    "observation": "`parse_tag` maps latest, pending, safe and finalized to the same head. The production ChainApi already exposes the QC-committed height through finalized(), but selector parsing does not use it. A request for finalized can therefore select a later, uncommitted block.",
+    "sources": [
+      [
+        "XinFinOrg/XDPoSChain",
+        "eth/api_backend.go"
+      ],
+      [
+        "ethereum/go-ethereum",
+        "eth/api_backend.go"
+      ],
+      [
+        "paradigmxyz/reth",
+        "crates/storage/storage-api/src/block_id.rs"
+      ]
+    ],
+    "fix": [
+      "Preserve block tags until the chain-aware resolver can distinguish latest from committed finality. Use one coherent chain view for resolution and reads.",
+      "Resolve finalized using the committed XDPoS V2 block. Define the V1 and no-commit errors from pinned geth-XDC vectors. Never substitute head when finality is unavailable.",
+      "Pin safe behavior to the XDC oracle. XDPoSChain does not expose Ethereum safe-head semantics; reject unsupported tags rather than inventing consensus rules.",
+      "Use the resolver for block, state, log-range and fee-history queries. Preserve existing XDC pending behavior; pending is intentionally mapped to latest in the public reference."
+    ],
+    "accept": [
+      "With head 105 and committed block 102, finalized resolves to 102 across affected methods.",
+      "V1, absent commit, restart and a reorg above the committed floor have explicit vectors.",
+      "The fix changes RPC selection only; it does not change fork choice or the committed floor."
+    ],
+    "related": "#42 owns general RPC parity; #33 owns fork choice. Neither records this selector defect.",
+    "why": "Consumers use finality tags to decide whether a result can still change. Returning the current head overstates finality.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "canonical-selectors",
+    "title": "Honor requireCanonical and validate EIP-1898 block selectors",
+    "area": "rpc",
+    "priority": "P1",
+    "ours": [
+      "crates/xone-rpc/src/types.rs",
+      "crates/xone-rpc/src/eth.rs"
+    ],
+    "observation": "`BlockRef::Hash` contains no requireCanonical flag. The object parser accepts blockHash with blockNumber and selects the hash. `state_at` resolves the stored hash without checking whether it is canonical.",
+    "sources": [
+      [
+        "XinFinOrg/XDPoSChain",
+        "rpc/types.go"
+      ],
+      [
+        "XinFinOrg/XDPoSChain",
+        "eth/api_backend.go"
+      ],
+      [
+        "ethereum/go-ethereum",
+        "eth/api_backend.go"
+      ],
+      [
+        "paradigmxyz/reth",
+        "crates/storage/provider/src/providers/consistent.rs"
+      ]
+    ],
+    "fix": [
+      "Represent the optional canonicality requirement in the typed selector and reject mutually exclusive or mistyped fields.",
+      "Check the requested hash against the canonical hash at its height when requireCanonical is true. Hold the same read view through the query.",
+      "Keep allowed side-branch queries and typed unsupported-history errors when canonicality is not required. Match the pinned oracle error contract."
+    ],
+    "accept": [
+      "A retained side-branch hash with requireCanonical=true is rejected.",
+      "Both selector fields, invalid boolean values and invalid hash/quantity encodings are rejected.",
+      "A concurrent reorg cannot change the canonicality decision between validation and the state read."
+    ],
+    "related": "#100 pins state during reads; this adds selector validation and canonicality, not another state-pinning implementation.",
+    "why": "Wallets and indexers use requireCanonical to avoid combining canonical metadata with state from an orphaned block.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "http-cors",
+    "title": "Wire http.corsdomain through HTTP preflight and response headers",
+    "area": "rpc",
+    "priority": "P2",
+    "ours": [
+      "bin/xone/src/flags.rs",
+      "crates/xone-node/src/config.rs",
+      "crates/xone-node/src/services/rpc.rs",
+      "crates/xone-rpc/src/transport.rs"
+    ],
+    "observation": "`http.corsdomain` populates Config.http.cors, but the HTTP service constructs an empty origins policy and never consumes that list. `http_handle` rejects every non-POST request, including OPTIONS, and emits no CORS headers.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "node/rpcstack.go"
+      ],
+      [
+        "paradigmxyz/reth",
+        "crates/rpc/rpc-builder/src/cors.rs"
+      ],
+      [
+        "besu-eth/besu",
+        "ethereum/api/src/main/java/org/hyperledger/besu/ethereum/api/jsonrpc/JsonRpcHttpService.java"
+      ]
+    ],
+    "fix": [
+      "Carry the HTTP CORS policy separately from WebSocket Origin validation.",
+      "Handle bounded OPTIONS preflight and emit matching Access-Control-Allow-* and Vary headers on permitted responses.",
+      "Keep the empty default disabled. Specify wildcard, null-origin and credential behavior explicitly. Apply Host checks, namespace policy and authentication independently."
+    ],
+    "accept": [
+      "A browser-origin POST and its preflight succeed only for configured origins.",
+      "Denied origins receive no permission headers. Vary: Origin prevents cross-origin cache reuse.",
+      "Preflight does not execute an RPC method or expose a disabled namespace."
+    ],
+    "related": "#60 owns transport authorization and #171 owns RPC limits. This issue fixes the existing CORS flag that is not wired to HTTP.",
+    "why": "A browser application cannot use the configured RPC endpoint even when its origin is explicitly allowed.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "fee-history",
+    "title": "Complete eth_feeHistory percentile and next-block fee semantics",
+    "area": "rpc",
+    "priority": "P1",
+    "ours": [
+      "crates/xone-rpc/src/eth.rs",
+      "spec/rpc/scope-adr-008.md",
+      "crates/xone-evm/src/fees.rs"
+    ],
+    "observation": "`fee_history` silently drops fractional percentiles, does not validate their order or range, converts zero count to one, narrows gas values through u32, and repeats the last base fee instead of evaluating the next block fee rule. Missing receipts become an empty vector.",
+    "sources": [
+      [
+        "XinFinOrg/XDPoSChain",
+        "eth/gasprice/feehistory.go"
+      ],
+      [
+        "ethereum/go-ethereum",
+        "eth/gasprice/feehistory.go"
+      ],
+      [
+        "paradigmxyz/reth",
+        "crates/rpc/rpc-eth-api/src/helpers/fee.rs"
+      ]
+    ],
+    "fix": [
+      "Parse and validate numeric percentiles without silently discarding values. Pin ordering, count and error behavior to geth-XDC.",
+      "Evaluate the child-height XDC fee rule for the final baseFeePerGas entry. Do not import Ethereum market fees into an XDC chain.",
+      "Compute ratios from the full gas values and return a typed history/storage error when required receipts are unavailable.",
+      "Replace the documented integer-only and repeated-fee shortcuts with the implemented contract."
+    ],
+    "accept": [
+      "Vectors cover fractional, descending, repeated, negative and above-100 percentiles, plus zero count.",
+      "A range ending immediately before an XDC fee-rule change returns the correct next fee.",
+      "Large gas fields retain correct ratios; missing receipts cannot produce invented reward percentiles."
+    ],
+    "related": "#42 is the parent RPC scope; this issue replaces explicit shortcuts in the current feeHistory implementation.",
+    "why": "Fee estimators need valid percentile rewards and the next block fee. Silent input changes can produce plausible but incorrect pricing.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "log-bloom",
+    "title": "Skip receipt reads when header blooms exclude an eth_getLogs match",
+    "area": "rpc",
+    "priority": "P2",
+    "ours": [
+      "crates/xone-rpc/src/eth.rs",
+      "crates/xone-rpc/src/subscriptions.rs",
+      "crates/xone-rpc/src/api.rs"
+    ],
+    "observation": "`get_logs` loads each selected block and its receipts before matching addresses and topics. The block header bloom is available but is not used to reject impossible matches.",
+    "sources": [
+      [
+        "XinFinOrg/XDPoSChain",
+        "eth/filters/filter.go"
+      ],
+      [
+        "ethereum/go-ethereum",
+        "eth/filters/filter.go"
+      ],
+      [
+        "paradigmxyz/reth",
+        "crates/rpc/rpc/src/eth/filter.rs"
+      ]
+    ],
+    "fix": [
+      "Add a header-bloom negative test for the same address/topic expression used by the exact filter.",
+      "Fetch and decode receipts only for possible matches. Keep exact matching because bloom positives are not proof.",
+      "Preserve retention checks, cancellation, canonical order, result limits and blockHash semantics. No new persistent index is required for this unit."
+    ],
+    "accept": [
+      "Differential fixtures return identical ordered logs with pruning enabled and disabled.",
+      "A sparse filter demonstrably performs fewer receipt reads using an instrumented backend.",
+      "Wildcard, OR-topic, empty-filter and bloom false-positive cases remain correct."
+    ],
+    "related": "#99 fixed range overflow; #153 adds polling filters. Neither adds bloom pruning to this existing method.",
+    "why": "Sparse explorer queries currently pay receipt IO and decoding cost for every block in the requested range.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "state-prefetch",
+    "title": "Add bounded read-only state prefetch before block execution",
+    "area": "perf",
+    "priority": "P2",
+    "ours": [
+      "crates/xone-state/src/provider.rs",
+      "crates/xone-sync/src/mdbx/diskflat.rs",
+      "crates/xone-executor/src/lib.rs",
+      "crates/xone-node/src/services/core.rs"
+    ],
+    "observation": "StateRead mentions read-only prewarming as an intended use, but the repository has no prefetch worker. Disk-backed account and storage reads are demand driven, while run_block executes transactions in order.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "core/state_prefetcher.go"
+      ],
+      [
+        "XinFinOrg/XDPoSChain",
+        "core/state_prefetcher.go"
+      ],
+      [
+        "lambdaclass/ethrex",
+        "crates/blockchain/prewarm.rs"
+      ]
+    ],
+    "fix": [
+      "Measure cold and warm disk-backed execution before adding workers.",
+      "Use a parent-state-pinned read-only view to warm bounded account, storage and code caches from candidate transactions.",
+      "Bound workers, queued transactions, reads and cache bytes. Cancel stale work on reorg, parent change, shutdown or execution completion.",
+      "Keep canonical writes and publication on the existing execution/import path. Make prefetch optional and treat a miss as a normal read."
+    ],
+    "accept": [
+      "Enabled and disabled execution produce identical state, receipts, logs and gas across fork and special-transaction fixtures.",
+      "Cancellation releases every state pin and worker; memory remains within its configured budget.",
+      "Report disk-backed latency, IO and RSS before/after, including a workload with no benefit."
+    ],
+    "related": "#248 caches analyzed bytecode; #246 hashes tries in parallel; #247 overlaps commit. This issue warms state reads and does not duplicate those changes.",
+    "why": "Disk latency can stall otherwise sequential execution. Competitor prefetchers move optional reads ahead of the critical path without changing consensus.",
+    "loop": "Warm only while the parent view remains valid. Discard stale work; never retry without a fresh parent and a budget."
+  },
+  {
+    "key": "parallel-evm",
+    "title": "Prototype deterministic parallel transaction execution with serial fallback",
+    "area": "perf",
+    "priority": "P3",
+    "ours": [
+      "crates/xone-executor/src/lib.rs",
+      "crates/xone-executor/src/overlay.rs",
+      "crates/xone-state/src/provider.rs",
+      "docs/reviews/2026-11-10-architecture-scale-pq-review.md"
+    ],
+    "observation": "`run_block` executes its transaction loop sequentially. The accepted scale review calls for a later parallel-EVM prototype behind serial-equivalence and bounded-memory gates. No such executor is currently present.",
+    "sources": [
+      [
+        "Galxe/gravity-reth",
+        "crates/ethereum/evm/src/parallel_execute.rs"
+      ],
+      [
+        "category-labs/monad",
+        "category/execution/ethereum/execute_block.cpp"
+      ],
+      [
+        "sei-protocol/sei-chain",
+        "giga/evmonly/occ.go"
+      ]
+    ],
+    "fix": [
+      "Keep serial execution as the default and correctness oracle. Introduce an opt-in executor interface with per-transaction speculative overlays.",
+      "Track read/write conflicts and validate in block order. Re-execute invalidated work and fall back to serial after a bounded retry budget.",
+      "Preserve XDC special transactions, TRC21 routing, wide balances, native hooks, fork transitions and Amsterdam commitments. Serialize operations that cannot be proven independent.",
+      "Workers must not publish roots or canonical heads. Measure representative independent and highly contended blocks before proposing a default change."
+    ],
+    "accept": [
+      "Serial and parallel paths produce identical receipts, logs, gas, state roots and BAL commitments.",
+      "Conflict, revert, deployment, nonce-chain, special-transaction and fork-boundary fixtures pass.",
+      "Cancellation, repeated conflicts and worker failure yield bounded cleanup or safe serial fallback.",
+      "A replay report includes resource usage and regressions; no throughput claim is accepted without measurements."
+    ],
+    "related": "#7, #10 and #58 provide execution correctness gates. #246 concerns trie hashing, not EVM transaction scheduling.",
+    "why": "Parallel execution is a competitive performance option for independent transactions. It is a research-to-implementation task, not a claim that XDC semantics can be changed.",
+    "loop": "Speculate, validate in block order and retry conflicts within a fixed budget. Use serial fallback when the budget is exhausted."
+  },
+  {
+    "key": "discovery-revalidation",
+    "title": "Revalidate discovery endpoints and replace dead routing-table entries",
+    "area": "p2p",
+    "priority": "P2",
+    "ours": [
+      "crates/xone-net/src/discv4.rs",
+      "crates/xone-node/src/services/net.rs"
+    ],
+    "observation": "Table has no last-bond timestamp or eviction/revalidation state. A full bucket permanently refuses new entries. FindNode accepts a previously stored identity/IP without checking whether its endpoint proof is still recent.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "p2p/discover/table_reval.go"
+      ],
+      [
+        "ethereum/go-ethereum",
+        "p2p/discover/v4_udp.go"
+      ]
+    ],
+    "fix": [
+      "Track bounded endpoint-proof freshness and periodically revalidate routing entries.",
+      "Use a bounded replacement cache when a bucket is full; replace dead entries after verified failure.",
+      "Require a recent endpoint proof before amplified discovery replies and refresh changed endpoints safely. Preserve the XDC ping encoding."
+    ],
+    "accept": [
+      "A full bucket with dead nodes eventually admits verified replacements.",
+      "A stale bond cannot authorize a FindNode response until renewed.",
+      "A simulated clock and packet-loss test prove bounded retries, memory and refresh traffic."
+    ],
+    "related": "#221 persists peers across restarts. This unit manages freshness and replacement while a node is running.",
+    "why": "A long-running node can exhaust its routing table with dead endpoints and continue trusting stale endpoint proofs.",
+    "loop": "Periodically probe a bounded subset. Back off failures, expire proofs and promote verified replacements."
+  },
+  {
+    "key": "discovery-diversity",
+    "title": "Limit subnet concentration in the discovery routing table",
+    "area": "p2p",
+    "priority": "P2",
+    "ours": [
+      "crates/xone-net/src/discv4.rs"
+    ],
+    "observation": "Routing-table insertion checks node identity, bucket distance and count, but has no per-subnet diversity accounting. Many identities on one subnet can occupy the bounded table.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "p2p/discover/table.go"
+      ],
+      [
+        "ethereum/go-ethereum",
+        "p2p/discover/table_test.go"
+      ]
+    ],
+    "fix": [
+      "Add bounded per-bucket and whole-table subnet accounting for public discovery entries.",
+      "Define IPv4 and IPv6 grouping and explicit private-network exceptions without silently granting trust.",
+      "Update counters atomically on insertion, replacement and removal, including endpoint changes."
+    ],
+    "accept": [
+      "Many distinct identities from one subnet cannot exceed its configured allocation.",
+      "Diverse legitimate endpoints remain discoverable.",
+      "Replace/remove/change-address tests preserve counts and never bypass total table bounds."
+    ],
+    "related": "#175 restricts allowed CIDRs and #199 restricts peer identities. Diversity limits address concentration among otherwise allowed discovery entries.",
+    "why": "Identity-count limits alone do not give routing diversity when many public keys share the same network origin.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "ipv6-p2p",
+    "title": "Support explicit IPv6 P2P listeners and valid advertised enode URLs",
+    "area": "p2p",
+    "priority": "P3",
+    "ours": [
+      "crates/xone-node/src/services/net.rs",
+      "crates/xone-node/src/enode.rs",
+      "crates/xone-node/src/config.rs",
+      "bin/xone/src/flags.rs"
+    ],
+    "observation": "NetService chooses only IPv4 loopback or IPv4 unspecified as its listening IP. Its advertised enode string interpolates the host directly, although the Enode formatter already knows how to bracket IPv6 hosts.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "p2p/server.go"
+      ],
+      [
+        "ethereum/go-ethereum",
+        "p2p/enode/urlv4.go"
+      ]
+    ],
+    "fix": [
+      "Add an explicit P2P bind address with validated IPv4/IPv6 behavior for TCP and discovery UDP.",
+      "Construct advertised URLs through the existing Enode formatter, including discport.",
+      "Document dual-stack behavior and keep existing IPv4 defaults compatible. Do not expose RPC as a side effect."
+    ],
+    "accept": [
+      "Two local nodes connect over IPv6 loopback and exchange discovery packets.",
+      "Advertised IPv6 enodes round-trip through the parser.",
+      "IPv4 behavior and separate TCP/UDP ports remain covered."
+    ],
+    "related": "#167 handles NAT and external-address discovery. This unit adds an address-family-capable listener and correct formatting.",
+    "why": "Operators with IPv6-only or dual-stack networks cannot configure a usable inbound P2P endpoint through the current listener.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "dial-lifecycle",
+    "title": "Deduplicate peer redial jobs and bound retry scheduling",
+    "area": "p2p",
+    "priority": "P2",
+    "ours": [
+      "crates/xone-node/src/services/net.rs",
+      "crates/xone-net/src/peers/mod.rs"
+    ],
+    "observation": "Every NetHandle::add_peer call spawns another endless five-second redial loop and appends its handle to a vector. Jobs are not keyed by peer identity, so repeated additions create duplicate long-lived work.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "p2p/dial.go"
+      ]
+    ],
+    "fix": [
+      "Own one dial intent per peer identity and update it idempotently when addresses or trust settings change.",
+      "Bound concurrent dials and retained intents; use bounded backoff with jitter after failures.",
+      "Cancel the corresponding job on removal and all jobs on shutdown. Preserve the repository decision that static peers receive trust treatment."
+    ],
+    "accept": [
+      "Adding one peer repeatedly leaves one managed intent and one active dial.",
+      "A failed endpoint backs off without synchronized retry bursts.",
+      "Removal and shutdown release jobs and prevent later redials."
+    ],
+    "related": "#163 and #42 own admin peer methods. This fixes scheduler ownership underneath those methods rather than creating another removePeer API.",
+    "why": "Duplicate management requests should not consume an increasing number of background tasks or repeated DNS/dial work.",
+    "loop": "Retry a managed intent with bounded backoff. Stop on removal, connection success until disconnect, or node shutdown."
+  },
+  {
+    "key": "producer-price-heap",
+    "title": "Use a heap for block-builder transaction selection",
+    "area": "perf",
+    "priority": "P2",
+    "ours": [
+      "crates/xone-builder/src/producer/build.rs"
+    ],
+    "observation": "The builder keeps one head per sender in a vector and scans all heads in best() for every transaction selection. The source explicitly leaves a binary heap for large pending sets.",
+    "sources": [
+      [
+        "XinFinOrg/XDPoSChain",
+        "miner/ordering.go"
+      ],
+      [
+        "ethereum/go-ethereum",
+        "core/txpool/txorder/ordering.go"
+      ]
+    ],
+    "fix": [
+      "Replace repeated full scans with a heap keyed by the existing effective-tip and tie-break rules.",
+      "Preserve per-sender nonce order, special-transaction handling, Shift and Pop behavior.",
+      "Measure large multi-sender pools and keep small-pool overhead visible."
+    ],
+    "accept": [
+      "The old and new selectors produce identical selections on randomized pools.",
+      "Insufficient funds, gas exhaustion, fee changes and special transactions preserve ordering rules.",
+      "Selection comparisons scale logarithmically per heap update instead of scanning every sender."
+    ],
+    "related": "#43 implements block production. #250 parallelizes sender recovery; neither changes this selection data structure.",
+    "why": "Large pools currently add avoidable CPU work to the time-limited block-building path.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "snap-server-streaming",
+    "title": "Serve snap ranges from bounded database views without rebuilding whole-state snapshots",
+    "area": "sync",
+    "priority": "P1",
+    "ours": [
+      "crates/xone-node/src/services/snap.rs",
+      "crates/xone-snap/src/server.rs",
+      "crates/xone-sync/src/mdbx/mod.rs",
+      "crates/xone-db/src/mdbx.rs"
+    ],
+    "observation": "SnapServer builds Snapshot::from_rows from the entire state and clones the whole code map under store/history reads. It caches two such snapshots. Request cost admission happens after this construction, so the response byte cap does not bound preparation work.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "eth/protocols/snap/handlers.go"
+      ],
+      [
+        "paradigmxyz/reth",
+        "crates/net/network/src/eth_requests.rs"
+      ]
+    ],
+    "fix": [
+      "Add a retained-root read interface that streams bounded account/storage ranges and proofs from persisted state/trie tables.",
+      "Apply peer and global admission before expensive reads or proof construction.",
+      "Bound root metadata, cursor lifetime and proof buffers; avoid whole-state and whole-code-map copies.",
+      "Preserve XDC wide-account encoding, empty-root refusal and cryptographic proof verification."
+    ],
+    "accept": [
+      "Serving a small range does not allocate memory proportional to total chain state.",
+      "Concurrent import remains within the existing latency budget while a peer requests ranges.",
+      "Client-side proof validation accepts every served range, including pagination and retained-root boundaries."
+    ],
+    "related": "#145 makes local state and snap installation disk-backed. This distinct server-side path still materializes full snapshots.",
+    "why": "A memory-bounded follower can lose that property when another node asks it to serve snap data.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "snap-cold-bytecodes",
+    "title": "Serve snap bytecode requests without requiring a warmed root cache",
+    "area": "sync",
+    "priority": "P2",
+    "ours": [
+      "crates/xone-node/src/services/snap.rs",
+      "crates/xone-snap/src/server.rs"
+    ],
+    "observation": "GetByteCodes contains no root. SnapServer selects a root from cache.last() for rootless requests and answers empty when the cache is empty, even though bytecode is available by hash in storage.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "eth/protocols/snap/handlers.go"
+      ]
+    ],
+    "fix": [
+      "Route bytecode requests directly to the retained content-addressed code store.",
+      "Enforce hash-count, byte and time budgets without building an account snapshot.",
+      "Keep missing-code and empty-code behavior compatible with snap/1 and verify content hashes."
+    ],
+    "accept": [
+      "A fresh server answers a known code hash before any account-range request.",
+      "Evicting root snapshots does not change bytecode availability.",
+      "Unknown, empty-code and oversized query cases follow the protocol limits."
+    ],
+    "related": "#37 owns snap/1. This is the rootless bytecode query path, separate from range-proof streaming.",
+    "why": "A peer can request code in any valid sync order; it should not need an unrelated query to warm server state first.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "resource-config-validation",
+    "title": "Reject unusable resource and lifecycle limits before starting services",
+    "area": "cli",
+    "priority": "P2",
+    "ours": [
+      "crates/xone-node/src/config.rs",
+      "crates/xone-node/src/services/rpc.rs",
+      "crates/xone-node/src/lifecycle.rs"
+    ],
+    "observation": "Config deserialization validates sync modes but does not validate the resource-limit relationships. Zero HTTP in-flight capacity can leave every request waiting, and invalid lifecycle budgets reach service startup without a unified validation step.",
+    "sources": [
+      [
+        "paradigmxyz/reth",
+        "crates/node/core/src/args/database.rs"
+      ],
+      [
+        "ethereum/go-ethereum",
+        "node/rpcstack.go"
+      ]
+    ],
+    "fix": [
+      "Validate the effective configuration after all sources are merged and before opening listeners or databases.",
+      "Define which zero values disable features and reject zero capacities that cause permanent waits. Check byte conversions and lifecycle-budget relationships.",
+      "Return actionable field-specific errors and include normalized values in dumpconfig without secrets."
+    ],
+    "accept": [
+      "Zero HTTP in-flight capacity is rejected or explicitly disables HTTP; it never starts a permanently waiting server.",
+      "Invalid whole-node/service shutdown budgets fail before resources are acquired.",
+      "Boundary-value and valid-default configurations round-trip consistently."
+    ],
+    "related": "#39 defines configuration precedence and #16 defines limits. This adds validation for unusable combinations in the current typed config.",
+    "why": "A syntactically valid configuration should not create a node that starts successfully but cannot serve requests or stop within its advertised budget.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "macos-release",
+    "title": "Publish verified native macOS arm64 follower binaries",
+    "area": "release",
+    "priority": "P3",
+    "ours": [
+      "ci/release.sh",
+      "ci/test-release.sh",
+      "ops/install.md",
+      "Cargo.toml"
+    ],
+    "observation": "The release path targets Linux binaries. There is no native Apple Silicon release artifact or macOS packaging qualification in the current release scripts.",
+    "sources": [
+      [
+        "paradigmxyz/reth",
+        ".github/workflows/release.yml"
+      ]
+    ],
+    "fix": [
+      "Add a pinned macOS arm64 build and native verification job with an explicit supported OS floor.",
+      "Exercise storage bindings, IPC paths, signal handling and a local follower/import fixture on macOS.",
+      "Publish checksums, signatures and provenance through the established release process. Document platform differences and keep Linux gates intact."
+    ],
+    "accept": [
+      "The downloaded artifact runs natively on the declared macOS version.",
+      "A controlled fixture yields the same block and state roots as the Linux build.",
+      "Release metadata identifies platform, architecture, revision and artifact checksum."
+    ],
+    "related": "#193 and #46 qualify Linux x86_64/aarch64 packaging. This is an additional native platform, not another Linux package.",
+    "why": "Developers using Apple Silicon need a maintained native binary for local integration and follower testing.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "telemetry-url-contract",
+    "title": "Parse telemetry URLs correctly for IPv6, ports and request targets",
+    "area": "observability",
+    "priority": "P2",
+    "ours": [
+      "crates/xone-node/src/observe/wire.rs",
+      "crates/xone-node/src/observe/heartbeat.rs",
+      "crates/xone-node/src/observe/ethstats.rs"
+    ],
+    "observation": "parse_target splits host/port with rsplit_once rather than parsing a URL authority. Bracketed IPv6 hosts remain bracketed for DNS/TLS handling. Heartbeat HTTP requests write Host using only the host, omitting an explicit non-default port.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "ethstats/ethstats.go"
+      ],
+      [
+        "ethereum/go-ethereum",
+        "rpc/http.go"
+      ]
+    ],
+    "fix": [
+      "Use a validated URL/authority representation with separate host, port, path and query components.",
+      "Serialize Host and request targets correctly for IPv6 and non-default ports. Reject control characters and unsupported userinfo forms without echoing secrets.",
+      "Preserve TLS verification and the existing explicit plaintext opt-in."
+    ],
+    "accept": [
+      "IPv4, DNS, bracketed IPv6, non-default port and path/query fixtures produce valid requests.",
+      "TLS receives the correct unbracketed server name/address.",
+      "Invalid authorities and control characters fail before network IO, with redacted errors."
+    ],
+    "related": "#41 implements telemetry. This unit fixes its shared endpoint parsing and HTTP serialization.",
+    "why": "Valid monitoring endpoints can fail because host, port and request target are reconstructed incorrectly.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "heartbeat-token-units",
+    "title": "Fix heartbeat scheduling when the interval exceeds the token-bucket burst",
+    "area": "observability",
+    "priority": "P2",
+    "ours": [
+      "crates/xone-node/src/observe/heartbeat.rs",
+      "crates/xone-primitives/src/limits/bucket.rs"
+    ],
+    "observation": "Heartbeat::start creates a bucket with burst 3, then calls try_take with cost equal to interval seconds. TokenBucket documents that a cost above its burst never succeeds. A configured interval greater than three seconds therefore prevents sends in this service loop.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "ethstats/ethstats.go"
+      ]
+    ],
+    "fix": [
+      "Use consistent token units for heartbeat sends, independent of the interval value.",
+      "Schedule the next send from a monotonic deadline without catch-up bursts after long stalls.",
+      "Test the actual service loop with an injected clock/transport and keep failures bounded by the configured cadence."
+    ],
+    "accept": [
+      "Intervals of 1, 15 and 60 seconds all send according to their documented schedule.",
+      "A long pause causes no unbounded catch-up burst.",
+      "Transport failures do not create a tight retry loop, and shutdown completes promptly."
+    ],
+    "related": "#41 owns runtime heartbeat integration. This is a deterministic scheduling defect inside the existing service, even before integration.",
+    "why": "Longer monitoring intervals must reduce traffic rather than silently disable all heartbeats.",
+    "loop": "Send once per configured interval. On failure, wait for the next bounded deadline."
+  },
+  {
+    "key": "metrics-cardinality",
+    "title": "Remove per-block hash churn from Prometheus metric labels",
+    "area": "observability",
+    "priority": "P2",
+    "ours": [
+      "crates/xone-node/src/observe/metrics.rs"
+    ],
+    "observation": "Every head emits xone_head_block_hash_info with the block hash as a label. Each new block creates a new time-series identity in a Prometheus server that retains prior samples.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "core/blockchain.go"
+      ],
+      [
+        "ethereum/go-ethereum",
+        "metrics/prometheus/collector.go"
+      ]
+    ],
+    "fix": [
+      "Keep stable labels for metrics and report changing block identifiers through an appropriate diagnostic/RPC surface.",
+      "Retain numeric head height and age gauges for monitoring.",
+      "Document the removed or replaced metric and update dashboard consumers."
+    ],
+    "accept": [
+      "Scraping thousands of simulated heads creates a bounded number of metric label sets.",
+      "Operators can still obtain the exact current hash through a documented read interface.",
+      "Existing numeric head/age metrics remain parseable and correct."
+    ],
+    "related": "#184 adds dashboards and alerts. This fixes the producer metric that would create unbounded series churn.",
+    "why": "A healthy fast chain should not create one new monitoring time series per block.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "import-counter-semantics",
+    "title": "Make blocks_imported_total a monotonic process counter",
+    "area": "observability",
+    "priority": "P2",
+    "ours": [
+      "crates/xone-node/src/services/stats.rs",
+      "crates/xone-node/src/observe/metrics.rs",
+      "crates/xone-node/src/services/core.rs"
+    ],
+    "observation": "NodeStats derives blocks_imported_total from current head minus sync start. A set-head or shorter reorg can reduce it, while initialization at a later head can imply imports that this process never performed.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "metrics/counter.go"
+      ],
+      [
+        "ethereum/go-ethereum",
+        "core/blockchain.go"
+      ]
+    ],
+    "fix": [
+      "Increment an actual process-local counter only after the defined successful import event.",
+      "Keep chain height as a separate gauge and define whether side-branch imports count.",
+      "Document restart reset semantics and avoid counting failed or rolled-back publication as successful import."
+    ],
+    "accept": [
+      "The counter never decreases during reorg or set-head within one process.",
+      "Failed imports do not increment it.",
+      "A restart starts a new counter series interval while head height still reports the persisted chain."
+    ],
+    "related": "#41 defines metrics and #226 adds timing. This repairs the counter semantics of an existing metric.",
+    "why": "Prometheus rate calculations treat decreases as resets and can report false throughput when a gauge is exposed as a counter.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "readiness-runtime-state",
+    "title": "Connect readiness to real degradation and shutdown state",
+    "area": "observability",
+    "priority": "P1",
+    "ours": [
+      "crates/xone-node/src/services/stats.rs",
+      "crates/xone-node/src/observe/metrics.rs",
+      "crates/xone-node/src/lifecycle.rs",
+      "crates/xone-node/src/services/core.rs"
+    ],
+    "observation": "Snapshot::ready checks degraded and shutting_down, but the production NodeStats snapshot leaves both fields at Snapshot::default(). Tests set them manually; the live adapter does not carry these lifecycle facts.",
+    "sources": [
+      [
+        "NethermindEth/nethermind",
+        "src/Nethermind/Nethermind.HealthChecks/NodeHealthService.cs"
+      ],
+      [
+        "NethermindEth/nethermind",
+        "src/Nethermind/Nethermind.HealthChecks/NodeHealthCheck.cs"
+      ]
+    ],
+    "fix": [
+      "Expose a shared read-only lifecycle/health state from the node to NodeStats.",
+      "Mark readiness false before shutdown drain and when a durable-storage or signer-safety fault is latched.",
+      "Keep liveness distinct from readiness and clear faults only through the documented recovery path."
+    ],
+    "accept": [
+      "A real metrics listener returns non-ready during injected durable failure and shutdown, even with a fresh head.",
+      "Normal synchronization and healthy-tip transitions remain correct.",
+      "Tests use the production adapter rather than only a hand-built Snapshot."
+    ],
+    "related": "#41 and #62 are the health/qualification parents. This issue fixes the missing runtime wiring between their existing components.",
+    "why": "Load balancers should not receive a healthy response based on default false flags after the node has entered a degraded or stopping state.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "mdbx-geometry",
+    "title": "Expose validated MDBX capacity and growth settings",
+    "area": "storage",
+    "priority": "P3",
+    "ours": [
+      "crates/xone-db/src/mdbx.rs",
+      "crates/xone-node/src/config.rs",
+      "bin/xone/src/flags.rs"
+    ],
+    "observation": "MDBX options hard-code a one-terabyte maximum map and a 64 MiB growth step. Operators cannot select capacity or growth behavior for different storage profiles.",
+    "sources": [
+      [
+        "paradigmxyz/reth",
+        "crates/node/core/src/args/database.rs"
+      ]
+    ],
+    "fix": [
+      "Add explicitly documented max-map-size and growth-step settings with byte-size parsing and safe defaults.",
+      "Validate limits against MDBX constraints, current database size and page geometry before opening for writes.",
+      "Keep durability mode and signer publication rules independent; capacity tuning must not weaken fsync behavior."
+    ],
+    "accept": [
+      "A small controlled map limit produces an actionable capacity error without corrupting committed data.",
+      "Reopening with a larger valid limit preserves the head and state.",
+      "Invalid values fail before migration or import, and dumpconfig shows effective non-secret settings."
+    ],
+    "related": "#135 chooses the storage architecture and #176 adds maintenance commands. This unit exposes bounded geometry for the selected MDBX backend.",
+    "why": "A fixed capacity can halt a long-lived node even when the operator has enough disk and a planned retention policy.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "gzip-block-files",
+    "title": "Read and write geth-compatible gzip block archives",
+    "area": "cli",
+    "priority": "P3",
+    "ours": [
+      "crates/xone-sync/src/import.rs",
+      "crates/xone-sync/src/export.rs",
+      "bin/xone/src/cmd/mod.rs",
+      "bin/xone/src/cmd/export.rs"
+    ],
+    "observation": "FileSource explicitly documents that .gz files are not read. The import path requires Read+Seek and the export path writes plain RLP regardless of gzip archive conventions.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "cmd/utils/cmd.go"
+      ],
+      [
+        "XinFinOrg/XDPoSChain",
+        "cmd/utils/cmd.go"
+      ]
+    ],
+    "fix": [
+      "Add gzip import/export interoperability with geth block archives.",
+      "Use a bounded streaming design or a controlled temporary spool compatible with staged body lookups; never decompress the whole archive into RAM.",
+      "Check gzip completion/CRC, block limits, cancellation and temporary-file cleanup."
+    ],
+    "accept": [
+      "A geth-produced .rlp.gz archive imports to the same head and state as its plain equivalent.",
+      "An xOne gzip export can be read by the reference client.",
+      "Truncation, corrupt CRC and oversized block fixtures fail without reporting success."
+    ],
+    "related": "#34 owns block-file transfer. This is a missing supported encoding, separate from persistent datadir command wiring.",
+    "why": "Compressed block files reduce transfer/storage costs and are already a standard operator interchange format.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "persistent-import-export",
+    "title": "Connect import and export commands to the persistent datadir",
+    "area": "cli",
+    "priority": "P1",
+    "ours": [
+      "bin/xone/src/cmd/mod.rs",
+      "bin/xone/src/cmd/import.rs",
+      "bin/xone/src/cmd/export.rs",
+      "crates/xone-node/src/datadir.rs",
+      "crates/xone-sync/src/mdbx/mod.rs"
+    ],
+    "observation": "The command helper open() constructs Chain<MemStore,...> from genesis. import reports imported blocks but discards the chain when the process exits. export requires --input to rebuild an in-memory chain instead of reading the node datadir.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "cmd/geth/chaincmd.go"
+      ],
+      [
+        "ethereum/go-ethereum",
+        "cmd/utils/cmd.go"
+      ]
+    ],
+    "fix": [
+      "Open the existing persistent backend with the same genesis/schema gates and exclusive ownership as node startup.",
+      "Import through the real validation and durable publication path, resuming from the persisted head.",
+      "Export retained blocks directly from the datadir without re-execution. Keep an explicitly named verification-only mode if the memory workflow remains useful."
+    ],
+    "accept": [
+      "After CLI import exits, a new process opens the datadir at the imported head with matching state.",
+      "Export works without --input and rejects requests for unavailable history.",
+      "A running node lock, wrong genesis or storage failure prevents the command from reporting success."
+    ],
+    "related": "#34 provides import/export primitives. This issue replaces the explicitly temporary command backend that is still wired in the shipped binary.",
+    "why": "Operators expect an import command to populate their node. Success output currently describes an ephemeral verification run.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "blockfile-length-validation",
+    "title": "Validate block-file RLP lengths before arithmetic, allocation and seeking",
+    "area": "sync",
+    "priority": "P1",
+    "ours": [
+      "crates/xone-sync/src/import.rs"
+    ],
+    "observation": "FileSource adds header and payload lengths with ordinary u64 addition in read_at and offset_of. An eight-byte RLP length can approach u64::MAX. decode_block also relies on decoded container shapes without explicitly checking every required list marker.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "rlp/decode.go"
+      ],
+      [
+        "ethereum/go-ethereum",
+        "core/types/block.go"
+      ]
+    ],
+    "fix": [
+      "Use checked length/offset arithmetic and reject oversized or noncanonical containers before allocating or seeking.",
+      "Validate outer block, transaction-list and uncle-list shapes and reject trailing bytes according to the interchange contract.",
+      "Return typed errors for truncated and impossible lengths; do not panic or wrap offsets in release mode."
+    ],
+    "accept": [
+      "Maximum-u64 length prefixes fail identically in debug and release builds.",
+      "Non-list containers, truncated payloads and noncanonical length encodings are rejected.",
+      "Valid legacy and typed-transaction block files remain interoperable."
+    ],
+    "related": "#34 owns file import. This is a concrete hostile-length and container-validation gap in its decoder.",
+    "why": "An invalid downloaded archive should produce a bounded error instead of a panic, wrapped offset or misleading parse.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "export-write-completion",
+    "title": "Propagate buffered export write failures before reporting success",
+    "area": "cli",
+    "priority": "P1",
+    "ours": [
+      "bin/xone/src/cmd/export.rs",
+      "crates/xone-sync/src/export.rs"
+    ],
+    "observation": "The export command wraps File in BufWriter and returns its success message without an explicit flush. A final buffered write can fail during Drop, where the IO error is discarded.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "core/blockchain.go"
+      ],
+      [
+        "ethereum/go-ethereum",
+        "cmd/utils/cmd.go"
+      ]
+    ],
+    "fix": [
+      "Explicitly finish and flush every output layer before returning success.",
+      "Define the durability contract and use sync/atomic publication if the command promises a completed durable artifact.",
+      "Write through a temporary destination or preserve an existing destination until a completed export can replace it."
+    ],
+    "accept": [
+      "A writer that fails only on final flush makes the command exit nonzero.",
+      "No success message is printed for a truncated export.",
+      "A completed export round-trips and replacement behavior is documented and tested."
+    ],
+    "related": "#34 owns export. This is its command-level completion/error propagation contract, independent of gzip support.",
+    "why": "An operator must not receive a success message for an archive whose final buffered bytes never reached the file.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "schema-marker-validation",
+    "title": "Fail closed on malformed database schema markers before migration",
+    "area": "storage",
+    "priority": "P1",
+    "ours": [
+      "crates/xone-sync/src/mdbx/mod.rs",
+      "crates/xone-db/src/mdbx.rs"
+    ],
+    "observation": "Schema loading uses rd.get(...).and_then(le_u64). A present marker with invalid length becomes None, which is also the signal to run the legacy migration. Unknown future numeric versions are rejected, but malformed markers are not distinguished from absence.",
+    "sources": [
+      [
+        "paradigmxyz/reth",
+        "crates/storage/db/src/version.rs"
+      ]
+    ],
+    "fix": [
+      "Distinguish an absent legacy marker, a valid supported version and malformed bytes.",
+      "Reject malformed or unsupported values before starting a migration or changing state tables.",
+      "Validate legacy key shapes before migration indexing/splitting and return a corruption error rather than panicking."
+    ],
+    "accept": [
+      "A malformed schema marker returns a typed error and leaves tables unchanged.",
+      "Supported legacy and current databases still open through their intended paths.",
+      "Truncated legacy changeset keys cannot panic the migration."
+    ],
+    "related": "#11 covers crash-safe publication and #135 architecture. This issue repairs the schema discriminator used before those data paths.",
+    "why": "Corruption must not be interpreted as permission to transform an already migrated database.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "websocket-frame-limit",
+    "title": "Apply configured WebSocket message limits before decoding or allocation",
+    "area": "rpc",
+    "priority": "P1",
+    "ours": [
+      "crates/xone-rpc/src/transport.rs",
+      "crates/xone-rpc/src/server.rs"
+    ],
+    "observation": "serve_ws calls accept_hdr_async without a WebSocketConfig, then allocates/converts received text before Rpc::serve checks body_bytes. Subscription messages take an earlier shortcut and do not reach that body check.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "rpc/websocket.go"
+      ]
+    ],
+    "fix": [
+      "Set explicit frame and reassembled-message limits from the transport configuration at handshake construction.",
+      "Apply the same ingress bound to ordinary requests, batches and subscription requests.",
+      "Bound fragmented-message handling and close oversized connections with the documented protocol code before JSON dispatch."
+    ],
+    "accept": [
+      "Oversized ordinary and subscription messages are rejected at the WebSocket layer.",
+      "Fragmentation cannot bypass the complete-message limit.",
+      "Valid messages at the boundary succeed and cleanup releases connection permits."
+    ],
+    "related": "#267 fixes subscription policy/admission. This unit moves byte enforcement ahead of WebSocket message assembly and parsing.",
+    "why": "A post-parse RPC limit cannot bound memory used while the transport assembles a larger message.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "http-content-type",
+    "title": "Validate HTTP JSON-RPC media types before dispatch",
+    "area": "rpc",
+    "priority": "P2",
+    "ours": [
+      "crates/xone-rpc/src/transport.rs"
+    ],
+    "observation": "http_handle checks Host and POST but never validates Content-Type. Any POST body that parses as JSON reaches the RPC dispatcher, including simple browser form media types.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "rpc/http.go"
+      ],
+      [
+        "ethereum/go-ethereum",
+        "rpc/http_test.go"
+      ]
+    ],
+    "fix": [
+      "Validate the media type and permitted parameters using the pinned oracle HTTP contract.",
+      "Reject unsupported simple-form or text media types before invoking a method.",
+      "Keep OPTIONS handling in the CORS layer and continue enforcing authentication and namespace policy independently."
+    ],
+    "accept": [
+      "application/json with supported parameters works.",
+      "Unsupported content types fail before a test handler is called.",
+      "Preflight remains functional and the test does not rely on CORS as authentication."
+    ],
+    "related": "#257 handles CORS headers/preflight and #60 owns authorization. This is validation of the actual POST representation.",
+    "why": "The HTTP boundary should accept the documented RPC representation and reject other browser-compatible request formats.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "ipc-startup-contract",
+    "title": "Bind and secure IPC before reporting RPC service startup success",
+    "area": "rpc",
+    "priority": "P1",
+    "ours": [
+      "crates/xone-node/src/services/rpc.rs",
+      "crates/xone-rpc/src/transport.rs"
+    ],
+    "observation": "RpcService::start spawns an async IPC bind and returns Ok immediately. Bind failures are only printed later. serve_ipc does not set explicit socket permissions, even though IPC serves all namespaces.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "node/rpcstack.go"
+      ],
+      [
+        "ethereum/go-ethereum",
+        "rpc/ipc_unix.go"
+      ]
+    ],
+    "fix": [
+      "Bind the IPC listener and set restrictive permissions before the service reports startup success.",
+      "Propagate directory, path-length, permission and bind errors through lifecycle rollback.",
+      "Remove only an appropriate stale socket owned by this datadir lifecycle; do not silently delete an unrelated regular file or active foreign endpoint."
+    ],
+    "accept": [
+      "An unusable IPC path makes startup fail before readiness or signing.",
+      "The socket has the documented restrictive mode regardless of process umask.",
+      "Partial startup rolls back listeners and preserves unrelated files."
+    ],
+    "related": "#39 defines startup failure handling and #60 IPC exposure. This is the current asynchronous-bind path that bypasses those gates.",
+    "why": "Operators can otherwise start a node with no working local control socket or with permissions broader than the privileged interface requires.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "rpc-argument-arity",
+    "title": "Enforce RPC method arity and distinguish quantities from block tags",
+    "area": "rpc",
+    "priority": "P2",
+    "ours": [
+      "crates/xone-rpc/src/server.rs",
+      "crates/xone-rpc/src/types.rs",
+      "crates/xone-rpc/src/eth.rs"
+    ],
+    "observation": "Registry entries contain no argument schema. Handlers ignore extra positional parameters and number_or_latest defaults required selectors. The transaction-index parser calls parse_tag, so block tags such as latest can be interpreted as transaction index zero.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "rpc/json.go"
+      ],
+      [
+        "ethereum/go-ethereum",
+        "internal/ethapi/api.go"
+      ]
+    ],
+    "fix": [
+      "Record required/optional argument counts and validate them before dispatch.",
+      "Use distinct parsers for block selectors, quantities, indexes and counts.",
+      "Pin each existing method signature to the XDC oracle; retain defaults only where the reference parameter is optional."
+    ],
+    "accept": [
+      "Extra parameters and missing required selectors fail with the expected error.",
+      "Transaction indexes reject latest, pending and other block tags.",
+      "Valid optional arguments and legacy supported numeric forms retain compatibility."
+    ],
+    "related": "#266 fixes the JSON-RPC envelope and #265 call-object fields. This unit validates positional method signatures and scalar domains.",
+    "why": "A malformed call should not silently query the latest block or the first transaction instead of the value the client intended.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "txpool-expiry-tick",
+    "title": "Run queued transaction expiry from the live pool service",
+    "area": "txpool",
+    "priority": "P2",
+    "ours": [
+      "crates/xone-node/src/services/pool.rs",
+      "crates/xone-builder/src/txpool/evict.rs",
+      "crates/xone-builder/src/txpool/queued.rs"
+    ],
+    "observation": "The pool library implements evict_expired, but PoolService only waits for head changes and calls reset. No production caller invokes the expiry routine, so queue lifetime does not trigger removal while the service runs.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "core/txpool/legacypool/legacypool.go"
+      ]
+    ],
+    "fix": [
+      "Add a bounded monotonic expiry tick to the pool service and run it against a pinned current state.",
+      "Preserve the rule that only stale queued accounts expire; executable pending transactions follow normal pool rules.",
+      "Remove corresponding raw bytes and pending-event bookkeeping, and cancel the ticker on shutdown."
+    ],
+    "accept": [
+      "A queued transaction expires after its configured lifetime even when the head does not advance.",
+      "Pending and recently refreshed queued accounts are retained.",
+      "A fake-clock test covers long pauses and shutdown without waiting in real time."
+    ],
+    "related": "#165 exposes pool controls and journaling. This issue wires the already implemented lifetime behavior into the live service.",
+    "why": "Configured queue lifetime is ineffective unless the runtime actually schedules eviction.",
+    "loop": "Check expiry at a bounded interval. Skip catch-up bursts and stop the timer during shutdown."
+  },
+  {
+    "key": "txpool-raw-cache",
+    "title": "Keep raw transaction storage bounded during replacement and eviction",
+    "area": "txpool",
+    "priority": "P1",
+    "ours": [
+      "crates/xone-node/src/services/pool.rs",
+      "crates/xone-builder/src/txpool/mod.rs",
+      "crates/xone-builder/src/txpool/evict.rs"
+    ],
+    "observation": "add_raws inserts every accepted transaction into Inner.raws, but removes stale raw entries only during reset on a head change. Replacement and price-based eviction can remove transactions from the bounded Pool while their raw encodings remain in the side map.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "core/txpool/legacypool/legacypool.go"
+      ],
+      [
+        "ethereum/go-ethereum",
+        "core/txpool/legacypool/list.go"
+      ]
+    ],
+    "fix": [
+      "Make pool mutation return removal events or use one authoritative representation so raw bytes leave with their transaction.",
+      "Apply cleanup on replacement, rejection after admission, eviction, expiry and reset without requiring a new head.",
+      "Avoid an unbounded duplicate map and avoid a full pool scan on every single admission if a bounded delta is available."
+    ],
+    "accept": [
+      "Repeated accepted replacements with a fixed head do not grow retained raw-byte count beyond live pool contents.",
+      "Price eviction and expiry release the removed bytes.",
+      "RPC content and block building still access every live transaction encoding."
+    ],
+    "related": "#165 configures pool bounds. This repairs a side cache that currently outlives the bounded entries.",
+    "why": "Pool count and slot limits do not bound memory if removed transactions remain in a separate raw-byte map.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "txpool-status-counts",
+    "title": "Report pending and queued counts correctly in txpool_status",
+    "area": "rpc",
+    "priority": "P2",
+    "ours": [
+      "crates/xone-node/src/services/pool.rs",
+      "crates/xone-builder/src/txpool/mod.rs",
+      "crates/xone-rpc/src/txpool.rs"
+    ],
+    "observation": "PoolApi::status returns Pool::len(), whose tuple is total transaction count and occupied slots. The RPC handler interprets that tuple as pending and queued. Pool::stats() already provides the correct counts.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "internal/ethapi/api.go"
+      ],
+      [
+        "ethereum/go-ethereum",
+        "core/txpool/legacypool/legacypool.go"
+      ]
+    ],
+    "fix": [
+      "Use the pending/queued statistics API in the production PoolApi adapter.",
+      "Keep slot accounting for capacity diagnostics under an explicitly named field or metric.",
+      "Verify status through the real RPC adapter as transactions are queued, promoted, replaced and mined."
+    ],
+    "accept": [
+      "One pending and two queued transactions report pending=1 and queued=2 regardless of slot sizes.",
+      "Promotion changes both counts correctly.",
+      "A large transaction using multiple slots does not inflate the queued count."
+    ],
+    "related": "#42 owns txpool RPC parity. This is a concrete tuple-contract mismatch in the current adapter.",
+    "why": "Operators and monitoring tools currently receive mislabeled capacity values instead of pool state counts.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "log-filter-grammar",
+    "title": "Validate log-filter ranges, topic shapes and wildcard alternatives",
+    "area": "rpc",
+    "priority": "P2",
+    "ours": [
+      "crates/xone-rpc/src/subscriptions.rs",
+      "crates/xone-rpc/src/eth.rs"
+    ],
+    "observation": "`LogFilter::parse` silently ignores a non-array topics field, rejects null inside a topic-alternative array, and does not limit topic positions. `get_logs` accepts blockHash together with fromBlock/toBlock and ignores the range.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "eth/filters/api.go"
+      ],
+      [
+        "XinFinOrg/XDPoSChain",
+        "eth/filters/api.go"
+      ]
+    ],
+    "fix": [
+      "Use one typed filter parser for HTTP log queries and subscriptions.",
+      "Reject incompatible block selectors and malformed topic shapes. Implement null wildcard alternatives according to the pinned XDC oracle.",
+      "Bound topic positions, alternative counts and address counts before scanning history."
+    ],
+    "accept": [
+      "Vectors cover blockHash plus range, non-array topics, too many positions and null inside OR alternatives.",
+      "Every accepted filter yields the same logs as the pinned oracle; malformed filters fail before storage reads."
+    ],
+    "related": "#153 adds polling filters and #258 adds bloom pruning. This fixes the existing filter input contract used by both.",
+    "why": "A malformed filter can silently broaden a query, while valid wildcard alternatives are refused.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "log-history-holes",
+    "title": "Refuse incomplete eth_getLogs results when canonical data is unavailable",
+    "area": "rpc",
+    "priority": "P1",
+    "ours": [
+      "crates/xone-rpc/src/eth.rs",
+      "crates/xone-rpc/src/api.rs",
+      "crates/xone-node/src/services/rpc.rs"
+    ],
+    "observation": "Range resolution uses filter_map on canonical hashes. The scan continues when a selected block or its receipts are absent. The blockHash path also skips the receipt retention check. These paths can return an apparently complete empty or partial list.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "eth/filters/filter.go"
+      ],
+      [
+        "XinFinOrg/XDPoSChain",
+        "eth/filters/filter.go"
+      ]
+    ],
+    "fix": [
+      "Distinguish unknown blocks, pruned history, missing canonical rows and legitimate empty logs.",
+      "Check retention for hash-selected queries and return a typed error when required canonical data disappears or cannot be loaded.",
+      "Keep a coherent canonical view for the scan, or detect its invalidation and return the documented retryable refusal."
+    ],
+    "accept": [
+      "A known canonical block with missing receipts never produces a successful partial result.",
+      "Hash queries below the receipt floor return the same typed refusal as range queries.",
+      "A block with valid empty receipts still returns an empty array."
+    ],
+    "related": "#99 addressed range overflow; #121 corrected pivot reporting. Neither handles silent data omission in the current scan.",
+    "why": "Indexers can permanently miss events when an incomplete scan is indistinguishable from a complete result.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "call-transaction-args",
+    "title": "Preserve and validate transaction arguments for call and gas estimation",
+    "area": "rpc",
+    "priority": "P1",
+    "ours": [
+      "crates/xone-rpc/src/api.rs",
+      "crates/xone-rpc/src/eth.rs"
+    ],
+    "observation": "`CallRequest` has no nonce or access list. `call_request` ignores mistyped optional fields, accepts conflicting data/input values by taking one, and does not reject mixed legacy and dynamic fee fields. Supported transaction semantics cannot be faithfully passed to the eventual execution backend.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "internal/ethapi/transaction_args.go"
+      ],
+      [
+        "XinFinOrg/XDPoSChain",
+        "internal/ethapi/transaction_args.go"
+      ]
+    ],
+    "fix": [
+      "Define typed call arguments for the transaction types enabled by the selected XDC fork, including access lists and nonce where supported.",
+      "Validate field types, quantity encodings, data/input equality and mutually exclusive fee fields before dispatch.",
+      "Pass the complete validated envelope to call and estimate backends. Reject unsupported future transaction fields explicitly instead of silently ignoring them."
+    ],
+    "accept": [
+      "A cold-access fixture with and without an access list matches oracle gas behavior.",
+      "Conflicting input/data and legacy/dynamic fee combinations fail with oracle-compatible errors.",
+      "Malformed gas, address, nonce and value fields cannot become defaults."
+    ],
+    "related": "#42 owns the runtime call backend; #158 concerns state/block overrides and #155 generates access lists. This unit is the transaction-argument contract.",
+    "why": "Simulation and estimation must execute the transaction the caller supplied, including its gas-affecting access list.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "wide-balance-rpc",
+    "title": "Return complete wide balances through read-only RPC quantities",
+    "area": "rpc",
+    "priority": "P2",
+    "ours": [
+      "crates/xone-rpc/src/eth.rs",
+      "crates/xone-rpc/src/json.rs",
+      "crates/xone-primitives/src/wide_balance.rs"
+    ],
+    "observation": "`eth_getBalance` converts the stored WideBalance to U256 and returns an error above 256 bits. WideBalance already exposes minimal big-endian bytes, while the XDC reference returns a hexutil.Big quantity.",
+    "sources": [
+      [
+        "XinFinOrg/XDPoSChain",
+        "internal/ethapi/api.go"
+      ],
+      [
+        "XinFinOrg/XDPoSChain",
+        "common/hexutil/json.go"
+      ]
+    ],
+    "fix": [
+      "Serialize the full nonnegative balance as a minimal hexadecimal RPC quantity without narrowing it.",
+      "Keep execution conversion rules unchanged. This change affects reporting only and must not mask values inside the EVM.",
+      "Audit other read-only balance output fields for the same narrowing and document any intentionally unsupported domains."
+    ],
+    "accept": [
+      "Fixtures for zero, 2^256-1, 2^256 and a larger stored balance match the XDC oracle exactly.",
+      "No leading zero or truncated balance is emitted.",
+      "EVM wide-balance and revert behavior remains unchanged."
+    ],
+    "related": "#7 owns execution-domain proof. This is a separately testable read-only serialization gap.",
+    "why": "An account value that is valid in XDC state should remain observable without loss or an artificial serialization limit.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "call-tracer-log-contract",
+    "title": "Carry callTracer event logs through the trace result model",
+    "area": "tracing",
+    "priority": "P2",
+    "ours": [
+      "crates/xone-rpc/src/api.rs",
+      "crates/xone-rpc/src/debug.rs"
+    ],
+    "observation": "The parser accepts callTracer withLog=true, but CallFrame has no logs field and frame() cannot serialize logs. No execution backend can satisfy the accepted option through the current result type.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "eth/tracers/native/call.go"
+      ],
+      [
+        "ethereum/go-ethereum",
+        "eth/tracers/native/gen_callframe_json.go"
+      ]
+    ],
+    "fix": [
+      "Extend the call-frame model and encoder with the oracle log schema and emission order.",
+      "Carry withLog through the real tracing adapter. Remove logs from reverted calls and their reverted descendants according to oracle behavior.",
+      "Validate tracer option types instead of converting malformed booleans to false."
+    ],
+    "accept": [
+      "Nested successful and reverted calls produce oracle-matching log placement and order.",
+      "withLog=false omits logs; withLog=true includes them when execution emitted them.",
+      "onlyTopCall interaction and malformed configuration have explicit fixtures."
+    ],
+    "related": "#42 owns trace execution and #169 adds other native tracers. This fixes an accepted option that the current public model cannot represent.",
+    "why": "Trace consumers request event logs to connect calls to emitted events. Accepting the option while dropping its data is misleading.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "jsonrpc-envelope",
+    "title": "Validate request IDs and preserve response correlation on RPC failures",
+    "area": "rpc",
+    "priority": "P1",
+    "ours": [
+      "crates/xone-rpc/src/server.rs",
+      "crates/xone-rpc/src/transport.rs"
+    ],
+    "observation": "`Rpc::one` clones any id value, including objects and arrays. Quota, timeout, panic and oversized-response paths construct id:null even when a valid request ID was parsed. Batch-wide errors lose correlation and notification-only failure paths can produce replies.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "rpc/json.go"
+      ],
+      [
+        "ethereum/go-ethereum",
+        "rpc/handler.go"
+      ]
+    ],
+    "fix": [
+      "Create a validated request-envelope type before cost admission and dispatch.",
+      "Retain valid IDs in errors, including timed-out batch members. Define aggregate batch failures using the pinned oracle contract.",
+      "Suppress replies for valid notifications, including failures after admission. Reject invalid request IDs before executing handlers."
+    ],
+    "accept": [
+      "String and numeric IDs survive timeout, quota refusal and handler failure.",
+      "Object/array IDs fail validation without invoking the method.",
+      "Mixed batches correlate every response, and notification-only requests produce no JSON-RPC reply."
+    ],
+    "related": "#42 supplies protocol parity. This issue captures specific failure-path correlation defects in the current server.",
+    "why": "Clients can leave promises unresolved or misclassify failures when the server changes their request IDs.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "subscription-admission",
+    "title": "Apply namespace policy and resource admission to subscription requests",
+    "area": "rpc",
+    "priority": "P1",
+    "ours": [
+      "crates/xone-rpc/src/transport.rs",
+      "crates/xone-rpc/src/subscriptions.rs",
+      "crates/xone-node/src/services/rpc.rs"
+    ],
+    "observation": "`Session::subscription` handles eth_subscribe and eth_unsubscribe before Rpc::serve. It does not check the filtered method registry, JSON-RPC version, token bucket or subscription count. Single subscription requests use this shortcut, while batches go through a path that rejects subscriptions.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "rpc/handler.go"
+      ],
+      [
+        "ethereum/go-ethereum",
+        "rpc/subscription.go"
+      ]
+    ],
+    "fix": [
+      "Route subscription admission through the same validated envelope and transport namespace policy as other methods.",
+      "Add explicit bounded subscription counts per connection and globally, with documented refusal and cleanup behavior.",
+      "Support the oracle batch contract and suppress notification replies. Activate notifications only after the subscription response is queued."
+    ],
+    "accept": [
+      "Disabling eth on a transport also disables eth subscriptions on that transport.",
+      "Repeated subscriptions hit a bounded refusal and release capacity on unsubscribe or disconnect.",
+      "Single and batched subscription requests have consistent validation and no event precedes its subscription response."
+    ],
+    "related": "#60 is the exposure parent and #122 fixed event publication. This defect is the current bypass around admission, not another event publisher.",
+    "why": "Subscription creation must honor the operator-selected API surface and cannot grow an unbounded registry.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "blocking-worker-permits",
+    "title": "Hold RPC permits until blocking workers stop and account for each cost class",
+    "area": "rpc",
+    "priority": "P1",
+    "ours": [
+      "crates/xone-rpc/src/server.rs",
+      "crates/xone-rpc/src/transport.rs"
+    ],
+    "observation": "The class semaphore permit is owned by the async serve future, while work runs in spawn_blocking. A timeout or dropped request releases the permit even if the worker is still running. A mixed batch acquires only its highest class semaphore, bypassing lower-class concurrency accounting.",
+    "sources": [
+      [
+        "paradigmxyz/reth",
+        "crates/rpc/rpc-eth-api/src/helpers/blocking_task.rs"
+      ],
+      [
+        "paradigmxyz/reth",
+        "crates/tasks/src/pool.rs"
+      ]
+    ],
+    "fix": [
+      "Transfer worker resource permits into the blocking closure so cancellation of the waiting future does not release active capacity.",
+      "Account for each executing method class in a batch, or reserve a documented equivalent set of permits without deadlock.",
+      "Check cancellation between batch members and inside long operations; instrument actual worker counts separately from waiting requests."
+    ],
+    "accept": [
+      "A deliberately slow cancelled handler keeps its permit until it exits.",
+      "Repeated timeouts cannot increase running workers beyond configured class bounds.",
+      "Mixed-cost batches and ordinary requests respect each class limit."
+    ],
+    "related": "#16 defines budgets. This unit repairs two concrete admission-accounting paths that do not enforce those budgets.",
+    "why": "A deadline limits waiting time; it does not stop a blocking thread. Releasing capacity early permits more work than the configured limit.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "http-ingress-deadlines",
+    "title": "Bound HTTP header, body, idle and response-write time before RPC dispatch",
+    "area": "rpc",
+    "priority": "P1",
+    "ours": [
+      "crates/xone-rpc/src/transport.rs",
+      "crates/xone-rpc/src/server.rs"
+    ],
+    "observation": "`serve_http` configures no header or idle timeout. `http_handle` acquires a global request permit before collecting the body without a time bound. Method deadlines start only after the complete body reaches Rpc::serve.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "node/rpcstack.go"
+      ],
+      [
+        "ethereum/go-ethereum",
+        "rpc/http.go"
+      ]
+    ],
+    "fix": [
+      "Add explicit finite header, body-read, idle and response-write deadlines at the HTTP transport layer.",
+      "Keep byte limits and method deadlines separate. Release waiting counters and permits with drop guards when a connection ends during admission.",
+      "Ensure transport shutdown cancels idle and partially read connections without waiting for a full body."
+    ],
+    "accept": [
+      "Slow-header and stalled-body local fixtures close within the configured deadline.",
+      "Cancelled waiters do not permanently increase the waiting count.",
+      "A normal keep-alive client succeeds and a slow client cannot occupy all work slots indefinitely."
+    ],
+    "related": "#16 defines RPC budgets and #60 defines exposure. This issue handles pre-dispatch network IO, which method deadlines cannot cover.",
+    "why": "A client that sends headers or a body slowly can hold limited connections and request slots without ever starting an RPC method.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "http-compression",
+    "title": "Negotiate gzip compression for large HTTP RPC responses",
+    "area": "rpc",
+    "priority": "P3",
+    "ours": [
+      "crates/xone-rpc/src/transport.rs"
+    ],
+    "observation": "`http_reply` always returns the uncompressed JSON bytes. The transport does not inspect Accept-Encoding or emit Content-Encoding.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "node/rpcstack.go"
+      ],
+      [
+        "XinFinOrg/XDPoSChain",
+        "node/rpcstack.go"
+      ]
+    ],
+    "fix": [
+      "Add standards-compliant gzip response negotiation with correct Vary headers and a small-response threshold.",
+      "Apply response-size limits to uncompressed data before compression and bound compression work.",
+      "Leave WebSocket framing and response content unchanged; share the transport middleware contract with the CORS change."
+    ],
+    "accept": [
+      "Decompressed responses equal ordinary responses byte for byte.",
+      "Clients without gzip support receive plain JSON; gzip;q=0 is not compressed.",
+      "Large receipt/log responses show measured byte savings without escaping CPU or size limits."
+    ],
+    "related": "#257 wires CORS. Compression is a separate opt-in transport efficiency feature.",
+    "why": "RPC providers and remote indexers transfer large JSON responses that competitor clients can compress.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "block-total-difficulty",
+    "title": "Include exact totalDifficulty in XDC block RPC responses",
+    "area": "rpc",
+    "priority": "P2",
+    "ours": [
+      "crates/xone-rpc/src/json.rs",
+      "crates/xone-rpc/src/api.rs",
+      "crates/xone-node/src/services/rpc.rs",
+      "crates/xone-node/src/services/hist.rs"
+    ],
+    "observation": "`block_json` emits header difficulty but no totalDifficulty, and ChainApi exposes no total-difficulty lookup. The public XDC reference includes the accumulated value in block responses.",
+    "sources": [
+      [
+        "XinFinOrg/XDPoSChain",
+        "internal/ethapi/api.go"
+      ],
+      [
+        "XinFinOrg/XDPoSChain",
+        "eth/api_backend.go"
+      ]
+    ],
+    "fix": [
+      "Expose an exact stored accumulated-difficulty read by block hash and serialize it where the pinned XDC oracle does.",
+      "Use authenticated bootstrap metadata for a snap pivot; do not count only blocks since the pivot or substitute header difficulty.",
+      "Specify missing-data behavior and retain correct values through restart and reorg."
+    ],
+    "accept": [
+      "Full and snap followers return identical totalDifficulty for the same block.",
+      "By-number and by-hash responses match the pinned XDC oracle.",
+      "A missing accumulated value is never invented from the local sync start."
+    ],
+    "related": "#119 concerns P2P Status ranking after snap. This issue adds the missing RPC field and reuses its corrected TD source.",
+    "why": "Explorers and client-comparison tools need the same accumulated-difficulty field as existing XDC nodes.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "pool-hash-lookup",
+    "title": "Use the txpool hash index for eth_getTransactionByHash",
+    "area": "perf",
+    "priority": "P2",
+    "ours": [
+      "crates/xone-rpc/src/eth.rs",
+      "crates/xone-rpc/src/api.rs",
+      "crates/xone-node/src/services/pool.rs",
+      "crates/xone-builder/src/txpool/mod.rs"
+    ],
+    "observation": "After the chain lookup misses, tx_by_hash calls PoolApi::content, clones both pool maps and hashes every transaction. The underlying Pool already has get(hash) backed by its lookup index.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "eth/api_backend.go"
+      ],
+      [
+        "ethereum/go-ethereum",
+        "core/txpool/txpool.go"
+      ]
+    ],
+    "fix": [
+      "Expose a read-only transaction-by-hash method in PoolApi and implement it through Pool::get.",
+      "Return one owned/immutable transaction without holding the pool lock during JSON encoding.",
+      "Keep queued transactions visible and preserve null for an unknown hash."
+    ],
+    "accept": [
+      "Pending, queued, replaced and unknown hash fixtures preserve results.",
+      "A measured lookup does not clone or hash unrelated transactions.",
+      "Concurrent pool mutation cannot produce an inconsistent transaction representation."
+    ],
+    "related": "#165 adds pool operator controls. This is a bounded lookup optimization in an existing read method.",
+    "why": "A cheap-looking hash query currently performs work proportional to the entire pool and holds avoidable allocations.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "receipt-linear-encoding",
+    "title": "Serialize block receipts with one cumulative log-index pass",
+    "area": "perf",
+    "priority": "P2",
+    "ours": [
+      "crates/xone-rpc/src/json.rs",
+      "crates/xone-rpc/src/eth.rs"
+    ],
+    "observation": "`block_receipts` invokes receipt_json for each transaction. Each call sums logs in receipts[..i] to find its first index, creating quadratic prefix work across a large block.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "core/types/receipt.go"
+      ],
+      [
+        "ethereum/go-ethereum",
+        "internal/ethapi/api.go"
+      ]
+    ],
+    "fix": [
+      "Compute cumulative gas and starting log indexes in one pass for block-wide serialization.",
+      "Pass the derived receipt context to the encoder while preserving the standalone transaction-receipt path.",
+      "Keep ordering, receipt types and XDC-specific transaction decoding unchanged."
+    ],
+    "accept": [
+      "Every receipt and log index is byte-equivalent before and after the change.",
+      "A large synthetic receipt list demonstrates linear prefix operations with an instrumented counter.",
+      "Empty receipts, empty logs and mixed receipt types are covered."
+    ],
+    "related": "#244 and #245 optimize execution roots. This issue removes repeated work in RPC response construction.",
+    "why": "Large receipt responses should scale with their output size rather than repeatedly traversing earlier receipts.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "raw-header-retention",
+    "title": "Read debug_getRawHeader from retained headers without requiring block bodies",
+    "area": "rpc",
+    "priority": "P2",
+    "ours": [
+      "crates/xone-rpc/src/debug.rs",
+      "crates/xone-rpc/src/eth.rs",
+      "crates/xone-rpc/src/api.rs"
+    ],
+    "observation": "`debug_getRawHeader` calls block_of, which checks body retention and loads a BlockView. A header-only request therefore depends on block body availability despite ChainApi::header already existing.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "internal/ethapi/dbapi.go"
+      ]
+    ],
+    "fix": [
+      "Resolve the selector to a retained header using the header history class and header lookup.",
+      "Keep debug_getRawBlock on its body-aware path.",
+      "Preserve canonical selector semantics and distinguish unknown headers from pruned header history."
+    ],
+    "accept": [
+      "A retained header with a pruned body can be returned as exact RLP.",
+      "No block-body read occurs for this method.",
+      "An actually unavailable header returns the documented null/error contract."
+    ],
+    "related": "#160 adds other diagnostics and #156 adds header methods. This corrects an already registered raw-header method.",
+    "why": "Operators need header diagnostics on minimal and pruned nodes even when full bodies have been removed.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "pending-full-subscription",
+    "title": "Support full transaction objects in newPendingTransactions subscriptions",
+    "area": "rpc",
+    "priority": "P3",
+    "ours": [
+      "crates/xone-rpc/src/subscriptions.rs",
+      "crates/xone-node/src/services/pool.rs",
+      "crates/xone-rpc/src/json.rs"
+    ],
+    "observation": "parse_kind ignores the second argument of newPendingTransactions. Kind::PendingTransactions and publish_pending carry hashes only, so a request for full transactions still receives hashes.",
+    "sources": [
+      [
+        "ethereum/go-ethereum",
+        "eth/filters/api.go"
+      ],
+      [
+        "paradigmxyz/reth",
+        "crates/rpc/rpc/src/eth/pubsub.rs"
+      ]
+    ],
+    "fix": [
+      "Parse the optional full-transaction boolean and store it in the subscription kind.",
+      "Publish the admitted immutable transaction once and encode an object only for subscribers that request it.",
+      "Apply the subscription admission and output-byte limits; avoid cloning the whole pool or issuing an internal RPC per event."
+    ],
+    "accept": [
+      "Default and false return hashes; true returns oracle-shaped pending transaction objects.",
+      "Malformed option types fail instead of being ignored.",
+      "Replacement, special-transaction and slow-consumer cases retain bounded behavior."
+    ],
+    "related": "#156 covers additional methods and other subscriptions. #42 already owns hash notifications; this adds the unsupported full-object option.",
+    "why": "Mempool consumers otherwise need one extra RPC query for each event and can lose data when a transaction leaves the pool first.",
+    "loop": "None. Run the operation only when requested."
+  },
+  {
+    "key": "openrpc-discovery",
+    "title": "Generate a machine-readable RPC schema and optional rpc.discover endpoint",
+    "area": "rpc",
+    "priority": "P3",
+    "ours": [
+      "crates/xone-rpc/src/server.rs",
+      "crates/xone-rpc/src/policy.rs",
+      "spec/rpc/scope-adr-008.md"
+    ],
+    "observation": "The registry exposes method names and closures, but no machine-readable parameter/result schemas or rpc.discover handler. Existing documentation work proposes human reference pages and a method-list currency test.",
+    "sources": [
+      [
+        "etclabscore/core-geth",
+        "node/openrpc.go"
+      ],
+      [
+        "etclabscore/core-geth",
+        "node/node.go"
+      ]
+    ],
+    "fix": [
+      "Define one versioned OpenRPC schema for the supported method contract and generate a distributable document.",
+      "Add optional rpc.discover only through an explicitly enabled namespace and an ADR-008 scope update; default XDC parity exposure remains unchanged.",
+      "Filter runtime discovery to methods enabled on the requesting transport and mark unsupported backends accurately.",
+      "Drive the human documentation currency test from the same schema instead of maintaining two method inventories."
+    ],
+    "accept": [
+      "Schema validation succeeds and every documented method maps to a real registry entry.",
+      "Disabled or unimplemented methods are not advertised as available.",
+      "A schema consumer can construct and validate representative XDC-prefixed requests and typed history errors."
+    ],
+    "related": "#188 owns human RPC documentation. This unit adds machine-readable contracts and discovery, reusing that documentation work.",
+    "why": "SDK generators and coding agents can validate requests and inspect capabilities without reverse-engineering Rust closures.",
+    "loop": "None. Run the operation only when requested."
+  }
+]

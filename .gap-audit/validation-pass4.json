@@ -1,0 +1,983 @@
+{
+  "date": "2026-11-14",
+  "kind": "static audit artifact validation",
+  "result": "pass",
+  "audit_base": "330b742bfa1ef1401c1b9b9be0cf0bd344255cca",
+  "rechecked_main": "a0dc523827c9ce8bdd305e9d8470f023aa2c7fba",
+  "new_issue_count": 50,
+  "unique_issue_urls": 50,
+  "ledger_entries": 109,
+  "ledger_open_entries": 0,
+  "selected_clients": 25,
+  "rejected_candidates": 52,
+  "ours_paths_checked": 53,
+  "competitor_source_references_checked": 72,
+  "json_files_parsed": [
+    "pass4-findings.json",
+    "gap-ledger.json",
+    "dedupe-pass4.json",
+    "discovery-pass4.json",
+    "competitors.json"
+  ],
+  "application_code_changed": false,
+  "reference_clones_excluded": true,
+  "git_diff_check": "pass",
+  "remote_body_verification": "pass: all 50 connector update responses exactly match local bodies, issue numbers and required labels",
+  "application_tests": "not run; this change contains audit documents only",
+  "runtime_validation": "not performed; issues describe static evidence and required implementation fixtures",
+  "asd_ste100": "Six procedural sentences per new issue, all at most 20 whitespace-delimited words; controlled-vocabulary certification not performed.",
+  "issues": [
+    {
+      "id": "GAP-0060",
+      "issue_number": 254,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/254",
+      "sha256": "dda37482aae51b99c71513f630eac6736a312d2db9283827266380207a62a796",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0061",
+      "issue_number": 255,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/255",
+      "sha256": "5d7c03d5a881c46d8b34c3be02bc3e87eea00db513809c659e095cedd02b1fd4",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0062",
+      "issue_number": 257,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/257",
+      "sha256": "4885e76fb3d8ce0bba235c10176c2a2f3dd760050d88d1ced727021fe33a3226",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0063",
+      "issue_number": 256,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/256",
+      "sha256": "d19fe4d9df5eaa56d59c7fc91252a8d5c81c47451cc1fa875bf8d186d42c497b",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0064",
+      "issue_number": 258,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/258",
+      "sha256": "3e2e6cbcaa5be646017047bf6512f19bedcdad9e0c18ec3bcd1fef70aa1d8d67",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0065",
+      "issue_number": 259,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/259",
+      "sha256": "a22c37b0a2be97006c523c439cc79ffeca537bd1e55c6ec1a287b7793106f07f",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0066",
+      "issue_number": 260,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/260",
+      "sha256": "8eab8c236f3e2474785c308973d8d0ed9c6f5275ae2582a2488144c0b9d00095",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0067",
+      "issue_number": 270,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/270",
+      "sha256": "240b8ff350bc9a06d06652e82f2e5d5466573909834e33ed92c74d890f0731f0",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0068",
+      "issue_number": 264,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/264",
+      "sha256": "c43b81d1548538bde14c36309a0ca564713938364f39905911859e735c728fd9",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0069",
+      "issue_number": 265,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/265",
+      "sha256": "f97467bcce6a382cab2265242d72a3309e2da9052c1edeb7e08e096075bf94d7",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0070",
+      "issue_number": 271,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/271",
+      "sha256": "8d48ebb9fa36ac3a8a7b16e10640b1ff8bae3dce6a68eea9591e59b5ba0b7b76",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0071",
+      "issue_number": 273,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/273",
+      "sha256": "6a5b93ece63d01a27f81b7208ec31a6b547d3fe9d1e4186eb0b000881eee5cc4",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0072",
+      "issue_number": 266,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/266",
+      "sha256": "33a20f530806e7daabdf593c64247cb64766e8b767b3953bf0369250f7317af0",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0073",
+      "issue_number": 267,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/267",
+      "sha256": "1226fde69d9922c735416f38fdc9493d11ead42376ae6a428fe54f8f6572a5da",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0074",
+      "issue_number": 268,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/268",
+      "sha256": "0c8086f5f0210e5339405068502dfdd9ffe66ca331829c877d83573ceda31881",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0075",
+      "issue_number": 269,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/269",
+      "sha256": "4bf22ae1a72150b13bc71f58b6a7447cb28987d3b43b003de27bf071768f4352",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0076",
+      "issue_number": 278,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/278",
+      "sha256": "44c6f550e29041754d4a7928ce50b77639a0bd771d21b637e5af0ca6fec5e4f6",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0077",
+      "issue_number": 274,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/274",
+      "sha256": "ca3533c3d27cf22763bbc37af3f9b51848a907558557828f6616e4100f5bf8a5",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0078",
+      "issue_number": 275,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/275",
+      "sha256": "981df4f0f5c9c16c1965d48363e1c63b19cdc487fc71c637521350b8b14776ec",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0079",
+      "issue_number": 276,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/276",
+      "sha256": "8d4f4aa80c7e482451ef269890c7d0ff33a88315d8fe60c95a3ee2a1648ddd54",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0080",
+      "issue_number": 277,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/277",
+      "sha256": "210986fdcd0f29b6e4b1a6b4c28e9160438dda7d83f254f329dfe1de7bfc0ea1",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0081",
+      "issue_number": 279,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/279",
+      "sha256": "f516a52d5d80d2b9f1fb3770df3cc2b256a056e563ad83e1aaa0edf5c20836c7",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0082",
+      "issue_number": 280,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/280",
+      "sha256": "b5da81d6464a8a111ecd4f58b64e1dca2539cd54107c287ff9bf902ffbf29e1d",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0083",
+      "issue_number": 294,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/294",
+      "sha256": "8af117b88dc556cd6a52a767e0532a8fc2ac67255dbaebff7be6c6da9f6d5973",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0084",
+      "issue_number": 295,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/295",
+      "sha256": "7f63194cc98b14f614020c4f336d6725cf9e67bd1c48042efef7223fa63402dc",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0085",
+      "issue_number": 308,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/308",
+      "sha256": "b391d81e3fd1e9fab96fea8cc74f701a80bb96cb2e134a6997d5c5e3ef7bdaa9",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0086",
+      "issue_number": 296,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/296",
+      "sha256": "eb0d6ee441c24f388e075877341d6d8378b17d687756c05ceb9901f97f5fc51d",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0087",
+      "issue_number": 297,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/297",
+      "sha256": "02a3a4b203bace4ca4bdf3a24f88b19672100044bda20b4c282b3886d9dc504f",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0088",
+      "issue_number": 285,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/285",
+      "sha256": "9a76a982c57885eb70ddc5db1fd33ccd3f0b0cc3a38e06aa9c7532cb44d4e024",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0089",
+      "issue_number": 298,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/298",
+      "sha256": "ee72e0417342ca3c4d3d42ff2d22380eedc2ceea66ef99e6fd1937938c3b43f3",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0090",
+      "issue_number": 299,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/299",
+      "sha256": "142050279792a774e474415e117c4caf1d195f332816ef3c2222ef5a2c2ee0ff",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0091",
+      "issue_number": 309,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/309",
+      "sha256": "8e7cceb27b4a2b260b8bff87317d34d9f9d08a9905013bdf6871f7fd8a43c932",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0092",
+      "issue_number": 300,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/300",
+      "sha256": "4357fb72cbb28d3991dae1ffbcc8337c1c1d3f97920ee149ab0c3b9688bc2bf5",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0093",
+      "issue_number": 301,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/301",
+      "sha256": "a440f33c89b3a195b0a344212df984ce98f0a1c6a24cf029b2ba37d505989e58",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0094",
+      "issue_number": 302,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/302",
+      "sha256": "48396559a1d4dc5dc9ce7825ba0caec1c892f570bcb106ac49308bd22673bd88",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0095",
+      "issue_number": 303,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/303",
+      "sha256": "3b94c5672b48b244eade68a051e1cd178845d267a5dc660ca9c88fe104d21003",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0096",
+      "issue_number": 286,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/286",
+      "sha256": "ad12d316dc13ec39ed3cd407158196c8cac8e3502308a7a7df3607b3e9de719d",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0097",
+      "issue_number": 311,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/311",
+      "sha256": "21f08d3c02800cc5e418149dbe44044d4724e65c4353f374e6ecf2fb3ecd4a79",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0098",
+      "issue_number": 312,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/312",
+      "sha256": "c347892924a64b2ca595309ae2a67b7433fe0c637c08ba15f5dcfb020b28ac7d",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0099",
+      "issue_number": 287,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/287",
+      "sha256": "2c026e0546f15485fe437dea974854f47df616ce4f55591116c8085f7c7af9cb",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0100",
+      "issue_number": 288,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/288",
+      "sha256": "4859f21e9225480ddbc812374d1361dd52cab6ec0a73fc31a22baee6af59f741",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0101",
+      "issue_number": 289,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/289",
+      "sha256": "939e84ce64c58dc0f3f96b8755e2561c2287130418f1ba9c2f66a706afdc0f1e",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0102",
+      "issue_number": 290,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/290",
+      "sha256": "b06b03305845641c134acfb7dcb66eab78c3c3864454a837c2baf4edae7f9e11",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0103",
+      "issue_number": 291,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/291",
+      "sha256": "f5658569d991a2322936dc5394e9aa5541c0882ae403803680bf815283859285",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0104",
+      "issue_number": 304,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/304",
+      "sha256": "26372b4912928c3a28252f5489b19fcb8f3feb74bc27e13362cf770dfeaf733a",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0105",
+      "issue_number": 292,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/292",
+      "sha256": "d60582f05cf9d40d6ea1703d282bf15b44166e4a0492801504aa6ef939a2190f",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0106",
+      "issue_number": 305,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/305",
+      "sha256": "02ba41c6650f69434df469315aeaf1cf8f2e6a1dc2173ecb3240efb4cc3aaad6",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0107",
+      "issue_number": 306,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/306",
+      "sha256": "1bb77656ee419917138b6a96895080f84d8c2b44723d62d8128de045dd10bed4",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0108",
+      "issue_number": 293,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/293",
+      "sha256": "46ae55a72791a59983575334363b7b0c27e087d578cf9e428075e43d9229d372",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    },
+    {
+      "id": "GAP-0109",
+      "issue_number": 307,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/307",
+      "sha256": "a44b01537f7ac1bac0ed26234a3138a0f2d88c10ecbb8aae22f44e7fb6823889",
+      "required_sections": 13,
+      "mermaid_diagrams": 3
+    }
+  ],
+  "remote_issues": [
+    {
+      "id": "GAP-0060",
+      "number": 254,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/254",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:rpc",
+        "priority:P1"
+      ]
+    },
+    {
+      "id": "GAP-0061",
+      "number": 255,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/255",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:rpc",
+        "priority:P1"
+      ]
+    },
+    {
+      "id": "GAP-0062",
+      "number": 257,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/257",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:rpc",
+        "priority:P2"
+      ]
+    },
+    {
+      "id": "GAP-0063",
+      "number": 256,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/256",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:rpc",
+        "priority:P1"
+      ]
+    },
+    {
+      "id": "GAP-0064",
+      "number": 258,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/258",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:rpc",
+        "priority:P2"
+      ]
+    },
+    {
+      "id": "GAP-0065",
+      "number": 259,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/259",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "priority:P2",
+        "area:perf"
+      ]
+    },
+    {
+      "id": "GAP-0066",
+      "number": 260,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/260",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "priority:P3",
+        "area:perf"
+      ]
+    },
+    {
+      "id": "GAP-0067",
+      "number": 270,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/270",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:rpc",
+        "priority:P2"
+      ]
+    },
+    {
+      "id": "GAP-0068",
+      "number": 264,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/264",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:rpc",
+        "priority:P1"
+      ]
+    },
+    {
+      "id": "GAP-0069",
+      "number": 265,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/265",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:rpc",
+        "priority:P1"
+      ]
+    },
+    {
+      "id": "GAP-0070",
+      "number": 271,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/271",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:rpc",
+        "priority:P2"
+      ]
+    },
+    {
+      "id": "GAP-0071",
+      "number": 273,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/273",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:tracing",
+        "priority:P2"
+      ]
+    },
+    {
+      "id": "GAP-0072",
+      "number": 266,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/266",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:rpc",
+        "priority:P1"
+      ]
+    },
+    {
+      "id": "GAP-0073",
+      "number": 267,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/267",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:rpc",
+        "priority:P1"
+      ]
+    },
+    {
+      "id": "GAP-0074",
+      "number": 268,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/268",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:rpc",
+        "priority:P1"
+      ]
+    },
+    {
+      "id": "GAP-0075",
+      "number": 269,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/269",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:rpc",
+        "priority:P1"
+      ]
+    },
+    {
+      "id": "GAP-0076",
+      "number": 278,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/278",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:rpc",
+        "priority:P3"
+      ]
+    },
+    {
+      "id": "GAP-0077",
+      "number": 274,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/274",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:rpc",
+        "priority:P2"
+      ]
+    },
+    {
+      "id": "GAP-0078",
+      "number": 275,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/275",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "priority:P2",
+        "area:perf"
+      ]
+    },
+    {
+      "id": "GAP-0079",
+      "number": 276,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/276",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "priority:P2",
+        "area:perf"
+      ]
+    },
+    {
+      "id": "GAP-0080",
+      "number": 277,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/277",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:rpc",
+        "priority:P2"
+      ]
+    },
+    {
+      "id": "GAP-0081",
+      "number": 279,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/279",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:rpc",
+        "priority:P3"
+      ]
+    },
+    {
+      "id": "GAP-0082",
+      "number": 280,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/280",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:rpc",
+        "priority:P3"
+      ]
+    },
+    {
+      "id": "GAP-0083",
+      "number": 294,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/294",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:p2p",
+        "priority:P2"
+      ]
+    },
+    {
+      "id": "GAP-0084",
+      "number": 295,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/295",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:p2p",
+        "priority:P2"
+      ]
+    },
+    {
+      "id": "GAP-0085",
+      "number": 308,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/308",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:p2p",
+        "priority:P3"
+      ]
+    },
+    {
+      "id": "GAP-0086",
+      "number": 296,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/296",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:p2p",
+        "priority:P2"
+      ]
+    },
+    {
+      "id": "GAP-0087",
+      "number": 297,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/297",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "priority:P2",
+        "area:perf"
+      ]
+    },
+    {
+      "id": "GAP-0088",
+      "number": 285,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/285",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "priority:P1",
+        "area:sync"
+      ]
+    },
+    {
+      "id": "GAP-0089",
+      "number": 298,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/298",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "priority:P2",
+        "area:sync"
+      ]
+    },
+    {
+      "id": "GAP-0090",
+      "number": 299,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/299",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:cli",
+        "priority:P2"
+      ]
+    },
+    {
+      "id": "GAP-0091",
+      "number": 309,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/309",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "priority:P3",
+        "area:release"
+      ]
+    },
+    {
+      "id": "GAP-0092",
+      "number": 300,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/300",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:observability",
+        "priority:P2"
+      ]
+    },
+    {
+      "id": "GAP-0093",
+      "number": 301,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/301",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:observability",
+        "priority:P2"
+      ]
+    },
+    {
+      "id": "GAP-0094",
+      "number": 302,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/302",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:observability",
+        "priority:P2"
+      ]
+    },
+    {
+      "id": "GAP-0095",
+      "number": 303,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/303",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:observability",
+        "priority:P2"
+      ]
+    },
+    {
+      "id": "GAP-0096",
+      "number": 286,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/286",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:observability",
+        "priority:P1"
+      ]
+    },
+    {
+      "id": "GAP-0097",
+      "number": 311,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/311",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:storage",
+        "priority:P3"
+      ]
+    },
+    {
+      "id": "GAP-0098",
+      "number": 312,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/312",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:cli",
+        "priority:P3"
+      ]
+    },
+    {
+      "id": "GAP-0099",
+      "number": 287,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/287",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:cli",
+        "priority:P1"
+      ]
+    },
+    {
+      "id": "GAP-0100",
+      "number": 288,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/288",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "priority:P1",
+        "area:sync"
+      ]
+    },
+    {
+      "id": "GAP-0101",
+      "number": 289,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/289",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:cli",
+        "priority:P1"
+      ]
+    },
+    {
+      "id": "GAP-0102",
+      "number": 290,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/290",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:storage",
+        "priority:P1"
+      ]
+    },
+    {
+      "id": "GAP-0103",
+      "number": 291,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/291",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:rpc",
+        "priority:P1"
+      ]
+    },
+    {
+      "id": "GAP-0104",
+      "number": 304,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/304",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:rpc",
+        "priority:P2"
+      ]
+    },
+    {
+      "id": "GAP-0105",
+      "number": 292,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/292",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:rpc",
+        "priority:P1"
+      ]
+    },
+    {
+      "id": "GAP-0106",
+      "number": 305,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/305",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:rpc",
+        "priority:P2"
+      ]
+    },
+    {
+      "id": "GAP-0107",
+      "number": 306,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/306",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:txpool",
+        "priority:P2"
+      ]
+    },
+    {
+      "id": "GAP-0108",
+      "number": 293,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/293",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:txpool",
+        "priority:P1"
+      ]
+    },
+    {
+      "id": "GAP-0109",
+      "number": 307,
+      "url": "https://github.com/XDCIndia/xOneRS/issues/307",
+      "body_verified": true,
+      "labels": [
+        "gap-audit",
+        "area:rpc",
+        "priority:P2"
+      ]
+    }
+  ]
+}
