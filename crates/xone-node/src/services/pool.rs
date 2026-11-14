@@ -7,10 +7,11 @@
 use std::{
     collections::{BTreeMap, HashMap},
     sync::{Arc, Mutex, PoisonError},
+    time::Duration,
 };
 
 use alloy_primitives::{keccak256, Address, Bytes, B256, U256};
-use tokio::{runtime::Handle, task::JoinHandle};
+use tokio::{runtime::Handle, task::JoinHandle, time::MissedTickBehavior};
 use xone_builder::{
     producer::build::Cand,
     txpool::{special::Authority, validate::min_gas_price, Config, Pool, PoolTx},
@@ -142,6 +143,17 @@ impl PoolShared {
     }
 }
 
+impl PoolShared {
+    /// Drops the queued transactions of accounts idle for longer than the pool's lifetime, with their
+    /// encodings. Executable transactions stay; the head does not have to move.
+    pub fn expire(&self) {
+        let mut g = self.lock();
+        let Inner { pool, raws } = &mut *g;
+        let _ = self.on_head(|st| pool.evict_expired(st, now()));
+        raws.retain(|h, _| pool.has(h));
+    }
+}
+
 impl PoolApi for PoolShared {
     fn status(&self) -> (usize, usize) {
         self.lock().pool.len()
@@ -205,8 +217,14 @@ impl Service for PoolService {
         let mut head = self.shared.core.head.subscribe();
         let shared = self.shared.clone();
         self.task = Some(self.rt.spawn(async move {
-            while head.changed().await.is_ok() {
-                shared.reset();
+            // geth's `evictionInterval`; the pool's own `lifetime_secs` decides what is stale.
+            let mut tick = tokio::time::interval(Duration::from_secs(60));
+            tick.set_missed_tick_behavior(MissedTickBehavior::Delay);
+            loop {
+                tokio::select! {
+                    r = head.changed() => if r.is_ok() { shared.reset() } else { break },
+                    _ = tick.tick() => shared.expire(),
+                }
             }
         }));
         Ok(())
