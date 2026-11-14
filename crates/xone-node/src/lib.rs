@@ -13,6 +13,7 @@ mod disk;
 pub mod diskguard;
 pub mod enode;
 pub mod lifecycle;
+pub mod netgen;
 pub mod observe;
 pub mod services;
 pub mod snapshot;
