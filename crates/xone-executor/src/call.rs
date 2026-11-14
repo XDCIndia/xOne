@@ -135,7 +135,10 @@ fn revert_reason(data: &[u8]) -> Option<String> {
     }
 }
 
-/// geth `core/vm/errors.go` text of a halt.
+/// geth `core/vm/errors.go` text of a halt. ponytail: revm's `HaltReason` carries no opcode or
+/// stack depth, so `invalid opcode`, `stack underflow` and `stack limit reached 1024` lack geth's
+/// `: <OPCODE>` / `(<len> <=> <required>)` / `(<limit>)` suffix; the EVM step hook of #155
+/// (`AccessListTracer`) is where that detail can be captured.
 fn halt_text(h: &HaltReason) -> String {
     match h {
         HaltReason::OutOfGas(OutOfGasError::InvalidOperand) => "gas uint64 overflow".to_owned(),
@@ -365,7 +368,8 @@ pub fn estimate_gas<V: StateRead, E: Env>(
         let balance = view.account(m.from).map_or(U256::ZERO, |a| a.balance.low());
         let wide = view.account(m.from).is_some_and(|a| a.balance.is_wide());
         if !wide {
-            if m.value >= balance && !m.value.is_zero() {
+            // geth: `Value` defaults to 0, so a zero balance refuses even a zero-value call
+            if m.value >= balance {
                 return Err(EstimateError::Failed(
                     "insufficient funds for transfer".to_owned(),
                 ));
@@ -644,6 +648,17 @@ mod tests {
             })
             .unwrap_err(),
             EstimateError::Reverted(Bytes::new())
+        );
+        // geth: a priced estimate from an empty account refuses, even with zero value
+        assert_eq!(
+            at(&CallMsg {
+                gas: 0,
+                gas_price: Some(U256::from(1u64)),
+                from: address!("00000000000000000000000000000000000000dd"),
+                ..msg(STORE)
+            })
+            .unwrap_err(),
+            EstimateError::Failed("insufficient funds for transfer".to_owned())
         );
         let cancelled = AtomicBool::new(true);
         assert!(estimate_gas(&spec, &m, &h, &m, &msg(STORE), 0, &cancelled).is_err());
