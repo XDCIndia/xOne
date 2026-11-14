@@ -1,4 +1,8 @@
-use std::{fs::File, io::BufWriter, process::ExitCode};
+use std::{
+    fs::File,
+    io::{BufWriter, Write},
+    process::ExitCode,
+};
 
 use clap::ArgMatches;
 use xone_sync::export::export as write;
@@ -22,10 +26,11 @@ pub fn export(m: &ArgMatches) -> ExitCode {
             return Err(format!("block number {last} larger than head block {head}"));
         }
         let path = m.get_one::<String>("file").map_or("", String::as_str);
-        let mut w = BufWriter::new(File::create(path).map_err(|e| format!("{path}: {e}"))?);
-        let n = chain
-            .with_store(|s| write(s, first, last, &mut w))
-            .map_err(|e| e.to_string())?;
+        let n = atomic(path, |w| {
+            chain
+                .with_store(|s| write(s, first, last, w))
+                .map_err(|e| e.to_string())
+        })?;
         Ok(format!("exported {n} blocks, {first}..={last}, to {path}"))
     };
     match run() {
@@ -34,5 +39,51 @@ pub fn export(m: &ArgMatches) -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(e) => fail(e),
+    }
+}
+
+/// Writes through `<path>.tmp`, flushes and syncs it, then renames over `path`: a failed or
+/// truncated export never replaces an existing file, and success means the bytes are on disk.
+fn atomic<T>(
+    path: &str,
+    f: impl FnOnce(&mut BufWriter<File>) -> Result<T, String>,
+) -> Result<T, String> {
+    let tmp = format!("{path}.tmp");
+    let io = |e: std::io::Error| format!("{path}: {e}");
+    let mut w = BufWriter::new(File::create(&tmp).map_err(io)?);
+    let done = f(&mut w).and_then(|n| {
+        w.flush().map_err(io)?;
+        w.get_ref().sync_all().map_err(io)?;
+        std::fs::rename(&tmp, path).map_err(io)?;
+        Ok(n)
+    });
+    if done.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    done
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_failed_export_keeps_the_old_file_and_a_good_one_replaces_it() {
+        let dir = std::env::temp_dir().join(format!("xone-export-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("out.rlp");
+        let p = p.to_str().unwrap();
+        std::fs::write(p, b"old").unwrap();
+        let r = atomic(p, |w| {
+            w.write_all(b"half").map_err(|e| e.to_string())?;
+            Err::<(), _>("boom".into())
+        });
+        assert!(r.is_err());
+        assert_eq!(std::fs::read(p).unwrap(), b"old");
+        assert!(!std::path::Path::new(&format!("{p}.tmp")).exists());
+        atomic(p, |w| w.write_all(b"new").map_err(|e| e.to_string())).unwrap();
+        assert_eq!(std::fs::read(p).unwrap(), b"new");
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }
