@@ -77,6 +77,7 @@ pub struct Config {
     pub authrpc: AuthRpc,
     pub ipc: Ipc,
     pub mining: Mining,
+    pub txpool: TxPool,
     pub logging: Logging,
     pub metrics: Listen,
     pub pprof: Listen,
@@ -164,6 +165,50 @@ pub struct Ipc {
     pub disabled: bool,
     /// None: `<datadir>/xone.ipc`.
     pub path: Option<PathBuf>,
+}
+
+/// `[txpool]`: geth-XDC `--txpool.*` (`cmd/utils/flags.go:487-528`); a zero value means the
+/// default, as geth `legacypool.Config.sanitize`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct TxPool {
+    pub price_limit: u64,
+    pub price_bump: u64,
+    pub account_slots: u64,
+    pub global_slots: u64,
+    pub account_queue: u64,
+    pub global_queue: u64,
+    pub lifetime_secs: u64,
+}
+
+impl TxPool {
+    pub fn pool_config(&self) -> xone_builder::txpool::Config {
+        xone_builder::txpool::Config {
+            price_limit: self.price_limit,
+            price_bump: self.price_bump,
+            account_slots: self.account_slots,
+            global_slots: self.global_slots,
+            account_queue: self.account_queue,
+            global_queue: self.global_queue,
+            lifetime_secs: self.lifetime_secs,
+        }
+        .sanitized()
+    }
+}
+
+impl Default for TxPool {
+    fn default() -> Self {
+        let d = xone_builder::txpool::Config::default();
+        Self {
+            price_limit: d.price_limit,
+            price_bump: d.price_bump,
+            account_slots: d.account_slots,
+            global_slots: d.global_slots,
+            account_queue: d.account_queue,
+            global_queue: d.global_queue,
+            lifetime_secs: d.lifetime_secs,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -278,6 +323,7 @@ defaults!(Config {
     authrpc: AuthRpc::default(),
     ipc: Ipc::default(),
     mining: Mining::default(),
+    txpool: TxPool::default(),
     logging: Logging::default(),
     metrics: Listen::default(),
     pprof: Listen::default(),
@@ -382,6 +428,41 @@ fn invalid(key: &str, value: &str, why: &'static str) -> ConfigError {
 fn num<T: std::str::FromStr>(key: &str, v: &str) -> Result<T, ConfigError> {
     v.parse()
         .map_err(|_| invalid(key, v, "not a number in range"))
+}
+
+/// A Go `time.ParseDuration` value (`3h0m0s`, `90m`, `30s`) in whole seconds; fractions round down.
+fn duration_secs(v: &str) -> Option<u64> {
+    if v == "0" {
+        return Some(0);
+    }
+    let (mut rest, mut ms) = (v, 0u128);
+    if rest.is_empty() {
+        return None;
+    }
+    while !rest.is_empty() {
+        let d = rest
+            .find(|c: char| !(c.is_ascii_digit() || c == '.'))
+            .unwrap_or(rest.len());
+        let (n, tail) = rest.split_at(d);
+        let u = tail
+            .find(|c: char| c.is_ascii_digit() || c == '.')
+            .unwrap_or(tail.len());
+        let (unit, next) = tail.split_at(u);
+        let scale = match unit {
+            "ms" => 1.0,
+            "s" => 1e3,
+            "m" => 60e3,
+            "h" => 3600e3,
+            _ => return None,
+        };
+        let part = n.parse::<f64>().ok()? * scale;
+        if !part.is_finite() || part > 1e24 {
+            return None;
+        }
+        ms += format!("{part:.0}").parse::<u128>().ok()?;
+        rest = next;
+    }
+    u64::try_from(ms / 1000).ok()
 }
 
 /// geth bool flags: `-http`, `-http=true`, `-http=false`.
@@ -621,6 +702,16 @@ impl Config {
             "pprof" => self.pprof.enabled = flag(key, v)?,
             "pprof.addr" => self.pprof.addr = v.to_owned(),
             "pprof.port" => self.pprof.port = num(key, v)?,
+            "txpool.pricelimit" => self.txpool.price_limit = num(key, v)?,
+            "txpool.pricebump" => self.txpool.price_bump = num(key, v)?,
+            "txpool.accountslots" => self.txpool.account_slots = num(key, v)?,
+            "txpool.globalslots" => self.txpool.global_slots = num(key, v)?,
+            "txpool.accountqueue" => self.txpool.account_queue = num(key, v)?,
+            "txpool.globalqueue" => self.txpool.global_queue = num(key, v)?,
+            "txpool.lifetime" => {
+                self.txpool.lifetime_secs =
+                    duration_secs(v).ok_or_else(|| invalid(key, v, "a duration such as 3h0m0s"))?;
+            }
             _ => return Err(ConfigError::UnknownKey(key.to_owned())),
         }
         Ok(())
@@ -774,6 +865,38 @@ mod tests {
         let c = Config::from_toml(bad).unwrap();
         assert!(crate::DiskWatermark::from_limits(1 << 40, &c.limits).is_none());
         assert!(Config::from_toml("[limits]\ndisk_nope = 1\n").is_err());
+    }
+
+    #[test]
+    fn txpool_flags_and_file() {
+        let mut c =
+            Config::from_toml("[txpool]\nglobal_slots = 9000\naccount_slots = 0\n").unwrap();
+        assert_eq!(c.txpool.global_slots, 9000);
+        // zero is the default, as geth `sanitize`
+        assert_eq!(c.txpool.pool_config().account_slots, 16);
+        for (k, v) in [
+            ("txpool.pricelimit", "250000000"),
+            ("txpool.pricebump", "15"),
+            ("txpool.accountslots", "32"),
+            ("txpool.globalslots", "8192"),
+            ("txpool.accountqueue", "128"),
+            ("txpool.globalqueue", "2048"),
+            ("txpool.lifetime", "1h30m"),
+        ] {
+            c.set(k, v).unwrap_or_else(|e| panic!("{k}: {e}"));
+        }
+        let p = c.txpool.pool_config();
+        assert_eq!(
+            (p.price_limit, p.price_bump, p.account_slots, p.global_slots),
+            (250_000_000, 15, 32, 8192)
+        );
+        assert_eq!(
+            (p.account_queue, p.global_queue, p.lifetime_secs),
+            (128, 2048, 5400)
+        );
+        assert!(c.set("txpool.lifetime", "3").is_err());
+        assert!(c.set("txpool.globalslots", "-1").is_err());
+        assert_eq!(duration_secs("3h0m0s"), Some(10_800));
     }
 
     #[test]

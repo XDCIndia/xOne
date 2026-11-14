@@ -165,7 +165,10 @@ pub fn build(
     let net_svc = net::NetService::new(cfg, rt, peers, key, &pc)?;
     let nh = net_svc.handle();
     let rth = nh.runtime();
-    let pool = Arc::new(pool::PoolShared::new(core.clone())?);
+    let pool = Arc::new(pool::PoolShared::with_config(
+        core.clone(),
+        &cfg.txpool.pool_config(),
+    )?);
     // the producer's BFT machine reads the votes, timeouts and SyncInfos the follower receives
     let (bft_tx, bft_rx) = std::sync::mpsc::channel();
     let gate = crate::diskguard::ImportGate::default();

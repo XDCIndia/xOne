@@ -38,16 +38,15 @@ pub struct PoolShared {
 
 impl PoolShared {
     pub fn new(core: Arc<Core>) -> Result<Self, String> {
+        Self::with_config(core, &Config::default())
+    }
+
+    /// A pool with the operator's `[txpool]` limits.
+    pub fn with_config(core: Arc<Core>, cfg: &Config) -> Result<Self, String> {
         let (number, _) = core.head();
         let gas = core.hist.read().tip().header.gas_limit;
-        let pool = Pool::new(
-            core.spec.clone(),
-            &Config::default(),
-            Authority::Syncing,
-            number,
-            gas,
-        )
-        .map_err(|e| e.to_string())?;
+        let pool = Pool::new(core.spec.clone(), cfg, Authority::Syncing, number, gas)
+            .map_err(|e| e.to_string())?;
         Ok(Self {
             inner: Mutex::new(Inner {
                 pool,
