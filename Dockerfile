@@ -1,7 +1,7 @@
 # Image of the release artifact (XB-26). It contains the exact binary that ci/release.sh built,
 # checksummed and signed; it does not compile anything. Build context is dist/:
 #   make release && make docker
-# Base: Ubuntu 24.04, the OS the release binary is built on (it links glibc dynamically).
+# Base: Ubuntu 24.04. The release binary is static (musl) and does not need it; a scratch image is a follow-up (#193).
 # Pinned by digest; update the digest and the date together:
 #   docker pull ubuntu:24.04 && docker image inspect ubuntu:24.04 --format '{{index .RepoDigests 0}}'
 ARG BASE=ubuntu:24.04@sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3
@@ -9,12 +9,12 @@ ARG BASE=ubuntu:24.04@sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9
 FROM ${BASE} AS unpack
 ARG VERSION
 WORKDIR /unpack
-COPY xone-${VERSION}-linux-x86_64.tar.gz SHA256SUMS ./
+COPY xone-${VERSION}-linux-x86_64-musl.tar.gz SHA256SUMS ./
 # Refuse an artifact that does not match SHA256SUMS (the signature is checked by the operator
 # on the host, see docs/ops/release.md).
-RUN grep " xone-${VERSION}-linux-x86_64.tar.gz\$" SHA256SUMS | sha256sum -c - \
- && tar -xzf xone-${VERSION}-linux-x86_64.tar.gz \
- && mv xone-${VERSION}-linux-x86_64 /opt-xone
+RUN grep " xone-${VERSION}-linux-x86_64-musl.tar.gz\$" SHA256SUMS | sha256sum -c - \
+ && tar -xzf xone-${VERSION}-linux-x86_64-musl.tar.gz \
+ && mv xone-${VERSION}-linux-x86_64-musl /opt-xone
 
 FROM ${BASE}
 ARG VERSION

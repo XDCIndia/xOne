@@ -101,3 +101,11 @@ opt-level = 2
 # The pool flood test pushes 100,000 transactions through the heaps and lists and prices each with a gas table.
 [profile.dev.package.xone-builder]
 opt-level = 2
+
+# Release binary (GAP-0038, #193): smaller, stripped. Unwind stays: the node relies on bounded shutdown.
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+panic = "unwind"
+debug = false

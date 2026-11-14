@@ -48,7 +48,7 @@ wait $pa || { tail -20 "$W/a.log"; fail "release in A"; }
 wait $pb || { tail -20 "$W/b.log"; fail "release in B"; }
 ok "release.sh ran in two clones"
 
-d=$W/a/dist; n=xone-$ver-linux-x86_64
+d=$W/a/dist; n=xone-$ver-linux-x86_64-musl
 for f in "$n.tar.gz" "xone-$ver.cdx.json" "xone-$ver.provenance.json" SHA256SUMS SHA256SUMS.sig; do [ -s "$d/$f" ] || fail "missing artifact $f"; done
 ok "artifacts present: $(cd "$d" && echo *)"
 (cd "$d" && sha256sum -c SHA256SUMS >/dev/null) || fail "checksums"

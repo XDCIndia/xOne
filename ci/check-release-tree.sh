@@ -3,6 +3,7 @@
 # test-only code, and carries a real version stamp.
 #   (a) `cargo tree -p xone -e features` names no forbidden feature or test-only crate
 #   (b) the release binary has no symbol or string from the test-only crates
+#   (d) the stripped binary is at most XONE_SIZE_BUDGET bytes (default 18874368, 18 MiB)
 #   (c) `xone --version` is not `unknown`, and has no `-dirty` on a clean tree
 # Build with `-p xone` only: a whole-workspace build unifies `fault-injection` onto xone-db for sim.
 # RELEASE_TREE_REQUIRE_CLEAN=1 (CI) fails on a dirty tree instead of expecting `-dirty`.
@@ -29,6 +30,9 @@ if hits=$( { nm -C "$bin" 2>/dev/null || true; strings -a "$bin"; } | grep -E "$
 else
   say "ok   (b) nm and strings on $bin: none of $syms"
 fi
+
+size=$(stat -c %s "$bin"); budget="${XONE_SIZE_BUDGET:-18874368}"
+if [ "$size" -gt "$budget" ]; then say "FAIL (d): $bin is $size bytes, budget $budget"; fail=1; else say "ok   (d) $bin is $size bytes, budget $budget"; fi
 
 stamp=$("$bin" --version)
 say "     stamp: $stamp"
