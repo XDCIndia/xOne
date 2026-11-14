@@ -4,13 +4,14 @@
 //! events published while a client is disconnected are gone (the documented event gap).
 
 use crate::{
-    json::h256,
+    json::{decode_receipts, h256, header_json, log_json, Loc},
     types::{parse_address, parse_hash, RpcError},
 };
-use alloy_primitives::{Address, B256};
+use alloy_primitives::{keccak256, Address, Bytes, B256};
 use serde_json::{json, Value};
 use std::sync::{Mutex, PoisonError};
 use tokio::sync::mpsc::{error::TrySendError, Sender};
+use xone_primitives::Header;
 
 /// geth `filters.FilterCriteria` for logs: any of `addresses` and, per position, any of the topics.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -179,6 +180,54 @@ impl Hub {
             }));
         }
         dropped
+    }
+
+    /// One block that became canonical (geth `handleChainEvent`, `eth/filters/filter_system.go:453`,
+    /// and the `logsFeed` of `core/blockchain.go:2447-2454`): its header to `newHeads`, its logs to
+    /// `logs`. With `removed` the block left the canonical chain: only its logs are sent, marked
+    /// removed (geth `RemovedLogsEvent`, `core/blockchain.go:3572-3653`). `txs` are the consensus
+    /// encodings of the body, `receipts` the stored receipts. Returns the dropped slow subscriptions.
+    pub fn publish_block(
+        &self,
+        header: &Header,
+        hash: B256,
+        txs: &[Bytes],
+        receipts: &[Bytes],
+        removed: bool,
+    ) -> Result<Vec<String>, RpcError> {
+        if self.is_empty() {
+            return Ok(vec![]);
+        }
+        let mut dropped = if removed {
+            vec![]
+        } else {
+            self.publish_head(&Value::Object(header_json(header, hash)))
+        };
+        let mut logs = vec![];
+        let mut idx = 0u64;
+        for (i, r) in decode_receipts(receipts)?.iter().enumerate() {
+            let at = Loc {
+                block: hash,
+                number: header.number,
+                time: header.timestamp,
+                index: u64::try_from(i).unwrap_or(u64::MAX),
+                base_fee: header.base_fee,
+            };
+            let tx = txs
+                .get(i)
+                .map(keccak256)
+                .ok_or_else(|| RpcError::internal("receipt without transaction"))?;
+            for l in &r.logs {
+                logs.push(LogEvent {
+                    address: l.address,
+                    topics: l.data.topics().to_vec(),
+                    json: log_json(l, &at, tx, at.index, idx, removed),
+                });
+                idx += 1;
+            }
+        }
+        dropped.extend(self.publish_logs(&logs, removed));
+        Ok(dropped)
     }
 
     pub fn publish_pending(&self, tx_hash: B256) -> Vec<String> {

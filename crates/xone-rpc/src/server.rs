@@ -195,7 +195,8 @@ pub struct Rpc {
     pub limits: Limits,
     /// `Host` and `Origin` checks of the transports (`policy.rs`).
     pub policy: crate::policy::Policy,
-    pub hub: Hub,
+    /// Shared with the node, which publishes each canonical block to it.
+    pub hub: Arc<Hub>,
     class_sem: [Arc<Semaphore>; 4],
     global_bucket: Mutex<Bucket>,
     /// Set by the node's watchdog: C2 and C3 answer `-32005 "node busy"` (ADR-007 section 3, rule 6).
@@ -239,7 +240,7 @@ impl Rpc {
             global_bucket: Mutex::new(Bucket::new(limits.bucket_burst, limits.bucket_per_sec, 0)),
             limits,
             policy: Default::default(),
-            hub: Hub::default(),
+            hub: Arc::default(),
             shed: AtomicBool::new(false),
             start: Instant::now(),
             next_conn: Mutex::new(0),

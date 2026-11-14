@@ -3,8 +3,8 @@
 //! and `--ws.api` are registered, as geth does.
 //!
 //! ponytail: `eth_call`, `eth_estimateGas` and the tracers answer a typed refusal (there is no
-//! single-call executor yet), `XDPoS_getMissedRoundsInEpochByBlockNum` too, and no subscription
-//! publishes (`eth_subscribe` accepts and stays quiet).
+//! single-call executor yet), `XDPoS_getMissedRoundsInEpochByBlockNum` too. `newHeads` and `logs`
+//! are published by `Core` on each canonical block; `newPendingTransactions` accepts and stays quiet.
 
 use std::{
     net::SocketAddr,
@@ -401,7 +401,7 @@ impl RpcService {
                 net,
                 core: core.clone(),
             }),
-            consensus: Arc::new(RpcConsensus { core }),
+            consensus: Arc::new(RpcConsensus { core: core.clone() }),
         };
         let lim = limits(&cfg.limits);
         let addr = |a: &str, p: u16| {
@@ -464,6 +464,15 @@ impl RpcService {
                 ))
             })
             .transpose()?;
+        // the transports that can push: their hubs receive the canonical blocks
+        core.hubs
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .extend(
+                ws.iter()
+                    .map(|(_, r)| r.hub.clone())
+                    .chain(ipc.iter().map(|(_, r)| r.hub.clone())),
+            );
         Ok(Self {
             rt,
             http,

@@ -24,6 +24,7 @@ use xone_consensus::{
 use xone_db::mdbx::T;
 use xone_executor::execute_verified;
 use xone_primitives::{Header, WideBalance};
+use xone_rpc::subscriptions::Hub;
 use xone_state::{
     trie::flat_root, Account, FlatRead, FlatWrite, MemFlat, Missing, StateDiff, StateRead,
 };
@@ -257,6 +258,9 @@ pub struct Core {
     pub senders: std::sync::Arc<Senders>,
     /// The state checkpoint being written ([`Self::checkpoint_in_background`]).
     saving: Mutex<Option<std::thread::JoinHandle<Result<(), FileError>>>>,
+    /// The subscription hubs of the WebSocket and IPC endpoints: each canonical block and each block
+    /// a reorg removes is published to them ([`Self::publish`]).
+    pub hubs: Mutex<Vec<std::sync::Arc<Hub>>>,
 }
 
 pub fn now() -> u64 {
@@ -663,6 +667,7 @@ impl Core {
             prune_slack: PRUNE_SLACK,
             senders,
             saving: Mutex::new(None),
+            hubs: Mutex::default(),
         };
         for (header, body) in replay {
             let number = header.number;
@@ -770,6 +775,7 @@ impl Core {
             })?;
         }
         self.head.send_replace((number, hash));
+        self.publish(std::slice::from_ref(self.hist.read().tip()), false);
         if self.ckpt_every != 0 && number % self.ckpt_every == 0 {
             self.checkpoint_in_background()?;
         }
@@ -817,8 +823,13 @@ impl Core {
                 Ok(Outcome::Extended) => added += 1,
                 r => {
                     // our own blocks back, the branch is refused
-                    let back =
-                        self.chain.set_head(fork).is_ok() && self.hist.write().pop_to(fork).is_ok();
+                    let back = self.chain.set_head(fork).is_ok()
+                        && self
+                            .hist
+                            .write()
+                            .pop_to(fork)
+                            .map(|b| self.publish(&b, true))
+                            .is_ok();
                     for s in dropped.iter().filter(|_| back) {
                         if !matches!(
                             self.import(s.header.clone(), s.body.clone(), now),
@@ -851,9 +862,34 @@ impl Core {
             .map_err(|e| bad(format!("set head {number}: {e}")))?;
         let dropped = self.hist.write().pop_to(number).map_err(bad)?;
         *self.hist.pending() = None;
+        self.publish(&dropped, true);
         let hash = self.hist.read().tip().hash;
         self.head.send_replace((number, hash));
         Ok(dropped)
+    }
+
+    /// Sends `blocks` (ascending) to the subscription hubs: a canonical block's header and logs, or
+    /// with `removed` the logs of blocks a reorg took off (geth `eth/filters/filter_system.go:453`,
+    /// `core/blockchain.go:3572`). A block whose receipts do not decode is logged and skipped: the
+    /// subscribers miss it, the chain does not.
+    fn publish(&self, blocks: &[Stored], removed: bool) {
+        let hubs = self.hubs.lock().unwrap_or_else(PoisonError::into_inner);
+        for hub in hubs.iter().filter(|h| !h.is_empty()) {
+            for s in blocks {
+                if let Err(e) = hub.publish_block(
+                    &s.header,
+                    s.hash,
+                    &s.body.transactions,
+                    &s.receipts,
+                    removed,
+                ) {
+                    eprintln!(
+                        "rpc: subscriptions: block {}: {}",
+                        s.header.number, e.message
+                    );
+                }
+            }
+        }
     }
 
     /// Writes a state checkpoint of the head. A snapshot with votes in flight is not saved: the
