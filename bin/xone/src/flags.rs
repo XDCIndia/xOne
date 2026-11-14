@@ -175,6 +175,14 @@ pub const FLAGS: &[Flag] = &[
         "flags.go:997",
     ),
     f(
+        "p2p.addr",
+        S,
+        "unset",
+        "::",
+        "IP the p2p TCP listener and the discovery UDP socket bind to, IPv4 or IPv6. `::` listens on IPv6 and, where the OS allows (Linux default), IPv4 too. Unset: 0.0.0.0 (127.0.0.1 for a loopback-only node). The advertised enode uses this address when it is not a wildcard and no --nat extip is given.",
+        "not in geth-XDC at the pin (ListenAddr); issue #308",
+    ),
+    f(
         "nat",
         S,
         "unset",
