@@ -187,7 +187,10 @@ mod tests {
     fn authorities() {
         let p = |s| parse_target(s, ["https", "http"], "/");
         let t = p("https://10.0.0.1/hb").unwrap();
-        assert_eq!((t.host.as_str(), t.port, t.authority()), ("10.0.0.1", 443, "10.0.0.1".into()));
+        assert_eq!(
+            (t.host.as_str(), t.port, t.authority()),
+            ("10.0.0.1", 443, "10.0.0.1".into())
+        );
         let t = p("https://sky.example.org:8443/v1/hb?k=1").unwrap();
         assert_eq!(t.authority(), "sky.example.org:8443");
         assert_eq!(t.path, "/v1/hb?k=1");
@@ -195,7 +198,10 @@ mod tests {
         assert_eq!((t.host.as_str(), t.port), ("::1", 3000));
         assert_eq!(t.authority(), "[::1]:3000");
         let t = p("https://[2001:db8::1]").unwrap();
-        assert_eq!((t.host.as_str(), t.port, t.path.as_str()), ("2001:db8::1", 443, "/"));
+        assert_eq!(
+            (t.host.as_str(), t.port, t.path.as_str()),
+            ("2001:db8::1", 443, "/")
+        );
         assert_eq!(t.authority(), "[2001:db8::1]");
         let t = p("https://h.example?x=1").unwrap();
         assert_eq!(t.path, "/?x=1");
