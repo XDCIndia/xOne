@@ -709,6 +709,59 @@ async fn http_serves_requests_and_429s_on_rejection() {
 }
 
 #[tokio::test]
+async fn http_accepts_only_json_media_types() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let r = rpc_with(Limits::default(), 0);
+    let ls = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
+    let addr = ls.local_addr().expect("addr");
+    let h = tokio::spawn(xone_rpc::transport::serve_http(r, ls));
+    let body = req(1, "eth_chainId", json!([])).to_string();
+    let send = |ct: Option<&'static str>| {
+        let body = body.clone();
+        async move {
+            let mut s = tokio::net::TcpStream::connect(addr).await.expect("connect");
+            let ct = ct
+                .map(|c| format!("Content-Type: {c}\r\n"))
+                .unwrap_or_else(String::new);
+            let msg = format!(
+                "POST / HTTP/1.1\r\nHost: localhost\r\n{ct}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            s.write_all(msg.as_bytes()).await.expect("write");
+            let mut out = String::new();
+            s.read_to_string(&mut out).await.expect("read");
+            out
+        }
+    };
+    for ok in [
+        "application/json",
+        "application/json; charset=utf-8",
+        "Application/JSON",
+        "application/json-rpc",
+        "application/jsonrequest",
+    ] {
+        let r = send(Some(ok)).await;
+        assert!(
+            r.starts_with("HTTP/1.1 200") && r.contains("0x33"),
+            "{ok}: {r}"
+        );
+    }
+    for bad in [
+        Some("text/plain"),
+        Some("application/x-www-form-urlencoded"),
+        Some("multipart/form-data; boundary=x"),
+        None,
+    ] {
+        let r = send(bad).await;
+        assert!(r.starts_with("HTTP/1.1 415"), "{bad:?}: {r}");
+        assert!(!r.contains("result"), "{bad:?}: {r}");
+    }
+    h.abort();
+}
+
+#[tokio::test]
 async fn websocket_subscribes_receives_heads_and_cleans_up_on_close() {
     use futures_util::{SinkExt, StreamExt};
     use tokio_tungstenite::tungstenite::Message;
