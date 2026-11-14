@@ -216,7 +216,9 @@ From this rehearsal (the owner runs the seat; these are the producer-side facts)
    signer, 0)`; `plan` refuses only 50 and 51): on net2040 the ADR-010 fence (`W = 2 * TimeoutPeriod * Base^MaxExponent`,
    120 s there) is not applied and no sighting of our own signature is fed to it. A second process with the same key
    is kept out only by the operator rule (stop the old signer, confirm 0 processes, then start). The mint-gate skill's
-   pre-flight asks for a fence that works across hosts; it is not there.
+   pre-flight asks for a fence that works across hosts; it is not there. Fixed by #118: the window is the network's
+   (`ChainSpec::quiet_window`, 120 s on net2040, only raised by `--miner.quietwindow`) and sightings of our key in
+   votes, timeouts and V2 headers feed `SafetyUnit::sight`.
 3. A restart costs the turns until the node is peered and has proved itself caught up (fix 5); on the devnet that was
    35 s of geth redial. Restart a seat right after one of its seals.
 4. A seat on a build before `1676b87` misses a turn whenever the head race (previous section) hits the round before its

@@ -1,6 +1,7 @@
 //! The `producer` service (XB-23): builds, seals and sends the blocks of one validator, and drives the V2
 //! BFT step machine for it. It runs only with `--mine`, an explicit keystore and password file, and never on
-//! chain id 50 (mainnet) in this build (a typed refusal, temporary until Gate D). Apothem (51) is allowed, with the ADR-010 quiet window.
+//! chain id 50 (mainnet) in this build (a typed refusal, temporary until Gate D). Every other chain signs behind the ADR-010
+//! quiet window of its chainspec (`ChainSpec::quiet_window`), fed by the sightings of our key in votes, timeouts and headers.
 //!
 //! One std thread polls the chain head every 50 ms. Everything that signs goes through the safety unit
 //! (`xone_consensus::unit`): the validator key is moved into it at start. The pure rules are in
@@ -50,7 +51,7 @@ use xone_consensus::{
     v2::{
         self,
         bft::{drive::drive, Bft, Chain, Config as BftConfig, EpochFacts, Event, HeaderFacts},
-        cert::Secp,
+        cert::{timeout_digest, vote_digest, Scheme, Secp},
         epoch_switch, gap_snapshot,
         safety::Kind,
     },
@@ -96,6 +97,8 @@ pub enum ProducerError {
     NoKeystore,
     #[error("--mine needs --password, a file that holds the keystore password")]
     NoPassword,
+    #[error("--miner.quietwindow {have} is below the {min} s quiet window of this network (ADR-010 section 8): it can only be raised")]
+    QuietWindowLowered { have: u64, min: u64 },
 }
 
 /// The files of a producer, after the checks.
@@ -103,10 +106,13 @@ pub enum ProducerError {
 pub struct Plan {
     pub keystore: PathBuf,
     pub password: PathBuf,
+    /// The ADR-010 quiet window in ticks of 1 s: the network's, or a larger configured one.
+    pub quiet: u32,
 }
 
-/// The checks of `--mine`, in order: the network, then the two files that must be named.
-pub fn plan(cfg: &Config, chain_id: u64) -> Result<Plan, ProducerError> {
+/// The checks of `--mine`, in order: the network, the two files that must be named, the quiet window.
+pub fn plan(cfg: &Config, spec: &ChainSpec) -> Result<Plan, ProducerError> {
+    let chain_id = spec.chain_id;
     if chain_id == 50 {
         return Err(ProducerError::PublicNetwork(chain_id));
     }
@@ -120,7 +126,16 @@ pub fn plan(cfg: &Config, chain_id: u64) -> Result<Plan, ProducerError> {
         .password_file
         .clone()
         .ok_or(ProducerError::NoPassword)?;
-    Ok(Plan { keystore, password })
+    let min = spec.quiet_window();
+    let have = cfg.mining.quiet_window.unwrap_or(min);
+    if have < min {
+        return Err(ProducerError::QuietWindowLowered { have, min });
+    }
+    Ok(Plan {
+        keystore,
+        password,
+        quiet: u32::try_from(have).unwrap_or(u32::MAX),
+    })
 }
 
 type Unit = SafetyUnit<FileSafety, LocalSigner>;
@@ -464,7 +479,17 @@ impl Worker {
             self.sign_tx_for(n, h);
         }
         self.sign_tx_for(number, hash);
-        let _ = header;
+        // a V2 head sealed by our key that this process did not propose (ADR-010 section 8.3)
+        if number > self.switch_block() {
+            if let Ok(f) = header.extra_fields_v2() {
+                self.sight(
+                    Kind::Propose,
+                    f.round,
+                    header.v2_sig_hash(),
+                    &header.validator,
+                );
+            }
+        }
     }
 
     // ---- sign transactions ----
@@ -1178,7 +1203,11 @@ impl Worker {
     /// `SyncInfo`: verify, `tryForward`, handle; `eth/bft/handler.go:187-229`).
     fn inbound(&mut self) {
         while let Ok((from, msg)) = self.bft_in.try_recv() {
-            if self.stopped() || !self.bft.initialized() {
+            if self.stopped() {
+                continue;
+            }
+            self.sight_msg(&msg);
+            if !self.bft.initialized() {
                 continue; // before the V2 switch, or not seeded yet: geth's engine is not ready either
             }
             let next = u64::try_from(self.tags.len()).unwrap_or(u64::MAX);
@@ -1198,6 +1227,40 @@ impl Worker {
             if self.bft_event(ev) {
                 self.heard = true;
                 self.peers.relay_bft(&msg, &from);
+            }
+        }
+    }
+
+    /// ADR-010 section 8.3: a vote or a timeout of our key from the network.
+    fn sight_msg(&mut self, msg: &BftMessage) {
+        match msg {
+            BftMessage::Vote(v) => {
+                let info = &v.proposed_block_info;
+                let digest = vote_digest(info, v.gap_number);
+                self.sight(Kind::Vote, info.round, digest, &v.signature);
+            }
+            BftMessage::Timeout(t) => {
+                let digest = timeout_digest(t.round, t.gap_number);
+                self.sight(Kind::Timeout, t.round, digest, &t.signature);
+            }
+            BftMessage::SyncInfo(_) => {}
+        }
+    }
+
+    /// A signature that recovers to our key and that the record does not explain (another process on
+    /// the key, or a stale record) raises the record and restarts the quiet window.
+    fn sight(&mut self, kind: Kind, round: u64, digest: B256, sig: &[u8]) {
+        if Secp.recover(&digest, sig).ok() != Some(self.me) {
+            return;
+        }
+        match self.unit.sight(kind, round, digest) {
+            Ok(false) => {}
+            Ok(true) => say(format!(
+                "fence closed: our key signed {kind:?} round {round} ({digest}) and this process did not; the quiet window restarts (ADR-010 section 8)"
+            )),
+            Err(e) => {
+                say(format!("stopping: the sighting could not be written: {e}"));
+                self.dead = true;
             }
         }
     }
@@ -1351,10 +1414,9 @@ impl ProducerService {
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         let store = FileSafety::open(&cfg.datadir.join("xone").join("safety"))
             .map_err(|e| format!("safety store: {e}"))?;
-        // ponytail: a private chain has no second signer by construction, so the quiet window is 0; a
-        // public chain (Apothem) takes the ADR-010 window W = 120 s (mainnet is refused in `plan`).
-        let quiet = if core.spec.chain_id == 51 { 120 } else { 0 };
-        let unit = SafetyUnit::open_or_init(store, signer, quiet)
+        // ADR-010 section 8 on every chain: a private chain can have a second signer on the key too
+        // (a copied datadir, a failover), so no chain runs with an inactive fence (#118)
+        let unit = SafetyUnit::open_or_init(store, signer, plan.quiet)
             .map_err(|e| format!("safety unit: {e}"))?;
         let spec = core.spec.clone();
         let v2 = spec.xdpos.v2.clone().ok_or("the chain has no V2 section")?;
