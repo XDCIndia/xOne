@@ -198,6 +198,141 @@ impl PoolService {
     }
 }
 
+/// The deepest reorg whose discarded transactions go back to the pool (issue #63). A deeper one, or
+/// one whose old branch the pool did not see, only resets the pool: a typed outcome, never a walk
+/// without end.
+pub const MAX_REORG_DEPTH: u64 = 64;
+
+/// A canonical block as the pool saw it: number, parent and the consensus encodings of its
+/// transactions.
+#[derive(Clone, Debug)]
+pub struct SeenBlock {
+    pub number: u64,
+    pub parent: B256,
+    pub txs: Vec<Bytes>,
+}
+
+/// Why a head change gave no reinjection set.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Delta {
+    /// The fork point is more than [`MAX_REORG_DEPTH`] blocks below one of the heads.
+    TooDeep,
+    /// A block of either branch is not known (not seen while canonical, or pruned).
+    Unknown(B256),
+}
+
+/// The transactions of the branch from `old` back to the common ancestor with `new`, oldest block
+/// first, minus every transaction the branch to `new` includes (geth `legacypool.go` `reset`:
+/// `discarded` minus `included`). An extension of `old` gives nothing.
+pub fn discarded(
+    old: B256,
+    new: B256,
+    get: impl Fn(B256) -> Option<SeenBlock>,
+) -> Result<Vec<Bytes>, Delta> {
+    let (mut o, mut n) = (old, new);
+    let mut ob = get(o).ok_or(Delta::Unknown(o))?;
+    let mut nb = get(n).ok_or(Delta::Unknown(n))?;
+    let (mut gone, mut kept): (Vec<Vec<Bytes>>, std::collections::HashSet<B256>) =
+        (Vec::new(), std::collections::HashSet::new());
+    let mut steps = 0u64;
+    while o != n {
+        steps += 1;
+        if steps > 2 * MAX_REORG_DEPTH {
+            return Err(Delta::TooDeep);
+        }
+        if ob.number >= nb.number {
+            gone.push(std::mem::take(&mut ob.txs));
+            o = ob.parent;
+            ob = get(o).ok_or(Delta::Unknown(o))?;
+        } else {
+            kept.extend(nb.txs.iter().map(keccak256));
+            n = nb.parent;
+            nb = get(n).ok_or(Delta::Unknown(n))?;
+        }
+    }
+    Ok(gone
+        .into_iter()
+        .rev()
+        .flatten()
+        .filter(|t| !kept.contains(&keccak256(t)))
+        .collect())
+}
+
+/// The canonical blocks the pool has seen, for the old branch of a later reorg; bounded.
+#[derive(Default)]
+struct Seen {
+    blocks: HashMap<B256, SeenBlock>,
+}
+
+impl Seen {
+    const MAX: usize = 4 * MAX_REORG_DEPTH as usize;
+
+    /// Records the canonical blocks from `head` back to a known block, at most the reorg depth.
+    fn record(&mut self, core: &Core, head: (u64, B256)) {
+        let (mut n, mut h) = head;
+        for _ in 0..=MAX_REORG_DEPTH {
+            if self.blocks.contains_key(&h) {
+                break;
+            }
+            let Some(parent) = core.hist.read().header_by_hash(h).map(|x| x.parent_hash) else {
+                break;
+            };
+            let Some(body) = core.body(n, h) else { break };
+            self.blocks.insert(
+                h,
+                SeenBlock {
+                    number: n,
+                    parent,
+                    txs: body.transactions,
+                },
+            );
+            if n == 0 {
+                break;
+            }
+            (n, h) = (n - 1, parent);
+        }
+        let floor = head.0.saturating_sub(2 * MAX_REORG_DEPTH);
+        self.blocks.retain(|_, b| b.number >= floor);
+        while self.blocks.len() > Self::MAX {
+            let Some(k) = self
+                .blocks
+                .iter()
+                .min_by_key(|(_, b)| b.number)
+                .map(|(k, _)| *k)
+            else {
+                break;
+            };
+            self.blocks.remove(&k);
+        }
+    }
+}
+
+impl PoolShared {
+    /// A head change: the transactions of a discarded branch go back to the pool after the reset,
+    /// under the new head's rules (nonce, balance, fee, special-transaction authority). Returns how
+    /// many were taken.
+    fn follow(&self, seen: &mut Seen, last: (u64, B256), head: (u64, B256)) -> usize {
+        if last == head {
+            return 0;
+        }
+        // the new branch is canonical now; the old one is in `seen` (or the delta is unknown)
+        seen.record(&self.core, head);
+        let back = discarded(last.1, head.1, |h| seen.blocks.get(&h).cloned());
+        self.reset();
+        match back {
+            Ok(txs) if !txs.is_empty() => {
+                let refs: Vec<&[u8]> = txs.iter().map(|t| &t[..]).collect();
+                self.add_raws(&refs).iter().filter(|r| r.is_ok()).count()
+            }
+            Ok(_) => 0,
+            Err(e) => {
+                tracing::debug!(target: "pool", "no reinjection for the head change to {}: {e:?}", head.0);
+                0
+            }
+        }
+    }
+}
+
 impl Service for PoolService {
     fn name(&self) -> &str {
         "pool"
@@ -207,8 +342,14 @@ impl Service for PoolService {
         let mut head = self.shared.core.head.subscribe();
         let shared = self.shared.clone();
         self.task = Some(self.rt.spawn(async move {
+            let mut seen = Seen::default();
+            let mut last = shared.core.head();
+            seen.record(&shared.core, last);
             while head.changed().await.is_ok() {
-                shared.reset();
+                // the watch coalesces: only the latest head is processed, once
+                let now_head = *head.borrow_and_update();
+                shared.follow(&mut seen, last, now_head);
+                last = now_head;
             }
         }));
         Ok(())
@@ -218,5 +359,102 @@ impl Service for PoolService {
         if let Some(t) = self.task.take() {
             t.abort();
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)] // test: a panic is the failure report
+mod tests {
+    use super::*;
+
+    fn tx(i: u8) -> Bytes {
+        Bytes::from(vec![i; 3])
+    }
+
+    /// Blocks named by a byte: `(hash, number, parent, txs)`.
+    fn chain(v: &[(u8, u64, u8, &[u8])]) -> HashMap<B256, SeenBlock> {
+        v.iter()
+            .map(|(h, n, p, t)| {
+                (
+                    B256::repeat_byte(*h),
+                    SeenBlock {
+                        number: *n,
+                        parent: B256::repeat_byte(*p),
+                        txs: t.iter().map(|i| tx(*i)).collect(),
+                    },
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn discarded_minus_included_oldest_first() {
+        // 1 <- 2 <- 3 <- 4 (old head)      1 <- 2 <- 5 <- 6 <- 7 (new head)
+        let m = chain(&[
+            (1, 1, 0, &[]),
+            (2, 2, 1, &[9]),
+            (3, 3, 2, &[10, 11]),
+            (4, 4, 3, &[12, 13]),
+            (5, 3, 2, &[11]),
+            (6, 4, 5, &[]),
+            (7, 5, 6, &[13, 14]),
+        ]);
+        let b = |h: u8| B256::repeat_byte(h);
+        let got = discarded(b(4), b(7), |h| m.get(&h).cloned()).unwrap();
+        // 11 and 13 are in the new branch; 9 is below the fork
+        assert_eq!(got, vec![tx(10), tx(12)]);
+        // an extension gives nothing; the same head gives nothing
+        assert_eq!(
+            discarded(b(5), b(7), |h| m.get(&h).cloned()).unwrap(),
+            Vec::<Bytes>::new()
+        );
+        assert_eq!(
+            discarded(b(7), b(7), |h| m.get(&h).cloned()).unwrap(),
+            Vec::<Bytes>::new()
+        );
+        // a branch the pool never saw
+        assert_eq!(
+            discarded(b(8), b(7), |h| m.get(&h).cloned()),
+            Err(Delta::Unknown(b(8)))
+        );
+    }
+
+    #[test]
+    fn a_deep_reorg_is_refused_not_walked() {
+        let mut m = HashMap::new();
+        let (mut a, mut b) = (B256::ZERO, B256::ZERO);
+        // two branches from genesis (hash 0), each 2 * MAX_REORG_DEPTH long
+        m.insert(
+            B256::ZERO,
+            SeenBlock {
+                number: 0,
+                parent: B256::ZERO,
+                txs: vec![],
+            },
+        );
+        for n in 1..=2 * MAX_REORG_DEPTH {
+            let (ha, hb) = (
+                keccak256([&n.to_be_bytes()[..], b"a"].concat()),
+                keccak256([&n.to_be_bytes()[..], b"b"].concat()),
+            );
+            m.insert(
+                ha,
+                SeenBlock {
+                    number: n,
+                    parent: a,
+                    txs: vec![],
+                },
+            );
+            m.insert(
+                hb,
+                SeenBlock {
+                    number: n,
+                    parent: b,
+                    txs: vec![],
+                },
+            );
+            (a, b) = (ha, hb);
+        }
+        assert_eq!(discarded(a, b, |h| m.get(&h).cloned()), Err(Delta::TooDeep));
     }
 }
