@@ -258,6 +258,8 @@ struct Worker {
     votes_in: BTreeMap<u64, u32>,
     /// ADR-010 fence clock: valid BFT gossip arrived since the last fence tick, and when that tick was.
     heard: bool,
+    /// Closed by the disk guard: no block is sealed while it is closed (ADR-007 section 7).
+    gate: crate::diskguard::ImportGate,
     fence_at: Instant,
 }
 
@@ -1112,6 +1114,10 @@ impl Worker {
     /// [`Worker::seal_now`], timed: the time is the safety record's write and sync plus the signature, and
     /// goes into the "sealed and sent" line, so a stalled disk shows as a number.
     fn seal(&mut self, h: Header) -> Result<Header, String> {
+        // disk low: nothing is signed that the store could not keep
+        if self.gate.stopped() {
+            return Err("disk low: block production paused".into());
+        }
         let t = Instant::now();
         let r = self.seal_now(h);
         self.seal_ms = t.elapsed().as_millis();
@@ -1397,6 +1403,14 @@ pub struct ProducerService {
 }
 
 impl ProducerService {
+    /// The disk guard's gate: no block is sealed while it is closed.
+    pub fn with_gate(mut self, gate: crate::diskguard::ImportGate) -> Self {
+        if let Some(w) = self.worker.as_mut() {
+            w.gate = gate;
+        }
+        self
+    }
+
     /// Opens the key and the safety record. The key is moved into the unit and goes nowhere else.
     pub fn new(
         plan: &Plan,
@@ -1472,6 +1486,7 @@ impl ProducerService {
                 votes_in: BTreeMap::new(),
                 heard: false,
                 fence_at: Instant::now(),
+                gate: Default::default(),
             }),
             stop,
             thread: None,

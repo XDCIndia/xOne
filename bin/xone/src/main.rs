@@ -155,7 +155,34 @@ fn run_node(cfg: &Config) -> ExitCode {
     if let Err(e) = shutdown.install_signals() {
         return fail(e);
     }
-    match services::snap_sync(cfg, &spec, &genesis, stamp(), &shutdown) {
+    // snap sync writes before the services (and their disk guard) exist: admit it on a first
+    // sample, and let a guard of its own stop it at the exit line
+    let mut snap_guard = None;
+    if cfg.sync.mode == "snap" {
+        if let Err(e) = xone_node::diskguard::admit(&cfg.datadir, &cfg.limits) {
+            return fail(e);
+        }
+        let mut g = xone_node::diskguard::DiskGuard::new(
+            cfg.datadir.clone(),
+            cfg.limits.clone(),
+            xone_node::diskguard::ImportGate::default(),
+            shutdown.clone(),
+        );
+        if let Err(e) = xone_node::Service::start(&mut g) {
+            return fail(e);
+        }
+        snap_guard = Some(g);
+    }
+    let snap = services::snap_sync(cfg, &spec, &genesis, stamp(), &shutdown);
+    let disk_full = snap_guard.as_mut().is_some_and(|g| {
+        xone_node::Service::stop(g);
+        g.exited()
+    });
+    if disk_full {
+        eprintln!("xone: {}", xone_node::NodeError::DiskFull);
+        return ExitCode::from(xone_node::NodeError::DiskFull.exit_code());
+    }
+    match snap {
         Ok(()) => {}
         Err(services::snapsync::SnapSyncError::Stopped) => {
             note(cfg, "stopped during snap sync; the datadir is still empty");
