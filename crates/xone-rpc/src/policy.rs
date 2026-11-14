@@ -57,6 +57,10 @@ pub fn registry(namespaces: &[String]) -> Result<Registry, Refusal> {
 pub struct Policy {
     pub vhosts: Vec<String>,
     pub origins: Vec<String>,
+    /// `--http.corsdomain`: the browser origins an HTTP response grants (geth `newCorsHandler`, which
+    /// uses `rs/cors`). Empty: CORS is off and no permission header is sent. Separate from
+    /// `origins`, the WebSocket handshake check.
+    pub cors: Vec<String>,
     /// The 32-byte HS256 secret. `Some`: every request needs `Authorization: Bearer <jwt>`.
     pub jwt: Option<[u8; 32]>,
 }
@@ -66,6 +70,7 @@ impl std::fmt::Debug for Policy {
         f.debug_struct("Policy")
             .field("vhosts", &self.vhosts)
             .field("origins", &self.origins)
+            .field("cors", &self.cors)
             .field("jwt", &self.jwt.map(|_| "<redacted>"))
             .finish()
     }
@@ -76,6 +81,7 @@ impl Default for Policy {
         Self {
             vhosts: vec!["localhost".into()],
             origins: vec![],
+            cors: vec![],
             jwt: None,
         }
     }
@@ -183,6 +189,27 @@ impl Policy {
         }
     }
 
+    /// `rs/cors` origin check for `--http.corsdomain`: the `Access-Control-Allow-Origin` value to
+    /// send for `origin`, or `None` (CORS off, no `Origin`, or not allowed). `*` allows any origin
+    /// and is sent as `*`; a rule may hold one `*` wildcard (`https://*.example.org`); matching is
+    /// case-blind. `null` is allowed only by a rule `null` or `*`. No credentials are ever granted.
+    pub fn cors_allow(&self, origin: Option<&str>) -> Option<String> {
+        let o = origin?.to_ascii_lowercase();
+        if self.cors.iter().any(|r| r == "*") {
+            return Some("*".into());
+        }
+        let ok = self.cors.iter().any(|r| {
+            let r = r.to_ascii_lowercase();
+            match r.split_once('*') {
+                Some((pre, post)) => {
+                    o.len() >= pre.len() + post.len() && o.starts_with(pre) && o.ends_with(post)
+                }
+                None => r == o,
+            }
+        });
+        ok.then_some(o)
+    }
+
     /// `wsHandshakeValidator`: a request without `Origin` is not a browser and passes.
     pub fn check_origin(&self, origin: Option<&str>) -> Result<(), Refusal> {
         let Some(o) = origin else {
@@ -234,10 +261,39 @@ mod tests {
         let p = Policy {
             vhosts: vec![],
             origins: vec!["https://app.example".into()],
+            cors: vec![],
             jwt: None,
         };
         assert!(p.check_origin(Some("https://APP.example")).is_ok());
         assert!(p.check_origin(Some("http://app.example")).is_err());
+    }
+
+    #[test]
+    fn cors_rules() {
+        assert_eq!(
+            Policy::default().cors_allow(Some("https://a.example")),
+            None
+        );
+        let p = Policy {
+            cors: vec![
+                "https://app.example".into(),
+                "https://*.dapp.example".into(),
+            ],
+            ..Policy::default()
+        };
+        assert_eq!(
+            p.cors_allow(Some("https://APP.example")).as_deref(),
+            Some("https://app.example")
+        );
+        assert!(p.cors_allow(Some("https://x.dapp.example")).is_some());
+        assert_eq!(p.cors_allow(Some("https://evil.example")), None);
+        assert_eq!(p.cors_allow(Some("null")), None);
+        assert_eq!(p.cors_allow(None), None);
+        let any = Policy {
+            cors: vec!["*".into()],
+            ..Policy::default()
+        };
+        assert_eq!(any.cors_allow(Some("null")).as_deref(), Some("*"));
     }
 
     /// A token signed with `secret` over `claims`, the way a client builds one.
