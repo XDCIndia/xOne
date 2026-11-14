@@ -729,28 +729,25 @@ async fn http_closes_slow_heads_and_stalled_bodies() {
         .await
         .expect("write");
     let mut out = Vec::new();
-    tokio::time::timeout(within, s.read_to_end(&mut out))
+    let _ = tokio::time::timeout(within, s.read_to_end(&mut out))
         .await
-        .expect("slow head closed")
-        .ok();
+        .expect("slow head closed");
     // a body that stops half way
     let mut s = tokio::net::TcpStream::connect(addr).await.expect("connect");
     s.write_all(b"POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 100\r\n\r\n{")
         .await
         .expect("write");
     let mut out = Vec::new();
-    tokio::time::timeout(within, s.read_to_end(&mut out))
+    let _ = tokio::time::timeout(within, s.read_to_end(&mut out))
         .await
-        .expect("stalled body answered")
-        .ok();
+        .expect("stalled body answered");
     assert!(String::from_utf8_lossy(&out).starts_with("HTTP/1.1 408"));
     // an idle keep-alive connection is closed too
     let mut s = tokio::net::TcpStream::connect(addr).await.expect("connect");
     let mut out = Vec::new();
-    tokio::time::timeout(within, s.read_to_end(&mut out))
+    let _ = tokio::time::timeout(within, s.read_to_end(&mut out))
         .await
-        .expect("idle closed")
-        .ok();
+        .expect("idle closed");
     // a normal client is unaffected
     let ok = raw_http(addr, &req(1, "eth_chainId", json!([])).to_string()).await;
     assert!(ok.starts_with("HTTP/1.1 200"), "{ok}");
