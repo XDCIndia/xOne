@@ -248,6 +248,10 @@ impl<D: SegDir> Segs<D> {
     pub fn stage(&mut self, s: Segment, block: u64, payload: &[u8]) -> Result<Staged, SegError> {
         let (i, chunk) = (idx(s), chunk_of(block, self.per_file));
         let key = (i, chunk);
+        // Only the active chunk of a segment is ever appended to: retire the handles of earlier
+        // chunks so a long sync holds at most one writer per segment. Their bytes stay in the page
+        // cache; a deferred group commit syncs them through `sync_chunk`, which reopens by path.
+        self.writers.retain(|&(si, c), _| si != i || c == chunk);
         let path = chunk_path(s, chunk);
         let mut created = false;
         let start = match self.visible[i] {
@@ -658,6 +662,34 @@ impl SegDir for OsDir {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn crossing_chunks_keeps_one_writer_per_segment() {
+        let root = std::env::temp_dir().join(format!("xone-segs-writers-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let mut segs = Segs::new(OsDir::open(&root).unwrap(), 2);
+        for n in 0..10u64 {
+            let entries = Segment::ALL.map(|s| {
+                let st = segs.stage(s, n, b"x").unwrap();
+                SegmentEntry {
+                    segment: s,
+                    first_block: 0,
+                    last_block: n,
+                    len: st.end,
+                    tail_digest: st.digest,
+                }
+            });
+            segs.publish(&Manifest {
+                generation: n,
+                head_number: n,
+                head_hash: B256::ZERO,
+                entries,
+            });
+            assert!(segs.writers.len() <= Segment::ALL.len(), "block {n}");
+        }
+        assert_eq!(segs.chunks(Segment::Headers).unwrap().len(), 5);
+        let _ = fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn crc32c_check_value() {

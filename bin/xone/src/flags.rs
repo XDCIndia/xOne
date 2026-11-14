@@ -523,6 +523,22 @@ pub const FLAGS: &[Flag] = &[
         "flags.go:1088",
     ),
     f(
+        "dev",
+        B,
+        "false",
+        "true",
+        "Developer chain: chain id 1337 with one validator whose key is made in memory at start and never written, sealing alone, and a funded developer account (the public test key of the test-junk mnemonic, printed at start). Implies --mine, --http and --nodiscover; the datadir is a new temp dir unless --datadir names an empty one. Refused with a network flag, --networkid, --override.genesis, --chainspec, --keystore or --password. V1 until block 2700, then V2.",
+        "flags.go:500 ; xone",
+    ),
+    f(
+        "dev.period",
+        N,
+        "2",
+        "1",
+        "Seconds between blocks of the --dev chain (1 to 60).",
+        "flags.go:504",
+    ),
+    f(
         "pprof",
         B,
         "false",

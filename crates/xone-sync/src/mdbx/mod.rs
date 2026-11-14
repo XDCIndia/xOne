@@ -101,13 +101,78 @@ pub enum OpenError {
     Io(#[from] io::Error),
     #[error("this datadir has state-table schema {0}; this build reads up to {SCHEMA}. Use the build that wrote it")]
     Schema(u64),
+    /// The `schema` row is present but is not an 8-byte little-endian version. Absence means a
+    /// version-1 datadir and starts the migration; a malformed row is corruption, never absence.
+    #[error("the state-table schema marker is malformed ({0} bytes, expected 8); refusing to open or migrate")]
+    SchemaMarker(usize),
+    /// A version-1 row the migration cannot re-key. Nothing was written.
+    #[error("schema 1 to 2 migration: {0}; nothing was changed")]
+    Corrupt(String),
+}
+
+/// What the `schema` row says, with a malformed row kept apart from an absent one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SchemaMarker {
+    /// No row: a version-1 datadir, or one that holds nothing yet.
+    Absent,
+    Version(u64),
+}
+
+fn parse_schema(row: Option<&[u8]>) -> Result<SchemaMarker, OpenError> {
+    match row {
+        None => Ok(SchemaMarker::Absent),
+        Some(b) => {
+            let a: [u8; 8] = b.try_into().map_err(|_| OpenError::SchemaMarker(b.len()))?;
+            let v = u64::from_le_bytes(a);
+            if v == 0 {
+                return Err(OpenError::SchemaMarker(b.len()));
+            }
+            if v > SCHEMA {
+                return Err(OpenError::Schema(v));
+            }
+            Ok(SchemaMarker::Version(v))
+        }
+    }
+}
+
+/// The exact key length of a version-1 changeset row: `block || address` (28) and
+/// `block || address || slot` (60).
+const V1_ACCOUNT_CS_KEY: usize = 28;
+const V1_STORAGE_CS_KEY: usize = 60;
+
+/// Checks every version-1 row the migration splits, before it writes anything, so a truncated
+/// key is a typed error and not a panic in `split_at`.
+fn check_v1(tx: &Wr) -> Result<(), OpenError> {
+    for (k, _) in tx.range(T::PlainStorage, &[], None)? {
+        if k.len() != 52 {
+            return Err(OpenError::Corrupt(format!(
+                "PlainStorage key of {} bytes, expected 52",
+                k.len()
+            )));
+        }
+    }
+    for (t, len, name) in [
+        (T::AccountChangeSets, V1_ACCOUNT_CS_KEY, "AccountChangeSets"),
+        (T::StorageChangeSets, V1_STORAGE_CS_KEY, "StorageChangeSets"),
+    ] {
+        for (k, _) in tx.range(t, &[], None)? {
+            if k.len() != len {
+                return Err(OpenError::Corrupt(format!(
+                    "{name} key of {} bytes, expected {len}",
+                    k.len()
+                )));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Version 1 to 2, in one MDBX transaction (all or nothing): the address-keyed state tables become
 /// the hash-keyed ones, the changesets are re-keyed, the plain tables are emptied. Every key is
 /// hashed from the address the old row carries, so nothing is looked up and nothing can be wrong
 /// but by a bug in `keccak256`. The state root is checked at load (`load_state`) as on any start.
-fn migrate_v1(tx: &Wr) -> R<()> {
+fn migrate_v1(tx: &Wr) -> Result<(), OpenError> {
+    check_v1(tx)?;
     for (k, v) in tx.range(T::PlainAccounts, &[], None)? {
         put_account(tx, &keccak256(&k), &v)?;
         put_preimage(tx, &k)?;
@@ -122,11 +187,14 @@ fn migrate_v1(tx: &Wr) -> R<()> {
         put_preimage(tx, a)?;
         put_preimage(tx, s)?;
     }
-    for (t, split) in [(T::AccountChangeSets, 28), (T::StorageChangeSets, 60)] {
+    for (t, split) in [
+        (T::AccountChangeSets, V1_ACCOUNT_CS_KEY),
+        (T::StorageChangeSets, V1_STORAGE_CS_KEY),
+    ] {
         for (k, v) in tx.range(t, &[], None)? {
             let (n, rest) = k.split_at(8);
             let mut nk = n.to_vec();
-            if split == 28 {
+            if split == V1_ACCOUNT_CS_KEY {
                 nk.extend_from_slice(keccak256(rest).as_slice());
             } else {
                 let (a, s) = rest.split_at(20);
@@ -139,7 +207,8 @@ fn migrate_v1(tx: &Wr) -> R<()> {
     }
     tx.del_range(T::PlainAccounts, &[], None)?;
     tx.del_range(T::PlainStorage, &[], None)?;
-    tx.put(T::Meta, SCHEMA_KEY, &SCHEMA.to_le_bytes())
+    tx.put(T::Meta, SCHEMA_KEY, &SCHEMA.to_le_bytes())?;
+    Ok(())
 }
 
 #[derive(Clone, Copy)]
@@ -224,6 +293,9 @@ fn put_preimage(tx: &Wr, pre: &[u8]) -> R<()> {
     tx.put(T::Preimages, keccak256(pre).as_slice(), pre)
 }
 
+/// Rows copied at a time by a paged scan (`xone_db::mdbx::Tx::scan_pages`).
+const SCAN_PAGE: usize = 1024;
+
 /// Writes the diff of block `n` into the state tables and its changeset (whole prior records) into
 /// the changeset tables: the same semantics as `StateDiff::apply`, over the tables.
 fn write_diff(tx: &Wr, n: u64, d: &StateDiff) -> R<()> {
@@ -235,11 +307,13 @@ fn write_diff(tx: &Wr, n: u64, d: &StateDiff) -> R<()> {
         };
         tx.put(T::AccountChangeSets, &cs_key(n, &ha), &prior)?;
         if new.is_none() {
-            for (k, v) in tx.prefix(T::HashedStorages, ha.as_slice())? {
+            // a page at a time: a removed contract may hold any number of slots; the changeset
+            // and the deletes stay in this block's one write transaction
+            tx.scan_prefix(T::HashedStorages, ha.as_slice(), SCAN_PAGE, |k, v| {
                 let hs = B256::from_slice(&k[32..]);
-                tx.put(T::StorageChangeSets, &cs_skey(n, &ha, &hs), &v)?;
-                del_slot(tx, &ha, &hs)?;
-            }
+                tx.put(T::StorageChangeSets, &cs_skey(n, &ha, &hs), v)?;
+                del_slot(tx, &ha, &hs)
+            })?;
         } else {
             put_preimage(tx, a.as_slice())?;
         }
@@ -383,12 +457,10 @@ impl<D: SegDir> MdbxStore<D> {
         };
         let schema = {
             let rd = s.env.read()?;
-            rd.get(T::Meta, SCHEMA_KEY)?.and_then(|b| le_u64(&b))
+            let row = rd.get(T::Meta, SCHEMA_KEY)?;
+            parse_schema(row.as_deref())?
         };
-        if let Some(v) = schema.filter(|v| *v > SCHEMA) {
-            return Err(OpenError::Schema(v));
-        }
-        if schema.is_none() {
+        if schema == SchemaMarker::Absent {
             let tx = s.env.write()?;
             migrate_v1(&tx)?;
             tx.commit()?;
@@ -1383,10 +1455,10 @@ impl<D: SegDir> MdbxStore<D> {
         let tx = env.write().map_err(|e| self.db_failed(&e))?;
         let r = (|| -> R<()> {
             let upto = be(floor);
-            for (k, v) in tx.range(T::CanonicalHeaders, &[], Some(&upto))? {
-                tx.del(T::HeaderNumbers, &v)?;
-                tx.del(T::CanonicalHeaders, &k)?;
-            }
+            tx.scan_pages(T::CanonicalHeaders, &[], Some(&upto), SCAN_PAGE, |k, v| {
+                tx.del(T::HeaderNumbers, v)?;
+                tx.del(T::CanonicalHeaders, k)
+            })?;
             for s in Segment::ALL {
                 tx.del_range(T::SegIdx, &seg_key(s, 0), Some(&seg_key(s, floor)))?;
             }
@@ -2152,10 +2224,10 @@ impl<D: SegDir> Store for MdbxStore<D> {
         let tx = env.write().map_err(|e| self.db_failed(&e))?;
         let r = (|| -> R<()> {
             let upto = be(h_from);
-            for (k, v) in tx.range(T::CanonicalHeaders, &[], Some(&upto))? {
-                tx.del(T::HeaderNumbers, &v)?;
-                tx.del(T::CanonicalHeaders, &k)?;
-            }
+            tx.scan_pages(T::CanonicalHeaders, &[], Some(&upto), SCAN_PAGE, |k, v| {
+                tx.del(T::HeaderNumbers, v)?;
+                tx.del(T::CanonicalHeaders, k)
+            })?;
             for s in Segment::ALL {
                 let f = if s == Segment::Headers {
                     h_from
@@ -2283,5 +2355,44 @@ impl<D: SegDir> Store for MdbxStore<D> {
         self.load_state()?;
         self.reconciling = false;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod schema_marker_tests {
+    use super::*;
+
+    #[test]
+    fn absent_marker_selects_the_legacy_migration() {
+        assert_eq!(parse_schema(None).unwrap(), SchemaMarker::Absent);
+    }
+
+    #[test]
+    fn current_marker_opens() {
+        let b = SCHEMA.to_le_bytes();
+        assert_eq!(
+            parse_schema(Some(&b)).unwrap(),
+            SchemaMarker::Version(SCHEMA)
+        );
+    }
+
+    #[test]
+    fn malformed_marker_is_not_absence() {
+        for b in [&[][..], &[2][..], &[2, 0, 0, 0, 0, 0, 0, 0, 0][..]] {
+            assert!(matches!(
+                parse_schema(Some(b)),
+                Err(OpenError::SchemaMarker(_))
+            ));
+        }
+        assert!(matches!(
+            parse_schema(Some(&0u64.to_le_bytes())),
+            Err(OpenError::SchemaMarker(8))
+        ));
+    }
+
+    #[test]
+    fn future_marker_is_refused() {
+        let b = (SCHEMA + 1).to_le_bytes();
+        assert!(matches!(parse_schema(Some(&b)), Err(OpenError::Schema(v)) if v == SCHEMA + 1));
     }
 }

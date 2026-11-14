@@ -86,8 +86,23 @@ pub enum BlockRef {
     Hash(B256),
 }
 
-/// geth `rpc.BlockNumber` tags that this node maps to the head: `latest`, `pending`, `safe`,
-/// `finalized`. `earliest` is 0.
+/// A block selector string resolved against the chain (geth-XDC `EthAPIBackend.HeaderByNumber`,
+/// `eth/api_backend.go:125-160`): `latest` and `pending` are the head; `finalized` is the latest
+/// QC-committed V2 block (`HookCommitBlock` sets it, `eth/backend.go:433-436`), an error before
+/// the first commit and never the head; `safe` is never set on an XDPoS chain, so it is an error;
+/// `earliest` is 0.
+pub fn resolve_tag(s: &str, head: u64, finalized: Option<u64>) -> Result<u64, RpcError> {
+    match s {
+        "latest" | "pending" => Ok(head),
+        "finalized" => finalized.ok_or_else(|| RpcError::server("finalized block not found")),
+        "safe" => Err(RpcError::server("safe block not found")),
+        "earliest" => Ok(0),
+        _ => parse_quantity(s),
+    }
+}
+
+/// A quantity that also accepts the geth tags, all mapped to `head` (an index, a gas amount or a
+/// count, where no block is selected). Block selectors use [`resolve_tag`].
 pub fn parse_tag(s: &str, head: u64) -> Result<u64, RpcError> {
     match s {
         "latest" | "pending" | "safe" | "finalized" => Ok(head),
@@ -144,6 +159,8 @@ pub fn parse_hash(s: &str) -> Result<B256, RpcError> {
 pub struct Params<'a> {
     pub v: &'a [Value],
     pub head: u64,
+    /// The latest QC-committed block (the `finalized` tag), read with `head`.
+    pub finalized: Option<u64>,
 }
 
 impl Params<'_> {
@@ -186,11 +203,15 @@ impl Params<'_> {
     pub fn opt(&self, i: usize) -> Option<&Value> {
         self.at(i)
     }
+    /// [`resolve_tag`] against this request's head and committed block.
+    pub fn tag(&self, s: &str) -> Result<u64, RpcError> {
+        resolve_tag(s, self.head, self.finalized)
+    }
     /// A block number argument; absent or null is `latest` (geth `*rpc.BlockNumber` nil).
     pub fn number_or_latest(&self, i: usize) -> Result<u64, RpcError> {
         match self.at(i) {
             None => Ok(self.head),
-            Some(Value::String(s)) => parse_tag(s, self.head),
+            Some(Value::String(s)) => self.tag(s),
             Some(Value::Number(n)) => n
                 .as_u64()
                 .ok_or_else(|| RpcError::invalid_params("invalid block number")),
@@ -203,10 +224,10 @@ impl Params<'_> {
             Value::String(s) if s.len() == 66 && s.starts_with("0x") => {
                 parse_hash(s).map(BlockRef::Hash)
             }
-            Value::String(s) => parse_tag(s, self.head).map(BlockRef::Number),
+            Value::String(s) => self.tag(s).map(BlockRef::Number),
             Value::Object(o) => match (o.get("blockHash"), o.get("blockNumber")) {
                 (Some(Value::String(h)), _) => parse_hash(h).map(BlockRef::Hash),
-                (_, Some(Value::String(n))) => parse_tag(n, self.head).map(BlockRef::Number),
+                (_, Some(Value::String(n))) => self.tag(n).map(BlockRef::Number),
                 _ => Err(RpcError::invalid_params("invalid block selector")),
             },
             _ => Err(RpcError::invalid_params("invalid block selector")),
@@ -243,5 +264,10 @@ mod tests {
         assert!(parse_quantity("0x").is_err());
         assert!(parse_quantity("10").is_err());
         assert_eq!(parse_tag("earliest", 9).unwrap(), 0);
+        assert_eq!(resolve_tag("latest", 105, Some(102)).unwrap(), 105);
+        assert_eq!(resolve_tag("pending", 105, Some(102)).unwrap(), 105);
+        assert_eq!(resolve_tag("finalized", 105, Some(102)).unwrap(), 102);
+        assert!(resolve_tag("finalized", 105, None).is_err());
+        assert!(resolve_tag("safe", 105, Some(102)).is_err());
     }
 }

@@ -143,8 +143,10 @@ impl PoolShared {
 }
 
 impl PoolApi for PoolShared {
+    /// `(pending, queued)` transaction counts, as geth `txpool_status`. `Pool::len` is
+    /// `(transactions, slots)` and is capacity accounting, not this contract.
     fn status(&self) -> (usize, usize) {
-        self.lock().pool.len()
+        self.lock().pool.stats()
     }
 
     #[allow(clippy::type_complexity)]

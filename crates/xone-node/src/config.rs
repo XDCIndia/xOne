@@ -81,6 +81,16 @@ pub struct Config {
     pub metrics: Listen,
     pub pprof: Listen,
     pub limits: Limits,
+    pub dev: Dev,
+}
+
+/// `--dev`: a one-validator chain made at start (`crate::dev`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Dev {
+    pub enabled: bool,
+    /// Seconds between blocks.
+    pub period: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -282,6 +292,11 @@ defaults!(Config {
     metrics: Listen::default(),
     pprof: Listen::default(),
     limits: Limits::default(),
+    dev: Dev::default(),
+});
+defaults!(Dev {
+    enabled: false,
+    period: 2
 });
 defaults!(SyncCfg {
     mode: "full".into(),
@@ -618,6 +633,14 @@ impl Config {
             "metrics" => self.metrics.enabled = flag(key, v)?,
             "metrics.addr" => self.metrics.addr = v.to_owned(),
             "metrics.port" => self.metrics.port = num(key, v)?,
+            "dev" => self.dev.enabled = flag(key, v)?,
+            "dev.period" => {
+                let n: u64 = num(key, v)?;
+                if n == 0 || n > 60 {
+                    return Err(invalid(key, v, "1 to 60 seconds"));
+                }
+                self.dev.period = n;
+            }
             "pprof" => self.pprof.enabled = flag(key, v)?,
             "pprof.addr" => self.pprof.addr = v.to_owned(),
             "pprof.port" => self.pprof.port = num(key, v)?,

@@ -258,10 +258,27 @@ pub fn decode_receipts(raw: &[Bytes]) -> Result<Vec<Receipt>, RpcError> {
 }
 
 /// `MarshalReceipt` for transaction `i` of the block. `receipts` are all the block's receipts.
+/// For a whole block use [`receipt_json_at`] with a running log count: this one sums the logs
+/// of the `i` receipts before it.
 pub fn receipt_json(
     raw_tx: &[u8],
     receipts: &[Receipt],
     i: usize,
+    loc: &Loc,
+    chain_id: u64,
+) -> Result<Value, RpcError> {
+    let first_log = receipts
+        .get(..i)
+        .map_or(0, |r| r.iter().map(|r| r.logs.len()).sum());
+    receipt_json_at(raw_tx, receipts, i, first_log, loc, chain_id)
+}
+
+/// [`receipt_json`] with `first_log`, the block log index of the first log of receipt `i`, given.
+pub fn receipt_json_at(
+    raw_tx: &[u8],
+    receipts: &[Receipt],
+    i: usize,
+    first_log: usize,
     loc: &Loc,
     chain_id: u64,
 ) -> Result<Value, RpcError> {
@@ -274,7 +291,6 @@ pub fn receipt_json(
     } else {
         receipts[i - 1].cumulative_gas_used
     };
-    let first_log: usize = receipts[..i].iter().map(|r| r.logs.len()).sum();
     let tx_hash = keccak256(raw_tx);
     let fee_cap = U256::from(t.gas_price);
     let eff = match (t.ty, loc.base_fee) {
