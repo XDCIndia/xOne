@@ -4898,6 +4898,7 @@ dependencies = [
  "alloy-primitives",
  "alloy-rlp",
  "base64 0.22.1",
+ "flate2",
  "futures-util",
  "hmac",
  "http-body-util",
