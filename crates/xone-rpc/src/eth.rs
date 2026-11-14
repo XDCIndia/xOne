@@ -187,8 +187,30 @@ fn tx_at(c: &Ctx, b: &BlockView, i: usize) -> R {
     }
 }
 
+/// geth `hexutil.Uint`: a `0x` quantity without leading zeros. A block tag (`latest`, `pending`, ...)
+/// or a decimal is not an index.
 fn index(p: &Params, i: usize) -> Result<usize, RpcError> {
-    usize::try_from(parse_tag(p.str(i)?, 0)?).map_err(|_| RpcError::invalid_params("invalid index"))
+    parse_index(p.str(i)?)
+}
+
+pub(crate) fn parse_index(s: &str) -> Result<usize, RpcError> {
+    let bad = || {
+        RpcError::invalid_params(
+            "invalid index: hex string without 0x prefix or with leading zeros",
+        )
+    };
+    let d = s
+        .strip_prefix("0x")
+        .or_else(|| s.strip_prefix("0X"))
+        .ok_or_else(bad)?;
+    if d.is_empty() || (d.len() > 1 && d.starts_with('0')) {
+        return Err(bad());
+    }
+    let v = u64::from_str_radix(d, 16).map_err(|_| bad())?;
+    u32::try_from(v)
+        .ok()
+        .and_then(|v| usize::try_from(v).ok())
+        .ok_or_else(bad)
 }
 
 fn tx_by_index(c: &Ctx, p: &Params, by_number: bool) -> R {

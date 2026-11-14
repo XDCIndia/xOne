@@ -320,6 +320,7 @@ impl Rpc {
             Some(Value::Array(a)) => a,
             Some(_) => return Err(RpcError::invalid_params("non-array args")),
         };
+        crate::arity::check(method, v.len())?;
         let ctx = Ctx {
             be: &self.be,
             cancel,
