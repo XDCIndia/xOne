@@ -1,5 +1,5 @@
 //! `admin_*` subset (geth `node/api.go` `adminAPI`): `nodeInfo`, `peers`, `addPeer`,
-//! `addTrustedPeer`, `removePeer`.
+//! `addTrustedPeer`, `removePeer`, `removeTrustedPeer`.
 
 use crate::{
     json::{h256, q},
@@ -39,5 +39,8 @@ pub fn register(r: &mut Registry) {
     });
     r.add("admin_removePeer", Cost::C0, |c, p| {
         Ok(json!(c.be.net.remove_peer(p.str(0)?, false)?))
+    });
+    r.add("admin_removeTrustedPeer", Cost::C0, |c, p| {
+        Ok(json!(c.be.net.remove_peer(p.str(0)?, true)?))
     });
 }

@@ -217,8 +217,14 @@ impl NetApi for RpcNet {
         self.net.add_peer(&e, trusted).map_err(RpcError::server)?;
         Ok(true)
     }
-    fn remove_peer(&self, _: &str, _: bool) -> Result<bool, RpcError> {
-        Ok(false)
+    fn remove_peer(&self, enode: &str, trusted: bool) -> Result<bool, RpcError> {
+        let e: Enode = enode
+            .parse()
+            .map_err(|e: crate::enode::EnodeError| RpcError::invalid_params(e.to_string()))?;
+        self.net
+            .remove_peer(&e, trusted)
+            .map_err(RpcError::server)?;
+        Ok(true)
     }
 }
 

@@ -748,3 +748,20 @@ async fn no_required_blocks_means_no_challenge() {
     let (_, m) = next_msg(&mut rx).await;
     assert!(matches!(m, Message::GetBlockHeaders { id: Some(7), .. }));
 }
+
+/// geth `RemovePeer` and `RemoveTrustedPeer` (issue #163): removing a static peer closes its
+/// session with `Requested`; removing trust leaves the session up.
+#[tokio::test]
+async fn remove_static_closes_and_remove_trusted_keeps_the_session() {
+    let (node, _rx) = Peers::new(cfg(), key(1));
+    node.add_static(peer_id(&key(2)));
+    node.add_trusted(peer_id(&key(3)));
+    let mut a = join(&node, key(2)).await;
+    let _b = join(&node, key(3)).await;
+    node.remove_trusted(&peer_id(&key(3)));
+    assert_eq!(node.peer_count(), 2);
+    assert!(node.remove_static(&peer_id(&key(2))));
+    assert_eq!(a.until_disconnect().await, DisconnectReason::Requested);
+    assert_eq!(node.peer_ids(), vec![peer_id(&key(3))]);
+    assert!(!node.remove_static(&peer_id(&key(2))));
+}
