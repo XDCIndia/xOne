@@ -1069,6 +1069,7 @@ fn state_heal_status_matches_the_oracle_idle_shape() {
     for m in ["xdc_getStateHealStatus", "eth_getStateHealStatus"] {
         assert_eq!(ask(&r, req(1, m, json!([])))["result"], want, "{m}");
     }
+}
 
 // --- #60: authentication, WebSocket limits and forwarding headers on the real listeners ---
 
