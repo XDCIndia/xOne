@@ -1,0 +1,9 @@
+#!/bin/sh
+# Creates the xone user and the directories. It never starts, stops or restarts a unit, and it
+# never touches /etc/xone/*.env or the datadir contents (upgrade keeps both).
+set -e
+getent group xone >/dev/null || groupadd --system xone
+getent passwd xone >/dev/null || useradd --system --gid xone --home-dir /var/lib/xone --shell /usr/sbin/nologin xone
+install -d -o xone -g xone -m 0700 /var/lib/xone
+install -d -o root -g xone -m 0750 /etc/xone
+exit 0

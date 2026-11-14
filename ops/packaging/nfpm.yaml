@@ -1,0 +1,30 @@
+# nfpm config for the .rpm (ci/package.sh builds the .deb with dpkg-deb from the same staged tree).
+# ci/package.sh sets VERSION, ARCH (nfpm names: amd64, arm64) and STAGE; nothing here is host-specific.
+name: xone
+arch: ${ARCH}
+platform: linux
+version: ${VERSION}
+section: net
+maintainer: AnilChinchawale <29918376+AnilChinchawale@users.noreply.github.com>
+description: xOneRS, a Rust XDC Network client
+homepage: https://github.com/XDCIndia/xOne
+license: See /usr/share/doc/xone/LICENSE
+contents:
+  - src: ${STAGE}/usr/bin/xone
+    dst: /usr/bin/xone
+    file_info: {mode: 0755}
+  - src: ${STAGE}/usr/lib/xone/run-xone.sh
+    dst: /usr/lib/xone/run-xone.sh
+    file_info: {mode: 0755}
+  - src: ${STAGE}/usr/lib/systemd/system/xone@.service
+    dst: /usr/lib/systemd/system/xone@.service
+  - src: ${STAGE}/usr/share/xone
+    dst: /usr/share/xone
+    type: tree
+  - src: ${STAGE}/usr/share/doc/xone/LICENSE
+    dst: /usr/share/doc/xone/LICENSE
+  - dst: /etc/xone
+    type: dir
+    file_info: {mode: 0750}
+scripts:
+  postinstall: ops/packaging/postinst

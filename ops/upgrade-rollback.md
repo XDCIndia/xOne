@@ -23,6 +23,11 @@ steps on a loopback devnet is in `docs/ops/release-rehearsal.md`.
 3. One signer at a time. Never start the old and the new unit together on one datadir (the `flock` on
    `datadir/safety/LOCK` stops a second process on one host; it does not stop two hosts).
 
+Installed from a package (ops/install.md)? Upgrade is `systemctl stop xone@<net>`, the backup of step A3, then
+`apt install ./xone_<N+1>_amd64.deb` (or `dnf upgrade`); rollback is `apt install xone=<N>` (or `dnf downgrade xone`)
+with the same format rule 1. The package keeps `/etc/xone` and the datadir and never restarts the unit: start it
+yourself after the stamp check.
+
 ## A. Upgrade
 
 ```bash
