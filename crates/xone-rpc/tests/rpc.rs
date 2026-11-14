@@ -1338,3 +1338,29 @@ async fn a_plain_http_request_to_the_websocket_port_is_not_dispatched() {
     assert!(out.is_empty() || out.starts_with("HTTP/1.1 4"), "{out}");
     h.abort();
 }
+
+#[tokio::test]
+async fn ipc_bind_is_private_refuses_non_sockets_and_live_sockets() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = std::env::temp_dir().join(format!("xone-rpc-ipcbind-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("dir");
+    let path = dir.join("n.ipc");
+    let _ = std::fs::remove_file(&path);
+    let l = xone_rpc::transport::bind_ipc(&path).expect("bind");
+    let mode = std::fs::metadata(&path)
+        .expect("socket")
+        .permissions()
+        .mode();
+    assert_eq!(mode & 0o777, 0o600);
+    // a live socket is not taken over
+    assert!(xone_rpc::transport::bind_ipc(&path).is_err());
+    drop(l);
+    // a stale socket is replaced
+    xone_rpc::transport::bind_ipc(&path).expect("rebind stale");
+    // a regular file is never removed
+    let f = dir.join("file.ipc");
+    std::fs::write(&f, b"keep").expect("write");
+    assert!(xone_rpc::transport::bind_ipc(&f).is_err());
+    assert_eq!(std::fs::read(&f).expect("kept"), b"keep");
+    let _ = std::fs::remove_dir_all(&dir);
+}
