@@ -1,4 +1,4 @@
-# xOne rebuild planning documents
+# xOneRS rebuild planning documents
 
 The [rebuild plan in issue #1](https://github.com/XDCIndia/xOne/issues/1) is the baseline proposal. The documents here add a review of correctness, durability, performance and post-quantum migration requirements. Research was completed on **10 November 2026**; repository packaging was added on **11 November 2026**.
 

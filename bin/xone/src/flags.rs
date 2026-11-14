@@ -586,7 +586,7 @@ fn snapshot() -> Command {
 
 pub fn command() -> Command {
     let mut c = Command::new("xone")
-        .about("XDC xOne execution client")
+        .about("XDC xOneRS execution client")
         .disable_version_flag(true)
         .subcommand(Command::new("version").about("Print the version stamp and exit."))
         .subcommand(Command::new("dumpconfig").about("Print the effective config as TOML."))

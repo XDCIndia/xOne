@@ -22,7 +22,7 @@ use xone_net::{
 use xone_node::{datadir, services, Config};
 use xone_state::trie::flat_root;
 
-const STAMP: &str = "xOne/v0.0.0-test/linux-x86_64/rustc1";
+const STAMP: &str = "xOneRS/v0.0.0-test/linux-x86_64/rustc1";
 
 /// A peer that holds `blocks` and answers header and body requests.
 fn serve(

@@ -10,17 +10,17 @@ Crate: `xone-signer` (issue #40). Specs: `spec/keys/keystore-v3.md`, `spec/keys/
 | Password | a password file you choose, for example `<datadir>/miner.password` | plain text, first line is the password (a trailing `\r` is dropped) | unlocking the keystore at start |
 | Node key | `<datadir>/nodekey` | 64 hex characters | devp2p identity (the enode id) |
 
-Use the keystore that `geth account new` (or the XDC tooling) wrote. xOne reads scrypt light, scrypt standard and pbkdf2 files. It does not read version 1 or presale files; convert them with geth first.
+Use the keystore that `geth account new` (or the XDC tooling) wrote. xOneRS reads scrypt light, scrypt standard and pbkdf2 files. It does not read version 1 or presale files; convert them with geth first.
 
 ## Permissions
 
 - Keystore file, password file and `nodekey`: mode **0600** or narrower (0400 is fine). Owner only.
-- The data directory: 0700. xOne creates a missing directory with 0700.
+- The data directory: 0700. xOneRS creates a missing directory with 0700.
 - A file with any group or other bit, or any execute bit, is **refused** with a `Permissions` error that names the file and the mode. Fix it with `chmod 600 <file>`.
-- `AllowInsecurePermissions` is an explicit override in the calling code. It is not a command-line flag or an environment variable and there is none planned. When it is used, xOne logs a `warn` line with the path and mode on every load. Use it only to get a node up while you fix the mode, never in production.
-- xOne does not check who owns the file or the mode of the directory above it. Keep the keystore directory 0700 yourself.
+- `AllowInsecurePermissions` is an explicit override in the calling code. It is not a command-line flag or an environment variable and there is none planned. When it is used, xOneRS logs a `warn` line with the path and mode on every load. Use it only to get a node up while you fix the mode, never in production.
+- xOneRS does not check who owns the file or the mode of the directory above it. Keep the keystore directory 0700 yourself.
 
-## What xOne never does
+## What xOneRS never does
 
 - It never writes a private key, a password or a decrypted key to a log, an error message, a panic message, an RPC response or a metric. Tests sign 1,000 digests at trace level and format every error path, and fail if the key appears raw, in hex, or in base64.
 - It never accepts a key or password on the command line or in an environment variable (so it cannot show in `ps` or `/proc`).

@@ -1,5 +1,7 @@
 # Changelog
 
+> 2026-11-14: the Rust client is renamed from xOne to xOneRS, matching xOneTS, xOneC and xOnePy. The version stamp now starts with `xOneRS/`. The binary `xone`, the `xone-*` crates and the repository name are unchanged. Entries below keep the name of their time.
+
 ## Unreleased
 
 - **`--state.disk`, part 3 of 3 (issue #145).** With `--syncmode snap` the proven ranges are written straight
@@ -17,13 +19,13 @@
 
 ## v0.1.0 - 2026-11-12
 
-First release of xOne, the Rust client for XDC Network. The workspace version is 0.1.0.
+First release of xOneRS (the Rust client, called xOne until 2026-11-14) for XDC Network. The workspace version is 0.1.0.
 
 ### What is in it
 
 - **Client.** Rust crates for primitives, chainspec, consensus (XDPoS V1 and V2), EVM, state,
   executor, database, networking, snap sync, node, RPC, signer and block builder. One binary, `xone`.
-  The version stamp (`xOne/v<semver>-<commit8>-<DDMMYYYY>/<os>-<arch>/rustc<version>`) comes from one
+  The version stamp (`xOneRS/v<semver>-<commit8>-<DDMMYYYY>/<os>-<arch>/rustc<version>`) comes from one
   function that `xone --version`, `web3_clientVersion`, the P2P hello and ethstats all use.
 - **Sync modes.** Full, snap, fast (an alias of snap, as in geth-XDC), minimal (snapshot import with
   a pinned anchor) and archive. Snap and fast verify the pivot state root and the epoch-switch anchor

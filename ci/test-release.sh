@@ -59,7 +59,7 @@ cp "$d/SHA256SUMS" "$W/tampered"; echo "00" >> "$W/tampered"
 ok "signature verifies with the throwaway key and fails on a changed file"
 
 mkdir "$W/x"; tar -C "$W/x" -xzf "$d/$n.tar.gz"
-want="xOne/v$ver-$(git -C "$W/a" rev-parse --short=8 HEAD)-$(date -u -d "@$(git -C "$W/a" log -1 --format=%ct)" +%d%m%Y)/linux-x86_64/rustc$(rustc --version | cut -d' ' -f2)"
+want="xOneRS/v$ver-$(git -C "$W/a" rev-parse --short=8 HEAD)-$(date -u -d "@$(git -C "$W/a" log -1 --format=%ct)" +%d%m%Y)/linux-x86_64/rustc$(rustc --version | cut -d' ' -f2)"
 got=$("$W/x/$n/xone" --version)
 [ "$got" = "$want" ] || fail "stamp '$got' != '$want'"
 ok "xone --version == $got"

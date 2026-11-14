@@ -36,7 +36,7 @@ use xone_sync::bootstrap::{Class, Missing};
 
 const AT: u64 = 100;
 const DAY: u64 = 86_400;
-const STAMP: &str = "xOne/v0.0.0-test/linux-x86_64/rustc1";
+const STAMP: &str = "xOneRS/v0.0.0-test/linux-x86_64/rustc1";
 
 fn serve(
     rt: &Runtime,
