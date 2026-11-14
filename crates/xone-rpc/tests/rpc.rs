@@ -722,9 +722,10 @@ async fn http_accepts_only_json_media_types() {
         let body = body.clone();
         async move {
             let mut s = tokio::net::TcpStream::connect(addr).await.expect("connect");
-            let ct = ct
-                .map(|c| format!("Content-Type: {c}\r\n"))
-                .unwrap_or_else(String::new);
+            let ct = match ct {
+                Some(c) => format!("Content-Type: {c}\r\n"),
+                None => String::new(),
+            };
             let msg = format!(
                 "POST / HTTP/1.1\r\nHost: localhost\r\n{ct}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
                 body.len()
