@@ -47,6 +47,7 @@ use super::{
     from_wire,
     net::NetHandle,
     pool::PoolShared,
+    short,
     snap::{Request, SnapServer},
     to_wire,
 };
@@ -747,10 +748,6 @@ impl Follower {
             }
         }
     }
-}
-
-fn short(p: &PeerId) -> String {
-    alloy_primitives::hex::encode(&p[..4])
 }
 
 pub struct ChainService {
