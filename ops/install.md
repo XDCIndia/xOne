@@ -30,6 +30,22 @@ stats.xdcindia.com. The RPC listens on loopback only unless the env file says ot
 
 Existing `/etc/xone/*.env` files from xOneGo hosts work unchanged: the variable names are the same.
 
+## From a package (.deb or .rpm)
+
+The release also carries `xone_$V_amd64.deb` and `xone-$V.x86_64.rpm` (arm64 too), listed in `SHA256SUMS`: verify
+them as in steps 2-3, then `sudo apt install ./xone_${V}_amd64.deb` (or `sudo dnf install ./xone-$V.x86_64.rpm`).
+The package puts `/usr/bin/xone`, `/usr/lib/xone/run-xone.sh`, `/usr/lib/systemd/system/xone@.service`,
+`/usr/share/xone/bootnodes/` in place and creates the `xone` user, `/var/lib/xone` and `/etc/xone`. It never starts
+a node and never touches `/etc/xone/*.env` or the datadir. Then:
+
+```bash
+sudo install -m600 /usr/share/xone/apothem.env.example /etc/xone/apothem.env   # edit DATADIR and ETHSTATS_SECRET
+sudo systemctl enable --now xone@apothem
+```
+
+The release script also writes `repo/apt` (signed `Release`, `InRelease`) and `repo/yum`; the owner decides the
+host (release assets or a static site). The package install paths replace the `/opt/xone` paths above.
+
 ## Stop, start, remove
 
 `systemctl stop xone@apothem` is a bounded stop (SIGTERM, 5 s in the node, SIGKILL after 15 s). `start`

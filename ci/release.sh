@@ -7,6 +7,7 @@
 #   xone-<version>-linux-<arch>-musl.tar.gz   one per target (default x86_64 and aarch64): static xone, run-xone.sh, xone@.service, bootnodes/, LICENSE
 #   xone-<version>.cdx.json              SBOM (CycloneDX 1.5); cargo tree manifest if cargo-cyclonedx is missing
 #   xone-<version>.provenance.json       in-toto statement, SLSA provenance v1 shaped
+#   xone_<version>_<arch>.deb, xone-<version>.<arch>.rpm, repo/{apt,yum}   OS packages (ci/package.sh); the rpm needs nfpm
 #   SHA256SUMS                           over every file above
 #   SHA256SUMS.sig                       detached gpg signature of SHA256SUMS
 #
@@ -108,6 +109,9 @@ for target in $TARGETS; do
   tarballs+=("$name.tar.gz")
 done
 stamp=${host_stamp:-$stamp}
+# OS packages from the tarballs (issue #228): .deb, .rpm (when nfpm is installed), and repo/ (apt, yum) signed with the release key
+XONE_DIST="$DIST" SOURCE_DATE_EPOCH=$SDE ci/package.sh
+for f in "$DIST"/*.deb "$DIST"/*.rpm; do [ ! -e "$f" ] || tarballs+=("$(basename "$f")"); done
 echo "release: sizes (budget $BUDGET): ${sizes[*]}"
 
 # SBOM
