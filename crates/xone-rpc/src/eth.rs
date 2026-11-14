@@ -8,7 +8,7 @@ use crate::{
     },
     server::{Cost, Ctx, Registry},
     subscriptions::LogFilter,
-    types::{parse_address, parse_tag, BlockRef, Params, RpcError, R},
+    types::{parse_address, parse_tag, resolve_tag, BlockRef, Params, RpcError, R},
 };
 use alloy_primitives::{keccak256, Address, Bytes, B256, U256};
 use serde_json::{json, Value};
@@ -389,7 +389,7 @@ fn get_logs(c: &Ctx, p: &Params) -> R {
     } else {
         let end = |k: &str, d: u64| match o.get(k).and_then(Value::as_str) {
             None => Ok(d),
-            Some(s) => parse_tag(s, head),
+            Some(s) => resolve_tag(s, head, c.be.chain.finalized()),
         };
         let (from, to) = (end("fromBlock", head)?, end("toBlock", head)?);
         if from > to {
