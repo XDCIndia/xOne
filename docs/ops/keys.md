@@ -42,3 +42,22 @@ Use the keystore that `geth account new` (or the XDC tooling) wrote. xOneRS read
 ## Not covered yet
 
 The remote-signer network transport, HSM support, and the call from the safety unit are later items. A seat move between hosts is still the manual sequence: stop the old signer, confirm it is gone, then start the new one (ADR-010 section 8).
+
+## Keystore accounts: `xone account`
+
+geth's `account` commands (`cmd/geth/accountcmd.go`), backed by `xone_signer::keystore_dir`:
+
+```sh
+xone account new    --datadir D --password pw.txt [--lightkdf]
+xone account import key.hex --datadir D --password pw.txt [--lightkdf]
+xone account list   --datadir D
+xone account update 0xADDR --datadir D --password old.txt --new-password new.txt [--lightkdf]
+```
+
+* Files go in `<datadir>/keystore`, or in `--keydir DIR`. The directory is created with mode 0700, and each file is written with mode 0600 under geth's name `UTC--<time>--<address>`.
+* The format is keystore v3 with scrypt and AES-128-CTR. The cost is geth `StandardScryptN`/`P` (N=262144, r=8, p=1); with `--lightkdf` it is `LightScryptN`/`P` (N=4096, p=6). geth reads these files, and xone reads geth's (`tests/keystore_dir.rs`, `tests/vectors.rs`).
+* Passwords come from files only. A password file holds its first line and must have mode 0600. There is no interactive prompt.
+* `import` reads a hex private key file (geth `crypto.LoadECDSA`: 64 hex characters, then only whitespace) with mode 0600. It refuses an address the directory already holds.
+* `update` decrypts with the old password and writes the same key under the new one through a temporary file renamed over the original, so the path stays the same.
+* Output shows addresses and paths only, never a key or a password.
+* The node's `--keystore` flag still names one keystore **file** for block production. Pass it one of these files.

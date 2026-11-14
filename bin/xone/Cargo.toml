@@ -8,12 +8,14 @@ publish.workspace = true
 build = "build.rs"
 
 [dependencies]
+alloy-primitives.workspace = true
 clap.workspace = true
 tracing.workspace = true
 xone-chainspec.workspace = true
 xone-consensus.workspace = true
 xone-node.workspace = true
 xone-primitives.workspace = true
+xone-signer.workspace = true
 xone-sync.workspace = true
 
 # jemalloc as the global allocator of the binary only (rule crates keep the system allocator), with
@@ -27,6 +29,5 @@ default = ["jemalloc"]
 jemalloc = ["dep:tikv-jemallocator", "dep:tikv-jemalloc-ctl"]
 
 [dev-dependencies]
-alloy-primitives.workspace = true
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 serde_json.workspace = true

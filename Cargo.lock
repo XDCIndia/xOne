@@ -4706,6 +4706,7 @@ dependencies = [
  "xone-consensus",
  "xone-node",
  "xone-primitives",
+ "xone-signer",
  "xone-sync",
 ]
 
