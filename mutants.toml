@@ -1,0 +1,11 @@
+# cargo-mutants configuration (nightly job `mutants` in .github/workflows/ci.yml; issue #15).
+# cargo-mutants rewrites sources in a scratch copy of the tree and adds no feature, crate or
+# symbol to any build: nothing here can ship, and ci/check-release-tree.sh still rejects a
+# `mutants` feature. Scope: the crates whose rules decide consensus, unit tests only.
+examine_globs = [
+  "crates/xone-consensus/src/**/*.rs",
+  "crates/xone-primitives/src/**/*.rs",
+  "crates/xone-signer/src/**/*.rs",
+]
+exclude_globs = ["**/tests.rs", "**/generated/**"]
+additional_cargo_test_args = ["--lib"]
