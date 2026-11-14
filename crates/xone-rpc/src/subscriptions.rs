@@ -89,7 +89,10 @@ impl LogFilter {
 pub enum Kind {
     NewHeads,
     Logs(LogFilter),
-    PendingTransactions,
+    /// geth `NewPendingTransactions(fullTx *bool)`: hashes, or `newRPCPendingTransaction` objects.
+    PendingTransactions {
+        full: bool,
+    },
 }
 
 /// A log to publish: the filter fields and the full JSON.
@@ -242,8 +245,41 @@ impl Hub {
         Ok(dropped)
     }
 
-    pub fn publish_pending(&self, tx_hash: B256) -> Vec<String> {
-        self.fan(|k| matches!(k, Kind::PendingTransactions).then(|| h256(tx_hash)))
+    /// One transaction the pool made executable (geth `NewTxsEvent`): its hash to every
+    /// `newPendingTransactions` subscription, the full object to those that asked for it. `raw` is
+    /// the consensus encoding; the object is built once, and only when a subscriber wants it.
+    pub fn publish_pending(&self, tx_hash: B256, raw: &[u8], chain_id: u64) -> Vec<String> {
+        let wants_full = self
+            .subs
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .1
+            .iter()
+            .any(|s| matches!(s.kind, Kind::PendingTransactions { full: true }));
+        // a transaction the decoder refuses goes out as its hash
+        let full = wants_full
+            .then(|| crate::json::tx_json(raw, chain_id, None))
+            .and_then(Result::ok);
+        let hash = h256(tx_hash);
+        self.fan(|k| match k {
+            Kind::PendingTransactions { full: true } => {
+                Some(full.clone().unwrap_or_else(|| hash.clone()))
+            }
+            Kind::PendingTransactions { full: false } => Some(hash.clone()),
+            _ => None,
+        })
+    }
+}
+
+/// The JSON type name `encoding/json` reports in an unmarshal error.
+fn go_json_kind(v: &Value) -> &'static str {
+    match v {
+        Value::Null => "null",
+        Value::Bool(_) => "bool",
+        Value::Number(_) => "number",
+        Value::String(_) => "string",
+        Value::Array(_) => "array",
+        Value::Object(_) => "object",
     }
 }
 
@@ -251,7 +287,15 @@ impl Hub {
 pub fn parse_kind(params: &[Value]) -> Result<Kind, RpcError> {
     match params.first().and_then(Value::as_str) {
         Some("newHeads") => Ok(Kind::NewHeads),
-        Some("newPendingTransactions") => Ok(Kind::PendingTransactions),
+        Some("newPendingTransactions") => match params.get(1) {
+            None | Some(Value::Null) => Ok(Kind::PendingTransactions { full: false }),
+            Some(Value::Bool(full)) => Ok(Kind::PendingTransactions { full: *full }),
+            // geth's decoding error for a `*bool` argument
+            Some(v) => Err(RpcError::invalid_params(format!(
+                "invalid argument 1: json: cannot unmarshal {} into Go value of type bool",
+                go_json_kind(v)
+            ))),
+        },
         Some("logs") => match params.get(1) {
             None | Some(Value::Null) => Ok(Kind::Logs(LogFilter::default())),
             Some(Value::Object(o)) => Ok(Kind::Logs(LogFilter::parse(o)?)),
@@ -271,6 +315,51 @@ pub fn parse_kind(params: &[Value]) -> Result<Kind, RpcError> {
 mod tests {
     use super::*;
     use tokio::sync::mpsc;
+
+    #[test]
+    fn pending_subscriptions_get_hashes_or_full_objects_as_asked() {
+        assert!(matches!(
+            parse_kind(&[json!("newPendingTransactions")]),
+            Ok(Kind::PendingTransactions { full: false })
+        ));
+        assert!(matches!(
+            parse_kind(&[json!("newPendingTransactions"), json!(false)]),
+            Ok(Kind::PendingTransactions { full: false })
+        ));
+        assert!(matches!(
+            parse_kind(&[json!("newPendingTransactions"), json!(true)]),
+            Ok(Kind::PendingTransactions { full: true })
+        ));
+        let e = parse_kind(&[json!("newPendingTransactions"), json!("yes")]).unwrap_err();
+        assert_eq!(
+            e.message,
+            "invalid argument 1: json: cannot unmarshal string into Go value of type bool"
+        );
+        let hub = Hub::default();
+        let (htx, mut hrx) = mpsc::channel(4);
+        let (ftx, mut frx) = mpsc::channel(4);
+        let (xtx, mut xrx) = mpsc::channel(4);
+        hub.subscribe(1, Kind::PendingTransactions { full: false }, htx);
+        hub.subscribe(2, Kind::PendingTransactions { full: true }, ftx);
+        hub.subscribe(3, Kind::NewHeads, xtx);
+        // a legacy transfer signed for chain 1 (EIP-155)
+        let raw = alloy_primitives::hex::decode(
+            "f86c098504a817c800825208943535353535353535353535353535353535353535880de0b6b3a76400008025a028ef61340bd939bc2195fe537567866003e1a15d3c71ff63e1590620aa636276a067cbe9d8997f761aecb703304b3800ccf555c9f3dc64214b297fb1966a3b6d83",
+        )
+        .unwrap();
+        let h = alloy_primitives::keccak256(&raw);
+        assert!(hub.publish_pending(h, &raw, 1).is_empty());
+        let got = |rx: &mut mpsc::Receiver<String>| -> Value {
+            serde_json::from_str::<Value>(&rx.try_recv().unwrap()).unwrap()["params"]["result"]
+                .clone()
+        };
+        assert_eq!(got(&mut hrx), json!(format!("{h:#x}")));
+        let full = got(&mut frx);
+        assert_eq!(full["hash"], json!(format!("{h:#x}")));
+        assert_eq!(full["blockHash"], Value::Null);
+        assert_eq!(full["nonce"], json!("0x9"));
+        assert!(xrx.try_recv().is_err());
+    }
 
     #[test]
     fn slow_consumer_is_dropped_and_others_keep_receiving() {

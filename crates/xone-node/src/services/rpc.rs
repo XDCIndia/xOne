@@ -4,7 +4,8 @@
 //!
 //! ponytail: `eth_call`, `eth_estimateGas` and the tracers answer a typed refusal (there is no
 //! single-call executor yet), `XDPoS_getMissedRoundsInEpochByBlockNum` too. `newHeads` and `logs`
-//! are published by `Core` on each canonical block; `newPendingTransactions` accepts and stays quiet.
+//! are published by `Core` on each canonical block; `newPendingTransactions` by the pool, for
+//! each transaction it makes executable (geth `NewTxsEvent`), as a hash or, when asked, an object.
 
 use std::{
     net::SocketAddr,

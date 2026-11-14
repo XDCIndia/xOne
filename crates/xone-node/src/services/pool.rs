@@ -117,7 +117,38 @@ impl PoolShared {
             .collect::<Vec<_>>();
         // A replacement or an eviction in this batch removed transactions the map still holds.
         g.release();
+        let new = Self::take_new(&mut g);
+        drop(g);
+        self.publish(&new);
         out
+    }
+
+    /// The transactions the pool made executable since the last call (geth `NewTxsEvent`), with
+    /// their encodings.
+    fn take_new(g: &mut Inner) -> Vec<(B256, Bytes)> {
+        let new = g.pool.take_new();
+        new.iter()
+            .filter_map(|t| g.raws.get(&t.hash).map(|r| (t.hash, r.clone())))
+            .collect()
+    }
+
+    /// `newPendingTransactions` on every transport that can push, outside the pool lock.
+    fn publish(&self, new: &[(B256, Bytes)]) {
+        if new.is_empty() {
+            return;
+        }
+        let hubs = self
+            .core
+            .hubs
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        let chain_id = self.core.spec.chain_id;
+        for hub in hubs.iter().filter(|h| !h.is_empty()) {
+            for (hash, raw) in new {
+                let _ = hub.publish_pending(*hash, raw, chain_id);
+            }
+        }
     }
 
     /// Transactions of a `Transactions` message; a refusal is the sender's business, not ours.
@@ -157,6 +188,9 @@ impl PoolShared {
         // a pool that cannot reset keeps its transactions; the next head tries again
         let _ = self.on_head(|st| pool.reset(st, now(), number, gas));
         g.release();
+        let new = Self::take_new(&mut g);
+        drop(g);
+        self.publish(&new);
     }
 
     /// geth `legacypool` eviction tick: drops queued accounts idle for longer than the pool
