@@ -120,6 +120,9 @@ pub enum SnapSyncError {
     },
     #[error("--snap.pins {0}")]
     Pins(String),
+    /// The peer's chain below the pivot is not the required one (`--eth.requiredblocks`).
+    #[error("{0}: the chain of the pivot is on another branch")]
+    RequiredBlock(#[from] xone_chainspec::RequiredBlockMismatch),
     #[error("block {number}: {why}")]
     Block { number: u64, why: String },
     #[error(
@@ -563,6 +566,9 @@ pub fn run(
         spec.genesis_hash,
     );
     pc.max_peers = cfg.p2p.max_peers as usize;
+    pc.required_blocks = cfg
+        .required_blocks_of_chain(spec.chain_id)
+        .map_err(|e| io(e.to_string()))?;
     pc.shutdown_grace = Duration::from_secs(1);
     let g = genesis
         .to_header(spec)
@@ -982,6 +988,16 @@ fn pivot_once(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec, pins: &[(u64, B25
     if headers.get(&top).map(Header::hash) != Some(head_hash) {
         return Err(bad(&src, "the header run does not end at its head"));
     }
+    // a pivot on the abandoned branch is refused before any state is asked for
+    let required = cfg
+        .required_blocks_of_chain(spec.chain_id)
+        .map_err(|e| SnapSyncError::Io(e.to_string()))?;
+    check_required_run(&required, top, &headers, |n| {
+        Ok(d.headers_from(src, Origin::Number(n), 1)?
+            .first()
+            .filter(|h| h.number == n)
+            .map(Header::hash))
+    })?;
     eprintln!(
         "snap: head {top} {head_hash} from peer {}; headers {lo}..={top} downloaded and linked ({} headers)",
         short(&src),
@@ -1226,6 +1242,28 @@ fn gap_pool(
 /// The pin of the anchor (geth's trust in its peers' header chain): at least two peers serve the
 /// switch header `hash` and more peers serve it than serve any other hash. Peers on another chain
 /// (a stale release that forked off) are outvoted and reported, not fatal.
+/// Every required height at or below `top` must carry its hash in the chain that ends at `top`:
+/// from `headers` where they reach, else as the source serves it (`fetch`; `None` is a source that
+/// does not have a block it announced the head above).
+fn check_required_run(
+    required: &[(u64, B256)],
+    top: u64,
+    headers: &BTreeMap<u64, Header>,
+    mut fetch: impl FnMut(u64) -> R<Option<B256>>,
+) -> R<()> {
+    for &(n, want) in required.iter().filter(|(n, _)| *n <= top) {
+        let got = match headers.get(&n) {
+            Some(h) => h.hash(),
+            None => fetch(n)?.ok_or(SnapSyncError::Block {
+                number: n,
+                why: "the source does not serve a required block below its head".into(),
+            })?,
+        };
+        xone_chainspec::check_required(&[(n, want)], n, got)?;
+    }
+    Ok(())
+}
+
 fn witness(d: &mut Drv<'_>, number: u64, hash: B256) -> R<(Vec<(u64, B256)>, String)> {
     // peers that connect late (the wait for the first snap peer returns as soon as two are there,
     // and one may be a stranger) get a minute to join the vote
@@ -1403,6 +1441,33 @@ mod tests {
 
     /// An `Unavailable` download takes a fresh pivot and continues over the same store; any other error
     /// stops it, and the moves are bounded.
+    #[test]
+    fn a_pivot_chain_through_the_wrong_required_hash_is_refused() {
+        let h = |n: u64, salt: u8| Header {
+            number: n,
+            extra_data: vec![salt].into(),
+            ..Header::default()
+        };
+        let run: BTreeMap<u64, Header> = (10..=20).map(|n| (n, h(n, 1))).collect();
+        let none = |_| -> R<Option<B256>> { panic!("held in the run") };
+        // in the run: the right hash passes, another is a typed error
+        assert!(check_required_run(&[(15, h(15, 1).hash())], 20, &run, none).is_ok());
+        let e = check_required_run(&[(15, h(15, 2).hash())], 20, &run, none).unwrap_err();
+        assert!(
+            matches!(&e, SnapSyncError::RequiredBlock(m) if (m.number, m.got) == (15, h(15, 1).hash())),
+            "{e}"
+        );
+        // below the run: asked of the source
+        let asked = |n: u64| -> R<Option<B256>> { Ok(Some(h(n, 1).hash())) };
+        assert!(check_required_run(&[(5, h(5, 1).hash())], 20, &run, asked).is_ok());
+        let e = check_required_run(&[(5, h(5, 2).hash())], 20, &run, asked).unwrap_err();
+        assert!(matches!(e, SnapSyncError::RequiredBlock(_)), "{e}");
+        // above the head: not applicable; a source without the block: refused
+        assert!(check_required_run(&[(99, B256::ZERO)], 20, &run, none).is_ok());
+        let gone = |_| -> R<Option<B256>> { Ok(None) };
+        assert!(check_required_run(&[(5, B256::ZERO)], 20, &run, gone).is_err());
+    }
+
     #[test]
     fn unavailable_moves_the_pivot_and_keeps_the_store() {
         let root = |n: u8| B256::repeat_byte(n);

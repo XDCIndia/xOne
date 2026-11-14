@@ -16,6 +16,7 @@ pub mod trusted;
 
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
@@ -28,6 +29,7 @@ use tokio::sync::{mpsc, Semaphore};
 use tokio::task::JoinHandle;
 use tokio::time::{sleep_until, timeout, Instant};
 use xone_primitives::limits::{BoundedQueue, Offence, Overflow, Push};
+use xone_primitives::Header;
 
 use crate::bft_gossip::{Gossip, Receive};
 use crate::eth::status62::Local;
@@ -75,6 +77,11 @@ pub struct Config {
     pub outbound_queue: usize,
     /// ADR-007 Q2: events waiting for the application.
     pub event_queue: usize,
+    /// `--eth.requiredblocks`: a peer that serves another hash at one of these heights is dropped
+    /// (geth `eth/handler.go`). A peer that does not have the height yet is kept.
+    pub required_blocks: Vec<(u64, B256)>,
+    /// Time one required-block header may take (geth: 15 s).
+    pub required_timeout: Duration,
     pub limits: PeerLimits,
 }
 
@@ -98,6 +105,8 @@ impl Config {
             max_handshakes: 64,
             outbound_queue: 64,
             event_queue: 4096,
+            required_blocks: Vec::new(),
+            required_timeout: Duration::from_secs(15),
             limits: PeerLimits::default(),
         }
     }
@@ -169,6 +178,8 @@ pub struct Peers {
     events: mpsc::Sender<Event>,
     handshakes: Arc<Semaphore>,
     start: Instant,
+    /// Peers dropped by the required-block check; `xone_peers_required_block_refused_total`.
+    refused: Arc<AtomicU64>,
 }
 
 fn lock(m: &Mutex<State>) -> MutexGuard<'_, State> {
@@ -224,6 +235,7 @@ impl Peers {
             state: Arc::new(Mutex::new(state)),
             events,
             start: Instant::now(),
+            refused: Arc::new(AtomicU64::new(0)),
         };
         (peers, rx)
     }
@@ -234,6 +246,11 @@ impl Peers {
 
     fn now_ms(&self) -> u64 {
         u64::try_from(self.start.elapsed().as_millis()).unwrap_or(u64::MAX)
+    }
+
+    /// Peers dropped for a wrong hash at, or no answer about, a required block.
+    pub fn required_refused(&self) -> u64 {
+        self.refused.load(Ordering::Relaxed)
     }
 
     pub fn peer_count(&self) -> usize {
@@ -578,7 +595,69 @@ fn class(m: &Message) -> Option<Class> {
     })
 }
 
+/// Request id of the required-block challenge under eth/101. The application counts up from 1.
+const CHALLENGE_ID: u64 = u64::MAX;
+
+/// The required-block check of one session: one header request at a time, the next entry after
+/// each good answer.
+struct Challenge {
+    next: usize,
+    deadline: Instant,
+    /// The next request is not sent yet.
+    unsent: bool,
+}
+
 impl Peers {
+    fn challenge_request(&self, f: Framing, idx: usize) -> Message {
+        let n = self.cfg.required_blocks.get(idx).map_or(0, |(n, _)| *n);
+        Message::GetBlockHeaders {
+            id: (f == Framing::RequestId).then_some(CHALLENGE_ID),
+            query: eth::GetHeaders {
+                origin: eth::Origin::Number(n),
+                amount: 1,
+                skip: 0,
+                reverse: false,
+            },
+        }
+    }
+
+    /// The answer to the outstanding challenge. Like geth: an empty answer means the peer has not
+    /// reached the height (kept); one header with another hash, or more than one header, is a refusal.
+    fn on_challenge(
+        &self,
+        id: &PeerId,
+        c: &mut Option<Challenge>,
+        headers: &[Header],
+    ) -> Result<(), DisconnectReason> {
+        let Some(ch) = c.as_mut() else { return Ok(()) };
+        let Some(&(number, want)) = self.cfg.required_blocks.get(ch.next) else {
+            *c = None;
+            return Ok(());
+        };
+        let refuse = |got: String| {
+            self.refused.fetch_add(1, Ordering::Relaxed);
+            eprintln!(
+                "peer refused  id={}  reason=required-block  number={number}  want={want}  got={got}",
+                short(id)
+            );
+            Err(DisconnectReason::UselessPeer)
+        };
+        match headers {
+            [] => *c = None,
+            [h] if h.number == number && h.hash() == want => {
+                ch.next += 1;
+                ch.deadline = Instant::now() + self.cfg.required_timeout;
+                ch.unsent = true;
+                if ch.next >= self.cfg.required_blocks.len() {
+                    *c = None;
+                }
+            }
+            [h] => return refuse(format!("{} at {}", h.hash(), h.number)),
+            _ => return refuse(format!("{} headers", headers.len())),
+        }
+        Ok(())
+    }
+
     fn enqueue(&self, id: &PeerId, q: &mut Queues, msg: Message) -> Result<(), DisconnectReason> {
         let Some(c) = class(&msg) else { return Ok(()) };
         match q.push(c, msg) {
@@ -602,6 +681,7 @@ impl Peers {
         code: u64,
         body: &[u8],
         q: &mut Queues,
+        challenge: &mut Option<Challenge>,
     ) -> Result<(), DisconnectReason> {
         // snap/1 and xpre/1: carried as bytes, decoded by the application
         if let Some((sub, base)) = subs
@@ -627,6 +707,14 @@ impl Peers {
         }
         match eth::decode(framing(s.version), code, body) {
             Ok(Message::Status(_)) => Err(DisconnectReason::ProtocolError),
+            // eth/100 has no request id: the first answer after the challenge is its answer
+            Ok(Message::BlockHeaders { id, headers })
+                if challenge.is_some()
+                    && id.is_none_or(|i| i == CHALLENGE_ID)
+                    && !challenge.as_ref().is_some_and(|c| c.unsent) =>
+            {
+                self.on_challenge(&s.id, challenge, &headers)
+            }
             Ok(msg) => self.enqueue(&s.id, q, msg),
             Err(_) => {
                 // Like geth, an undecodable data-plane message ends the session, trusted or not.
@@ -646,6 +734,24 @@ async fn session<Io>(
 ) where
     Io: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
+    let f = framing(s.version);
+    // sent before the application hears of the peer, so that under eth/100 the first header
+    // answer is the challenge's
+    let mut challenge = None;
+    if !p.cfg.required_blocks.is_empty() {
+        if let Ok((code, body)) = eth::encode(f, &p.challenge_request(f, 0)) {
+            match timeout(p.cfg.write_timeout, conn.send(code, &body)).await {
+                Ok(Ok(())) => {
+                    challenge = Some(Challenge {
+                        next: 0,
+                        deadline: Instant::now() + p.cfg.required_timeout,
+                        unsent: false,
+                    });
+                }
+                _ => return session_end(&p, &s, conn, DisconnectReason::NetworkError, true).await,
+            }
+        }
+    }
     let _ = p
         .events
         .send(Event::Connected {
@@ -657,7 +763,6 @@ async fn session<Io>(
             subs: subs.iter().map(|(x, _)| *x).collect(),
         })
         .await;
-    let f = framing(s.version);
     let mut q = Queues::new();
     let mut last_rx = Instant::now();
     // (reason, true if the connection is already gone and no Disconnect can be sent)
@@ -693,13 +798,27 @@ async fn session<Io>(
                 }
                 Err(_) => break (DisconnectReason::Quitting, false),
             },
+            _ = sleep_until(challenge.as_ref().map_or(last_rx, |c| c.deadline)), if challenge.as_ref().is_some_and(|c| !c.unsent) => {
+                p.refused.fetch_add(1, Ordering::Relaxed);
+                eprintln!("peer refused  id={}  reason=required-block  no answer in {:?}", short(&s.id), p.cfg.required_timeout);
+                break (DisconnectReason::UselessPeer, false)
+            }
             _ = sleep_until(last_rx + p.cfg.idle_timeout) => break (DisconnectReason::ReadTimeout, false),
             frame = conn.recv() => {
                 last_rx = Instant::now();
                 match frame {
                     Ok((code, body)) => {
-                        if let Err(r) = p.on_message(&s, &subs, code, &body, &mut q) {
+                        if let Err(r) = p.on_message(&s, &subs, code, &body, &mut q, &mut challenge) {
                             break (r, false);
+                        }
+                        if let Some(c) = challenge.as_mut().filter(|c| c.unsent) {
+                            let req = p.challenge_request(f, c.next);
+                            if let Ok((code, body)) = eth::encode(f, &req) {
+                                match timeout(p.cfg.write_timeout, conn.send(code, &body)).await {
+                                    Ok(Ok(())) => c.unsent = false,
+                                    _ => break (DisconnectReason::NetworkError, true),
+                                }
+                            }
                         }
                     }
                     Err(NetError::Disconnect(_) | NetError::Closed | NetError::Io(_) | NetError::Ecies(_)) => {
@@ -718,6 +837,18 @@ async fn session<Io>(
             }
         }
     };
+    session_end(&p, &s, conn, reason, gone).await
+}
+
+async fn session_end<Io>(
+    p: &Peers,
+    s: &Session,
+    mut conn: Conn<Io>,
+    reason: DisconnectReason,
+    gone: bool,
+) where
+    Io: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
     {
         let mut st = lock(&p.state);
         if st.peers.get(&s.id).is_some_and(|e| e.seq == s.seq) {
@@ -735,4 +866,8 @@ async fn session<Io>(
     )
     .await;
     drop(sent);
+}
+
+fn short(id: &PeerId) -> String {
+    id.0.iter().take(6).map(|b| format!("{b:02x}")).collect()
 }

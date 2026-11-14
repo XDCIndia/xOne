@@ -131,7 +131,13 @@ pub fn build(
         Err(core::CoreError::Anchored) if cfg.sync.mode == "snap" => open(true),
         r => r,
     };
-    let core = Arc::new(core.map_err(|e| e.to_string())?);
+    let mut core = core.map_err(|e| e.to_string())?;
+    // checked in the peer sessions (below), and for every block and header the chain takes
+    let required = cfg
+        .required_blocks_of_chain(cfg.network_id.unwrap_or(marker.chain_id))
+        .map_err(|e| e.to_string())?;
+    core.chain.set_required_blocks(required.clone());
+    let core = Arc::new(core);
     if core.genesis.to_string() != marker.genesis_hash {
         return Err("the genesis hash of the node differs from the chain marker".into());
     }
@@ -148,6 +154,7 @@ pub fn build(
         core.genesis,
     );
     pc.max_peers = cfg.p2p.max_peers as usize;
+    pc.required_blocks = required;
     pc.shutdown_grace = Duration::from_secs(1);
     {
         let h = core.hist.read();

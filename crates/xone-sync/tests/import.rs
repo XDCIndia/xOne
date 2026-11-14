@@ -482,3 +482,26 @@ fn a_file_with_a_missing_block_does_not_link() {
     let e = stages::sync(&chain, &mut source(&blocks.concat()), &limits(), NOW).unwrap_err();
     assert!(matches!(e, SyncError::Link { number: 11 }), "{e}");
 }
+
+#[test]
+fn a_chain_through_the_wrong_hash_at_a_required_height_is_refused_before_it_is_stored() {
+    let (blocks, _) = raws(120);
+    let file = blocks.concat();
+    let (n, good) = (50, decode_block(&blocks[50]).unwrap().0.hash());
+    // the right hash: the whole file imports
+    let mut ok = fresh_chain();
+    ok.set_required_blocks(vec![(n, good)]);
+    stages::sync(&ok, &mut source(&file), &Limits::default(), NOW).unwrap();
+    assert_eq!(ok.head().0, 120);
+    // another hash: a typed error naming both, and nothing above genesis is stored
+    let mut bad = fresh_chain();
+    bad.set_required_blocks(vec![(n, B256::repeat_byte(7))]);
+    let e = stages::sync(&bad, &mut source(&file), &Limits::default(), NOW).unwrap_err();
+    match e {
+        SyncError::RequiredBlock(m) => {
+            assert_eq!((m.number, m.want, m.got), (50, B256::repeat_byte(7), good))
+        }
+        e => panic!("{e}"),
+    }
+    assert_eq!(bad.head().0, 0);
+}
