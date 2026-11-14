@@ -159,6 +159,23 @@ impl Anchor {
         }
         Ok(alloy_rlp::decode_exact(buf)?)
     }
+
+    /// The checkpoint (pivot) number of an encoded manifest, read without decoding its headers:
+    /// the RPC asks for it on every request below the floor.
+    pub fn number_of(buf: &[u8]) -> Result<u64, AnchorError> {
+        let mut b = buf;
+        alloy_rlp::Header::decode(&mut b)?;
+        let found = u16::decode(&mut b)?;
+        if found != FORMAT_VERSION {
+            return Err(AnchorError::UnsupportedFormat {
+                found,
+                supported: FORMAT_VERSION,
+            });
+        }
+        u64::decode(&mut b)?;
+        B256::decode(&mut b)?;
+        Ok(u64::decode(&mut b)?)
+    }
 }
 
 /// Order: format, chain, genesis, freshness, pin, then the binding of the headers to the manifest
