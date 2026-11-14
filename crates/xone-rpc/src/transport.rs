@@ -29,8 +29,11 @@ use tokio::{
 };
 use tokio_tungstenite::tungstenite::{
     handshake::server::{ErrorResponse, Request as WsRequest, Response as WsResponse},
-    protocol::WebSocketConfig,
-    Message,
+    protocol::{
+        frame::{coding::CloseCode, CloseFrame},
+        WebSocketConfig,
+    },
+    Error as WsError, Message,
 };
 
 struct HttpState {
@@ -274,21 +277,54 @@ pub async fn serve_ws(rpc: Arc<Rpc>, listener: TcpListener) {
             };
             let (mut sink, mut stream) = ws.split();
             let (mut s, mut rx) = Session::new(&rpc, rpc.limits.ws_in_flight);
-            let writer = tokio::spawn(async move {
-                while let Some(m) = rx.recv().await {
-                    if sink.send(Message::text(m)).await.is_err() {
-                        break;
+            // #291: an oversized message is answered with close code 1009 by the writer, the one
+            // owner of the sink
+            let (close_tx, mut close_rx) = tokio::sync::oneshot::channel::<CloseFrame>();
+            let mut writer = tokio::spawn(async move {
+                loop {
+                    tokio::select! {
+                        m = rx.recv() => match m {
+                            Some(m) => {
+                                if sink.send(Message::text(m)).await.is_err() {
+                                    break;
+                                }
+                            }
+                            None => break,
+                        },
+                        c = &mut close_rx => {
+                            if let Ok(c) = c {
+                                let _ = sink.send(Message::Close(Some(c))).await;
+                                let _ = sink.flush().await;
+                            }
+                            break;
+                        }
                     }
                 }
             });
-            while let Some(Ok(m)) = stream.next().await {
-                match m {
-                    Message::Text(t) => s.on_message(t.as_str().to_owned()).await,
-                    Message::Close(_) => break,
-                    _ => {}
+            let mut close_tx = Some(close_tx);
+            while let Some(r) = stream.next().await {
+                match r {
+                    Ok(Message::Text(t)) => s.on_message(t.as_str().to_owned()).await,
+                    Ok(Message::Close(_)) => break,
+                    Ok(_) => {}
+                    // a frame or the reassembled message is above body_bytes: tungstenite refuses
+                    // it before it is buffered whole, nothing reaches the JSON parser
+                    Err(WsError::Capacity(_)) => {
+                        if let Some(tx) = close_tx.take() {
+                            let _ = tx.send(CloseFrame {
+                                code: CloseCode::Size,
+                                reason: "message too big".into(),
+                            });
+                        }
+                        break;
+                    }
+                    Err(_) => break,
                 }
             }
             s.close();
+            if close_tx.is_none() {
+                let _ = tokio::time::timeout(std::time::Duration::from_secs(1), &mut writer).await;
+            }
             writer.abort();
             drop(slot);
         });
