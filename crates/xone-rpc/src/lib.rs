@@ -12,6 +12,7 @@ pub mod admin;
 pub mod api;
 pub mod debug;
 pub mod eth;
+pub mod filters;
 pub mod json;
 pub mod net;
 pub mod policy;

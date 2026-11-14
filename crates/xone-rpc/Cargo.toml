@@ -17,6 +17,7 @@ alloy-rlp.workspace = true
 # `--rpc.jwtsecret` (HS256 JWT, geth `node/jwt_handler.go`); all three are already in the lock.
 base64 = "0.22"
 hmac = "0.12"
+getrandom.workspace = true
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 http-body-util = "0.1"
 hyper = { version = "1", features = ["http1", "server"] }

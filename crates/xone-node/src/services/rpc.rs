@@ -503,13 +503,15 @@ impl RpcService {
                 ))
             })
             .transpose()?;
-        // the transports that can push: their hubs receive the canonical blocks
+        // every transport's hub receives the canonical blocks: WebSocket and IPC push them to
+        // subscriptions, and the polling filters of all three read them (`xone_rpc::filters`)
         core.hubs
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .extend(
-                ws.iter()
+                http.iter()
                     .map(|(_, r)| r.hub.clone())
+                    .chain(ws.iter().map(|(_, r)| r.hub.clone()))
                     .chain(ipc.iter().map(|(_, r)| r.hub.clone())),
             );
         Ok(Self {
