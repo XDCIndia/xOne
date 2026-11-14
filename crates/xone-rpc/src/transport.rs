@@ -116,6 +116,22 @@ fn http_reply(status: StatusCode, body: Vec<u8>, retry: Option<u64>) -> Response
     r
 }
 
+/// geth `acceptedContentTypes`: the media type, without its parameters, compared case-blind.
+/// A missing or malformed header is refused, as geth's `mime.ParseMediaType` error is.
+fn json_media_type(ct: Option<&str>) -> bool {
+    let Some(ct) = ct else {
+        return false;
+    };
+    let mt = ct.split(';').next().unwrap_or("").trim();
+    [
+        "application/json",
+        "application/json-rpc",
+        "application/jsonrequest",
+    ]
+    .iter()
+    .any(|a| mt.eq_ignore_ascii_case(a))
+}
+
 async fn http_handle(
     st: Arc<HttpState>,
     conn: Arc<Conn>,
@@ -144,6 +160,19 @@ async fn http_handle(
     }
     if req.method() != Method::POST {
         return Ok(http_reply(StatusCode::METHOD_NOT_ALLOWED, vec![], None));
+    }
+    // geth `rpc/http.go` validateRequest: the media type must be a JSON one, before any body is
+    // read or a method runs. Simple form and text types (a browser's no-preflight POST) fail.
+    let ct = req
+        .headers()
+        .get("content-type")
+        .and_then(|h| h.to_str().ok());
+    if !json_media_type(ct) {
+        return Ok(http_reply(
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            b"invalid content type, only application/json is supported".to_vec(),
+            None,
+        ));
     }
     let gz = accepts_gzip(
         req.headers()
