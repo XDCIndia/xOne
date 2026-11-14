@@ -391,6 +391,14 @@ pub const FLAGS: &[Flag] = &[
         "flags.go:124 ; xone",
     ),
     f(
+        "miner.quietwindow",
+        N,
+        "the network's",
+        "300",
+        "ADR-010 signer quiet window in seconds (`ChainSpec::quiet_window`: 120 on mainnet, Apothem and net2040, 20 on the devnets). Only a larger value is accepted.",
+        "xone",
+    ),
+    f(
         "ethstats",
         S,
         "unset",
