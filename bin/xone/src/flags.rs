@@ -75,6 +75,22 @@ pub const FLAGS: &[Flag] = &[
         "flags.go:299 ; geth,xone",
     ),
     f(
+        "synctarget",
+        Some("<hash>"),
+        "unset",
+        "0x0000000000000000000000000000000000000000000000000000000000000001",
+        "Hash of the block to full sync to: nothing above it is imported, and the node then stops following (forces --syncmode full; not with --mine).",
+        "flags.go:810",
+    ),
+    f(
+        "exitwhensynced",
+        B,
+        "false",
+        "true",
+        "Stop the node (exit 0) once synced: with --synctarget once the target is held, otherwise once the head is less than 10 minutes old. Not with --mine.",
+        "flags.go:203",
+    ),
+    f(
         "snap.pins",
         P,
         "unset",
