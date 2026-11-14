@@ -489,11 +489,11 @@ impl Core {
                     inner.td += s.header.difficulty;
                     inner.blocks.push_back(s);
                 }
-                if !anchored {
+                if !anchored || !c.td.is_zero() {
                     // The history starts inside the chain: the checkpoint carries the total
-                    // difficulty. A minimal node does not know it (no block below its first retained
-                    // one is held): the window's own sum is a lower bound, and XDPoS peers rank by
-                    // block number and round, not by difficulty.
+                    // difficulty (an anchored one since the snap install gives the pivot's, #119).
+                    // A checkpoint of a snapshot file has none: the window's own sum is a lower
+                    // bound, and XDPoS peers rank by block number and round, not by difficulty.
                     inner.td = c.td;
                 }
                 // the switches below the window are rows of `ConsensusEpoch`

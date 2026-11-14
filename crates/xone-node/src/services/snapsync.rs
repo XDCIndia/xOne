@@ -155,6 +155,8 @@ fn now_secs() -> u64 {
 struct Peer {
     version: u64,
     head: B256,
+    /// The total difficulty of the Status, at `head` (saturated at `u64::MAX`).
+    rank: u64,
     subs: Vec<Sub>,
 }
 
@@ -196,6 +198,7 @@ impl Drv<'_> {
             Event::Connected {
                 peer,
                 version,
+                rank,
                 head,
                 subs,
                 ..
@@ -218,6 +221,7 @@ impl Drv<'_> {
                     Peer {
                         version,
                         head,
+                        rank,
                         subs,
                     },
                 );
@@ -728,6 +732,7 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec, genesis: &Genesis) -> R
     };
     let Pivoted {
         anchor,
+        td,
         pin_source,
         win,
         records,
@@ -784,7 +789,7 @@ fn sync(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec, genesis: &Genesis) -> R
         retention: RETENTION,
         rows_in_tables,
     };
-    crate::snapshot::install(&dir, &mut store, pivot, anchor.hash, &side, install)
+    crate::snapshot::install(&dir, &mut store, pivot, anchor.hash, td, &side, install)
         .map_err(|e| SnapSyncError::Io(e.to_string()))?;
     let record = format!(
         "pivot {pivot} {}\nstate_root {}\nswitch {} {}\npin {pin_source}\nsynced_at {now}\n",
@@ -871,10 +876,28 @@ fn advance(d: &mut Drv<'_>, src: PeerId, mut head: Header) -> R<(Header, B256)> 
     }
 }
 
+/// The total difficulty at `pivot`, from a peer's Status (`td` at block `at`) and the linked headers
+/// between the two: `td(n) = td(n - 1) + difficulty(n)`, which is what geth-XDC puts in its Status
+/// (`xdcHandshakeTD`, `eth/protocols/eth/handshake.go:87-104`: the stored TD of the head). `None`
+/// when a header between them is not held, or the Status td saturated (`Peers` ranks with a u64).
+fn td_at(headers: &BTreeMap<u64, Header>, (at, td): (u64, u64), pivot: u64) -> Option<U256> {
+    if td == u64::MAX {
+        return None;
+    }
+    let mut t = U256::from(td);
+    for n in pivot.min(at) + 1..=pivot.max(at) {
+        let d = headers.get(&n)?.difficulty;
+        t = if pivot < at { t.checked_sub(d)? } else { t + d };
+    }
+    Some(t)
+}
+
 /// What one pivot needs before its state is downloaded: the verified anchor and the window and gap
 /// pools below it.
 struct Pivoted {
     anchor: Anchor,
+    /// The total difficulty at the pivot; 0 when the source's Status does not give it.
+    td: U256,
     pin_source: String,
     win: Vec<Header>,
     records: Vec<Record>,
@@ -910,10 +933,10 @@ fn pivot_window(
 fn pivot_once(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec, pins: &[(u64, B256)]) -> R<Pivoted> {
     // ---- the head and the pivot
     let src = d.src()?;
-    let head_hash = d
+    let (head_hash, rank) = d
         .known
         .get(&src)
-        .map(|p| p.head)
+        .map(|p| (p.head, p.rank))
         .ok_or_else(|| bad(&src, "gone"))?;
     let head = d
         .headers_from(src, Origin::Hash(head_hash), 1)?
@@ -921,6 +944,7 @@ fn pivot_once(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec, pins: &[(u64, B25
         .next()
         .filter(|h| h.hash() == head_hash)
         .ok_or_else(|| bad(&src, "does not serve its own head"))?;
+    let status = (head.number, rank);
     // the Status head is as old as the connection: go on to the peer's tip (a re-pivot, minutes
     // later, would otherwise pick the same stale pivot)
     let (head, head_hash) = advance(d, src, head)?;
@@ -1015,6 +1039,13 @@ fn pivot_once(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec, pins: &[(u64, B25
         });
     };
     let pivot = anchor.number;
+    let td = td_at(&headers, status, pivot).unwrap_or(U256::ZERO);
+    eprintln!(
+        "snap: total difficulty {td} at the pivot, from the Status of peer {} (td {} at block {}) and the linked headers",
+        short(&src),
+        status.1,
+        status.0
+    );
     let pv = &anchor.provenance;
     eprintln!(
         "snap: pivot block {pivot} {} state root {} (head {top} - {}); anchor verified: switch {} {} with {} masternodes certifies it by the 3-chain to {}; pin: {pin_source}",
@@ -1122,6 +1153,7 @@ fn pivot_once(d: &mut Drv<'_>, cfg: &Config, spec: &ChainSpec, pins: &[(u64, B25
     }
     Ok(Pivoted {
         anchor,
+        td,
         pin_source,
         win,
         records,
@@ -1272,6 +1304,29 @@ fn tally(number: u64, hash: B256, votes: &[(String, B256)]) -> R<Vec<String>> {
 mod tests {
     use super::*;
     use alloy_rlp::Encodable;
+
+    /// #119: the pivot's total difficulty is the Status td less the difficulty above the pivot
+    /// (or plus the difficulty up to it, for a Status older than the pivot).
+    #[test]
+    fn the_pivot_td_is_the_status_td_through_the_linked_headers() {
+        let headers: BTreeMap<u64, Header> = (10..=20)
+            .map(|n| {
+                let h = Header {
+                    number: n,
+                    difficulty: U256::from(if n < 15 { 3 } else { 1 }),
+                    ..Default::default()
+                };
+                (n, h)
+            })
+            .collect();
+        // a full node at 20 has td 100: 12..=20 add 3 * 3 + 6 * 1 = 15 above 11
+        assert_eq!(td_at(&headers, (20, 100), 11), Some(U256::from(85)));
+        assert_eq!(td_at(&headers, (11, 85), 20), Some(U256::from(100)));
+        assert_eq!(td_at(&headers, (20, 100), 20), Some(U256::from(100)));
+        // a header that is not held, a saturated td
+        assert_eq!(td_at(&headers, (20, 100), 5), None);
+        assert_eq!(td_at(&headers, (20, u64::MAX), 11), None);
+    }
 
     /// What `chain.rs` serves for `GetReceipts` is what the snap client reads back: a legacy
     /// receipt as its list, a typed one inside an RLP string.
