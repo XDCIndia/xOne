@@ -54,6 +54,9 @@ pub struct Ctx<'a> {
     /// Set when the client is gone or the deadline passed; long handlers check it.
     pub cancel: &'a AtomicBool,
     pub limits: &'a Limits,
+    /// The transport's event hub and polling filters (`filters.rs`).
+    pub hub: &'a Hub,
+    pub filters: &'a crate::filters::Filters,
 }
 
 pub type Handler = Box<dyn Fn(&Ctx, &Params) -> R + Send + Sync>;
@@ -204,6 +207,8 @@ pub struct Rpc {
     pub policy: crate::policy::Policy,
     /// Shared with the node, which publishes each canonical block to it.
     pub hub: Arc<Hub>,
+    /// Polling filters installed over this transport, fed by `hub`.
+    pub filters: crate::filters::Filters,
     class_sem: [Arc<Semaphore>; 4],
     global_bucket: Mutex<Bucket>,
     /// Set by the node's watchdog: C2 and C3 answer `-32005 "node busy"` (ADR-007 section 3, rule 6).
@@ -248,6 +253,7 @@ impl Rpc {
             limits,
             policy: Default::default(),
             hub: Arc::default(),
+            filters: Default::default(),
             shed: AtomicBool::new(false),
             start: Instant::now(),
             next_conn: Mutex::new(0),
@@ -324,6 +330,8 @@ impl Rpc {
             be: &self.be,
             cancel,
             limits: &self.limits,
+            hub: &self.hub,
+            filters: &self.filters,
         };
         h(
             &ctx,

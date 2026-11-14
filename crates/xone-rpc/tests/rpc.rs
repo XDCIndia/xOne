@@ -1338,3 +1338,133 @@ async fn a_plain_http_request_to_the_websocket_port_is_not_dispatched() {
     assert!(out.is_empty() || out.starts_with("HTTP/1.1 4"), "{out}");
     h.abort();
 }
+
+#[test]
+fn polling_filters_over_http() {
+    use xone_rpc::subscriptions::LogEvent;
+    let r = rpc();
+    let id = |v: Value| v["result"].as_str().expect("filter id").to_owned();
+    // a block filter sees the blocks published after it, once
+    let bf = id(ask(&r, req(1, "eth_newBlockFilter", json!([]))));
+    assert_eq!(bf.len(), 34, "{bf}");
+    let h = header(101);
+    r.hub
+        .publish_block(&h, h.hash(), &[], &[], false)
+        .expect("publish");
+    let ch = ask(&r, req(2, "eth_getFilterChanges", json!([bf])));
+    assert_eq!(ch["result"], json!([format!("{:#x}", h.hash())]), "{ch}");
+    let again = ask(&r, req(3, "eth_getFilterChanges", json!([bf])));
+    assert_eq!(again["result"], json!([]));
+
+    // a log filter with an address and an absolute range; removed logs are delivered too
+    let addr = Address::repeat_byte(0x33);
+    let lf = id(ask(
+        &r,
+        req(
+            4,
+            "eth_newFilter",
+            json!([{"address": format!("{addr:#x}"), "fromBlock": "0x10", "toBlock": "latest"}]),
+        ),
+    ));
+    let log = |n: &str, a: Address| LogEvent {
+        address: a,
+        topics: vec![],
+        json: json!({"address": format!("{a:#x}"), "blockNumber": n}),
+    };
+    r.hub.publish_logs(
+        &[
+            log("0x11", addr),
+            log("0xf", addr),
+            log("0x12", Address::ZERO),
+        ],
+        false,
+    );
+    r.hub.publish_logs(&[log("0x11", addr)], true);
+    let logs = ask(&r, req(5, "eth_getFilterChanges", json!([lf])))["result"].clone();
+    let logs = logs.as_array().expect("logs");
+    assert_eq!(logs.len(), 2, "{logs:?}");
+    assert_eq!(logs[0]["removed"], false);
+    assert_eq!(logs[1]["removed"], true);
+    // eth_getFilterLogs runs eth_getLogs with the stored criteria
+    let fl = ask(&r, req(6, "eth_getFilterLogs", json!([lf])));
+    assert_eq!(fl["result"], json!([]), "{fl}");
+    // a block filter has no criteria
+    let e = ask(&r, req(7, "eth_getFilterLogs", json!([bf])));
+    assert_eq!(e["error"]["message"], "filter not found");
+
+    // pending transaction filter: nothing entered the (empty) pool
+    let pf = id(ask(
+        &r,
+        req(8, "eth_newPendingTransactionFilter", json!([])),
+    ));
+    assert_eq!(
+        ask(&r, req(9, "eth_getFilterChanges", json!([pf])))["result"],
+        json!([])
+    );
+
+    // uninstall: true once, then the id is unknown
+    assert_eq!(
+        ask(&r, req(10, "eth_uninstallFilter", json!([bf])))["result"],
+        true
+    );
+    assert_eq!(
+        ask(&r, req(11, "eth_uninstallFilter", json!([bf])))["result"],
+        false
+    );
+    let e = ask(&r, req(12, "eth_getFilterChanges", json!([bf])));
+    assert_eq!(e["error"]["message"], "filter not found");
+}
+
+#[test]
+fn filter_buffer_overflow_is_an_error_not_a_gap() {
+    let r = rpc();
+    let bf = ask(&r, req(1, "eth_newBlockFilter", json!([])))["result"]
+        .as_str()
+        .expect("id")
+        .to_owned();
+    for n in 0..=u64::try_from(xone_rpc::filters::BUFFER).unwrap() {
+        let h = header(200 + n);
+        r.hub
+            .publish_block(&h, h.hash(), &[], &[], false)
+            .expect("publish");
+    }
+    let e = ask(&r, req(2, "eth_getFilterChanges", json!([bf])));
+    assert!(
+        e["error"]["message"]
+            .as_str()
+            .unwrap_or("")
+            .starts_with("filter buffer overflow"),
+        "{e}"
+    );
+    // the overflowed filter is gone
+    let e = ask(&r, req(3, "eth_getFilterChanges", json!([bf])));
+    assert_eq!(e["error"]["message"], "filter not found");
+}
+
+#[test]
+fn new_filter_validates_its_criteria() {
+    let r = rpc();
+    for (crit, msg) in [
+        (
+            json!({"fromBlock": "0x5", "toBlock": "0x4"}),
+            "invalid block range params",
+        ),
+        (
+            json!({"fromBlock": "pending"}),
+            "pending logs are not supported",
+        ),
+        (
+            json!({"topics": [null, null, null, null, null]}),
+            "exceed max topics",
+        ),
+        (
+            json!({"blockHash": format!("{:#x}", B256::ZERO), "fromBlock": "0x1"}),
+            "cannot specify both BlockHash and FromBlock/ToBlock, choose one or the other",
+        ),
+    ] {
+        let e = ask(&r, req(1, "eth_newFilter", json!([crit])));
+        assert_eq!(e["error"]["code"], -32602, "{e}");
+        assert_eq!(e["error"]["message"], msg);
+    }
+    assert!(r.filters.is_empty());
+}

@@ -77,6 +77,7 @@ pub fn register(r: &mut Registry) {
     r.add("eth_call", Cost::C1, call);
     r.add("eth_estimateGas", Cost::C2, estimate);
     r.add("eth_getLogs", Cost::C2, get_logs);
+    crate::filters::register(r);
     r.add("eth_sendRawTransaction", Cost::C1, send_raw);
 }
 
@@ -380,7 +381,7 @@ fn send_raw(c: &Ctx, p: &Params) -> R {
     c.be.pool.add_raw(&raw).map(h256).map_err(RpcError::server)
 }
 
-fn get_logs(c: &Ctx, p: &Params) -> R {
+pub(crate) fn get_logs(c: &Ctx, p: &Params) -> R {
     let o = p.obj(0)?;
     let filter = LogFilter::parse(o)?;
     let head = c.be.chain.head().0;
