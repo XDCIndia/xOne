@@ -17,6 +17,7 @@ use xone_node::services::{
     producer::{behind_head, reinject},
 };
 use xone_primitives::{BlockInfo, ExtraFieldsV2, Header, QuorumCert};
+use xone_rpc::api::PoolApi;
 
 fn v2_header(round: u64) -> Header {
     let quorum_cert = QuorumCert {
@@ -91,5 +92,9 @@ fn the_transactions_of_the_blocks_a_sibling_takes_off_go_back_to_the_pool() {
     for h in &taken {
         assert!(raws.contains_key(h), "{h} is back in the pool");
     }
+    // `txpool_status` counts executable and queued transactions, not the lookup size and its slots.
+    let (p, q) = PoolApi::content(&pool);
+    let n = |m: &std::collections::BTreeMap<_, Vec<_>>| m.values().map(Vec::len).sum::<usize>();
+    assert_eq!(PoolApi::status(&pool), (n(&p), n(&q)));
     let _ = std::fs::remove_dir_all(&dir);
 }

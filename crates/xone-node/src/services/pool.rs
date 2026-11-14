@@ -144,7 +144,7 @@ impl PoolShared {
 
 impl PoolApi for PoolShared {
     fn status(&self) -> (usize, usize) {
-        self.lock().pool.len()
+        self.lock().pool.stats()
     }
 
     #[allow(clippy::type_complexity)]
