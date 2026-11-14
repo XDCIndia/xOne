@@ -1338,3 +1338,30 @@ async fn a_plain_http_request_to_the_websocket_port_is_not_dispatched() {
     assert!(out.is_empty() || out.starts_with("HTTP/1.1 4"), "{out}");
     h.abort();
 }
+
+#[test]
+fn get_logs_by_hash_checks_retention_and_known_blocks() {
+    let r = rpc_with(Limits::default(), 50);
+    let old = format!("{:#x}", header(10).hash());
+    let e = ask(&r, req(1, "eth_getLogs", json!([{ "blockHash": old }])));
+    assert!(
+        e["error"]["message"]
+            .as_str()
+            .expect("msg")
+            .starts_with("unsupported history"),
+        "{e}"
+    );
+    let e = ask(
+        &r,
+        req(
+            2,
+            "eth_getLogs",
+            json!([{ "blockHash": format!("{:#x}", B256::repeat_byte(9)) }]),
+        ),
+    );
+    assert_eq!(e["error"]["message"], "unknown block");
+    // A retained block with no transactions is a complete, empty answer.
+    let new = format!("{:#x}", header(60).hash());
+    let o = ask(&r, req(3, "eth_getLogs", json!([{ "blockHash": new }])));
+    assert_eq!(o["result"], json!([]));
+}

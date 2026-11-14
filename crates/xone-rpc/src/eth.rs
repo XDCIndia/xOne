@@ -384,38 +384,74 @@ fn get_logs(c: &Ctx, p: &Params) -> R {
     let o = p.obj(0)?;
     let filter = LogFilter::parse(o)?;
     let head = c.be.chain.head().0;
-    let blocks: Vec<B256> = if let Some(h) = o.get("blockHash").and_then(Value::as_str) {
-        vec![crate::types::parse_hash(h)?]
-    } else {
-        let end = |k: &str, d: u64| match o.get(k).and_then(Value::as_str) {
-            None => Ok(d),
-            Some(s) => parse_tag(s, head),
+    // Range queries carry the number each hash was read at, so a block that leaves the canonical
+    // chain during the scan is detected; a `blockHash` query names its block and has none.
+    let blocks: Vec<(Option<u64>, B256)> =
+        if let Some(h) = o.get("blockHash").and_then(Value::as_str) {
+            let bh = crate::types::parse_hash(h)?;
+            let header =
+                c.be.chain
+                    .header(bh)
+                    .ok_or_else(|| RpcError::server("unknown block"))?;
+            // The same retention refusal as a range query (XB-14), never an empty list.
+            c.be.chain.history(Class::Receipt, header.number)?;
+            vec![(None, bh)]
+        } else {
+            let end = |k: &str, d: u64| match o.get(k).and_then(Value::as_str) {
+                None => Ok(d),
+                Some(s) => parse_tag(s, head),
+            };
+            let (from, to) = (end("fromBlock", head)?, end("toBlock", head)?);
+            if from > to {
+                return Err(RpcError::invalid_params("invalid block range"));
+            }
+            if to - from >= c.limits.logs_blocks {
+                return Err(RpcError::invalid_params(format!(
+                    "exceed maximum block range: {}",
+                    c.limits.logs_blocks
+                )));
+            }
+            c.be.chain.history(Class::Receipt, from)?;
+            (from..=to.min(head))
+                .map(|n| {
+                    c.be.chain
+                        .hash_by_number(n)
+                        .map(|h| (Some(n), h))
+                        .ok_or_else(|| incomplete(n, "canonical hash"))
+                })
+                .collect::<Result<_, _>>()?
         };
-        let (from, to) = (end("fromBlock", head)?, end("toBlock", head)?);
-        if from > to {
-            return Err(RpcError::invalid_params("invalid block range"));
-        }
-        if to - from >= c.limits.logs_blocks {
-            return Err(RpcError::invalid_params(format!(
-                "exceed maximum block range: {}",
-                c.limits.logs_blocks
-            )));
-        }
-        c.be.chain.history(Class::Receipt, from)?;
-        (from..=to.min(head))
-            .filter_map(|n| c.be.chain.hash_by_number(n))
-            .collect()
-    };
     let id = c.be.chain.spec().chain_id;
     let mut out = Vec::new();
-    for bh in blocks {
+    for (at, bh) in blocks {
         if c.cancel.load(Ordering::Relaxed) {
             return Err(RpcError::server("request cancelled"));
         }
-        let (Some(b), Some(raw)) = (c.be.chain.block(bh), c.be.chain.receipts(bh)) else {
-            continue;
+        let Some(b) = c.be.chain.block(bh) else {
+            return Err(match at {
+                Some(n) => incomplete(n, "block"),
+                None => RpcError::server("unknown block"),
+            });
         };
+        let raw = match c.be.chain.receipts(bh) {
+            Some(raw) => raw,
+            // A block without transactions has no receipts to lose: its empty list is complete.
+            None if b.txs.is_empty() => Vec::new(),
+            None => return Err(incomplete(b.header.number, "receipts")),
+        };
+        // The block was replaced on the canonical chain while the scan ran: what was read is not
+        // one chain. The client retries.
+        if let Some(n) = at {
+            if c.be.chain.hash_by_number(n) != Some(bh) {
+                return Err(RpcError::server(format!(
+                    "canonical chain changed at block {n} during the query; retry"
+                )));
+            }
+        }
         let rc = decode_receipts(&raw)?;
+        if rc.len() != b.txs.len() {
+            return Err(incomplete(b.header.number, "receipts"));
+        }
         let mut idx = 0u64;
         for (i, r) in rc.iter().enumerate() {
             let l = loc(&b, i);
@@ -440,6 +476,14 @@ fn get_logs(c: &Ctx, p: &Params) -> R {
         }
     }
     Ok(Value::Array(out))
+}
+
+/// `eth_getLogs` could not read `what` of canonical block `n`: a partial list would look complete,
+/// so the query is refused.
+fn incomplete(n: u64, what: &str) -> RpcError {
+    RpcError::server(format!(
+        "{what} of canonical block {n} is not available; the log query is incomplete"
+    ))
 }
 
 /// `eth_feeHistory` (geth `eth/gasprice/feehistory.go`): `baseFeePerGas` has one more entry than the
