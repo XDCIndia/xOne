@@ -29,6 +29,7 @@ use tokio::{
 };
 use tokio_tungstenite::tungstenite::{
     handshake::server::{ErrorResponse, Request as WsRequest, Response as WsResponse},
+    protocol::WebSocketConfig,
     Message,
 };
 
@@ -63,6 +64,18 @@ async fn http_handle(
     if let Err(e) = st.rpc.policy.check_host(host) {
         return Ok(http_reply(
             StatusCode::FORBIDDEN,
+            e.to_string().into_bytes(),
+            None,
+        ));
+    }
+    // authentication before anything else is read or dispatched
+    let auth = req
+        .headers()
+        .get("authorization")
+        .and_then(|h| h.to_str().ok());
+    if let Err(e) = st.rpc.policy.check_auth(auth) {
+        return Ok(http_reply(
+            StatusCode::UNAUTHORIZED,
             e.to_string().into_bytes(),
             None,
         ));
@@ -229,18 +242,34 @@ pub async fn serve_ws(rpc: Arc<Rpc>, listener: TcpListener) {
                 clippy::result_large_err,
                 reason = "the error type is tungstenite's callback contract"
             )]
-            let check = |req: &WsRequest, resp: WsResponse| match rpc
-                .policy
-                .check_origin(req.headers().get("origin").and_then(|o| o.to_str().ok()))
-            {
-                Ok(()) => Ok(resp),
-                Err(e) => {
-                    let mut r = ErrorResponse::new(Some(e.to_string()));
-                    *r.status_mut() = StatusCode::FORBIDDEN;
-                    Err(r)
+            // With `--rpc.jwtsecret` the upgrade itself carries the token; a refused upgrade gets no
+            // WebSocket, so no later frame on it is ever read.
+            let check = |req: &WsRequest, resp: WsResponse| {
+                let hdr = |n: &str| req.headers().get(n).and_then(|o| o.to_str().ok());
+                let refused = match rpc.policy.check_origin(hdr("origin")) {
+                    Err(e) => Some((StatusCode::FORBIDDEN, e)),
+                    Ok(()) => rpc
+                        .policy
+                        .check_auth(hdr("authorization"))
+                        .err()
+                        .map(|e| (StatusCode::UNAUTHORIZED, e)),
+                };
+                match refused {
+                    None => Ok(resp),
+                    Some((status, e)) => {
+                        let mut r = ErrorResponse::new(Some(e.to_string()));
+                        *r.status_mut() = status;
+                        Err(r)
+                    }
                 }
             };
-            let Ok(ws) = tokio_tungstenite::accept_hdr_async(stream, check).await else {
+            // #16: a message or frame is bounded like an HTTP body (tungstenite's own default is 64 MiB).
+            let cfg = WebSocketConfig::default()
+                .max_message_size(Some(rpc.limits.body_bytes))
+                .max_frame_size(Some(rpc.limits.body_bytes));
+            let Ok(ws) =
+                tokio_tungstenite::accept_hdr_async_with_config(stream, check, Some(cfg)).await
+            else {
                 return;
             };
             let (mut sink, mut stream) = ws.split();
@@ -269,6 +298,11 @@ pub async fn serve_ws(rpc: Arc<Rpc>, listener: TcpListener) {
 /// IPC: a Unix socket carrying a stream of JSON values, no framing (geth `rpc/ipc.go`).
 pub async fn serve_ipc(rpc: Arc<Rpc>, path: &Path) -> std::io::Result<()> {
     let listener = UnixListener::bind(path)?;
+    // geth `rpc/ipc_unix.go`: the socket is the owner's only (0600); IPC serves every namespace.
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+    }
     let conns = Arc::new(Semaphore::new(rpc.limits.ipc_connections));
     loop {
         let (stream, _) = listener.accept().await?;

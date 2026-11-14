@@ -37,6 +37,7 @@ Source column: file:line in geth-XDC (`XDCIndia/go-ethereum` at `6fc8e8c2`; `fla
 | `--ws.port <n>` |  | 8546 | WebSocket-RPC listen port. | flags.go:898 ; geth |
 | `--ws.api <a,b,..>` |  | eth,net,web3 | APIs offered over WebSocket-RPC. | flags.go:904 ; geth |
 | `--ws.origins <a,b,..>` |  | none | Allowed origins for WebSocket-RPC. | flags.go:910 ; geth |
+| `--rpc.jwtsecret <path>` |  | unset | JWT secret file (32 bytes hex): HTTP and WebSocket RPC then require an HS256 bearer token. IPC is not affected. | reth --rpc.jwtsecret; geth node/jwt_handler.go |
 | `--authrpc.addr <string>` |  | localhost | Authenticated RPC listen address. | flags.go:761 |
 | `--authrpc.port <n>` |  | 8551 | Authenticated RPC listen port. | flags.go:767 ; geth,xone |
 | `--authrpc.vhosts <a,b,..>` |  | localhost | Allowed virtual hosts for authenticated RPC. | flags.go:773 |

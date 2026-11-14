@@ -84,7 +84,7 @@ fn run(args: impl IntoIterator<Item = OsString>) -> ExitCode {
         }
     }
     match m.subcommand() {
-        Some(("dumpconfig", _)) => match cfg.to_toml() {
+        Some(("dumpconfig", _)) => match cfg.redacted().to_toml() {
             Ok(t) => {
                 print!("{t}");
                 ExitCode::SUCCESS

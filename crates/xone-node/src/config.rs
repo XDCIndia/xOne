@@ -130,6 +130,8 @@ pub struct Http {
     pub api: Vec<String>,
     pub cors: Vec<String>,
     pub vhosts: Vec<String>,
+    /// `--rpc.jwtsecret`: with a secret file every request needs an HS256 bearer token.
+    pub jwt_secret: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -140,6 +142,8 @@ pub struct Ws {
     pub port: u16,
     pub api: Vec<String>,
     pub origins: Vec<String>,
+    /// `--rpc.jwtsecret`, as for HTTP: the upgrade request carries the token.
+    pub jwt_secret: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -263,14 +267,16 @@ defaults!(Http {
     port: 8545,
     api: strs(&["eth", "net", "web3"]),
     cors: vec![],
-    vhosts: strs(&["localhost"])
+    vhosts: strs(&["localhost"]),
+    jwt_secret: None
 });
 defaults!(Ws {
     enabled: false,
     addr: "localhost".into(),
     port: 8546,
     api: strs(&["eth", "net", "web3"]),
-    origins: vec![]
+    origins: vec![],
+    jwt_secret: None
 });
 defaults!(AuthRpc {
     addr: "localhost".into(),
@@ -384,6 +390,30 @@ impl Config {
         Self::from_toml(&text)
     }
 
+    /// The config with its secrets replaced by `<redacted>`, for `dumpconfig` and logs: the ethstats
+    /// secret (`name:secret@host`) and the user info of a URL (`https://user:pass@host`). Paths of
+    /// secret files stay: they are not secrets.
+    pub fn redacted(&self) -> Self {
+        const R: &str = "<redacted>";
+        let mut c = self.clone();
+        if let Some(u) = c.ethstats.as_mut() {
+            if let Some((pre, host)) = u.rsplit_once('@') {
+                if let Some((name, _)) = pre.rsplit_once(':') {
+                    *u = format!("{name}:{R}@{host}");
+                }
+            }
+        }
+        if let Some(u) = c.sync.snap_gap_rpc.as_mut() {
+            let (scheme, rest) = u.split_once("://").unwrap_or(("", u.as_str()));
+            let auth_end = rest.find('/').unwrap_or(rest.len());
+            if let Some(at) = rest[..auth_end].rfind('@') {
+                let sep = if scheme.is_empty() { "" } else { "://" };
+                *u = format!("{scheme}{sep}{R}{}", &rest[at..]);
+            }
+        }
+        c
+    }
+
     pub fn to_toml(&self) -> Result<String, ConfigError> {
         toml::to_string_pretty(self).map_err(|e| ConfigError::Toml(e.to_string()))
     }
@@ -448,6 +478,10 @@ impl Config {
             "ws.port" => self.ws.port = num(key, v)?,
             "ws.api" => self.ws.api = list(v),
             "ws.origins" => self.ws.origins = list(v),
+            "rpc.jwtsecret" => {
+                self.http.jwt_secret = Some(v.into());
+                self.ws.jwt_secret = Some(v.into());
+            }
             "authrpc.addr" => self.authrpc.addr = v.to_owned(),
             "authrpc.port" => self.authrpc.port = num(key, v)?,
             "authrpc.jwtsecret" => self.authrpc.jwt_secret = Some(v.into()),
@@ -481,6 +515,26 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn redacted_hides_the_ethstats_secret_and_url_credentials() {
+        let mut c = Config::default();
+        c.set("ethstats", "node-1:s3cr3t@wss://stats.example:443")
+            .unwrap();
+        c.set("snap.gap-rpc", "https://user:pw0rd@rpc.example/path")
+            .unwrap();
+        c.set("rpc.jwtsecret", "/d/jwt.hex").unwrap();
+        let t = c.redacted().to_toml().unwrap();
+        assert!(!t.contains("s3cr3t") && !t.contains("pw0rd"), "{t}");
+        assert!(t.contains("node-1:<redacted>@wss://stats.example:443"));
+        assert!(t.contains("https://<redacted>@rpc.example/path"));
+        assert!(t.contains("/d/jwt.hex"), "a path is not a secret");
+        let mut plain = Config::default();
+        plain
+            .set("snap.gap-rpc", "http://rpc.example:8545")
+            .unwrap();
+        assert_eq!(plain.redacted(), plain);
+    }
 
     #[test]
     fn dump_load_round_trip() {
