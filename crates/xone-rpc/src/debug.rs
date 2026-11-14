@@ -344,7 +344,14 @@ mod tests {
 
     fn parse(cfg: Value) -> Result<Choice, RpcError> {
         let v = [json!("0x00"), cfg];
-        tracer(&Params { v: &v, head: 0 }, 1)
+        tracer(
+            &Params {
+                v: &v,
+                head: 0,
+                finalized: None,
+            },
+            1,
+        )
     }
 
     #[test]
