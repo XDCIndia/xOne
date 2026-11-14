@@ -66,14 +66,32 @@ fn run(args: impl IntoIterator<Item = OsString>) -> ExitCode {
         );
         return ExitCode::from(2);
     }
-    let mut cfg = match m.get_one::<String>("config") {
+    let env = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
+    let config_path = m
+        .get_one::<String>("config")
+        .cloned()
+        .or_else(|| env(&flags::env_name("config")));
+    let mut cfg = match config_path {
         Some(p) => match Config::from_file(p.as_ref()) {
             Ok(c) => c,
             Err(e) => return fail(e),
         },
         None => Config::default(),
     };
-    // flags win over the file
+    // the environment wins over the file (XONE_<FLAG>, or GETH_<FLAG> for a geth flag)
+    let on_cli = |n: &str| m.value_source(n) == Some(ValueSource::CommandLine);
+    match flags::apply_env(&mut cfg, on_cli, env) {
+        Ok(warns) => {
+            for w in warns {
+                eprintln!("xone: {w}");
+            }
+        }
+        Err(e) => {
+            eprintln!("xone: {e}");
+            return ExitCode::from(2);
+        }
+    }
+    // flags win over the environment and the file
     for x in flags::FLAGS
         .iter()
         .filter(|x| !matches!(x.name, "config" | "version"))
@@ -344,6 +362,58 @@ mod tests {
                 assert!(c.set(a, v).is_ok(), "{a}");
             }
         }
+    }
+
+    #[test]
+    fn every_flag_has_a_unique_env_name_and_the_cli_wins() {
+        let mut seen = std::collections::HashSet::new();
+        for f in flags::FLAGS {
+            let n = flags::env_name(f.name);
+            assert!(n.starts_with("XONE_") && !n.contains(['.', '-']), "{n}");
+            // names the launcher and the build use for themselves
+            assert!(
+                !matches!(n.as_str(), "XONE_BIN" | "XONE_BOOTNODES_DIR" | "XONE_STAMP"),
+                "{n}"
+            );
+            assert!(seen.insert(n.clone()), "{n} twice");
+        }
+        assert_eq!(flags::env_name("http.api"), "XONE_HTTP_API");
+        assert_eq!(flags::env_name("snap.gap-rpc"), "XONE_SNAP_GAP_RPC");
+        let env = |pairs: &'static [(&'static str, &'static str)]| {
+            move |k: &str| {
+                pairs
+                    .iter()
+                    .find(|(n, _)| *n == k)
+                    .map(|(_, v)| (*v).to_owned())
+            }
+        };
+        // the environment over the default, XONE_ over GETH_
+        let mut c = Config::default();
+        let w = flags::apply_env(
+            &mut c,
+            |_| false,
+            env(&[
+                ("XONE_MAXPEERS", "7"),
+                ("GETH_MAXPEERS", "9"),
+                ("GETH_HTTP_PORT", "9545"),
+            ]),
+        )
+        .map_err(|e| e.to_string());
+        assert_eq!(c.p2p.max_peers, 7);
+        assert_eq!(c.http.port, 9545);
+        assert_eq!(w.map(|w| w.len()), Ok(1));
+        // a flag on the command line is left to the command line
+        let mut c = Config::default();
+        assert!(
+            flags::apply_env(&mut c, |n| n == "maxpeers", env(&[("XONE_MAXPEERS", "7")])).is_ok()
+        );
+        assert_eq!(c.p2p.max_peers, Config::default().p2p.max_peers);
+        // an xone-only flag has no GETH_ name; a bad value names the variable
+        let mut c = Config::default();
+        assert!(flags::apply_env(&mut c, |_| false, env(&[("GETH_STATE_DISK", "true")])).is_ok());
+        assert!(!c.sync.state_disk);
+        let e = flags::apply_env(&mut c, |_| false, env(&[("XONE_MAXPEERS", "many")]));
+        assert!(e.is_err_and(|e| e.starts_with("XONE_MAXPEERS")));
     }
 
     #[test]

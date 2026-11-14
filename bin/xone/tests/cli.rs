@@ -525,3 +525,36 @@ fn a_malformed_required_block_is_refused() {
         );
     }
 }
+
+/// #227: `XONE_<FLAG>` and `GETH_<FLAG>` configure the node; a flag wins over both.
+#[test]
+fn environment_variables_configure_and_flags_win() {
+    let run = |env: &[(&str, &str)], args: &[&str]| {
+        let mut c = Command::new(env!("CARGO_BIN_EXE_xone"));
+        c.args(args);
+        for (k, v) in env {
+            c.env(k, v);
+        }
+        c.output().unwrap_or_else(|e| panic!("{e}"))
+    };
+    let o = run(
+        &[("XONE_MAXPEERS", "7"), ("XONE_HTTP_API", "eth,net")],
+        &["dumpconfig"],
+    );
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    assert!(out(&o).contains("max_peers = 7"), "{}", out(&o));
+    assert!(out(&o).contains("\"eth\""), "{}", out(&o));
+    let o = run(
+        &[("XONE_MAXPEERS", "7")],
+        &["--maxpeers", "9", "dumpconfig"],
+    );
+    assert!(out(&o).contains("max_peers = 9"), "{}", out(&o));
+    // a geth env file keeps working, with a warning naming the xone variable
+    let o = run(&[("GETH_MAXPEERS", "5")], &["dumpconfig"]);
+    assert!(out(&o).contains("max_peers = 5"), "{}", out(&o));
+    assert!(String::from_utf8_lossy(&o.stderr).contains("prefer XONE_MAXPEERS"));
+    // a bad value exits 2 naming the variable
+    let o = run(&[("XONE_MAXPEERS", "many")], &["dumpconfig"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&o.stderr).contains("XONE_MAXPEERS"));
+}
