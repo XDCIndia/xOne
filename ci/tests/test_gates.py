@@ -65,28 +65,6 @@ class GlobalsGate(unittest.TestCase):
             self.assertIn("xone-executor", result.stdout)
 
 
-class OracleAccessGate(unittest.TestCase):
-    def test_missing_access_cannot_qualify(self):
-        env = os.environ.copy()
-        env.pop("GETH_XDC_DEPLOY_KEY", None)
-        result = subprocess.run(
-            ["bash", str(ROOT / "ci/check-oracle-access.sh")],
-            env=env, capture_output=True, text=True, check=False,
-        )
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("cannot qualify", result.stderr)
-
-    def test_access_check_does_not_print_credential(self):
-        env = os.environ.copy()
-        env["GETH_XDC_DEPLOY_KEY"] = "test-only-not-a-real-credential"
-        result = subprocess.run(
-            ["bash", str(ROOT / "ci/check-oracle-access.sh")],
-            env=env, capture_output=True, text=True, check=False,
-        )
-        self.assertEqual(result.returncode, 0)
-        self.assertNotIn(env["GETH_XDC_DEPLOY_KEY"], result.stdout + result.stderr)
-
-
 class FixtureRunnerGate(unittest.TestCase):
     def run_runner(self, globals_fail):
         with tempfile.TemporaryDirectory() as directory:
@@ -129,6 +107,31 @@ class FixtureRunnerGate(unittest.TestCase):
         result = self.run_runner(True)
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("FAIL  check-globals", result.stdout)
+
+
+class OracleAccessGate(unittest.TestCase):
+    def run_check(self, key):
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "out"
+            env = {k: v for k, v in os.environ.items() if k != "GETH_XDC_DEPLOY_KEY"}
+            env["GITHUB_OUTPUT"] = str(out)
+            if key:
+                env["GETH_XDC_DEPLOY_KEY"] = key
+            r = subprocess.run(["bash", str(ROOT / "ci/check-oracle-access.sh")],
+                               env=env, capture_output=True, text=True, check=False)
+            return r, out.read_text()
+
+    def test_missing_key_is_not_qualified_and_green(self):
+        r, out = self.run_check(None)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("not qualified", r.stdout)
+        self.assertEqual(out.strip(), "available=false")
+
+    def test_key_present_qualifies_without_printing_it(self):
+        r, out = self.run_check("SECRET-VALUE")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(out.strip(), "available=true")
+        self.assertNotIn("SECRET-VALUE", r.stdout + r.stderr)
 
 
 if __name__ == "__main__":
