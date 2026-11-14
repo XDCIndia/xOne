@@ -114,6 +114,58 @@ pub enum ExecError {
     NoBurn(u64),
     #[error("not supported by the block executor: {0}")]
     Unsupported(&'static str),
+    /// geth-XDC `core/state_processor.go:223-229`: from the denylist block on, a block with a
+    /// listed sender or recipient is invalid. The sender is checked first.
+    #[error("tx {index}: {side} {address} is blacklisted")]
+    Denylisted {
+        index: usize,
+        address: Address,
+        side: DenySide,
+    },
+}
+
+/// Which address of a transaction is on the denylist.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DenySide {
+    Sender,
+    Recipient,
+}
+
+impl std::fmt::Display for DenySide {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Sender => "sender",
+            Self::Recipient => "recipient",
+        })
+    }
+}
+
+/// The denylist rule for one transaction of block `number`: sender first, then recipient.
+pub fn check_denylist(
+    spec: &ChainSpec,
+    number: u64,
+    index: usize,
+    from: Address,
+    to: Option<Address>,
+) -> Result<(), ExecError> {
+    if !spec.is_denylist(number) {
+        return Ok(());
+    }
+    if xone_chainspec::is_denylisted(&from) {
+        return Err(ExecError::Denylisted {
+            index,
+            address: from,
+            side: DenySide::Sender,
+        });
+    }
+    match to {
+        Some(to) if xone_chainspec::is_denylisted(&to) => Err(ExecError::Denylisted {
+            index,
+            address: to,
+            side: DenySide::Recipient,
+        }),
+        _ => Ok(()),
+    }
 }
 
 /// The result of executing one block.
@@ -327,6 +379,7 @@ fn run_block<V: StateRead, E: Env>(
     // Amsterdam), so its change is recorded by the next transaction's finalise, or the post phase.
     let mut pending: BTreeMap<Address, u64> = BTreeMap::new();
     for (index, t) in txs.iter().enumerate() {
+        check_denylist(spec, number, index, t.from, t.to)?;
         let bal_index = u32::try_from(index + 1).unwrap_or(u32::MAX);
         // `RouteTransaction`, `core/state_processor.go:856-872`, used at `:235-258`.
         match route(&r, t.to) {
@@ -1014,5 +1067,44 @@ mod decode_tests {
             decode_all(&raws, 2040),
             Err(ExecError::Tx { index: 40, .. })
         ));
+    }
+}
+
+#[cfg(test)]
+mod denylist_tests {
+    use super::*;
+
+    const LISTED: Address = address!("5248bfb72fd4f234e062d3e9bb76f08643004fcd");
+    const OTHER: Address = address!("00000000000000000000000000000000000000aa");
+
+    #[test]
+    fn sender_then_recipient_at_and_after_the_fork_only() {
+        let spec = xone_chainspec::mainnet();
+        let fork = spec.denylist_block().unwrap();
+        assert_eq!(fork, 38_383_838);
+        assert!(check_denylist(&spec, fork - 1, 0, LISTED, Some(LISTED)).is_ok());
+        assert!(matches!(
+            check_denylist(&spec, fork, 3, LISTED, Some(LISTED)),
+            Err(ExecError::Denylisted {
+                index: 3,
+                side: DenySide::Sender,
+                ..
+            })
+        ));
+        assert!(matches!(
+            check_denylist(&spec, fork, 0, OTHER, Some(LISTED)),
+            Err(ExecError::Denylisted {
+                side: DenySide::Recipient,
+                ..
+            })
+        ));
+        assert!(check_denylist(&spec, fork, 0, OTHER, None).is_ok());
+        assert!(check_denylist(&spec, fork, 0, OTHER, Some(OTHER)).is_ok());
+    }
+
+    #[test]
+    fn genesis_row_overrides_the_chain_default() {
+        assert_eq!(xone_chainspec::net2040().denylist_block(), Some(7200));
+        assert_eq!(xone_chainspec::apothem().denylist_block(), Some(23_779_191));
     }
 }
