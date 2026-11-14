@@ -709,6 +709,55 @@ async fn http_serves_requests_and_429s_on_rejection() {
 }
 
 #[tokio::test]
+async fn http_closes_slow_heads_and_stalled_bodies() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let l = Limits {
+        http_header_timeout: std::time::Duration::from_millis(200),
+        http_body_timeout: std::time::Duration::from_millis(200),
+        ..Limits::default()
+    };
+    let r = rpc_with(l, 0);
+    let ls = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
+    let addr = ls.local_addr().expect("addr");
+    let h = tokio::spawn(xone_rpc::transport::serve_http(r, ls));
+    let within = std::time::Duration::from_secs(5);
+    // a head that never ends
+    let mut s = tokio::net::TcpStream::connect(addr).await.expect("connect");
+    s.write_all(b"POST / HTTP/1.1\r\nHost: localhost\r\n")
+        .await
+        .expect("write");
+    let mut out = Vec::new();
+    tokio::time::timeout(within, s.read_to_end(&mut out))
+        .await
+        .expect("slow head closed")
+        .ok();
+    // a body that stops half way
+    let mut s = tokio::net::TcpStream::connect(addr).await.expect("connect");
+    s.write_all(b"POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 100\r\n\r\n{")
+        .await
+        .expect("write");
+    let mut out = Vec::new();
+    tokio::time::timeout(within, s.read_to_end(&mut out))
+        .await
+        .expect("stalled body answered")
+        .ok();
+    assert!(String::from_utf8_lossy(&out).starts_with("HTTP/1.1 408"));
+    // an idle keep-alive connection is closed too
+    let mut s = tokio::net::TcpStream::connect(addr).await.expect("connect");
+    let mut out = Vec::new();
+    tokio::time::timeout(within, s.read_to_end(&mut out))
+        .await
+        .expect("idle closed")
+        .ok();
+    // a normal client is unaffected
+    let ok = raw_http(addr, &req(1, "eth_chainId", json!([])).to_string()).await;
+    assert!(ok.starts_with("HTTP/1.1 200"), "{ok}");
+    h.abort();
+}
+
+#[tokio::test]
 async fn websocket_subscribes_receives_heads_and_cleans_up_on_close() {
     use futures_util::{SinkExt, StreamExt};
     use tokio_tungstenite::tungstenite::Message;
