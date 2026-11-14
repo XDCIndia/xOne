@@ -23,6 +23,7 @@ Source column: file:line in geth-XDC (`XDCIndia/go-ethereum` at `6fc8e8c2`; `fla
 | `--discovery.port <n>` |  | same as port | P2P discovery port (UDP). | flags.go:1026 ; xone |
 | `--maxpeers <n>` |  | 50 | Maximum peers; 0 disables networking. | flags.go:957 ; geth,xone |
 | `--nodiscover` |  | false | Disable peer discovery. | flags.go:997 |
+| `--permissions.nodes <path>` |  |  | Node allowlist: a JSON array of enode URLs. When set, any other node is refused in and out, and every static and trusted node must be listed. | besu --permissions-nodes-config-file ; xone |
 | `--nat <string>` |  | unset | NAT port mapping: any, none, upnp, pmp, extip:<IP>. | flags.go:991 ; geth,xone |
 | `--bootnodes <a,b,..>` |  | built-in for the profile | Comma-separated enode URLs for discovery bootstrap. | flags.go:975 ; geth,xone |
 | `--eth.requiredblocks <a,b,..>` |  | built-in for the profile (Apothem: 83665617) | Comma-separated `<number>=<0x hash>` entries. A peer that serves another hash at one of these heights is disconnected (reason 0x03) within 15 seconds of the handshake, and a header chain through another hash is refused before import or pivot choice. A peer that has not reached the height is kept. An entry replaces the built-in one at the same height. Apothem has one built-in entry, the first canonical block after the September 2026 reset; stale v2.8.2 peers still serve the abandoned branch. dumpconfig prints the merged list. | flags.go:2265 (apothemResetBlockNum) ; geth,xone |

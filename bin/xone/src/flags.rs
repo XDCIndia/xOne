@@ -175,6 +175,14 @@ pub const FLAGS: &[Flag] = &[
         "flags.go:997",
     ),
     f(
+        "permissions.nodes",
+        P,
+        "",
+        "/d/allowed-nodes.json",
+        "Node allowlist: a JSON array of enode URLs. When set, any other node is refused in and out, and every static and trusted node must be listed.",
+        "besu --permissions-nodes-config-file ; xone",
+    ),
+    f(
         "nat",
         S,
         "unset",

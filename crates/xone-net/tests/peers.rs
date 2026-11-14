@@ -748,3 +748,36 @@ async fn no_required_blocks_means_no_challenge() {
     let (_, m) = next_msg(&mut rx).await;
     assert!(matches!(m, Message::GetBlockHeaders { id: Some(7), .. }));
 }
+
+/// Node permissioning (issue #199): an unlisted node is refused in and out, and removing a
+/// connected peer from the list closes it at once.
+#[tokio::test]
+async fn allowlist_refuses_unlisted_nodes_in_and_out() {
+    let (node, _rx) = Peers::new(cfg(), key(1));
+    node.set_allowlist(Some(vec![peer_id(&key(2))]));
+    // inbound from an unlisted node
+    let (r, _) = join_with(&node, key(3), both(), 64 * 1024, |v| status(v, NET)).await;
+    assert!(matches!(
+        r,
+        Err(NetError::Rejected(DisconnectReason::UselessPeer))
+    ));
+    // outbound to an unlisted node: refused before any socket
+    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 9));
+    assert!(matches!(
+        node.dial(addr, peer_id(&key(3))).await,
+        Err(NetError::Rejected(DisconnectReason::UselessPeer))
+    ));
+    // a listed node connects
+    let mut f = join(&node, key(2)).await;
+    assert_eq!(node.peer_count(), 1);
+    // removed at runtime: closed within one second
+    let t0 = Instant::now();
+    node.set_allowlist(Some(Vec::new()));
+    assert_eq!(f.until_disconnect().await, DisconnectReason::UselessPeer);
+    assert!(t0.elapsed() < Duration::from_secs(1));
+    assert_eq!(node.peer_count(), 0);
+    // off again: anyone may connect
+    node.set_allowlist(None);
+    assert!(node.is_allowed(&peer_id(&key(3))));
+    let _g = join(&node, key(3)).await;
+}

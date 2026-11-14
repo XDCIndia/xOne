@@ -166,6 +166,8 @@ struct State {
     gossip: Gossip,
     score: Scoreboard,
     trust: Trust,
+    /// Node permissioning (issue #199): when set, only these node ids connect, in or out.
+    allow: Option<std::collections::HashSet<PeerId>>,
 }
 
 #[derive(Clone)]
@@ -215,6 +217,7 @@ impl Peers {
             gossip: Gossip::default(),
             score: Scoreboard::new(cfg.limits),
             trust: Trust::default(),
+            allow: None,
         };
         let hello = LocalHello {
             name: cfg.name.clone(),
@@ -269,6 +272,46 @@ impl Peers {
         lock(&self.state).trust.add_static(id);
     }
 
+    /// Sets the node allowlist (issue #199); `None` turns it off. Connected peers that are not
+    /// listed are closed with `UselessPeer` (geth `DiscUselessPeer`) right away.
+    pub fn set_allowlist(&self, ids: Option<Vec<PeerId>>) {
+        let mut st = lock(&self.state);
+        st.allow = ids.map(|v| v.into_iter().collect());
+        let out: Vec<PeerId> = match &st.allow {
+            Some(a) => st
+                .peers
+                .keys()
+                .filter(|p| !a.contains(*p))
+                .copied()
+                .collect(),
+            None => Vec::new(),
+        };
+        for p in out {
+            if let Some(e) = st.peers.remove(&p) {
+                // a full queue drops `tx` right after, which ends the session too
+                let _ = e.tx.try_send(Cmd::Close(DisconnectReason::UselessPeer));
+            }
+            st.gossip.remove_peer(&p);
+        }
+    }
+
+    /// The allowlist in force, sorted; `None` when off.
+    pub fn allowlist(&self) -> Option<Vec<PeerId>> {
+        lock(&self.state).allow.as_ref().map(|a| {
+            let mut v: Vec<PeerId> = a.iter().copied().collect();
+            v.sort();
+            v
+        })
+    }
+
+    /// Whether node `id` may connect: always when no allowlist is set.
+    pub fn is_allowed(&self, id: &PeerId) -> bool {
+        lock(&self.state)
+            .allow
+            .as_ref()
+            .is_none_or(|a| a.contains(id))
+    }
+
     /// The head we announce in the Status of new sessions.
     pub fn set_head(&self, head: B256, td: U256) {
         lock(&self.state).head = (head, td);
@@ -278,6 +321,9 @@ impl Peers {
     pub async fn dial(&self, addr: SocketAddr, remote: PeerId) -> Result<PeerId, NetError> {
         if lock(&self.state).closed {
             return Err(NetError::Shutdown);
+        }
+        if !self.is_allowed(&remote) {
+            return Err(NetError::Rejected(DisconnectReason::UselessPeer));
         }
         let tcp = timeout(self.cfg.dial_timeout, TcpStream::connect(addr))
             .await
@@ -382,6 +428,10 @@ impl Peers {
         if conn.remote == self.id {
             bye(&mut conn, DisconnectReason::SelfConnect, d).await;
             return Err(NetError::Rejected(DisconnectReason::SelfConnect));
+        }
+        if !self.is_allowed(&conn.remote) {
+            bye(&mut conn, DisconnectReason::UselessPeer, d).await;
+            return Err(NetError::Rejected(DisconnectReason::UselessPeer));
         }
         let f = framing(conn.eth_version);
         let (head, td) = lock(&self.state).head;
