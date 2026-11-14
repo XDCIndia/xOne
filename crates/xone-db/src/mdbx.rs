@@ -131,8 +131,80 @@ impl T {
 }
 
 #[derive(Debug, thiserror::Error)]
-#[error("mdbx: {0}")]
+#[error("mdbx: {0}{hint}", hint = capacity_hint(.0))]
 pub struct MdbxError(#[from] pub libmdbx::Error);
+
+/// What an operator does about a full map.
+fn capacity_hint(e: &libmdbx::Error) -> &'static str {
+    match e {
+        libmdbx::Error::MapFull => {
+            " (chain.mdbx reached its maximum size: restart with a larger --db.max-size; committed data is intact)"
+        }
+        _ => "",
+    }
+}
+
+/// The MDBX map geometry (`--db.max-size`, `--db.growth-step`): the largest the database may grow
+/// to and the step it grows by. Durability (`SyncMode`) is independent of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Geometry {
+    pub max_size: usize,
+    pub growth_step: usize,
+}
+
+/// 1 TiB and 64 MiB: the geometry before these settings existed.
+pub const DEFAULT_MAX_SIZE: usize = 1 << 40;
+pub const DEFAULT_GROWTH_STEP: usize = 64 << 20;
+/// Bounds that hold for the default 4 KiB page: MDBX addresses at most 2^31 pages (8 TiB).
+pub const MIN_MAX_SIZE: usize = 16 << 20;
+pub const MAX_MAX_SIZE: usize = 8 << 40;
+pub const MIN_GROWTH_STEP: usize = 1 << 20;
+
+impl Default for Geometry {
+    fn default() -> Self {
+        Self {
+            max_size: DEFAULT_MAX_SIZE,
+            growth_step: DEFAULT_GROWTH_STEP,
+        }
+    }
+}
+
+impl Geometry {
+    /// The bounds MDBX takes with a 4 KiB page, and a step no larger than the map.
+    pub fn validate(&self) -> Result<(), String> {
+        if !(MIN_MAX_SIZE..=MAX_MAX_SIZE).contains(&self.max_size) {
+            return Err(format!(
+                "db.max-size {} is outside {MIN_MAX_SIZE}..={MAX_MAX_SIZE} bytes",
+                self.max_size
+            ));
+        }
+        if self.growth_step < MIN_GROWTH_STEP || self.growth_step > self.max_size {
+            return Err(format!(
+                "db.growth-step {} must be at least {MIN_GROWTH_STEP} bytes and at most db.max-size",
+                self.growth_step
+            ));
+        }
+        Ok(())
+    }
+
+    /// An existing database at `path` (the `chain.mdbx` directory) must fit the maximum: MDBX
+    /// would otherwise refuse to open it, or keep its own larger geometry.
+    pub fn check_existing(&self, path: &Path) -> Result<(), String> {
+        let data = path.join("mdbx.dat");
+        let size = match fs::metadata(&data) {
+            Ok(m) => m.len(),
+            Err(_) => return Ok(()),
+        };
+        if size > u64::try_from(self.max_size).unwrap_or(u64::MAX) {
+            return Err(format!(
+                "{} holds {size} bytes, above db.max-size {}: raise --db.max-size",
+                data.display(),
+                self.max_size
+            ));
+        }
+        Ok(())
+    }
+}
 
 impl MdbxError {
     /// A full map or disk is `NoSpace`; every other failure is `Io`.
@@ -147,13 +219,13 @@ impl MdbxError {
 
 type R<V> = Result<V, MdbxError>;
 
-fn options(sync_mode: SyncMode) -> DatabaseOptions {
+fn options(sync_mode: SyncMode, g: Geometry) -> DatabaseOptions {
     DatabaseOptions {
         max_tables: Some(64),
         mode: Mode::ReadWrite(ReadWriteOptions {
             sync_mode,
-            max_size: Some(1 << 40),
-            growth_step: Some(64 << 20),
+            max_size: Some(isize::try_from(g.max_size).unwrap_or(isize::MAX)),
+            growth_step: Some(isize::try_from(g.growth_step).unwrap_or(isize::MAX)),
             ..Default::default()
         }),
         ..Default::default()
@@ -181,13 +253,18 @@ impl Env {
     /// flushed, a crash of the system rolls the database back to the last steady commit (never to a
     /// torn one), and [`Env::sync`] makes the last commit steady. For group commit only.
     pub fn open_with(path: &Path, tables: &[&str], durable: bool) -> R<Env> {
+        Self::open_geometry(path, tables, durable, Geometry::default())
+    }
+
+    /// [`Env::open_with`] with the map geometry `g` (validate it first, [`Geometry::validate`]).
+    pub fn open_geometry(path: &Path, tables: &[&str], durable: bool, g: Geometry) -> R<Env> {
         fs::create_dir_all(path).map_err(|_| libmdbx::Error::Access)?;
         let mode = if durable {
             SyncMode::Durable
         } else {
             SyncMode::SafeNoSync
         };
-        let db = Database::<NoWriteMap>::open_with_options(path, options(mode))?;
+        let db = Database::<NoWriteMap>::open_with_options(path, options(mode, g))?;
         let env = Env { db };
         let tx = env.db.begin_rw_txn()?;
         for t in tables {
@@ -274,6 +351,41 @@ impl<K: TransactionKind> Tx<'_, K> {
         Ok(out)
     }
 
+    /// Visits the rows with `from <= key < to` in pages of at most `page` rows: one page is copied
+    /// at a time, so `f` may delete the rows it is given (the next page starts above the last key).
+    pub fn scan_pages(
+        &self,
+        t: T,
+        from: &[u8],
+        to: Option<&[u8]>,
+        page: usize,
+        mut f: impl FnMut(&[u8], &[u8]) -> R<()>,
+    ) -> R<()> {
+        let page = page.max(1);
+        let mut at = from.to_vec();
+        loop {
+            let rows = self.range_limit(t, &at, to, page)?;
+            for (k, v) in &rows {
+                f(k, v)?;
+            }
+            match rows.last() {
+                Some((k, _)) if rows.len() == page => at = [k.as_slice(), &[0]].concat(),
+                _ => return Ok(()),
+            }
+        }
+    }
+
+    /// [`Self::scan_pages`] over the rows whose key starts with `prefix`.
+    pub fn scan_prefix(
+        &self,
+        t: T,
+        prefix: &[u8],
+        page: usize,
+        f: impl FnMut(&[u8], &[u8]) -> R<()>,
+    ) -> R<()> {
+        self.scan_pages(t, prefix, prefix_end(prefix).as_deref(), page, f)
+    }
+
     /// Rows whose key starts with `prefix`. The scan stops at the end of the prefix: it does not read
     /// (and copy) the rest of the table.
     pub fn prefix(&self, t: T, prefix: &[u8]) -> R<Vec<(Vec<u8>, Vec<u8>)>> {
@@ -337,10 +449,20 @@ impl Tx<'_, RW> {
         Ok(())
     }
 
-    /// Deletes rows with `from <= key < to`.
+    /// Deletes rows with `from <= key < to` through one cursor: only the current key is copied,
+    /// so the temporary memory does not grow with the range. After each delete the cursor seeks
+    /// again from the deleted key (`set_range`), which does not depend on where MDBX leaves a
+    /// cursor after `mdbx_cursor_del` at the end of a page or of the table.
     pub fn del_range(&self, t: T, from: &[u8], to: Option<&[u8]>) -> R<()> {
-        for (k, _) in self.range(t, from, to)? {
-            self.del(t, &k)?;
+        let tb = self.table(t.name())?;
+        let mut cur = self.tx.cursor(&tb)?;
+        let mut at: Vec<u8> = from.to_vec();
+        while let Some((k, ())) = cur.set_range::<Cow<'_, [u8]>, ()>(&at)? {
+            if &*k < from || to.is_some_and(|to| &*k >= to) {
+                break;
+            }
+            at = k.into_owned();
+            cur.del(WriteFlags::empty())?;
         }
         Ok(())
     }
@@ -453,6 +575,36 @@ mod tests {
             w.del_range(T::SegIdx, &[1, 2], None).unwrap();
             // dropped: aborted
         }
+        {
+            // deletion and paged scans over many rows, with a bound inside and at the end
+            let w = env.write().unwrap();
+            for i in 0u16..3000 {
+                w.put(T::Aux, &i.to_be_bytes(), &[0; 64]).unwrap();
+            }
+            w.del_range(T::Aux, &100u16.to_be_bytes(), Some(&2900u16.to_be_bytes()))
+                .unwrap();
+            assert_eq!(w.range(T::Aux, &[], None).unwrap().len(), 200);
+            let mut seen = 0;
+            w.scan_pages(T::Aux, &[], None, 7, |k, _| {
+                seen += 1;
+                w.del(T::Aux, k)
+            })
+            .unwrap();
+            assert_eq!(seen, 200);
+            assert!(w.first(T::Aux).unwrap().is_none());
+            w.put(T::Aux, &[9, 1], &[1]).unwrap();
+            w.put(T::Aux, &[9, 2], &[1]).unwrap();
+            w.put(T::Aux, &[10], &[1]).unwrap();
+            let mut n = 0;
+            w.scan_prefix(T::Aux, &[9], 1, |_, _| {
+                n += 1;
+                Ok(())
+            })
+            .unwrap();
+            assert_eq!(n, 2);
+            w.del_range(T::Aux, &[], None).unwrap();
+            assert!(w.first(T::Aux).unwrap().is_none());
+        }
         let r = env.read().unwrap();
         assert_eq!(r.range(T::SegIdx, &[1, 1], Some(&[1, 4])).unwrap().len(), 3);
         assert_eq!(r.prefix(T::SegIdx, &[1]).unwrap().len(), 5);
@@ -466,6 +618,73 @@ mod tests {
         assert_eq!(r.last(T::SegIdx).unwrap().unwrap().1, vec![4]);
         assert!(r.is_empty(T::Aux).unwrap());
         drop(r);
+        drop(env);
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn geometry_bounds_are_checked() {
+        assert_eq!(Geometry::default().validate(), Ok(()));
+        let g = |max_size, growth_step| Geometry {
+            max_size,
+            growth_step,
+        };
+        assert!(g(MIN_MAX_SIZE - 1, MIN_GROWTH_STEP).validate().is_err());
+        assert!(g(MAX_MAX_SIZE + 1, MIN_GROWTH_STEP).validate().is_err());
+        assert!(g(MIN_MAX_SIZE, MIN_GROWTH_STEP - 1).validate().is_err());
+        assert!(g(MIN_MAX_SIZE, MIN_MAX_SIZE + 1).validate().is_err());
+        assert_eq!(g(MIN_MAX_SIZE, MIN_MAX_SIZE).validate(), Ok(()));
+    }
+
+    #[test]
+    fn a_full_map_names_the_flag_and_a_larger_one_keeps_the_rows() {
+        let d = tmp("geometry");
+        let names: Vec<_> = T::ALL.iter().map(|t| t.name()).collect();
+        let small = Geometry {
+            max_size: MIN_MAX_SIZE,
+            growth_step: MIN_GROWTH_STEP,
+        };
+        let env = Env::open_geometry(&d, &names, false, small).unwrap();
+        let val = vec![7u8; 4096];
+        let mut committed = 0u32;
+        let full = loop {
+            let w = env.write().unwrap();
+            let r = (0..64u32)
+                .try_for_each(|i| w.put(T::SegIdx, &(committed * 64 + i).to_be_bytes(), &val));
+            match r.and_then(|()| w.commit()) {
+                Ok(()) => committed += 1,
+                Err(e) => break e,
+            }
+            assert!(committed < 1000, "a 16 MiB map never filled");
+        };
+        assert!(matches!(full.0, libmdbx::Error::MapFull), "{full}");
+        assert!(full.to_string().contains("--db.max-size"), "{full}");
+        assert!(committed > 0);
+        drop(env);
+        // the database on disk is above a smaller maximum: refused before opening
+        let tiny = Geometry {
+            max_size: MIN_MAX_SIZE / 2,
+            growth_step: MIN_GROWTH_STEP,
+        };
+        assert!(tiny.check_existing(&d).is_err());
+        let large = Geometry {
+            max_size: MIN_MAX_SIZE * 4,
+            growth_step: MIN_GROWTH_STEP,
+        };
+        assert_eq!(large.check_existing(&d), Ok(()));
+        let env = Env::open_geometry(&d, &names, false, large).unwrap();
+        let r = env.read().unwrap();
+        assert_eq!(
+            r.get(T::SegIdx, &0u32.to_be_bytes()).unwrap(),
+            Some(val.clone())
+        );
+        drop(r);
+        let w = env.write().unwrap();
+        for i in 0..64u32 {
+            w.put(T::SegIdx, &(committed * 64 + i).to_be_bytes(), &val)
+                .unwrap();
+        }
+        w.commit().unwrap();
         drop(env);
         let _ = fs::remove_dir_all(&d);
     }

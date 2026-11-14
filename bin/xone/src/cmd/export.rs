@@ -1,4 +1,9 @@
-use std::{fs::File, io::BufWriter, process::ExitCode};
+use std::{
+    fs::{self, File},
+    io::{BufWriter, Write},
+    path::Path,
+    process::ExitCode,
+};
 
 use clap::ArgMatches;
 use xone_sync::export::export as write;
@@ -22,10 +27,25 @@ pub fn export(m: &ArgMatches) -> ExitCode {
             return Err(format!("block number {last} larger than head block {head}"));
         }
         let path = m.get_one::<String>("file").map_or("", String::as_str);
-        let mut w = BufWriter::new(File::create(path).map_err(|e| format!("{path}: {e}"))?);
-        let n = chain
-            .with_store(|s| write(s, first, last, &mut w))
-            .map_err(|e| e.to_string())?;
+        let tmp = temp_path(path);
+        let file = File::create(&tmp).map_err(|e| format!("{tmp}: {e}"))?;
+        let mut w = BufWriter::new(file);
+        let n = match chain.with_store(|s| write(s, first, last, &mut w)) {
+            Ok(n) => n,
+            Err(e) => {
+                drop(w);
+                let _ = fs::remove_file(&tmp);
+                return Err(e.to_string());
+            }
+        };
+        if let Err(e) = finish(w) {
+            let _ = fs::remove_file(&tmp);
+            return Err(format!("{path}: {e}"));
+        }
+        fs::rename(&tmp, path).map_err(|e| {
+            let _ = fs::remove_file(&tmp);
+            format!("{path}: {e}")
+        })?;
         Ok(format!("exported {n} blocks, {first}..={last}, to {path}"))
     };
     match run() {
@@ -34,5 +54,52 @@ pub fn export(m: &ArgMatches) -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(e) => fail(e),
+    }
+}
+
+/// The sibling file the export is written to before it replaces `path`. An existing
+/// file at `path` stays unchanged until the export has been completely written and synced.
+fn temp_path(path: &str) -> String {
+    let p = Path::new(path);
+    let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("export");
+    let tmp = format!(".{name}.partial");
+    match p.parent().filter(|d| !d.as_os_str().is_empty()) {
+        Some(dir) => dir.join(tmp).to_string_lossy().into_owned(),
+        None => tmp,
+    }
+}
+
+/// Flushes every buffered byte and syncs the file. A write error that `BufWriter` would
+/// otherwise discard in `Drop` is returned here, so no success message follows a
+/// truncated export.
+fn finish(mut w: BufWriter<File>) -> std::io::Result<()> {
+    w.flush()?;
+    let file = w.into_inner().map_err(|e| e.into_error())?;
+    file.sync_all()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn temp_path_is_a_hidden_sibling() {
+        assert_eq!(temp_path("chain.rlp"), ".chain.rlp.partial");
+        assert_eq!(
+            temp_path("/tmp/out/chain.rlp"),
+            "/tmp/out/.chain.rlp.partial"
+        );
+    }
+
+    #[test]
+    fn finish_flushes_buffered_bytes() {
+        let dir = std::env::temp_dir().join(format!("xone-export-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("out.rlp");
+        let mut w = BufWriter::new(File::create(&p).unwrap());
+        w.write_all(&[1, 2, 3]).unwrap();
+        finish(w).unwrap();
+        assert_eq!(fs::read(&p).unwrap(), vec![1, 2, 3]);
+        let _ = fs::remove_dir_all(&dir);
     }
 }

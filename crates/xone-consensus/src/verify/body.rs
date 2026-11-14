@@ -317,6 +317,37 @@ impl<'a> BodyVerifier<'a> {
     }
 }
 
+impl BodyVerifier<'_> {
+    /// [`Self::verify_receipts`] with the bloom and receipts root the executor derived from the
+    /// receipts it produced (geth `ValidateState` computes them once, `core/block_validator.go:217-232`):
+    /// the same checks, in the same order, without decoding and re-encoding every receipt.
+    pub fn verify_receipt_roots(
+        &self,
+        header: &Header,
+        txs: usize,
+        receipts: usize,
+        bloom: Bloom,
+        root: B256,
+    ) -> Result<(), BodyError> {
+        if receipts != txs {
+            return Err(BodyError::ReceiptCount { receipts, txs });
+        }
+        if bloom != header.bloom {
+            return Err(BodyError::BloomMismatch {
+                header: header.bloom.to_string(),
+                computed: bloom.to_string(),
+            });
+        }
+        if header.receipt_root != root {
+            return Err(BodyError::ReceiptRootMismatch {
+                header: header.receipt_root,
+                computed: root,
+            });
+        }
+        Ok(())
+    }
+}
+
 /// Length of a byte string of `n` bytes (more than one byte, so it has a header).
 fn list_len_str(n: usize) -> usize {
     n + alloy_rlp::length_of_length(n)
@@ -337,5 +368,56 @@ mod tests {
         };
         let r = BodyVerifier::new(&spec).verify_body(&Header::default(), &body);
         assert!(matches!(r, Err(BodyError::TxDecode(_))), "{r:?}");
+    }
+
+    /// #245: the compare-only path gives the verdict of the deriving path, a wrong root or bloom
+    /// included.
+    #[test]
+    fn receipt_roots_from_the_executor_give_the_derived_verdict() {
+        let spec = xone_chainspec::mainnet();
+        let v = BodyVerifier::new(&spec);
+        let empty = alloy_trie::EMPTY_ROOT_HASH;
+        let good = Header {
+            receipt_root: empty,
+            ..Header::default()
+        };
+        let kind = |r: Result<(), BodyError>| r.map_err(|e| std::mem::discriminant(&e));
+        let both = |h: &Header, txs: usize| {
+            (
+                kind(v.verify_receipt_roots(h, txs, 0, Bloom::ZERO, empty)),
+                kind(v.verify_receipts(h, txs, &[])),
+            )
+        };
+        let (a, b) = both(&good, 0);
+        assert_eq!(a, b);
+        assert!(v
+            .verify_receipt_roots(&good, 0, 0, Bloom::ZERO, empty)
+            .is_ok());
+        let wrong_root = Header {
+            receipt_root: B256::repeat_byte(1),
+            ..good.clone()
+        };
+        let (a, b) = both(&wrong_root, 0);
+        assert_eq!(a, b);
+        assert!(matches!(
+            v.verify_receipt_roots(&wrong_root, 0, 0, Bloom::ZERO, empty),
+            Err(BodyError::ReceiptRootMismatch { .. })
+        ));
+        let wrong_bloom = Header {
+            bloom: Bloom::repeat_byte(1),
+            ..good.clone()
+        };
+        let (a, b) = both(&wrong_bloom, 0);
+        assert_eq!(a, b);
+        assert!(matches!(
+            v.verify_receipt_roots(&wrong_bloom, 0, 0, Bloom::ZERO, empty),
+            Err(BodyError::BloomMismatch { .. })
+        ));
+        let (a, b) = both(&good, 1);
+        assert_eq!(a, b);
+        assert!(matches!(
+            v.verify_receipt_roots(&good, 1, 0, Bloom::ZERO, empty),
+            Err(BodyError::ReceiptCount { .. })
+        ));
     }
 }

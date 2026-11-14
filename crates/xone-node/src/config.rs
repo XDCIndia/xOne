@@ -81,6 +81,16 @@ pub struct Config {
     pub metrics: Listen,
     pub pprof: Listen,
     pub limits: Limits,
+    pub dev: Dev,
+}
+
+/// `--dev`: a one-validator chain made at start (`crate::dev`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Dev {
+    pub enabled: bool,
+    /// Seconds between blocks.
+    pub period: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -107,6 +117,10 @@ pub struct SyncCfg {
     pub cache_mb: u32,
     /// Blocks of transaction index kept; 0 is the whole chain.
     pub tx_history: u64,
+    /// `--db.max-size`: bytes the MDBX database may grow to (`docs/ops/db-geometry.md`).
+    pub db_max_size: u64,
+    /// `--db.growth-step`: bytes the MDBX database grows by.
+    pub db_growth_step: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -176,6 +190,9 @@ pub struct Mining {
     /// Keystore file of the validator key (`--keystore`). Block production needs it and the password file.
     pub keystore: Option<PathBuf>,
     pub unlock: Vec<String>,
+    /// The signer's quiet window in seconds (`--miner.quietwindow`, ADR-010 section 8). Only a value
+    /// at or above the network's (`ChainSpec::quiet_window`) is accepted.
+    pub quiet_window: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -219,7 +236,10 @@ pub struct Listen {
     pub port: u16,
 }
 
-/// ADR-007 proposals. TOML only: none of these has a geth flag.
+/// ADR-007 proposals. TOML only, except the RPC caps that geth also has as flags:
+/// `rpc_gas_cap` (`--rpc.gascap`), `rpc_tx_fee_cap` (`--rpc.txfeecap`), `rpc_evm_timeout_ms`
+/// (`--rpc.evmtimeout`), `rpc_batch_items` (`--rpc.batch-request-limit`) and
+/// `rpc_response_bytes` (`--rpc.batch-response-max-size`). A flag wins over the file.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Limits {
@@ -235,6 +255,12 @@ pub struct Limits {
     pub rpc_body_bytes: u64,
     pub rpc_batch_items: u32,
     pub rpc_response_bytes: u64,
+    /// Gas cap of `eth_call` and `eth_estimateGas`; 0 is no cap.
+    pub rpc_gas_cap: u64,
+    /// Fee cap in ether of a transaction sent over RPC; 0 is no cap.
+    pub rpc_tx_fee_cap: f64,
+    /// Deadline of `eth_call`; 0 keeps the RPC class deadline.
+    pub rpc_evm_timeout_ms: u64,
     pub log_queue_lines: u32,
     /// Disk watermark (ADR-007 section 7): the larger of the percent of the datadir filesystem and the
     /// byte floor wins. Import stops below `stop`, resumes above `resume`, the node exits below `exit`.
@@ -279,6 +305,11 @@ defaults!(Config {
     metrics: Listen::default(),
     pprof: Listen::default(),
     limits: Limits::default(),
+    dev: Dev::default(),
+});
+defaults!(Dev {
+    enabled: false,
+    period: 2
 });
 defaults!(SyncCfg {
     mode: "full".into(),
@@ -289,7 +320,9 @@ defaults!(SyncCfg {
     from_block: None,
     minimal: false,
     cache_mb: 4096,
-    tx_history: 2_350_000
+    tx_history: 2_350_000,
+    db_max_size: 1 << 40,
+    db_growth_step: 64 << 20
 });
 defaults!(P2p {
     port: 30303,
@@ -337,7 +370,8 @@ defaults!(Mining {
     etherbase: None,
     password_file: None,
     keystore: None,
-    unlock: vec![]
+    unlock: vec![],
+    quiet_window: None
 });
 defaults!(Logging {
     verbosity: 3,
@@ -355,6 +389,9 @@ defaults!(Limits {
     rpc_body_bytes: 5 << 20,
     rpc_batch_items: 100,
     rpc_response_bytes: 20 << 20,
+    rpc_gas_cap: 50_000_000,
+    rpc_tx_fee_cap: 1.0,
+    rpc_evm_timeout_ms: 5_000,
     log_queue_lines: 8_192,
     // Safer than the ADR-007 proposals (10% or 20 GiB, 15% or 30 GiB, 2% or 4 GiB), which would halt
     // import on a host that has 40 GB free of 420 GB: the owner raises these per fleet.
@@ -375,9 +412,70 @@ fn invalid(key: &str, value: &str, why: &'static str) -> ConfigError {
     }
 }
 
+/// A byte count: plain bytes or a number with a binary suffix, `KB`/`KiB`, `MB`/`MiB`,
+/// `GB`/`GiB`, `TB`/`TiB` (all powers of 1024, as MDBX sizes are).
+pub fn parse_byte_size(v: &str) -> Option<u64> {
+    let t = v.trim();
+    let split = t.find(|c: char| !c.is_ascii_digit()).unwrap_or(t.len());
+    let (n, unit) = t.split_at(split);
+    let n: u64 = n.parse().ok()?;
+    let shift = match unit.trim().to_ascii_lowercase().as_str() {
+        "" | "b" => 0,
+        "k" | "kb" | "kib" => 10,
+        "m" | "mb" | "mib" => 20,
+        "g" | "gb" | "gib" => 30,
+        "t" | "tb" | "tib" => 40,
+        _ => return None,
+    };
+    n.checked_mul(1u64.checked_shl(shift)?)
+}
+
+fn byte_size(key: &str, v: &str) -> Result<u64, ConfigError> {
+    parse_byte_size(v).ok_or_else(|| invalid(key, v, "bytes, or a number with KB, MB, GB or TB"))
+}
+
 fn num<T: std::str::FromStr>(key: &str, v: &str) -> Result<T, ConfigError> {
     v.parse()
         .map_err(|_| invalid(key, v, "not a number in range"))
+}
+
+/// A Go `time.ParseDuration` value (`5s`, `1m30s`, `250ms`, `0`) in whole milliseconds.
+fn go_duration_ms(v: &str) -> Option<u64> {
+    if v == "0" {
+        return Some(0);
+    }
+    let mut rest = v;
+    let mut ns: u128 = 0;
+    if rest.is_empty() {
+        return None;
+    }
+    while !rest.is_empty() {
+        let digits = rest
+            .find(|c: char| !(c.is_ascii_digit() || c == '.'))
+            .unwrap_or(rest.len());
+        let (n, tail) = rest.split_at(digits);
+        let unit_len = tail
+            .find(|c: char| c.is_ascii_digit() || c == '.')
+            .unwrap_or(tail.len());
+        let (unit, next) = tail.split_at(unit_len);
+        let scale: f64 = match unit {
+            "ns" => 1.0,
+            "us" | "µs" => 1e3,
+            "ms" => 1e6,
+            "s" => 1e9,
+            "m" => 60e9,
+            "h" => 3600e9,
+            _ => return None,
+        };
+        let n: f64 = n.parse().ok()?;
+        let part = n * scale;
+        if !part.is_finite() || part > 1e30 {
+            return None;
+        }
+        ns += format!("{part:.0}").parse::<u128>().ok()?;
+        rest = next;
+    }
+    u64::try_from(ns / 1_000_000).ok()
 }
 
 /// geth bool flags: `-http`, `-http=true`, `-http=false`.
@@ -430,6 +528,66 @@ fn gc_mode(key: &str, v: &str) -> Result<String, ConfigError> {
 }
 
 impl Config {
+    /// The checks of the effective config, after the file and the flags are merged and before a
+    /// listener, database or service is opened (#299): a zero capacity that would make a server
+    /// wait for ever, byte sizes this platform cannot hold, and shutdown budgets that cannot nest.
+    /// `rpc_http_waiting = 0` stays valid: no request waits for a slot, the 429 is immediate.
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        let l = &self.limits;
+        let positive: [(&str, u64); 9] = [
+            ("limits.rpc_http_connections", l.rpc_http_connections.into()),
+            ("limits.rpc_http_in_flight", l.rpc_http_in_flight.into()),
+            ("limits.rpc_ws_connections", l.rpc_ws_connections.into()),
+            ("limits.rpc_ipc_connections", l.rpc_ipc_connections.into()),
+            ("limits.rpc_batch_items", l.rpc_batch_items.into()),
+            ("limits.rpc_body_bytes", l.rpc_body_bytes),
+            ("limits.rpc_response_bytes", l.rpc_response_bytes),
+            ("limits.log_queue_lines", l.log_queue_lines.into()),
+            ("limits.disk_sample_secs", l.disk_sample_secs.into()),
+        ];
+        for (k, v) in positive {
+            if v == 0 {
+                return Err(invalid(
+                    k,
+                    "0",
+                    "must be at least 1 (0 would leave the server waiting for ever)",
+                ));
+            }
+        }
+        for (k, v) in [
+            ("limits.rpc_body_bytes", l.rpc_body_bytes),
+            ("limits.rpc_response_bytes", l.rpc_response_bytes),
+        ] {
+            if usize::try_from(v).is_err() {
+                return Err(invalid(
+                    k,
+                    &v.to_string(),
+                    "larger than this platform can address",
+                ));
+            }
+        }
+        for (k, v) in [
+            ("limits.disk_stop_pct", l.disk_stop_pct),
+            ("limits.disk_resume_pct", l.disk_resume_pct),
+            ("limits.disk_exit_pct", l.disk_exit_pct),
+        ] {
+            if v > 100 {
+                return Err(invalid(k, &v.to_string(), "a percent: 0 to 100"));
+            }
+        }
+        if l.stop_timeout_ms == 0 {
+            return Err(invalid("limits.stop_timeout_ms", "0", "must be at least 1"));
+        }
+        if l.service_stop_timeout_ms == 0 || l.service_stop_timeout_ms > l.stop_timeout_ms {
+            return Err(invalid(
+                "limits.service_stop_timeout_ms",
+                &l.service_stop_timeout_ms.to_string(),
+                "must be at least 1 and at most limits.stop_timeout_ms",
+            ));
+        }
+        Ok(())
+    }
+
     pub fn from_toml(text: &str) -> Result<Self, ConfigError> {
         let c: Self = toml::from_str(text).map_err(|e| ConfigError::Toml(e.to_string()))?;
         let mut c = c;
@@ -438,6 +596,19 @@ impl Config {
         c.logging.levels()?;
         c.required_blocks(None)?;
         Ok(c)
+    }
+
+    /// The MDBX map geometry of `--db.max-size` and `--db.growth-step`, validated.
+    pub fn db_geometry(&self) -> Result<xone_db::mdbx::Geometry, String> {
+        let bytes = |n: u64| {
+            usize::try_from(n).map_err(|_| format!("{n} bytes does not fit this platform"))
+        };
+        let g = xone_db::mdbx::Geometry {
+            max_size: bytes(self.sync.db_max_size)?,
+            growth_step: bytes(self.sync.db_growth_step)?,
+        };
+        g.validate()?;
+        Ok(g)
     }
 
     /// The heights whose hash every peer and every chain must carry: the built-in entries of
@@ -558,6 +729,8 @@ impl Config {
             "minimal" => self.sync.minimal = flag(key, v)?,
             "cache" => self.sync.cache_mb = num(key, v)?,
             "history.transactions" | "txlookuplimit" => self.sync.tx_history = num(key, v)?,
+            "db.max-size" => self.sync.db_max_size = byte_size(key, v)?,
+            "db.growth-step" => self.sync.db_growth_step = byte_size(key, v)?,
             "port" => self.p2p.port = num(key, v)?,
             "discovery.port" => self.p2p.discovery_port = Some(num(key, v)?),
             "maxpeers" => self.p2p.max_peers = num(key, v)?,
@@ -592,6 +765,7 @@ impl Config {
             "ipcpath" => self.ipc.path = Some(v.into()),
             "mine" => self.mining.mine = flag(key, v)?,
             "miner.etherbase" => self.mining.etherbase = Some(v.to_owned()),
+            "miner.quietwindow" => self.mining.quiet_window = Some(num(key, v)?),
             "password" => self.mining.password_file = Some(v.into()),
             "keystore" => self.mining.keystore = Some(v.into()),
             "unlock" => self.mining.unlock = list(v),
@@ -613,9 +787,31 @@ impl Config {
             "metrics" => self.metrics.enabled = flag(key, v)?,
             "metrics.addr" => self.metrics.addr = v.to_owned(),
             "metrics.port" => self.metrics.port = num(key, v)?,
+            "dev" => self.dev.enabled = flag(key, v)?,
+            "dev.period" => {
+                let n: u64 = num(key, v)?;
+                if n == 0 || n > 60 {
+                    return Err(invalid(key, v, "1 to 60 seconds"));
+                }
+                self.dev.period = n;
+            }
             "pprof" => self.pprof.enabled = flag(key, v)?,
             "pprof.addr" => self.pprof.addr = v.to_owned(),
             "pprof.port" => self.pprof.port = num(key, v)?,
+            "rpc.gascap" => self.limits.rpc_gas_cap = num(key, v)?,
+            "rpc.txfeecap" => {
+                let cap: f64 = num(key, v)?;
+                if !cap.is_finite() || cap < 0.0 {
+                    return Err(invalid(key, v, "a fee in ether, 0 or more"));
+                }
+                self.limits.rpc_tx_fee_cap = cap;
+            }
+            "rpc.evmtimeout" => {
+                self.limits.rpc_evm_timeout_ms =
+                    go_duration_ms(v).ok_or_else(|| invalid(key, v, "a duration such as 5s"))?;
+            }
+            "rpc.batch-request-limit" => self.limits.rpc_batch_items = num(key, v)?,
+            "rpc.batch-response-max-size" => self.limits.rpc_response_bytes = num(key, v)?,
             _ => return Err(ConfigError::UnknownKey(key.to_owned())),
         }
         Ok(())
@@ -624,7 +820,52 @@ impl Config {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn db_geometry_flags_take_byte_sizes() {
+        assert_eq!(parse_byte_size("4096"), Some(4096));
+        assert_eq!(parse_byte_size("64MB"), Some(64 << 20));
+        assert_eq!(parse_byte_size("2 TiB"), Some(2 << 40));
+        assert_eq!(parse_byte_size("1.5TB"), None);
+        assert_eq!(parse_byte_size("9PB"), None);
+        let mut c = Config::default();
+        assert_eq!(c.db_geometry(), Ok(xone_db::mdbx::Geometry::default()));
+        c.set("db.max-size", "2TB").unwrap();
+        c.set("db.growth-step", "256MB").unwrap();
+        assert_eq!(
+            c.db_geometry().map(|g| (g.max_size, g.growth_step)),
+            Ok((2 << 40, 256 << 20))
+        );
+        assert!(c.set("db.max-size", "lots").is_err());
+        c.set("db.growth-step", "4TB").unwrap();
+        assert!(c.db_geometry().is_err());
+    }
+
     use super::*;
+
+    #[test]
+    fn unusable_limits_are_refused_before_start() {
+        assert!(Config::default().validate().is_ok());
+        let bad = |f: fn(&mut Config)| {
+            let mut c = Config::default();
+            f(&mut c);
+            matches!(c.validate(), Err(ConfigError::Invalid { .. }))
+        };
+        assert!(bad(|c| c.limits.rpc_http_in_flight = 0));
+        assert!(bad(|c| c.limits.rpc_http_connections = 0));
+        assert!(bad(|c| c.limits.rpc_body_bytes = 0));
+        assert!(bad(|c| c.limits.disk_sample_secs = 0));
+        assert!(bad(|c| c.limits.disk_stop_pct = 101));
+        assert!(bad(|c| c.limits.stop_timeout_ms = 0));
+        assert!(bad(|c| c.limits.service_stop_timeout_ms = 0));
+        assert!(bad(|c| {
+            c.limits.stop_timeout_ms = 1_000;
+            c.limits.service_stop_timeout_ms = 2_000;
+        }));
+        let mut ok = Config::default();
+        ok.limits.rpc_http_waiting = 0;
+        ok.limits.service_stop_timeout_ms = ok.limits.stop_timeout_ms;
+        assert!(ok.validate().is_ok());
+    }
 
     #[test]
     fn redacted_hides_the_ethstats_secret_and_url_credentials() {
@@ -769,6 +1010,51 @@ mod tests {
         let c = Config::from_toml(bad).unwrap();
         assert!(crate::DiskWatermark::from_limits(1 << 40, &c.limits).is_none());
         assert!(Config::from_toml("[limits]\ndisk_nope = 1\n").is_err());
+    }
+
+    #[test]
+    fn rpc_cap_flags_set_limits() {
+        let mut c = Config::from_toml(
+            "[limits]\nrpc_gas_cap = 7\nrpc_tx_fee_cap = 0.5\nrpc_evm_timeout_ms = 9\n",
+        )
+        .unwrap();
+        assert_eq!(
+            (
+                c.limits.rpc_gas_cap,
+                c.limits.rpc_tx_fee_cap,
+                c.limits.rpc_evm_timeout_ms
+            ),
+            (7, 0.5, 9)
+        );
+        // a flag wins over the file
+        for (k, v) in [
+            ("rpc.gascap", "0"),
+            ("rpc.txfeecap", "2.5"),
+            ("rpc.evmtimeout", "1m30s"),
+            ("rpc.batch-request-limit", "10"),
+            ("rpc.batch-response-max-size", "1024"),
+        ] {
+            c.set(k, v).unwrap_or_else(|e| panic!("{k}: {e}"));
+        }
+        let l = &c.limits;
+        assert_eq!((l.rpc_gas_cap, l.rpc_tx_fee_cap), (0, 2.5));
+        assert_eq!(l.rpc_evm_timeout_ms, 90_000);
+        assert_eq!((l.rpc_batch_items, l.rpc_response_bytes), (10, 1024));
+        for bad in ["-1", "nan", "inf", "x"] {
+            assert!(c.set("rpc.txfeecap", bad).is_err(), "{bad}");
+        }
+        for (d, ms) in [
+            ("0", 0),
+            ("5s", 5000),
+            ("250ms", 250),
+            ("1.5s", 1500),
+            ("1h", 3_600_000),
+        ] {
+            assert_eq!(go_duration_ms(d), Some(ms), "{d}");
+        }
+        for bad in ["", "5", "5x", "s"] {
+            assert_eq!(go_duration_ms(bad), None, "{bad}");
+        }
     }
 
     #[test]

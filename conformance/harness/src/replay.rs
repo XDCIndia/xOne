@@ -23,8 +23,8 @@ use xone_consensus::{
 use xone_executor::{execute_block, tx, BlockOutcome, ExecCtx};
 use xone_primitives::WideBalance;
 use xone_state::{
-    system_contracts::validator_0x88 as v88, trie::flat_root, Account, FlatWrite, MemFlat,
-    StateDiff, StateProvider,
+    system_contracts::validator_0x88 as v88, trie::flat_root, Account, FlatRead, FlatWrite,
+    MemFlat, StateDiff, StateProvider,
 };
 
 /// Changesets kept for unwind; a replay never unwinds, so the window is small.
@@ -182,6 +182,22 @@ fn save(
     let (number, hash) = p.head();
     let flat = p.flat();
     let accounts: Vec<_> = flat.accounts().collect();
+    // A key written by hash only has no address or slot key to save (#251): such a checkpoint
+    // would load as another state. Refuse it.
+    let unnamed_accounts = flat.hashed_accounts().count() - accounts.len();
+    let unnamed_slots: usize = flat
+        .hashed_accounts()
+        .map(|(ha, _)| flat.hashed_slots(ha).count())
+        .sum::<usize>()
+        - accounts
+            .iter()
+            .map(|(a, _)| flat.slots(*a).count())
+            .sum::<usize>();
+    if unnamed_accounts + unnamed_slots != 0 {
+        return Err(format!(
+            "checkpoint {number}: {unnamed_accounts} accounts and {unnamed_slots} slots have no known address or key"
+        ));
+    }
     let c = Ckpt {
         number,
         hash,
@@ -228,6 +244,26 @@ fn save(
     );
     serde_json::to_writer(z, &c).map_err(|e| e.to_string())?;
     fs::rename(&tmp, ckpt_path(dir, number)).map_err(|e| e.to_string())
+}
+
+/// The flat state a checkpoint holds.
+fn flat_of(c: &Ckpt) -> MemFlat {
+    let mut f = MemFlat::recording();
+    for (a, nonce, bal, code_hash) in &c.accounts {
+        f.set_account(
+            *a,
+            Some(Account {
+                nonce: *nonce,
+                balance: WideBalance::from_be_bytes(bal),
+                code_hash: *code_hash,
+                ..Default::default()
+            }),
+        );
+    }
+    for (a, k, v) in &c.storage {
+        f.set_slot(*a, *k, *v);
+    }
+    f
 }
 
 /// The number of the checkpoint a resumed run to `to` starts from.
@@ -437,20 +473,15 @@ pub fn run_from(
         if chain.get(c.number).map(|s| s.hash) != Some(c.hash) {
             return Err("the checkpoint is of another chain than the cache".into());
         }
-        let mut f = MemFlat::recording();
-        for (a, nonce, bal, code_hash) in &c.accounts {
-            f.set_account(
-                *a,
-                Some(Account {
-                    nonce: *nonce,
-                    balance: WideBalance::from_be_bytes(bal),
-                    code_hash: *code_hash,
-                    ..Default::default()
-                }),
-            );
-        }
-        for (a, k, v) in &c.storage {
-            f.set_slot(*a, *k, *v);
+        let f = flat_of(&c);
+        // The loaded state must be the state of the checkpoint block (#251): a dropped or
+        // misread field shows here, not as a mismatch at the next block.
+        let (root, want) = (flat_root(&f), at(c.number)?.header.state_root);
+        if root != want {
+            return Err(format!(
+                "checkpoint {}: the loaded state root {root} differs from the header's {want}",
+                c.number
+            ));
         }
         chain.codes = c.codes;
         chain.gaps = c
@@ -683,4 +714,81 @@ pub fn run_from(
     report.committed = chain.committed.map(|l| (l.number, l.round));
     report.committed_count = chain.committed_count;
     Ok(report)
+}
+
+#[cfg(test)]
+mod ckpt_tests {
+    use super::*;
+    use alloy_primitives::address;
+
+    /// #251: accounts and slots a block creates are written by hash; the checkpoint still names
+    /// them, and the loaded state has the root of the saved one.
+    #[test]
+    fn a_checkpoint_loads_as_the_state_it_saved() {
+        let spec = xone_chainspec::net2040();
+        let (old, new) = (
+            address!("00000000000000000000000000000000000000aa"),
+            address!("00000000000000000000000000000000000000bb"),
+        );
+        let mut f = MemFlat::recording();
+        f.set_account(
+            old,
+            Some(Account {
+                nonce: 1,
+                ..Default::default()
+            }),
+        );
+        let mut p = StateProvider::new(f, 0, B256::repeat_byte(1), RETENTION);
+        let diff = StateDiff {
+            accounts: BTreeMap::from([(
+                new,
+                Some(Account {
+                    nonce: 7,
+                    balance: WideBalance::from(U256::from(5u64)),
+                    ..Default::default()
+                }),
+            )]),
+            storage: BTreeMap::from([
+                ((new, B256::with_last_byte(1)), U256::from(9u64)),
+                ((old, B256::with_last_byte(2)), U256::from(3u64)),
+            ]),
+        };
+        p.commit_block(B256::repeat_byte(2), B256::repeat_byte(1), &diff)
+            .unwrap();
+        let dir = std::env::temp_dir().join(format!("xone-ckpt-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let chain = Chain::new(&spec, 0);
+        save(&dir, &p, &chain, &Snapshot::new(0, B256::ZERO, vec![])).unwrap();
+        let c = load(&dir, 10).unwrap();
+        assert_eq!(c.number, 1);
+        assert_eq!(c.accounts.len(), 2);
+        assert_eq!(c.storage.len(), 2);
+        assert_eq!(flat_root(&flat_of(&c)), p.root());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A flat state that does not know an address refuses to be saved.
+    #[test]
+    fn a_state_with_unnamed_keys_is_not_saved() {
+        let spec = xone_chainspec::net2040();
+        let mut f = MemFlat::recording();
+        f.set_hashed_account(
+            B256::repeat_byte(3),
+            Some(Account {
+                nonce: 1,
+                ..Default::default()
+            }),
+        );
+        let p = StateProvider::new(f, 0, B256::repeat_byte(1), RETENTION);
+        let dir = std::env::temp_dir().join(format!("xone-ckpt-u-{}", std::process::id()));
+        let e = save(
+            &dir,
+            &p,
+            &Chain::new(&spec, 0),
+            &Snapshot::new(0, B256::ZERO, vec![]),
+        )
+        .unwrap_err();
+        assert!(e.contains("1 accounts and 0 slots"), "{e}");
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

@@ -153,7 +153,7 @@ impl<S: Store, E: BlockExecutor, H: HeaderCheck> Chain<S, E, H> {
         let ex = executed?;
         // geth `ValidateState` (`core/block_validator.go:198-259`): receipts, bloom, then gas used,
         // access list hash and state root. No branch skips them.
-        verifier.verify_receipts(&block.header, block.body.transactions.len(), &ex.receipts)?;
+        check_receipts(&verifier, &block.header, block.body.transactions.len(), &ex)?;
         if ex.gas_used != block.header.gas_used {
             return Err(InsertError::GasUsed {
                 header: block.header.gas_used,
@@ -293,4 +293,25 @@ impl<S: Store, E: BlockExecutor, H: HeaderCheck> Chain<S, E, H> {
             _ => current,
         }
     }
+}
+
+/// geth `ValidateState`'s receipt checks (count, bloom, receipts root). With the bloom and root the
+/// executor derived (#245) they are compared, not derived again; a debug build checks that both
+/// paths give the same verdict.
+fn check_receipts(
+    verifier: &BodyVerifier<'_>,
+    header: &Header,
+    txs: usize,
+    ex: &crate::executor::Execution,
+) -> Result<(), BodyError> {
+    let Some(r) = ex.roots else {
+        return verifier.verify_receipts(header, txs, &ex.receipts);
+    };
+    let once = verifier.verify_receipt_roots(header, txs, ex.receipts.len(), r.bloom, r.root);
+    debug_assert_eq!(
+        once.is_ok(),
+        verifier.verify_receipts(header, txs, &ex.receipts).is_ok(),
+        "the executor's receipt roots disagree with its receipts"
+    );
+    once
 }

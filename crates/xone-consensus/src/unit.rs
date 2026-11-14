@@ -190,6 +190,33 @@ impl<St: SafetyStore, B: Backend> SafetyUnit<St, B> {
         &mut self.fence
     }
 
+    /// ADR-010 section 8.3: a signature of our key seen on the network (a vote, a timeout, the
+    /// validator of a sealed header), verified by the caller. When the record does not explain it (a
+    /// stale record, or a second signer on the key) the window restarts and the record is raised to
+    /// it and written. `Ok(true)` for an unexplained sighting.
+    pub fn sight(&mut self, kind: Kind, round: u64, digest: B256) -> Result<bool, UnitError> {
+        if self.stopped {
+            return Err(UnitError::Stopped);
+        }
+        let mut next = self.rec.clone();
+        if !next.sight(kind, round, digest) {
+            return Ok(false);
+        }
+        // closed first: a failed write leaves the unit stopped and the fence closed
+        self.fence.sighted();
+        if next != self.rec {
+            if let Err(e) = self
+                .store
+                .persist_intent(&Intent::new(kind, round, digest).to_bytes(), &next.encode())
+            {
+                self.stopped = true;
+                return Err(e.into());
+            }
+            self.rec = next;
+        }
+        Ok(true)
+    }
+
     pub fn set_durability(&mut self, d: Durability) {
         self.dur = d;
     }

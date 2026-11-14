@@ -10,6 +10,7 @@
 
 pub mod admin;
 pub mod api;
+pub mod arity;
 pub mod debug;
 pub mod eth;
 pub mod json;

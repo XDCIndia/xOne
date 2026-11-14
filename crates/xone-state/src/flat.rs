@@ -45,6 +45,10 @@ pub trait FlatWrite: FlatRead {
     /// changeset `cs` of the same block): bring this view in line. A flat state that owns its rows
     /// writes them; one that reads tables only updates its caches.
     fn commit_written(&mut self, diff: &HashedDiff, cs: &ChangeSet);
+
+    /// The addresses and slot keys of `diff`, before it is written by hash: a flat state that
+    /// lists addresses (a recording [`MemFlat`]) keeps them; any other ignores them.
+    fn note_preimages(&mut self, _diff: &crate::StateDiff) {}
 }
 
 /// The addresses and slots behind the hashes of a [`MemFlat`], kept only by a recording one.
@@ -148,6 +152,21 @@ impl FlatWrite for MemFlat {
             p.slots.insert(hs, slot);
         }
         self.set_hashed_slot(ha, hs, value);
+    }
+    fn note_preimages(&mut self, diff: &crate::StateDiff) {
+        let Some(p) = &mut self.pre else {
+            return;
+        };
+        for (a, new) in &diff.accounts {
+            if new.is_some() {
+                p.addresses.insert(keccak256(a), *a);
+            }
+        }
+        for (&(_, s), v) in &diff.storage {
+            if !v.is_zero() {
+                p.slots.insert(keccak256(s), s);
+            }
+        }
     }
     fn commit_written(&mut self, diff: &HashedDiff, _cs: &ChangeSet) {
         for (ha, new) in &diff.accounts {

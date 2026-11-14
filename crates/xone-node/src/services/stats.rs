@@ -84,22 +84,21 @@ impl ChainStats for NodeStats {
 /// The parts of the metrics snapshot this node knows; the rest stays zero until its source is wired.
 impl MetricsSource for NodeStats {
     fn snapshot(&self) -> Snapshot {
-        let (number, hash, timestamp) = {
+        let (number, timestamp) = {
             let g = self.core.hist.read();
             let t = g.tip();
-            (t.header.number, t.hash.0, t.header.timestamp)
+            (t.header.number, t.header.timestamp)
         };
         Snapshot {
             version: self.stamp.clone(),
             head_number: Some(number),
-            head_hash: hash,
             head_timestamp: timestamp,
             now: super::core::now(),
             syncing: self.syncing(),
             peers: self.peer_count() as u64, // ponytail: usize is u64 here
             peers_required_block_refused_total: self.peers.required_refused(),
             txpool_pending: self.pending_txs() as u64,
-            blocks_imported_total: number.saturating_sub(self.progress.start.load(Relaxed)),
+            blocks_imported_total: self.core.imported.load(Relaxed),
             ..Snapshot::default()
         }
     }

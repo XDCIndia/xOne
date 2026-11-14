@@ -90,7 +90,7 @@ pub fn post(cfg: &HeartbeatCfg, body: &str) -> Result<(), String> {
     let req = format!(
         "POST {} HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\n{auth}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
         t.path,
-        t.host,
+        t.authority(),
         body.len()
     );
     s.write_all(req.as_bytes()).map_err(|e| e.to_string())?;
@@ -108,6 +108,22 @@ pub fn post(cfg: &HeartbeatCfg, body: &str) -> Result<(), String> {
         Some(c) if c.starts_with('2') => Ok(()),
         _ => Err("heartbeat not accepted".into()),
     }
+}
+
+/// True when `now` has reached the deadline `next`; the next deadline is then one `interval`
+/// after the later of `now` and the old deadline. A long stall (a suspended process, a slow
+/// POST) therefore yields one send, not a catch-up burst of every missed interval.
+fn due(now: Instant, next: &mut Instant, interval: Duration) -> bool {
+    if now < *next {
+        return false;
+    }
+    let base = if now.duration_since(*next) >= interval {
+        now
+    } else {
+        *next
+    };
+    *next = base + interval;
+    true
 }
 
 pub struct Heartbeat {
@@ -153,16 +169,18 @@ impl Service for Heartbeat {
             .name("heartbeat".into())
             .spawn(move || {
                 let t0 = Instant::now();
-                // Sends are bounded to one burst of 3, then one per interval, so a bug in
-                // the timer cannot hammer the server. Failures are not retried early.
-                let secs = cfg.interval.as_secs().max(1);
+                // Sends are bounded to one burst of 3 tokens refilled at one per second, and
+                // each send costs one token whatever the interval, so a bug in the timer cannot
+                // hammer the server. Failures are not retried early: the next attempt waits for
+                // the next deadline.
+                let interval = cfg.interval.max(Duration::from_secs(1));
                 let mut bucket = TokenBucket::new(3, 1, 0);
-                let mut next = Instant::now();
+                let mut next = t0;
                 while !stop.load(SeqCst) {
-                    if Instant::now() >= next {
-                        next += Duration::from_secs(secs);
+                    let now = Instant::now();
+                    if due(now, &mut next, interval) {
                         let ms = u64::try_from(t0.elapsed().as_millis()).unwrap_or(u64::MAX);
-                        if bucket.try_take(ms, secs) {
+                        if bucket.try_take(ms, 1) {
                             if let Err(e) = post(&cfg, &payload(&*chain, &*peers)) {
                                 tracing::warn!(target: "xone_node::heartbeat", "{e}");
                             }
@@ -181,6 +199,51 @@ impl Service for Heartbeat {
         if let Some(t) = self.th.take() {
             let _ = t.join();
         }
+    }
+}
+
+#[cfg(test)]
+mod schedule_tests {
+    use super::*;
+
+    /// Counts sends over `span`, ticking every 100 ms like the service loop, with the same
+    /// token bucket and cost.
+    fn sends(interval: Duration, span: Duration) -> u32 {
+        let t0 = Instant::now();
+        let mut next = t0;
+        let mut bucket = TokenBucket::new(3, 1, 0);
+        let mut n = 0;
+        let mut t = Duration::ZERO;
+        while t <= span {
+            if due(t0 + t, &mut next, interval) {
+                let ms = u64::try_from(t.as_millis()).unwrap();
+                if bucket.try_take(ms, 1) {
+                    n += 1;
+                }
+            }
+            t += Duration::from_millis(100);
+        }
+        n
+    }
+
+    #[test]
+    fn intervals_above_the_burst_still_send() {
+        let hour = Duration::from_secs(3600);
+        assert_eq!(sends(Duration::from_secs(1), Duration::from_secs(60)), 61);
+        assert_eq!(sends(Duration::from_secs(15), hour), 241);
+        assert_eq!(sends(Duration::from_secs(60), hour), 61);
+    }
+
+    #[test]
+    fn a_long_stall_gives_one_send_not_a_burst() {
+        let t0 = Instant::now();
+        let i = Duration::from_secs(15);
+        let mut next = t0;
+        assert!(due(t0, &mut next, i));
+        let late = t0 + Duration::from_secs(600);
+        assert!(due(late, &mut next, i));
+        assert!(!due(late + Duration::from_millis(100), &mut next, i));
+        assert_eq!(next, late + i);
     }
 }
 

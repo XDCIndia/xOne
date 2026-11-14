@@ -6,7 +6,7 @@
 //! No I/O and no clock: `now_ms` is an argument. A node that has no snapshot has no [`Snapshot`],
 //! so it has no [`Server`] and must not advertise snap/1 (there is no stub that answers empty).
 
-use alloy_primitives::{Bytes, B256, B512, KECCAK256_EMPTY, U256};
+use alloy_primitives::{keccak256, Bytes, B256, B512, KECCAK256_EMPTY, U256};
 use alloy_trie::{HashBuilder, Nibbles, EMPTY_ROOT_HASH};
 use std::collections::{BTreeMap, HashMap};
 use xone_state::{flat::FlatRead, provider::StateProvider, Account, FlatWrite};
@@ -265,12 +265,20 @@ fn storage_ranges(s: &Snapshot, req: &GetStorageRanges) -> StorageRanges {
 
 /// `ServiceGetByteCodesQuery` (`handlers.go:348-374`).
 fn byte_codes(s: &Snapshot, req: &GetByteCodes) -> ByteCodes {
+    byte_codes_from(req, |h| s.codes.get(h).cloned())
+}
+
+/// `ServiceGetByteCodesQuery` over any content-addressed code source: a bytecode request names no
+/// root, so it needs no state snapshot (#298). At most `MAX_LOOKUPS` hashes, the response stops
+/// once it passes the byte budget, an unknown hash is skipped, the empty-code hash answers empty
+/// code, and a code whose hash does not match its key is never sent.
+pub fn byte_codes_from(req: &GetByteCodes, code: impl Fn(&B256) -> Option<Bytes>) -> ByteCodes {
     let budget = req.bytes.min(SOFT_RESPONSE_LIMIT);
     let (mut codes, mut size) = (Vec::new(), 0u64);
     for h in req.hashes.iter().take(MAX_LOOKUPS) {
         if *h == KECCAK256_EMPTY {
             codes.push(Bytes::new());
-        } else if let Some(c) = s.codes.get(h).filter(|c| !c.is_empty()) {
+        } else if let Some(c) = code(h).filter(|c| !c.is_empty() && keccak256(c) == *h) {
             codes.push(c.clone());
             size = size.saturating_add(u64::try_from(c.len()).unwrap_or(u64::MAX));
         }
@@ -535,4 +543,30 @@ pub fn hashed_root(
         );
         (*h, a.rlp())
     }))
+}
+
+#[cfg(test)]
+mod bytecode_tests {
+    use super::*;
+
+    #[test]
+    fn bytecodes_need_no_root_and_are_hash_checked() {
+        let good = Bytes::from_static(&[0x60, 0x00]);
+        let gh = keccak256(&good);
+        let liar = B256::repeat_byte(3);
+        let req = GetByteCodes {
+            id: 7,
+            hashes: vec![gh, KECCAK256_EMPTY, B256::repeat_byte(9), liar],
+            bytes: 1 << 20,
+        };
+        let r = byte_codes_from(&req, |h| {
+            if *h == gh || *h == liar {
+                Some(good.clone())
+            } else {
+                None
+            }
+        });
+        assert_eq!(r.id, 7);
+        assert_eq!(r.codes, vec![good, Bytes::new()]);
+    }
 }

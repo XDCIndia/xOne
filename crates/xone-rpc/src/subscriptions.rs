@@ -58,6 +58,18 @@ impl LogFilter {
         Ok(f)
     }
 
+    /// geth `bloomFilter`: false when the block bloom rules out every log this filter matches.
+    /// A true answer is no proof: [`Self::matches`] still decides each log.
+    pub fn may_match(&self, bloom: &alloy_primitives::Bloom) -> bool {
+        use alloy_primitives::BloomInput;
+        let has = |b: &[u8]| bloom.contains_input(BloomInput::Raw(b));
+        (self.addresses.is_empty() || self.addresses.iter().any(|a| has(a.as_slice())))
+            && self
+                .topics
+                .iter()
+                .all(|alts| alts.is_empty() || alts.iter().any(|t| has(t.as_slice())))
+    }
+
     /// geth `filterLogs`.
     pub fn matches(&self, address: Address, topics: &[B256]) -> bool {
         if !self.addresses.is_empty() && !self.addresses.contains(&address) {
@@ -309,5 +321,36 @@ mod tests {
         assert_eq!(m["params"]["result"]["removed"], json!(true));
         hub.drop_conn(7);
         assert!(hub.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod bloom_tests {
+    use super::*;
+    use alloy_primitives::{logs_bloom, Log, LogData};
+
+    #[test]
+    fn bloom_never_rules_out_a_matching_log() {
+        let (a, b) = (Address::repeat_byte(1), Address::repeat_byte(2));
+        let (t1, t2) = (B256::repeat_byte(3), B256::repeat_byte(4));
+        let log = Log {
+            address: a,
+            data: LogData::new_unchecked(vec![t1, t2], Default::default()),
+        };
+        let bloom = logs_bloom([&log]);
+        let f = |addresses: Vec<Address>, topics: Vec<Vec<B256>>| LogFilter { addresses, topics };
+        for (flt, want) in [
+            (f(vec![], vec![]), true),
+            (f(vec![a], vec![]), true),
+            (f(vec![b, a], vec![vec![], vec![t2]]), true),
+            (f(vec![], vec![vec![t2, t1]]), true),
+            (f(vec![b], vec![]), false),
+            (f(vec![a], vec![vec![B256::repeat_byte(9)]]), false),
+        ] {
+            assert_eq!(flt.may_match(&bloom), want, "{flt:?}");
+            if flt.matches(log.address, log.data.topics()) {
+                assert!(flt.may_match(&bloom));
+            }
+        }
     }
 }
