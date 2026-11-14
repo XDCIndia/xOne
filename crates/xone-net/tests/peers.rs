@@ -612,3 +612,139 @@ async fn snap_and_xpre_codes_follow_eth() {
     // the xpre frame was not sent: the first frame is the snap answer
     assert_eq!(f.recv().await.unwrap(), (232, vec![0xc0]));
 }
+
+// ---- required blocks (--eth.requiredblocks; geth eth/handler.go) ----
+
+fn hdr(number: u64, salt: u8) -> xone_primitives::Header {
+    xone_primitives::Header {
+        number,
+        extra_data: vec![salt].into(),
+        ..Default::default()
+    }
+}
+
+fn required_cfg(entries: &[(u64, B256)]) -> Config {
+    let mut c = cfg();
+    c.required_blocks = entries.to_vec();
+    c.required_timeout = Duration::from_millis(400);
+    c
+}
+
+/// The challenge of the node as `(number, id)`.
+async fn read_challenge(f: &mut Fake, framing: Framing) -> (u64, Option<u64>) {
+    let (code, body) = f.recv().await.unwrap();
+    assert_eq!(code, codes::GET_BLOCK_HEADERS);
+    match eth::decode(framing, code, &body).unwrap() {
+        Message::GetBlockHeaders {
+            id,
+            query:
+                GetHeaders {
+                    origin: Origin::Number(n),
+                    amount: 1,
+                    skip: 0,
+                    reverse: false,
+                },
+        } => (n, id),
+        m => panic!("not a one-header challenge: {m:?}"),
+    }
+}
+
+async fn answer(
+    f: &mut Fake,
+    framing: Framing,
+    id: Option<u64>,
+    headers: Vec<xone_primitives::Header>,
+) {
+    let body = eth::encode(framing, &Message::BlockHeaders { id, headers })
+        .unwrap()
+        .1;
+    f.send(codes::BLOCK_HEADERS, &body).await;
+}
+
+#[tokio::test]
+async fn a_peer_with_the_required_hashes_stays_and_the_app_never_sees_the_answers() {
+    let (a, b) = (hdr(5, 1), hdr(9, 2));
+    let (node, mut rx) = Peers::new(required_cfg(&[(5, a.hash()), (9, b.hash())]), key(1));
+    let mut f = join(&node, key(2)).await;
+    let (n, id) = read_challenge(&mut f, Framing::RequestId).await;
+    assert_eq!(n, 5);
+    answer(&mut f, Framing::RequestId, id, vec![a]).await;
+    let (n, id) = read_challenge(&mut f, Framing::RequestId).await;
+    assert_eq!(n, 9);
+    answer(&mut f, Framing::RequestId, id, vec![b]).await;
+    // a later request of the peer reaches the app, the answers did not
+    f.send(
+        codes::GET_BLOCK_HEADERS,
+        &headers_request(Framing::RequestId, 7),
+    )
+    .await;
+    let (_, m) = next_msg(&mut rx).await;
+    assert!(
+        matches!(m, Message::GetBlockHeaders { id: Some(7), .. }),
+        "{m:?}"
+    );
+    assert_eq!((node.peer_count(), node.required_refused()), (1, 0));
+}
+
+#[tokio::test]
+async fn a_peer_with_another_hash_at_a_required_height_is_dropped_with_reason_3() {
+    let (node, mut rx) = Peers::new(required_cfg(&[(5, hdr(5, 1).hash())]), key(1));
+    let mut f = join(&node, key(2)).await;
+    let (_, id) = read_challenge(&mut f, Framing::RequestId).await;
+    answer(&mut f, Framing::RequestId, id, vec![hdr(5, 99)]).await;
+    assert_eq!(f.until_disconnect().await, DisconnectReason::UselessPeer);
+    expect_disconnected(&mut rx, peer_id(&key(2))).await;
+    assert_eq!((node.peer_count(), node.required_refused()), (0, 1));
+}
+
+#[tokio::test]
+async fn a_legacy_eth100_peer_is_challenged_without_a_request_id() {
+    let (node, mut rx) = Peers::new(required_cfg(&[(5, hdr(5, 1).hash())]), key(1));
+    let (r, f) = join_with(&node, key(3), vec![Cap::eth(100)], 64 * 1024, |v| {
+        status(v, NET)
+    })
+    .await;
+    r.unwrap();
+    let mut f = f.unwrap();
+    let (n, id) = read_challenge(&mut f, Framing::Bare).await;
+    assert_eq!((n, id), (5, None));
+    answer(&mut f, Framing::Bare, None, vec![hdr(5, 98)]).await;
+    assert_eq!(f.until_disconnect().await, DisconnectReason::UselessPeer);
+    expect_disconnected(&mut rx, peer_id(&key(3))).await;
+    assert_eq!(node.required_refused(), 1);
+}
+
+#[tokio::test]
+async fn a_peer_that_has_not_reached_the_height_is_kept() {
+    let (node, _rx) = Peers::new(required_cfg(&[(5, hdr(5, 1).hash())]), key(1));
+    let mut f = join(&node, key(2)).await;
+    let (_, id) = read_challenge(&mut f, Framing::RequestId).await;
+    answer(&mut f, Framing::RequestId, id, vec![]).await;
+    tokio::time::sleep(Duration::from_millis(700)).await; // past the timeout
+    assert_eq!((node.peer_count(), node.required_refused()), (1, 0));
+}
+
+#[tokio::test]
+async fn a_peer_that_does_not_answer_is_dropped_at_the_timeout() {
+    let (node, mut rx) = Peers::new(required_cfg(&[(5, hdr(5, 1).hash())]), key(1));
+    let mut f = join(&node, key(2)).await;
+    let _ = read_challenge(&mut f, Framing::RequestId).await;
+    let t = Instant::now();
+    assert_eq!(f.until_disconnect().await, DisconnectReason::UselessPeer);
+    assert!(t.elapsed() < Duration::from_secs(5));
+    expect_disconnected(&mut rx, peer_id(&key(2))).await;
+    assert_eq!(node.required_refused(), 1);
+}
+
+#[tokio::test]
+async fn no_required_blocks_means_no_challenge() {
+    let (node, mut rx) = Peers::new(cfg(), key(1));
+    let mut f = join(&node, key(2)).await;
+    f.send(
+        codes::GET_BLOCK_HEADERS,
+        &headers_request(Framing::RequestId, 7),
+    )
+    .await;
+    let (_, m) = next_msg(&mut rx).await;
+    assert!(matches!(m, Message::GetBlockHeaders { id: Some(7), .. }));
+}

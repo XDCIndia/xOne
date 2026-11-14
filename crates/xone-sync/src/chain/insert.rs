@@ -39,6 +39,9 @@ pub enum InsertError {
     /// geth `consensus.ErrUnknownAncestor`.
     #[error("unknown parent {parent} of block {number}")]
     UnknownParent { number: u64, parent: B256 },
+    /// The block is at a required height with another hash: it is on another branch.
+    #[error("{0}")]
+    RequiredBlock(#[from] xone_chainspec::RequiredBlockMismatch),
     #[error("header: {0}")]
     Header(#[from] HeaderError),
     #[error("body: {0}")]
@@ -90,6 +93,7 @@ impl<S: Store, E: BlockExecutor, H: HeaderCheck> Chain<S, E, H> {
     /// The import lock then covers execution, body verification and the store writes. `now` is the
     /// caller's clock in seconds.
     pub fn insert(&self, block: Block, now: u64) -> Result<Outcome, InsertError> {
+        self.check_required(&block.header)?;
         let parent = self
             .reader()
             .header(block.parent())

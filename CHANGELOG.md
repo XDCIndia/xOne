@@ -4,6 +4,12 @@
 
 ## Unreleased
 
+- **Required blocks, `--eth.requiredblocks` (issue #218).** A peer that serves another hash than the
+  required one at a required height is disconnected (reason 0x03, 15 s), and a header chain, a
+  block or a snap pivot chain through another hash is refused with a typed error. Apothem carries
+  the built-in entry 83,665,617 (the first block after the September 2026 reset); an operator
+  entry at the same height replaces it. Counter `xone_peers_required_block_refused_total`.
+
 - **`--state.disk`, part 3 of 3 (issue #145).** With `--syncmode snap` the proven ranges are written straight
   into the store's state tables with their cursors (a crash resumes the download), the root is
   streamed from the tables, and the install writes the rest and builds the trie rows: no state in

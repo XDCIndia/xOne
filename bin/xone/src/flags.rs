@@ -191,6 +191,14 @@ pub const FLAGS: &[Flag] = &[
         "flags.go:975 ; geth,xone",
     ),
     f(
+        "eth.requiredblocks",
+        L,
+        "built-in for the profile (Apothem: 83665617)",
+        "83665617=0x2432ce6433608954ef6eaf2feba8f9a2fe90f5a913401eb07d5fa2f1bb499c3f",
+        "Comma-separated `<number>=<0x hash>` entries. A peer that serves another hash at one of these heights is disconnected (reason 0x03) within 15 seconds of the handshake, and a header chain through another hash is refused before import or pivot choice. A peer that has not reached the height is kept. An entry replaces the built-in one at the same height. Apothem has one built-in entry, the first canonical block after the September 2026 reset; stale v2.8.2 peers still serve the abandoned branch. dumpconfig prints the merged list.",
+        "flags.go:2265 (apothemResetBlockNum) ; geth,xone",
+    ),
+    f(
         "identity",
         S,
         "unset",
