@@ -6,6 +6,7 @@
 use xone_chainspec::ChainSpec;
 use xone_db::ManifestState;
 
+use super::anchor::{Anchor, AnchorError};
 use super::retention::{Class, Error, Missing, Retention};
 use crate::store::{Store, StoreError};
 
@@ -41,6 +42,8 @@ pub enum MinimalError {
     NoAnchor,
     #[error("the datadir has no readable manifest")]
     NoManifest,
+    #[error(transparent)]
+    Anchor(#[from] AnchorError),
     /// `Retention` can only grow without migration (ADR-005 section 12): a datadir that holds less
     /// than this binary derives cannot be started, and is not repaired by reading an archive.
     #[error("{class:?} is held from block {have}, this binary needs it from {need}: import a new snapshot")]
@@ -120,6 +123,9 @@ pub fn check_start(spec: &ChainSpec, store: &impl Store) -> Result<(), MinimalEr
 /// What a minimal node holds, for the RPC: the first block of each class.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Held {
+    /// The block whose state the datadir was installed at (the snap pivot or the snapshot
+    /// checkpoint), read from the anchor manifest: it does not move with the head. 0 on a store
+    /// that holds from genesis.
     pub pivot: u64,
     pub headers_from: u64,
     pub records_from: u64,
@@ -135,10 +141,15 @@ impl Held {
         state_window: u64,
     ) -> Result<Self, MinimalError> {
         let (head, _) = store.head();
+        // a store that was not installed from a snapshot or a snap pivot holds from genesis
+        let pivot = match store.anchor() {
+            Some(a) => Anchor::number_of(&a)?,
+            None => 0,
+        };
         let (headers_from, records_from) = firsts(store).ok_or(MinimalError::NoManifest)?;
         let gaps_from = Retention::derive(spec, head)?.floor(Class::GapSnapshot);
         Ok(Self {
-            pivot: head,
+            pivot,
             headers_from,
             records_from,
             gaps_from,

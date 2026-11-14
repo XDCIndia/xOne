@@ -82,7 +82,7 @@ Release binary: 19,430,648 bytes (`target/release/xone`, built 2026-11-13 from t
 ### Tests and gates
 
 - 704 test functions, 9 `proptest!` blocks, 3 fuzz targets.
-- CI (`.github/workflows/ci.yml`): `check` (fmt, clippy `-D warnings`, `cargo test --locked`, Python tests), `assurance` (fixtures, layering, cargo-deny, cargo-audit, release tree), `miri` (`xone-primitives --lib`), `fork-table-drift` (needs the private oracle).
+- CI (`.github/workflows/ci.yml`): `check` (fmt, clippy `-D warnings`, `cargo test --locked`, Python tests), `assurance` (fixtures, layering, cargo-deny, cargo-audit, release tree), `miri` (`xone-primitives --lib`, nightly and on demand, 60 min cap), `fork-table-drift` (needs the private oracle; without the key it ends green with a "not qualified" notice and is not a required check).
 - Result: GitHub Actions reports 111 runs and 0 successes (`gh run list --repo XDCIndia/xOneRS --status success` is empty). The run for PR branch `feat/disk-trie` (run 43513275926) shows `check` and `assurance` green, `fork-table-drift` red in 8 s ("GETH_XDC_DEPLOY_KEY is unavailable"), `miri` failed at the 6 h job limit (6 h 0 m 16 s).
 
 ## Issues

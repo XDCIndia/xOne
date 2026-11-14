@@ -1160,7 +1160,7 @@ impl Worker {
 
     // ---- the BFT machine ----
 
-    /// The durability of the block store (`BlockWriter::durability`, ADR-010 section 9), handed to the unit
+    /// The durability of the block store (`xone_db::Durability`, ADR-010 section 9), handed to the unit
     /// and the machine before every signature: only `Durable` signs. A producer's store commits each block
     /// to the device (no group commit, `services::build`), so anything else is a fault and is logged.
     fn durability(&mut self) -> Durability {

@@ -4,13 +4,18 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "17 3 * * *"   # nightly: miri
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # `check` and `assurance` are the required checks of main (branch protection, repo settings).
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       # rust-toolchain.toml selects the pinned toolchain and its components.
@@ -30,6 +35,7 @@ jobs:
   # Every command here is also run locally (docs/assurance/README.md); keep them in step.
   assurance:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - run: rustup show active-toolchain || rustup toolchain install
@@ -57,37 +63,45 @@ jobs:
   # Plan #1 R3 rule 5, primitives part. Nightly is pinned to the date verified locally;
   # raise it deliberately. Unit tests only (--lib): the integration tests read vector files, which
   # miri isolation refuses, and they are untested under miri (about 14 min for --lib locally).
+  # Not a PR check: it runs nightly and on demand, bounded to 60 minutes (#203).
   miri:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - run: rustup toolchain install nightly-2026-03-24 --profile minimal --component miri,rust-src
       - run: cargo +nightly-2026-03-24 miri test -p xone-primitives --lib
 
-  # The oracle fork is private. Missing read access fails this qualification;
-  # committed-table smoke tests still run in `check`, but cannot replace drift proof.
+  # The oracle fork is private. Without the read credential (unset, or a fork PR) this job
+  # ends green with a "not qualified" notice; it is NOT a required check, so a green tick here
+  # never proves drift. Only a run with the key qualifies the table.
   fork-table-drift:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       GETH_XDC_DEPLOY_KEY: ${{ secrets.GETH_XDC_DEPLOY_KEY }}
     steps:
       - uses: actions/checkout@v4
-      - name: Require the pinned oracle read credential
+      - name: Check the pinned oracle read credential
+        id: oracle
         run: bash ci/check-oracle-access.sh
       - name: Fetch geth-XDC at conformance/PIN
+        if: steps.oracle.outputs.available == 'true'
         run: |
           install -m 700 -d ~/.ssh
           printf '%s\n' "$GETH_XDC_DEPLOY_KEY" > ~/.ssh/geth_xdc
           chmod 600 ~/.ssh/geth_xdc
           ssh-keyscan github.com >> ~/.ssh/known_hosts
           GIT_SSH_COMMAND="ssh -i $HOME/.ssh/geth_xdc -o IdentitiesOnly=yes" conformance/fetch-geth.sh
-      - uses: actions/setup-go@v5
+      - if: steps.oracle.outputs.available == 'true'
+        uses: actions/setup-go@v5
         with:
           go-version-file: conformance/exporter/go.mod
           cache-dependency-path: conformance/exporter/go.sum
       - name: Regenerate and compare
+        if: steps.oracle.outputs.available == 'true'
         working-directory: conformance/exporter
         run: |
           go vet ./...
           go run . -check
-
