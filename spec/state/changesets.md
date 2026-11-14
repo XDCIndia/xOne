@@ -47,3 +47,11 @@ All four.
 
 - A diff cannot express "delete the storage of an account, re-create the account and write new slots" as one account entry: `None` wipes, and slots under a `None` account are ignored. A net diff of such a block lists the surviving slots under a `Some` account and zero for each slot that is gone. The executor (XB-06) builds net diffs.
 - Not in this slice: an index per key so a read does not scan the window, a persisted side index, side-branch pruning, and the MDBX binding of the flat tables and changesets.
+
+## Archive history (`--gcmode archive`, issue #152)
+
+- An archive datadir writes each changeset row twice in the block's MDBX transaction: by block (`AccountChangeSets`, `StorageChangeSets`, pruned to the state window) and by state key (`AccountHistory`: `keccak(address) || block`, `StorageHistory`: `keccak(address) || keccak(slot) || block`, never pruned). The value is the same prior record.
+- The state after block `n`: for each key, the first history row above `n`, else the head's row (`HashedAccounts`, `HashedStorages`). One cursor seek per read, in one read transaction (`xone_sync::mdbx::history`).
+- An unwind deletes the history rows of every block it removes, in the same transaction as the changeset rows (`revert_block`).
+- The mode is the `Meta` row `gcmode`, written on an empty datadir only; a start in the other mode is refused (`CoreError::GcMode`). An archive is never installed from a snapshot.
+- Tests: `disk_flat_equals_mem_flat` (the history at every block of random blocks, unwinds and restarts equals the memory state, its recomputed root equals the state root, and the row count equals the changesets of the blocks kept) and `crates/xone-node/tests/archive.rs` (net2040 0..=899 with a 64-block window).

@@ -114,16 +114,21 @@ pub fn build(
         .transpose()
         .map_err(|e| e.to_string())?;
 
+    cfg.check().map_err(|e| e.to_string())?;
     let open = |minimal: bool| {
-        core::Core::open_full(
+        core::Core::open_opts(
             spec.clone(),
             genesis,
             &cfg.datadir.join("xone"),
             CHECKPOINT_EVERY,
-            minimal,
-            // a node that signs commits every block to the device before it goes on
-            producer_plan.is_none(),
-            cfg.sync.state_disk,
+            core::Opts {
+                minimal,
+                // a node that signs commits every block to the device before it goes on
+                group_commit: producer_plan.is_none(),
+                disk_state: cfg.sync.state_disk,
+                archive: cfg.sync.gcmode == "archive",
+                ..core::Opts::default()
+            },
         )
     };
     // a snap-synced datadir is anchored: it runs as a minimal node from its pivot

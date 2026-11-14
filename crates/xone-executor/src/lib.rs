@@ -505,6 +505,121 @@ fn run_block<V: StateRead, E: Env>(
     })
 }
 
+/// One `eth_call` message (geth `TransactionArgs` after `CallDefaults`).
+#[derive(Debug, Clone, Default)]
+pub struct Call {
+    pub from: Address,
+    pub to: Option<Address>,
+    pub gas: u64,
+    pub gas_price: u128,
+    pub value: U256,
+    pub data: Bytes,
+}
+
+/// What a call returned: the output (the revert data on a revert), the gas used, and geth's error
+/// text when it did not succeed.
+#[derive(Debug, Clone)]
+pub struct CallOutcome {
+    pub output: Bytes,
+    pub gas_used: u64,
+    pub error: Option<String>,
+}
+
+/// geth `DoCall` (`internal/ethapi/api.go:757-852`): `call` on `view`, the state after `header`, in the
+/// context of the block after it as geth builds it from `header` itself (number, time, author,
+/// gas limit). Nothing is written. As geth: the nonce is not checked (it is the sender's), and a call
+/// without a gas price runs with a zero base fee (`NoBaseFee`); the call's gas may exceed the block's
+/// gas limit and the EIP-7825 cap (`SkipExecutionGasCapCheck`).
+///
+/// ponytail: a sender with code is refused (revm EIP-3607, which geth skips for calls) and EIP-1559
+/// fee fields are not read; enable revm `optional_eip3607` and price them if a caller needs either.
+pub fn call<V: StateRead, E: Env>(
+    spec: &ChainSpec,
+    view: &V,
+    header: &Header,
+    author: Address,
+    c: &Call,
+    env: &E,
+) -> Result<CallOutcome, ExecError> {
+    let r = rules(spec, header.number)?;
+    let block = XdcBlock {
+        number: header.number,
+        timestamp: header.timestamp,
+        beneficiary: author,
+        // revm refuses a transaction above the block limit; geth's call has no such check
+        gas_limit: header.gas_limit.max(c.gas),
+        difficulty: header.difficulty,
+        base_fee: header
+            .base_fee
+            .map(u64::try_from)
+            .transpose()
+            .map_err(|_| ExecError::Unsupported("base fee above 2^64"))?,
+    };
+    let nonce = view.account(c.from).map_or(0, |a| a.nonce);
+    let mut evm = build_evm_with_rules(Overlay::new(view, env), spec, r, &block, None);
+    if c.gas_price == 0 {
+        evm.ctx.block.basefee = 0;
+    }
+    evm.ctx.cfg.tx_gas_limit_cap = Some(u64::MAX);
+    for (a, w) in env.wide_balances() {
+        evm.ctx.journaled_state.side.insert(a, w);
+    }
+    evm.ctx.set_tx(TxEnv {
+        caller: c.from,
+        gas_limit: c.gas,
+        gas_price: c.gas_price,
+        kind: c.to.map_or(TxKind::Create, TxKind::Call),
+        value: c.value,
+        data: c.data.clone(),
+        nonce,
+        chain_id: Some(spec.chain_id),
+        ..Default::default()
+    });
+    let result = XdcHandler::<Overlay<'_, V, E>>::default()
+        .run(&mut evm)
+        .map_err(|e| match e {
+            EVMError::Database(e) => ExecError::State(e),
+            other => evm_error(0, other),
+        })?;
+    Ok(match result {
+        ExecutionResult::Success { gas, output, .. } => CallOutcome {
+            output: output.into_data(),
+            gas_used: gas.tx_gas_used(),
+            error: None,
+        },
+        ExecutionResult::Revert { gas, output, .. } => CallOutcome {
+            error: Some(match revert_reason(&output) {
+                Some(why) => format!("execution reverted: {why}"),
+                None => "execution reverted".into(),
+            }),
+            output,
+            gas_used: gas.tx_gas_used(),
+        },
+        ExecutionResult::Halt { gas, reason, .. } => CallOutcome {
+            output: Bytes::new(),
+            gas_used: gas.tx_gas_used(),
+            error: Some(match reason {
+                revm::context_interface::result::HaltReason::OutOfGas(_) => "out of gas".into(),
+                other => format!("{other:?}"),
+            }),
+        },
+    })
+}
+
+/// The string of a Solidity `Error(string)` revert (geth `abi.UnpackRevert`).
+fn revert_reason(out: &[u8]) -> Option<String> {
+    let body = out.strip_prefix(&[0x08, 0xc3, 0x79, 0xa0][..])?;
+    let word = |i: usize| -> Option<usize> {
+        let w = body.get(i..i + 32)?;
+        let v = U256::from_be_slice(w);
+        usize::try_from(v).ok()
+    };
+    let at = word(0)?;
+    let len = word(at)?;
+    let s = body.get(at.checked_add(32)?..at.checked_add(32)?.checked_add(len)?)?;
+    String::from_utf8(s.to_vec()).ok()
+}
+
 fn tx_env(spec: &ChainSpec, t: &Tx) -> TxEnv {
     TxEnv {
         tx_type: t.ty,

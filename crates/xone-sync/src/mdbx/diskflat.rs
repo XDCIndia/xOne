@@ -371,7 +371,11 @@ impl FlatWrite for Flat {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mdbx::{changeset_of, put_account, put_slot, revert_block, write_diff};
+    use crate::mdbx::{
+        changeset_of,
+        history::{root_at, HistState},
+        put_account, put_slot, revert_block, write_diff,
+    };
     use alloy_primitives::{keccak256, Address};
     use proptest::prelude::*;
     use std::{
@@ -379,7 +383,7 @@ mod tests {
         sync::atomic::{AtomicU64, Ordering as O},
     };
     use xone_primitives::WideBalance;
-    use xone_state::StateDiff;
+    use xone_state::{StateDiff, StateRead};
 
     static NEXT: AtomicU64 = AtomicU64::new(0);
 
@@ -469,6 +473,8 @@ mod tests {
         let mut disk = DiskFlat::with_caps(env.clone(), caps.0, caps.1);
         let mut mem = MemFlat::default();
         let mut stack: Vec<(u64, ChangeSet)> = Vec::new();
+        // archive: the state after every block of the stack, to check the history rows against
+        let mut states = vec![MemFlat::default()];
         for op in ops {
             match op {
                 Op::Block(accounts, slots) => {
@@ -482,13 +488,14 @@ mod tests {
                             .insert((addr(i), B256::repeat_byte(j + 1)), U256::from(v));
                     }
                     let tx = env.write().unwrap();
-                    write_diff(&tx, n, &d).unwrap();
+                    write_diff(&tx, n, &d, true).unwrap();
                     tx.commit().unwrap();
                     let cs = d.apply(&mut mem).unwrap();
                     let from_rows = changeset_of(&env.read().unwrap(), n).unwrap();
                     assert_eq!(from_rows, cs, "the rows hold the changeset");
                     disk.commit_written(&d.hashed(), &from_rows);
                     stack.push((n, cs));
+                    states.push(mem.clone());
                 }
                 Op::Unwind => {
                     if let Some((n, cs)) = stack.pop() {
@@ -497,12 +504,51 @@ mod tests {
                         tx.commit().unwrap();
                         cs.revert(&mut mem);
                         cs.revert(&mut disk);
+                        states.pop();
                     }
                 }
                 Op::Restart => disk = DiskFlat::with_caps(env.clone(), caps.0, caps.1),
             }
             same(&disk, &mem);
+            history_is_every_state(&env, &stack, &states);
         }
+    }
+
+    /// The history rows give the state after every block of the stack, and hold the rows of those
+    /// blocks only: an unwind removed the rows of the blocks it popped.
+    fn history_is_every_state(env: &Env, stack: &[(u64, ChangeSet)], states: &[MemFlat]) {
+        let rd = env.read().unwrap();
+        for (k, want) in states.iter().enumerate() {
+            let k = u64::try_from(k).unwrap();
+            let h = HistState::new(&rd, k);
+            for i in 0..4 {
+                let ha = keccak256(addr(i));
+                assert_eq!(
+                    h.account(addr(i)),
+                    want.hashed_account(ha),
+                    "block {k} account {i}"
+                );
+                for j in 0..4 {
+                    let s = B256::repeat_byte(j + 1);
+                    assert_eq!(
+                        h.storage(addr(i), s),
+                        want.hashed_storage(ha, keccak256(s)),
+                        "block {k} slot {i}/{j}"
+                    );
+                }
+            }
+            assert!(h.failed().is_none());
+            assert_eq!(
+                root_at(&rd, k).unwrap(),
+                xone_state::trie::flat_root(want),
+                "root at {k}"
+            );
+        }
+        let (a, s) = stack.iter().fold((0, 0), |(a, s), (_, cs)| {
+            (a + cs.accounts.len(), s + cs.storage.len())
+        });
+        assert_eq!(rd.entries(T::AccountHistory).unwrap(), a);
+        assert_eq!(rd.entries(T::StorageHistory).unwrap(), s);
     }
 
     proptest! {

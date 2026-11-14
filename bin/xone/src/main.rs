@@ -142,6 +142,10 @@ fn note(cfg: &Config, m: &str) {
 }
 
 fn run_node(cfg: &Config) -> ExitCode {
+    if let Err(e) = cfg.check() {
+        eprintln!("xone: {e}");
+        return ExitCode::from(2);
+    }
     let (marker, spec, genesis) = match datadir::prepare_chain(cfg) {
         Ok(m) => m,
         Err(e) => return fail(e),

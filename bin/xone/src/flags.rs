@@ -103,7 +103,7 @@ pub const FLAGS: &[Flag] = &[
         Some("full"),
         "full",
         "full",
-        "State garbage collection mode. Only full is implemented: archive is refused with a typed error (state is pruned to the state window).",
+        "State garbage collection mode: full (the state window) or archive (the state of every block from genesis; an empty datadir only, full sync only, the datadir keeps the mode).",
         "flags.go:338",
     ),
     f(

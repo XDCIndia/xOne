@@ -88,6 +88,49 @@ pub enum CoreError {
     Store(#[from] StoreError),
     #[error("the datadir was written by a build without the history tables (TxLookup, ConsensusEpoch, ConsensusSnapshot): remove it and sync again")]
     NoHistoryTables,
+    /// The gcmode of a datadir is fixed by its first block: an archive keeps the state of every block
+    /// from genesis, which a full datadir no longer has.
+    #[error("the datadir holds a chain synced with --gcmode {stored}; it cannot run with --gcmode {asked} (start it with --gcmode {stored}, or sync a new datadir)")]
+    GcMode {
+        stored: &'static str,
+        asked: &'static str,
+    },
+}
+
+fn gc_name(archive: bool) -> &'static str {
+    if archive {
+        "archive"
+    } else {
+        "full"
+    }
+}
+
+/// How [`Core::open_opts`] opens a datadir.
+#[derive(Debug, Clone, Copy)]
+pub struct Opts {
+    /// Start from the anchor of an imported snapshot ([`Core::open_with`]).
+    pub minimal: bool,
+    /// Group commit, for a node that does not sign ([`GROUP_COMMIT`]).
+    pub group_commit: bool,
+    /// `--state.disk` ([`Core::open_full`]).
+    pub disk_state: bool,
+    /// `--gcmode archive`: the store writes the history of every block and the RPC serves the state of
+    /// any block. Accepted on an empty datadir, which it marks; refused on a datadir of the other mode.
+    pub archive: bool,
+    /// The state window ([`RETENTION`]; a test sets a smaller one).
+    pub retention: u64,
+}
+
+impl Default for Opts {
+    fn default() -> Self {
+        Self {
+            minimal: false,
+            group_commit: false,
+            disk_state: false,
+            archive: false,
+            retention: RETENTION,
+        }
+    }
 }
 
 /// The state as a sized reader, so the generic executor and the pool can take a `&dyn StateRead`.
@@ -252,6 +295,8 @@ pub struct Core {
     pub head: watch::Sender<(u64, B256)>,
     /// Started from an imported snapshot: prunes below the retention floor, serves nothing below it.
     pub minimal: bool,
+    /// `--gcmode archive`: the state of every block is in the store's history tables.
+    pub archive: bool,
     /// Blocks the retention floor moves before the store is rewritten ([`PRUNE_SLACK`]; a test sets 0).
     pub prune_slack: u64,
     /// Recovers the senders of bodies as they arrive, ahead of their import.
@@ -383,15 +428,50 @@ impl Core {
         group_commit: bool,
         disk_state: bool,
     ) -> Result<Self, CoreError> {
+        let o = Opts {
+            minimal,
+            group_commit,
+            disk_state,
+            ..Opts::default()
+        };
+        Self::open_opts(spec, genesis, dir, ckpt_every, o)
+    }
+
+    /// [`Core::open_full`] with every option, `--gcmode archive` among them.
+    pub fn open_opts(
+        spec: ChainSpec,
+        genesis: &Genesis,
+        dir: &Path,
+        ckpt_every: u64,
+        o: Opts,
+    ) -> Result<Self, CoreError> {
+        let Opts {
+            minimal,
+            group_commit,
+            disk_state,
+            archive,
+            retention,
+        } = o;
         let (flat0, codes0, g) = genesis_state(genesis, &spec)?;
         std::fs::create_dir_all(dir).map_err(|e| FileError(format!("{}: {e}", dir.display())))?;
         let mut node_store = store::open(
             dir,
-            RETENTION,
+            retention,
             group_commit.then_some(GROUP_COMMIT),
             disk_state,
         )?;
         let resumed = resume(&mut node_store)?;
+        // the gcmode is the datadir's: set with its first block, checked on every later start
+        match (&resumed, node_store.archive()) {
+            (Resumed::Fresh, _) => node_store.set_archive(archive)?,
+            (_, stored) if stored != archive => {
+                return Err(CoreError::GcMode {
+                    stored: gc_name(stored),
+                    asked: gc_name(archive),
+                })
+            }
+            _ => {}
+        }
         let loaded = store::load(&node_store)?;
         let anchored = loaded.as_ref().is_some_and(|l| l.anchor.is_some());
         match (anchored, minimal) {
@@ -621,7 +701,7 @@ impl Core {
         if loaded.as_ref().is_some_and(|l| start < l.number) {
             node_store.unwind_to(start, Unwound::Drop).map_err(|e| {
                 CoreError::Inconsistent(format!(
-                    "no state checkpoint within the last {RETENTION} blocks to replay from: {e}"
+                    "no state checkpoint within the last {retention} blocks to replay from: {e}"
                 ))
             })?;
         }
@@ -664,6 +744,7 @@ impl Core {
             ckpt_every,
             head,
             minimal,
+            archive,
             prune_slack: PRUNE_SLACK,
             senders,
             saving: Mutex::new(None),
@@ -1046,6 +1127,32 @@ impl Core {
     /// The number of canonical block `hash`, for a request that names blocks by hash.
     pub fn number_of(&self, hash: B256) -> Option<u64> {
         self.hist.read().number_of(hash)
+    }
+
+    /// `--gcmode archive`: runs `f` on the state after canonical block (`number`, `hash`), read from
+    /// the store's history tables with no store or import lock. `Ok(false)`: the node is not an
+    /// archive, or the block is not canonical; nothing ran.
+    pub fn with_history(
+        &self,
+        number: u64,
+        hash: B256,
+        f: &mut dyn FnMut(&dyn StateRead),
+    ) -> Result<bool, StoreError> {
+        if !self.archive {
+            return Ok(false);
+        }
+        self.reader.with_state_at(number, hash, f)
+    }
+
+    /// The state root after block `number` of an archive, recomputed from every row of the store
+    /// (`xone_sync::mdbx::history::root_at`): the check that the history is whole.
+    pub fn history_root(&self, number: u64) -> Result<B256, StoreError> {
+        self.reader.state_root_at(number)
+    }
+
+    /// The rows of the history tables (accounts, slots).
+    pub fn history_rows(&self) -> Result<(usize, usize), StoreError> {
+        self.reader.history_rows()
     }
 
     /// What a minimal node holds, for the RPC; `None` on a node that followed from genesis.

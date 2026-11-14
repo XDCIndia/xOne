@@ -18,6 +18,7 @@
 
 mod codec;
 pub mod diskflat;
+pub mod history;
 pub mod snapstate;
 pub mod trierows;
 
@@ -66,6 +67,9 @@ const HISTORY_KEY: &[u8] = b"history";
 const SCHEMA_KEY: &[u8] = b"schema";
 /// Version 2: state and changesets keyed by hash ([`migrate_v1`]).
 const SCHEMA: u64 = 2;
+/// `Meta` row of a datadir made with `--gcmode archive` (value `archive`): every block commit writes
+/// its changeset into `AccountHistory` and `StorageHistory` too. Written on an empty datadir only.
+const GCMODE_KEY: &[u8] = b"gcmode";
 const FSYNC_FAILED: &str = "FSYNC_FAILED";
 
 pub struct Config {
@@ -176,6 +180,16 @@ fn cs_skey(n: u64, ha: &B256, hs: &B256) -> Vec<u8> {
     [&be(n)[..], ha.as_slice(), hs.as_slice()].concat()
 }
 
+/// History keys (`--gcmode archive`): the changeset key with the block last,
+/// `keccak(address) || block` and `keccak(address) || keccak(slot) || block`.
+fn hist_key(ha: &B256, n: u64) -> Vec<u8> {
+    [ha.as_slice(), &be(n)[..]].concat()
+}
+
+fn hist_skey(ha: &B256, hs: &B256, n: u64) -> Vec<u8> {
+    [ha.as_slice(), hs.as_slice(), &be(n)[..]].concat()
+}
+
 /// The `TxLookup` rows of block `n`'s transactions: `keccak(tx) -> n u64 BE || index u32 BE`.
 fn put_tx_lookup(tx: &Wr, n: u64, body: &Body) -> R<()> {
     for (i, t) in body.transactions.iter().enumerate() {
@@ -225,8 +239,16 @@ fn put_preimage(tx: &Wr, pre: &[u8]) -> R<()> {
 }
 
 /// Writes the diff of block `n` into the state tables and its changeset (whole prior records) into
-/// the changeset tables: the same semantics as `StateDiff::apply`, over the tables.
-fn write_diff(tx: &Wr, n: u64, d: &StateDiff) -> R<()> {
+/// the changeset tables: the same semantics as `StateDiff::apply`, over the tables. `archive`: the
+/// same prior records go into the history tables, keyed by state key first.
+fn write_diff(tx: &Wr, n: u64, d: &StateDiff, archive: bool) -> R<()> {
+    let slot_cs = |ha: &B256, hs: &B256, prior: &[u8]| -> R<()> {
+        tx.put(T::StorageChangeSets, &cs_skey(n, ha, hs), prior)?;
+        if archive {
+            tx.put(T::StorageHistory, &hist_skey(ha, hs, n), prior)?;
+        }
+        Ok(())
+    };
     for (a, new) in &d.accounts {
         let ha = keccak256(a);
         let prior = match tx.get(T::HashedAccounts, ha.as_slice())? {
@@ -234,10 +256,13 @@ fn write_diff(tx: &Wr, n: u64, d: &StateDiff) -> R<()> {
             Some(r) => [&[1][..], &r].concat(),
         };
         tx.put(T::AccountChangeSets, &cs_key(n, &ha), &prior)?;
+        if archive {
+            tx.put(T::AccountHistory, &hist_key(&ha, n), &prior)?;
+        }
         if new.is_none() {
             for (k, v) in tx.prefix(T::HashedStorages, ha.as_slice())? {
                 let hs = B256::from_slice(&k[32..]);
-                tx.put(T::StorageChangeSets, &cs_skey(n, &ha, &hs), &v)?;
+                slot_cs(&ha, &hs, &v)?;
                 del_slot(tx, &ha, &hs)?;
             }
         } else {
@@ -252,7 +277,7 @@ fn write_diff(tx: &Wr, n: u64, d: &StateDiff) -> R<()> {
         let prior = tx
             .get(T::HashedStorages, &hashed_skey(&ha, &hs))?
             .unwrap_or_else(|| vec![0; 32]);
-        tx.put(T::StorageChangeSets, &cs_skey(n, &ha, &hs), &prior)?;
+        slot_cs(&ha, &hs, &prior)?;
         if v.is_zero() {
             del_slot(tx, &ha, &hs)?;
         } else {
@@ -271,7 +296,8 @@ fn write_diff(tx: &Wr, n: u64, d: &StateDiff) -> R<()> {
     Ok(())
 }
 
-/// Writes the changeset rows of block `k` back into the state tables and deletes them.
+/// Writes the changeset rows of block `k` back into the state tables and deletes them, with the
+/// history rows of block `k` (absent on a datadir that is not an archive: deleting them is a no-op).
 fn revert_block(tx: &Wr, k: u64) -> R<()> {
     for (key, val) in tx.prefix(T::AccountChangeSets, &be(k))? {
         let ha = B256::from_slice(&key[8..40]);
@@ -280,6 +306,7 @@ fn revert_block(tx: &Wr, k: u64) -> R<()> {
             _ => del_account(tx, &ha)?,
         }
         tx.del(T::AccountChangeSets, &key)?;
+        tx.del(T::AccountHistory, &hist_key(&ha, k))?;
     }
     for (key, val) in tx.prefix(T::StorageChangeSets, &be(k))? {
         let (ha, hs) = (
@@ -292,6 +319,7 @@ fn revert_block(tx: &Wr, k: u64) -> R<()> {
             put_slot(tx, &ha, &hs, &val)?;
         }
         tx.del(T::StorageChangeSets, &key)?;
+        tx.del(T::StorageHistory, &hist_skey(&ha, &hs, k))?;
     }
     Ok(())
 }
@@ -333,6 +361,8 @@ pub struct MdbxStore<D: SegDir> {
     anchor: Option<Bytes>,
     /// Oldest openable block: rows of blocks at or below it have no changeset.
     base: u64,
+    /// `--gcmode archive`: the `gcmode` row of `Meta`.
+    archive: bool,
     state: StateProvider<Flat>,
     side: HashMap<B256, Record>,
     stateless: HashMap<B256, Block>,
@@ -372,6 +402,7 @@ impl<D: SegDir> MdbxStore<D> {
             committed: None,
             anchor: None,
             base: 0,
+            archive: false,
             side: HashMap::new(),
             stateless: HashMap::new(),
             degraded: None,
@@ -403,6 +434,7 @@ impl<D: SegDir> MdbxStore<D> {
             .and_then(|b| Manifest::decode(&b).ok());
         s.committed = rd.get(T::Meta, COMMITTED_KEY)?.and_then(|b| dec_link(&b));
         s.anchor = rd.get(T::Meta, ANCHOR_KEY)?.map(Bytes::from);
+        s.archive = rd.get(T::Meta, GCMODE_KEY)?.as_deref() == Some(b"archive");
         drop(rd);
         if let Some(m) = &s.manifest {
             s.head = (m.head_number, m.head_hash);
@@ -843,6 +875,27 @@ impl<D: SegDir> MdbxStore<D> {
             .is_some())
     }
 
+    /// The datadir keeps the state of every block (`--gcmode archive`).
+    pub fn archive(&self) -> bool {
+        self.archive
+    }
+
+    /// Marks a datadir that holds no chain yet as an archive (or not): from its first block on, every
+    /// commit writes the history rows. [`StoreError::NotEmpty`] once it holds a chain, whose blocks
+    /// below the head would have no history.
+    pub fn set_archive(&mut self, on: bool) -> Result<(), StoreError> {
+        if self.manifest.is_some() || self.generation != 0 {
+            return Err(StoreError::NotEmpty);
+        }
+        self.small_txn(
+            |tx| match on {
+                true => tx.put(T::Meta, GCMODE_KEY, b"archive"),
+                false => tx.del(T::Meta, GCMODE_KEY),
+            },
+            |s| s.archive = on,
+        )
+    }
+
     // ---- writes outside the head: one MDBX transaction each
 
     /// S5 and S6 for a write that does not move the head: the rows and `after` (the in-memory
@@ -951,7 +1004,7 @@ impl<D: SegDir> MdbxStore<D> {
             }
             None => {
                 put_tx_lookup(tx, n, &b.body)?;
-                write_diff(tx, n, &rec.diff)?;
+                write_diff(tx, n, &rec.diff, self.archive)?;
                 if let Some((root, rows)) = trie {
                     // the trie rows of the block and the root they are, with the block's own rows
                     write_flush(tx, rows)?;
@@ -1968,6 +2021,10 @@ impl<D: SegDir> Store for MdbxStore<D> {
             return Err(StoreError::NotEmpty);
         }
         let bad = StoreError::BadInstall;
+        if self.archive {
+            // an archive holds the state of every block from genesis: nothing below a pivot
+            return Err(bad("an archive datadir starts at genesis"));
+        }
         let (Some(pivot), Some(top)) = (s.records.last(), s.headers.last()) else {
             return Err(bad("no blocks"));
         };

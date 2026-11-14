@@ -2,9 +2,12 @@
 //! consensus, and serves HTTP, WebSocket and IPC per the config. Only the namespaces of `--http.api`
 //! and `--ws.api` are registered, as geth does.
 //!
-//! ponytail: `eth_call`, `eth_estimateGas` and the tracers answer a typed refusal (there is no
-//! single-call executor yet), `XDPoS_getMissedRoundsInEpochByBlockNum` too. `newHeads` and `logs`
-//! are published by `Core` on each canonical block; `newPendingTransactions` accepts and stays quiet.
+//! State reads and `eth_call` run on the state window, and on an archive (`--gcmode archive`) on
+//! the history tables below it.
+//!
+//! ponytail: `eth_estimateGas` and the tracers answer a typed refusal,
+//! `XDPoS_getMissedRoundsInEpochByBlockNum` too. `newHeads` and `logs` are published by `Core` on
+//! each canonical block; `newPendingTransactions` accepts and stays quiet.
 
 use std::{
     net::SocketAddr,
@@ -116,8 +119,14 @@ impl ChainApi for RpcChain {
     }
 }
 
-struct RpcState {
+pub struct RpcState {
     core: Arc<Core>,
+}
+
+impl RpcState {
+    pub fn new(core: Arc<Core>) -> Self {
+        Self { core }
+    }
 }
 
 fn unsupported(what: &str) -> RpcError {
@@ -128,23 +137,72 @@ impl StateApi for RpcState {
     fn state(&self, block: B256, f: &mut dyn FnMut(&dyn StateRead)) -> Result<(), Missing> {
         // the chain holds its read lock for the whole of `f`: the state cannot leave the retained
         // window while it is read
-        if self.core.chain.reader().with_state(block, f).is_err() {
-            let (head, _) = self.core.head();
-            let number = self.core.hist.read().number_of(block).unwrap_or(head);
-            return Err(Missing::UnsupportedHistory {
-                class: Class::State,
-                block: number,
-                floor: head.saturating_sub(super::core::RETENTION),
-                pivot: 0,
-            });
+        if self.core.chain.reader().with_state(block, f).is_ok() {
+            return Ok(());
         }
-        Ok(())
+        let (head, _) = self.core.head();
+        let number = self.core.hist.read().number_of(block);
+        // an archive reads the state below the window from its history tables
+        match number.map(|n| self.core.with_history(n, block, f)) {
+            Some(Ok(true)) => return Ok(()),
+            Some(Err(e)) => eprintln!("rpc: the history of block {block}: {e}"),
+            _ => {}
+        }
+        Err(Missing::UnsupportedHistory {
+            class: Class::State,
+            block: number.unwrap_or(head),
+            floor: head.saturating_sub(super::core::RETENTION),
+            pivot: 0,
+        })
     }
     fn code(&self, code_hash: B256) -> Option<Bytes> {
         self.core.hist.read().codes.get(&code_hash).cloned()
     }
-    fn call(&self, _: B256, _: &CallRequest, _: &AtomicBool) -> Result<CallOutput, RpcError> {
-        Err(unsupported("eth_call"))
+    /// geth `DoCall` on the state after `block` ([`xone_executor::call`]). ponytail: not cancelled
+    /// mid-run; the gas cap of the request bounds it.
+    fn call(&self, block: B256, req: &CallRequest, _: &AtomicBool) -> Result<CallOutput, RpcError> {
+        let header = self
+            .core
+            .hist
+            .read()
+            .header_by_hash(block)
+            .ok_or_else(|| RpcError::server("header not found"))?
+            .into_owned();
+        let author = super::core::miner_of(&self.core.spec, &header)
+            .map_err(|e| RpcError::server(e.to_string()))?;
+        let price = |v: Option<alloy_primitives::U256>| {
+            u128::try_from(v.unwrap_or_default())
+                .map_err(|_| RpcError::invalid_params("gas price above 2^128"))
+        };
+        let c = xone_executor::Call {
+            from: req.from.unwrap_or_default(),
+            to: req.to,
+            gas: req.gas.unwrap_or(header.gas_limit),
+            gas_price: price(req.gas_price)?,
+            value: req.value.unwrap_or_default(),
+            data: req.data.clone(),
+        };
+        let mut out = None;
+        self.state(block, &mut |s| {
+            // the state lock (if any) before the history's, as the import takes them
+            let h = self.core.hist.read();
+            out = Some(xone_executor::call(
+                &self.core.spec,
+                &super::core::Dyn(s),
+                &header,
+                author,
+                &c,
+                &*h,
+            ));
+        })?;
+        let o = out
+            .ok_or_else(|| RpcError::server("the call did not run"))?
+            .map_err(|e| RpcError::server(e.to_string()))?;
+        Ok(CallOutput {
+            output: o.output,
+            gas_used: o.gas_used,
+            error: o.error,
+        })
     }
     fn estimate_gas(&self, _: B256, _: &CallRequest, _: &AtomicBool) -> Result<u64, RpcError> {
         Err(unsupported("eth_estimateGas"))

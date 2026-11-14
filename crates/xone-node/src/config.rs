@@ -99,7 +99,7 @@ pub struct SyncCfg {
     /// `--state.disk`: read the head state from the MDBX tables behind bounded caches instead of
     /// holding every row in memory (`docs/ops/disk-state.md`). Off by default.
     pub state_disk: bool,
-    /// full; archive is refused (`gc_mode`).
+    /// full, or archive: the state of every block from genesis (`gc_mode`, [`Config::check`]).
     pub gcmode: String,
     pub from_block: Option<u64>,
     /// Start from the anchor of an imported snapshot and keep only the retention window.
@@ -407,16 +407,11 @@ fn sync_mode(key: &str, v: &str) -> Result<String, ConfigError> {
     }
 }
 
-/// The node keeps a 128-block state window and its newest checkpoints whatever `gcmode` says, so
-/// `archive` is refused rather than reported to the board as a mode the node does not run.
+/// `full` keeps the state window; `archive` also writes the history of every block, so the RPC
+/// serves the state of any block (issue #152). The mode is the datadir's, fixed by its first block.
 fn gc_mode(key: &str, v: &str) -> Result<String, ConfigError> {
     match v {
-        "full" => Ok(v.to_owned()),
-        "archive" => Err(invalid(
-            key,
-            v,
-            "not implemented in this build (historical state is pruned to the state window): use full",
-        )),
+        "full" | "archive" => Ok(v.to_owned()),
         _ => Err(invalid(key, v, "not an allowed value")),
     }
 }
@@ -429,6 +424,19 @@ impl Config {
         gc_mode("sync.gcmode", &c.sync.gcmode)?;
         c.logging.levels()?;
         Ok(c)
+    }
+
+    /// The flags that cannot run together, checked once they are all set. An archive holds the state
+    /// of every block from genesis: it syncs in full, never from a snap pivot or a snapshot anchor.
+    pub fn check(&self) -> Result<(), ConfigError> {
+        if self.sync.gcmode == "archive" && (self.sync.mode == "snap" || self.sync.minimal) {
+            return Err(invalid(
+                "gcmode",
+                "archive",
+                "an archive keeps the state of every block from genesis: it runs with --syncmode full, not with snap, fast or --minimal",
+            ));
+        }
+        Ok(())
     }
 
     pub fn from_file(path: &Path) -> Result<Self, ConfigError> {
@@ -660,8 +668,19 @@ mod tests {
     #[test]
     fn sync_modes() {
         let mut c = Config::default();
-        let e = c.set("gcmode", "archive").unwrap_err().to_string();
-        assert!(e.contains("not implemented in this build"), "{e}");
+        c.set("gcmode", "archive").unwrap_or_else(|e| panic!("{e}"));
+        assert!(c.check().is_ok());
+        // an archive syncs from genesis: never with snap, fast or --minimal
+        for (k, v) in [
+            ("syncmode", "snap"),
+            ("syncmode", "fast"),
+            ("minimal", "true"),
+        ] {
+            let mut a = c.clone();
+            a.set(k, v).unwrap_or_else(|e| panic!("{e}"));
+            let e = a.check().unwrap_err().to_string();
+            assert!(e.contains("--syncmode full"), "{k} {v}: {e}");
+        }
         for (v, want) in [("snap", "snap"), ("fast", "snap")] {
             c.set("syncmode", v).unwrap_or_else(|e| panic!("{e}"));
             assert_eq!(c.sync.mode, want);
@@ -682,7 +701,7 @@ mod tests {
         assert_eq!(Config::default().sync.mode, "full");
         for t in [
             "[sync]\nmode = \"light\"\n",
-            "[sync]\ngcmode = \"archive\"\n",
+            "[sync]\ngcmode = \"pruned\"\n",
         ] {
             assert!(
                 matches!(Config::from_toml(t), Err(ConfigError::Invalid { .. })),

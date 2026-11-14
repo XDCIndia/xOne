@@ -70,10 +70,18 @@ pub enum T {
     /// A snap download in progress: `p` to the pivot root and the cursors, `1 || keccak(address)` to
     /// the storage cursor of that account (see `xone_sync::mdbx::snapstate`). Emptied by the install.
     SnapProgress,
+    /// `--gcmode archive` only: `keccak(address) || block u64 BE` to the account before `block` changed
+    /// it (the [`T::AccountChangeSets`] value). The state of account `a` after block `n` is the first
+    /// row of `a` above `n`, else `HashedAccounts`: one cursor seek. An unwind deletes the rows of the
+    /// blocks it removes.
+    AccountHistory,
+    /// `--gcmode archive` only: `keccak(address) || keccak(slot) || block u64 BE` to the prior 32
+    /// bytes, read as [`T::AccountHistory`] over `HashedStorages`.
+    StorageHistory,
 }
 
 impl T {
-    pub const ALL: [T; 24] = [
+    pub const ALL: [T; 26] = [
         T::Meta,
         T::CanonicalHeaders,
         T::HeaderNumbers,
@@ -98,6 +106,8 @@ impl T {
         T::TxLookup,
         T::TrieNodes,
         T::SnapProgress,
+        T::AccountHistory,
+        T::StorageHistory,
     ];
 
     pub fn name(self) -> &'static str {
@@ -126,6 +136,8 @@ impl T {
             T::TxLookup => "TxLookup",
             T::TrieNodes => "TrieNodes",
             T::SnapProgress => "SnapProgress",
+            T::AccountHistory => "AccountHistory",
+            T::StorageHistory => "StorageHistory",
         }
     }
 }

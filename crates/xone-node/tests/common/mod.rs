@@ -18,8 +18,14 @@ use xone_primitives::Header;
 
 /// `conformance/vectors/replay/apothem-0-1800.jsonl.gz`: blocks `0..=count`, one wire block each.
 pub fn vectors(count: usize) -> Vec<WireBlock> {
+    vectors_of("apothem-0-1800.jsonl.gz", count)
+}
+
+/// Blocks `0..=count` of a file of `conformance/vectors/replay`.
+pub fn vectors_of(file: &str, count: usize) -> Vec<WireBlock> {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../conformance/vectors/replay/apothem-0-1800.jsonl.gz");
+        .join("../../conformance/vectors/replay")
+        .join(file);
     let mut text = String::new();
     GzDecoder::new(std::fs::File::open(path).unwrap_or_else(|e| panic!("{e}")))
         .read_to_string(&mut text)
