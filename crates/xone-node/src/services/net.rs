@@ -111,6 +111,30 @@ impl NetHandle {
     }
 }
 
+/// Reads the node allowlist (issue #199). The file must exist; every static and trusted node
+/// (`targets` marked true) must be listed.
+fn allowlist(file: &Path, targets: &[(Enode, bool)]) -> Result<Vec<PeerId>, String> {
+    if !file.is_file() {
+        return Err(format!(
+            "--permissions.nodes: {}: no such file",
+            file.display()
+        ));
+    }
+    let mut ids = Vec::new();
+    for e in read_peer_file(file).map_err(|e| format!("--permissions.nodes: {e}"))? {
+        ids.push(peer_id(&e)?);
+    }
+    for (e, trusted) in targets {
+        if *trusted && !ids.contains(&peer_id(e)?) {
+            return Err(format!(
+                "--permissions.nodes: static or trusted node {} is not in the allowlist",
+                e.id
+            ));
+        }
+    }
+    Ok(ids)
+}
+
 pub struct NetService {
     rt: Option<Runtime>,
     h: NetHandle,
@@ -144,6 +168,10 @@ impl NetService {
             for e in read_peer_file(&cfg.datadir.join(file)).map_err(|e| e.to_string())? {
                 targets.push((e, trusted));
             }
+        }
+        if let Some(file) = &cfg.p2p.permissions_nodes {
+            let ids = allowlist(file, &targets)?;
+            peers.set_allowlist(Some(ids));
         }
         // a node that only talks to loopback peers and does no discovery has no reason to listen outside
         let loopback = cfg.p2p.no_discover
@@ -344,5 +372,39 @@ impl Service for NetService {
             });
             rt.shutdown_timeout(Duration::from_secs(1));
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)] // test: a panic is the failure report
+mod allowlist_tests {
+    use super::*;
+
+    fn en(b: u8) -> Enode {
+        format!(
+            "enode://{}@127.0.0.1:30303",
+            alloy_primitives::hex::encode([b; 64])
+        )
+        .parse()
+        .unwrap()
+    }
+
+    #[test]
+    fn file_must_exist_and_cover_static_and_trusted_nodes() {
+        let dir = std::env::temp_dir().join(format!("xone-allow-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("allowed.json");
+        assert!(allowlist(&file, &[]).is_err(), "missing file");
+        let list = format!(
+            "[\"enode://{}@10.0.0.1:30303\"]",
+            alloy_primitives::hex::encode([1u8; 64])
+        );
+        std::fs::write(&file, list).unwrap();
+        let ids = allowlist(&file, &[(en(1), true), (en(2), false)]).unwrap();
+        assert_eq!(ids, vec![peer_id(&en(1)).unwrap()]);
+        let e = allowlist(&file, &[(en(2), true)]).unwrap_err();
+        assert!(e.contains("not in the allowlist"), "{e}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

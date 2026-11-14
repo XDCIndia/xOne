@@ -117,6 +117,9 @@ pub struct P2p {
     pub discovery_port: Option<u16>,
     pub max_peers: u32,
     pub no_discover: bool,
+    /// Node allowlist file (a JSON array of enode URLs, issue #199): when set, only these nodes
+    /// connect, in or out.
+    pub permissions_nodes: Option<PathBuf>,
     pub nat: Option<String>,
     pub bootnodes: Vec<String>,
     /// `--eth.requiredblocks`: `<n>=<0x hash>` entries the operator adds to, or uses to replace,
@@ -299,6 +302,7 @@ defaults!(P2p {
     discovery_port: None,
     max_peers: 50,
     no_discover: false,
+    permissions_nodes: None,
     nat: None,
     bootnodes: vec![],
     required_blocks: vec![]
@@ -566,6 +570,7 @@ impl Config {
             "discovery.port" => self.p2p.discovery_port = Some(num(key, v)?),
             "maxpeers" => self.p2p.max_peers = num(key, v)?,
             "nodiscover" => self.p2p.no_discover = flag(key, v)?,
+            "permissions.nodes" => self.p2p.permissions_nodes = Some(v.into()),
             "nat" => self.p2p.nat = Some(v.to_owned()),
             "bootnodes" => self.p2p.bootnodes = list(v),
             "eth.requiredblocks" => {
