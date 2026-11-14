@@ -33,7 +33,7 @@ use xone_state::{
 };
 
 use crate::{
-    executor::{BlockExecutor, ExecError, Execution},
+    executor::{BlockExecutor, ExecError, Execution, ReceiptRoots},
     store::Store,
 };
 
@@ -548,6 +548,10 @@ impl BlockExecutor for XdcExecutor {
             gas_used: o.gas_used,
             access_list_hash: None,
             aux: aux.into(),
+            roots: Some(ReceiptRoots {
+                root: o.receipt_root,
+                bloom: o.bloom,
+            }),
         };
         st.pending = Some(Pending {
             stored,

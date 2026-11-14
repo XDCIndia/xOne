@@ -30,6 +30,7 @@ impl BlockExecutor for Echo {
             gas_used: h.gas_used,
             access_list_hash: h.block_access_list_hash,
             aux: Default::default(),
+            roots: None,
         })
     }
 }

@@ -178,6 +178,7 @@ pub fn execute_block<V: StateRead, E: Env>(
         author,
         body,
         None,
+        None,
         ctx.parent,
         ctx.env,
     )?;
@@ -190,7 +191,8 @@ pub fn execute_block<V: StateRead, E: Env>(
 /// `insertChain` once per header), with the senders of `body.transactions` recovered ahead of
 /// execution (geth `SenderCacher`, `core/blockchain.go:2526`): `senders[i]` is the sender
 /// `tx::decode` recovers from transaction `i`; `None` recovers them here. Every other check of
-/// `execute_block` runs.
+/// `execute_block` runs. The body must have passed `BodyVerifier::verify_body` (as `Chain::insert`
+/// does before it executes): its transactions root is taken from the header, not derived again.
 pub fn execute_verified<V: StateRead, E: Env>(
     spec: &ChainSpec,
     parent_view: &V,
@@ -207,6 +209,13 @@ pub fn execute_verified<V: StateRead, E: Env>(
     }
     basefee::verify(spec, header.number, header.base_fee)?;
     let author = block_author(spec, header)?;
+    // `ValidateBody` already compared the header's transactions root with the body (#245): it is
+    // not derived a second time
+    debug_assert_eq!(
+        ordered_trie_root_encoded(&body.transactions),
+        header.tx_root,
+        "execute_verified on a body that was not verified"
+    );
     run_block(
         spec,
         parent_view,
@@ -214,6 +223,7 @@ pub fn execute_verified<V: StateRead, E: Env>(
         author,
         body,
         senders,
+        Some(header.tx_root),
         parent,
         env,
     )
@@ -233,7 +243,17 @@ pub fn execute_unsealed<V: StateRead, E: Env>(
     env: &E,
 ) -> Result<BlockOutcome, ExecError> {
     basefee::verify(spec, header.number, header.base_fee)?;
-    run_block(spec, parent_view, header, author, body, None, parent, env)
+    run_block(
+        spec,
+        parent_view,
+        header,
+        author,
+        body,
+        None,
+        None,
+        parent,
+        env,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -244,6 +264,7 @@ fn run_block<V: StateRead, E: Env>(
     author: Address,
     body: &Body,
     senders: Option<&[Address]>,
+    tx_root: Option<B256>,
     parent: &Header,
     env: &E,
 ) -> Result<BlockOutcome, ExecError> {
@@ -479,7 +500,7 @@ fn run_block<V: StateRead, E: Env>(
         })
         .collect();
     let (diff, codes) = db.take();
-    let tx_root = ordered_trie_root_encoded(&body.transactions);
+    let tx_root = tx_root.unwrap_or_else(|| ordered_trie_root_encoded(&body.transactions));
     let receipt_encodings: Vec<Bytes> = receipts.iter().map(|x| Bytes::from(x.encode())).collect();
     let receipt_root = ordered_trie_root_encoded(&receipt_encodings);
     let bloom = receipts.iter().fold(Bloom::ZERO, |b, x| b | x.bloom);
