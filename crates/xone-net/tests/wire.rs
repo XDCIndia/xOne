@@ -526,3 +526,30 @@ fn discv4_packets_equal_oracle_bytes() {
         assert!(discv4::decode(&b).is_err(), "flip at {i}");
     }
 }
+
+/// #119: geth-XDC announces `BlockRangeUpdate` (0x11, `[earliest, latest, latestHash]`, no request
+/// id) on eth/101 (`xdpos2rid`, `eth/protocols/eth/handler.go:306`). It decodes and re-encodes as is.
+#[test]
+fn block_range_update_is_accepted_on_eth101() {
+    use alloy_rlp::Encodable;
+    let mut p = Vec::new();
+    0u64.encode(&mut p);
+    776_545u64.encode(&mut p);
+    h(3).encode(&mut p);
+    let mut body = Vec::new();
+    alloy_rlp::Header {
+        list: true,
+        payload_length: p.len(),
+    }
+    .encode(&mut body);
+    body.extend(p);
+    let m = v101::decode(codes::BLOCK_RANGE_UPDATE, &body).unwrap();
+    assert!(matches!(
+        m,
+        Message::Opaque {
+            code: codes::BLOCK_RANGE_UPDATE,
+            ..
+        }
+    ));
+    assert_eq!(v101::encode(&m).unwrap(), (codes::BLOCK_RANGE_UPDATE, body));
+}

@@ -26,7 +26,8 @@ checked against their headers.
 1. Nothing is written until every step of the download has passed. A stop or a failure before this leaves the
    datadir empty (`head.json` absent), and the next start begins again.
 2. `snapshot::install`: the state checkpoint of the pivot (`ckpt/`, gzip JSON: accounts, storage, codes, gap
-   pools, sign transactions, `signs_from` 0, `td` 0), then `Store::install_snapshot`: one generation with the
+   pools, sign transactions, `signs_from` 0, `td` the pivot's from the source's Status (`snap/pivot.md` rule 6;
+   0 for a snapshot file, which carries none)), then `Store::install_snapshot`: one generation with the
    state, the canonical index, the headers, the records, the anchor manifest and the segment manifest whose
    `first_block` is the first retained block.
 3. `<datadir>/xone/snap-pivot.txt`: the pivot, its state root, the switch header and the pin source.
