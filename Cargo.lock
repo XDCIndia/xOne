@@ -4885,6 +4885,7 @@ dependencies = [
  "k256",
  "num-bigint",
  "proptest",
+ "secp256k1 0.30.0",
  "serde",
  "serde_json",
  "thiserror",
