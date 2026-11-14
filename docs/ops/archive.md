@@ -20,3 +20,12 @@ Not served from the history yet: `eth_getProof` below the window, snap/1 at old 
 
 ## Growth
 
+Measured on net2040 (`xone-rs-net2040-archive-h95`, full sync from genesis to 832,598 on 2026-11-14, build `fa3edb8e`), sampled every 5 minutes:
+
+| range | `chain.mdbx` (state, changesets, history, indexes) | whole datadir (with the header, body and receipt segments) |
+|---|---|---|
+| 0 to 215k (blocks of 20,000+ transactions up to ~50k) | 4.56 GB | 20.3 GB |
+| 215k to 793k (mostly empty blocks) | +0.47 GB, about 81 MB per 100k blocks | +2.38 GB, about 410 MB per 100k blocks |
+| at 832,598 | 5.03 GB | 22.8 GB |
+
+For comparison the full node on the same host (`xone-rs-net2040-h95`, same chain) holds a 2.9 GB `chain.mdbx` and a 20.6 GB datadir: on net2040 the history costs about 2.1 GB, almost all of it from the dense range. MDBX grows in 64 MB steps, so a figure per 100k blocks is rounded to that.
