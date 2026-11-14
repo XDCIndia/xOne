@@ -367,7 +367,13 @@ fn call(c: &Ctx, p: &Params) -> R {
 }
 
 fn estimate(c: &Ctx, p: &Params) -> R {
-    let req = call_request(p.obj(0)?, c.limits.call_gas_cap)?;
+    let o = p.obj(0)?;
+    let mut req = call_request(o, c.limits.call_gas_cap)?;
+    // geth `DoEstimateGas`: without `gas` the ceiling is the block's gas limit (capped by
+    // `--rpc.gascap`), not the cap itself
+    if o.get("gas").is_none() {
+        req.gas = None;
+    }
     let (_, h) = state_at(c, p, 1)?;
     Ok(q(c.be.state.estimate_gas(h, &req, c.cancel)?))
 }

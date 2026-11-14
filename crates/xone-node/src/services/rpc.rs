@@ -2,8 +2,9 @@
 //! consensus, and serves HTTP, WebSocket and IPC per the config. Only the namespaces of `--http.api`
 //! and `--ws.api` are registered, as geth does.
 //!
-//! ponytail: `eth_call`, `eth_estimateGas` and the tracers answer a typed refusal (there is no
-//! single-call executor yet), `XDPoS_getMissedRoundsInEpochByBlockNum` too. `newHeads` and `logs`
+//! `eth_call` and `eth_estimateGas` run one message on the retained state of the selected block
+//! (`xone_executor::call`, geth `doCall` and `gasestimator.Estimate`); nothing reaches the store.
+//! ponytail: the tracers answer a typed refusal, `XDPoS_getMissedRoundsInEpochByBlockNum` too. `newHeads` and `logs`
 //! are published by `Core` on each canonical block; `newPendingTransactions` accepts and stays quiet.
 
 use std::{
@@ -15,7 +16,7 @@ use std::{
     },
 };
 
-use alloy_primitives::{Address, Bytes, B256};
+use alloy_primitives::{Address, Bytes, B256, U256};
 use tokio::{net::TcpListener, runtime::Handle, task::JoinHandle};
 use xone_consensus::{
     v1::{
@@ -24,6 +25,8 @@ use xone_consensus::{
     },
     v2::gap_snapshot,
 };
+use xone_executor::call::{revert_message, CallMsg, CallStatus, EstimateError};
+use xone_primitives::Header;
 use xone_rpc::{
     api::{
         Backend, BlockView, CallOutput, CallRequest, ChainApi, ConsensusApi, EpochInfo,
@@ -40,7 +43,14 @@ use xone_sync::{
     chain::ChainRead,
 };
 
-use super::{chain::Progress, core::Core, net::NetHandle, pool::PoolShared, to_wire};
+use super::{
+    chain::Progress,
+    core::{Core, Dyn},
+    hist::HistInner,
+    net::NetHandle,
+    pool::PoolShared,
+    to_wire,
+};
 use crate::{
     config::{Config, Limits as NodeLimits},
     enode::Enode,
@@ -118,6 +128,50 @@ impl ChainApi for RpcChain {
 
 struct RpcState {
     core: Arc<Core>,
+    /// `--rpc.gascap`: the ceiling of `eth_estimateGas` (0: none).
+    gas_cap: u64,
+}
+
+fn call_msg(req: &CallRequest) -> CallMsg {
+    CallMsg {
+        // geth `TransactionArgs.from`: the zero address when absent
+        from: req.from.unwrap_or(Address::ZERO),
+        to: req.to,
+        // below 21000 means "not given" to the estimator
+        gas: req.gas.unwrap_or(0),
+        gas_price: req.gas_price,
+        max_fee: req.max_fee,
+        max_priority_fee: req.max_priority_fee,
+        value: req.value.unwrap_or(U256::ZERO),
+        data: req.data.clone(),
+    }
+}
+
+impl RpcState {
+    /// Runs `f` on the post-state of `block` with its header and the node's history as `Env`, the
+    /// chain's read lock held throughout (the order of block import: chain, then history).
+    fn with_block<R>(
+        &self,
+        block: B256,
+        f: impl FnOnce(&Dyn<'_>, &Header, &HistInner) -> R,
+    ) -> Result<R, RpcError> {
+        let header = self
+            .core
+            .hist
+            .read()
+            .header_by_hash(block)
+            .map(|h| h.into_owned())
+            .ok_or_else(|| RpcError::server("header not found"))?;
+        let mut f = Some(f);
+        let mut out = None;
+        self.state(block, &mut |view| {
+            if let Some(f) = f.take() {
+                let hist = self.core.hist.read();
+                out = Some(f(&Dyn(view), &header, &hist));
+            }
+        })?;
+        out.ok_or_else(|| RpcError::internal("state not read"))
+    }
 }
 
 fn unsupported(what: &str) -> RpcError {
@@ -143,11 +197,57 @@ impl StateApi for RpcState {
     fn code(&self, code_hash: B256) -> Option<Bytes> {
         self.core.hist.read().codes.get(&code_hash).cloned()
     }
-    fn call(&self, _: B256, _: &CallRequest, _: &AtomicBool) -> Result<CallOutput, RpcError> {
-        Err(unsupported("eth_call"))
+    fn call(
+        &self,
+        block: B256,
+        req: &CallRequest,
+        cancel: &AtomicBool,
+    ) -> Result<CallOutput, RpcError> {
+        if cancel.load(Ordering::Relaxed) {
+            return Err(RpcError::server("request cancelled"));
+        }
+        let msg = call_msg(req);
+        let spec = &self.core.spec;
+        let res = self
+            .with_block(block, |view, header, hist| {
+                xone_executor::call::call(spec, view, header, hist, &msg)
+            })?
+            // geth `applyMessageWithEVM`
+            .map_err(|e| RpcError::server(format!("err: {e} (supplied gas {})", msg.gas)))?;
+        let error = match res.status {
+            CallStatus::Success => None,
+            CallStatus::Revert => Some(revert_message(&res.output)),
+            CallStatus::Halt(h) => Some(h),
+        };
+        Ok(CallOutput {
+            output: res.output,
+            gas_used: res.gas_used,
+            error,
+        })
     }
-    fn estimate_gas(&self, _: B256, _: &CallRequest, _: &AtomicBool) -> Result<u64, RpcError> {
-        Err(unsupported("eth_estimateGas"))
+    fn estimate_gas(
+        &self,
+        block: B256,
+        req: &CallRequest,
+        cancel: &AtomicBool,
+    ) -> Result<u64, RpcError> {
+        let msg = call_msg(req);
+        let spec = &self.core.spec;
+        self.with_block(block, |view, header, hist| {
+            xone_executor::call::estimate_gas(spec, view, header, hist, &msg, self.gas_cap, cancel)
+        })?
+        .map_err(|e| match e {
+            // geth `newRevertError`: code 3, the reason in the message, the output in `data`
+            EstimateError::Reverted(data) => RpcError {
+                code: 3,
+                message: revert_message(&data),
+                data: Some(serde_json::Value::String(format!(
+                    "0x{}",
+                    alloy_primitives::hex::encode(&data)
+                ))),
+            },
+            EstimateError::Failed(m) => RpcError::server(m),
+        })
     }
     fn trace(
         &self,
@@ -417,12 +517,16 @@ impl RpcService {
         pool: Arc<PoolShared>,
         net: NetHandle,
     ) -> Result<Self, String> {
+        let lim = limits(&cfg.limits);
         let be = Backend {
             chain: Arc::new(RpcChain {
                 core: core.clone(),
                 progress,
             }),
-            state: Arc::new(RpcState { core: core.clone() }),
+            state: Arc::new(RpcState {
+                core: core.clone(),
+                gas_cap: lim.call_gas_cap,
+            }),
             pool,
             net: Arc::new(RpcNet {
                 net,
@@ -430,7 +534,6 @@ impl RpcService {
             }),
             consensus: Arc::new(RpcConsensus { core: core.clone() }),
         };
-        let lim = limits(&cfg.limits);
         let addr = |a: &str, p: u16| {
             let host = if a == "localhost" { "127.0.0.1" } else { a };
             format!("{host}:{p}")

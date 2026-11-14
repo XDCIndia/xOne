@@ -12,7 +12,12 @@ workspace = true
 [dependencies]
 alloy-primitives.workspace = true
 alloy-rlp.workspace = true
-revm = { version = "=43.0.3", default-features = false, features = ["std"] }
+revm = { version = "=43.0.3", default-features = false, features = [
+    "std",
+    # eth_call and eth_estimateGas (geth `SkipTransactionChecks`, the caller's gas pool)
+    "optional_eip3607",
+    "optional_block_gas_limit",
+] }
 thiserror.workspace = true
 xone-chainspec.workspace = true
 xone-primitives.workspace = true
