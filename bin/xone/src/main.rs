@@ -87,6 +87,11 @@ fn run(args: impl IntoIterator<Item = OsString>) -> ExitCode {
             }
         }
     }
+    // the merged config, before anything is opened
+    if let Err(e) = cfg.validate() {
+        eprintln!("xone: {e}");
+        return ExitCode::from(2);
+    }
     match m.subcommand() {
         Some(("dumpconfig", _)) => match cfg
             .redacted()
