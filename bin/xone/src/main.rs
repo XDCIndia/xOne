@@ -206,13 +206,45 @@ fn run_node(cfg: &Config, dev: Option<xone_node::dev::Started>) -> ExitCode {
     }
 }
 
+/// jemalloc (#249): ethrex measured the inline purge at about 12 % of block execution CPU before
+/// it moved purging to a background thread, as here.
+#[cfg(all(feature = "jemalloc", not(target_env = "msvc")))]
+#[global_allocator]
+static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+
+/// Starts jemalloc's background purge threads; `false` when the allocator refused (the node runs,
+/// with inline purging).
+#[cfg(all(feature = "jemalloc", not(target_env = "msvc")))]
+fn allocator_background() -> bool {
+    tikv_jemalloc_ctl::background_thread::write(true).is_ok()
+        && tikv_jemalloc_ctl::background_thread::read().unwrap_or(false)
+}
+
+#[cfg(not(all(feature = "jemalloc", not(target_env = "msvc"))))]
+fn allocator_background() -> bool {
+    false
+}
+
 fn main() -> ExitCode {
+    if !allocator_background() {
+        tracing::debug!("allocator: no background purge thread");
+    }
     run(std::env::args_os())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(all(feature = "jemalloc", not(target_env = "msvc")))]
+    #[test]
+    fn jemalloc_is_the_allocator_with_a_background_purge_thread() {
+        assert!(allocator_background());
+        // the epoch advances only under jemalloc
+        assert!(tikv_jemalloc_ctl::epoch::advance().is_ok());
+        let v: Vec<u8> = vec![1; 1 << 20];
+        assert_eq!(v.iter().map(|b| u64::from(*b)).sum::<u64>(), 1 << 20);
+    }
 
     #[test]
     fn stamp_shape() {
