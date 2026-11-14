@@ -4972,6 +4972,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "xone-primitives",
+ "xone-snap",
  "xone-state",
 ]
 

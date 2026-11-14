@@ -25,3 +25,8 @@ xone-state.workspace = true
 proptest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+xone-snap = { path = ".", features = ["testkit"] }
+
+[features]
+# In-memory peer and state generator for tests. Not for a release artifact.
+testkit = []
