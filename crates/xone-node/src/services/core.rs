@@ -261,6 +261,11 @@ pub struct Core {
     /// The subscription hubs of the WebSocket and IPC endpoints: each canonical block and each block
     /// a reorg removes is published to them ([`Self::publish`]).
     pub hubs: Mutex<Vec<std::sync::Arc<Hub>>>,
+    /// Blocks this process has imported onto the head ([`Self::import`] returned `Extended`
+    /// after the commit, history push and publication). Starts at 0 on every start, never
+    /// decreases (a reorg or set-head does not take blocks off it), and counts no failed
+    /// import, side block or start-up replay: the `xone_blocks_imported_total` counter.
+    pub imported: std::sync::atomic::AtomicU64,
 }
 
 pub fn now() -> u64 {
@@ -670,6 +675,7 @@ impl Core {
             senders,
             saving: Mutex::new(None),
             hubs: Mutex::default(),
+            imported: std::sync::atomic::AtomicU64::new(0),
         };
         for (header, body) in replay {
             let number = header.number;
@@ -781,6 +787,8 @@ impl Core {
         if self.ckpt_every != 0 && number % self.ckpt_every == 0 {
             self.checkpoint_in_background()?;
         }
+        self.imported
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         if self.minimal {
             self.prune()?;
         }

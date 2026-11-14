@@ -9,7 +9,7 @@ Rust: `xone_node::observe::metrics` (`Snapshot`, `encode`, `MetricsServer`). The
 | `xone_head_block_age_seconds` | gauge | now minus head timestamp |
 | `xone_syncing`, `xone_peers` | gauge | |
 | `xone_txpool_pending`, `xone_txpool_queued` | gauge | |
-| `xone_blocks_imported_total` | counter | `rate()` is the import rate |
+| `xone_blocks_imported_total` | counter | blocks this process imported onto the head (`Core::imported`); starts at 0 on each start, never decreases on reorg or set-head, excludes failed imports, side blocks and start-up replay; `rate()` is the import rate. Chain height is `xone_head_block_number` |
 | `xone_rpc_in_flight{class}` | gauge | running requests per ADR-007 section 4 class |
 | `xone_queue_depth{queue}`, `xone_queue_overflow_total{queue}` | gauge, counter | ADR-007 queue ids `Q1`..`Q18` |
 | `xone_watchdog_lag_seconds` | gauge | lateness of the watchdog tick |

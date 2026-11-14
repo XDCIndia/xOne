@@ -98,7 +98,7 @@ impl MetricsSource for NodeStats {
             peers: self.peer_count() as u64, // ponytail: usize is u64 here
             peers_required_block_refused_total: self.peers.required_refused(),
             txpool_pending: self.pending_txs() as u64,
-            blocks_imported_total: number.saturating_sub(self.progress.start.load(Relaxed)),
+            blocks_imported_total: self.core.imported.load(Relaxed),
             ..Snapshot::default()
         }
     }
