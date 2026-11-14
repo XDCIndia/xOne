@@ -25,6 +25,16 @@ use super::{
 };
 use crate::lifecycle::{Service, ServiceError};
 
+/// Drops the encodings of transactions the pool replaced, evicted or expired. The size check is
+/// the whole cost while nothing is stale.
+/// ponytail: a scan of the live set per admission that leaves a stale entry; a removal event from
+/// `Pool` if replacement-heavy load shows in a profile.
+fn prune(raws: &mut HashMap<B256, Bytes>, live: usize, has: impl Fn(&B256) -> bool) {
+    if raws.len() > live {
+        raws.retain(|h, _| has(h));
+    }
+}
+
 struct Inner {
     pool: Pool,
     /// Consensus encodings of what the pool holds: the pool keeps decoded transactions only.
@@ -89,7 +99,8 @@ impl PoolShared {
             Ok(r) => r,
             Err(e) => return raws.iter().map(|_| Err(e.clone())).collect(),
         };
-        raws.iter()
+        let out = raws
+            .iter()
             .zip(res)
             .map(|(raw, r)| match r {
                 Ok(()) => {
@@ -99,7 +110,10 @@ impl PoolShared {
                 }
                 Err(e) => Err(e.to_string()),
             })
-            .collect()
+            .collect::<Vec<_>>();
+        let Inner { pool, raws } = &mut *g;
+        prune(raws, pool.len().0, |h| pool.has(h));
+        out
     }
 
     /// Transactions of a `Transactions` message; a refusal is the sender's business, not ours.
@@ -216,5 +230,22 @@ impl Service for PoolService {
         if let Some(t) = self.task.take() {
             t.abort();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prune_drops_what_the_pool_no_longer_holds() {
+        let h = |n: u8| B256::repeat_byte(n);
+        let mut raws: HashMap<B256, Bytes> = (1..=3).map(|n| (h(n), Bytes::new())).collect();
+        // replaced: the pool holds 1 and 3 only
+        prune(&mut raws, 2, |x| *x != h(2));
+        assert_eq!(raws.len(), 2);
+        assert!(!raws.contains_key(&h(2)));
+        // nothing stale: no scan (the predicate must not run)
+        prune(&mut raws, 2, |_| unreachable!());
     }
 }
