@@ -1,0 +1,946 @@
+{
+  "generated": "2026-11-14",
+  "priority_rule": "P0 = a missing node type (archive); P1 = 8+ of 10 selected competitors, or present in the canonical XDC clients; P2 = 5-7; P3 = 1-4.",
+  "competitor_commits": {
+    "ethereum/go-ethereum": "8059ff8beb3170eb8b977169ac51bb0423c97ee1",
+    "erigontech/erigon": "bbb5524e53fb057e7d47a5066e152f1091ac4ba4",
+    "paradigmxyz/reth": "36600d5ff9628465475dd4c7608e2e9f2fe24273",
+    "lambdaclass/ethrex": "740ea493880b6c073b81537010df75e143c615c2",
+    "NethermindEth/nethermind": "a7dd73052e696ad934d228aad3f33e660701fdb7",
+    "besu-eth/besu": "2b839d96863d01210f45a6f62127e6229e5b0889",
+    "status-im/nimbus-eth1": "5e3fd7e9d19177980cc1c086c46c4e1dcf38eced",
+    "XinFinOrg/XDPoSChain": "cb1ef79073c05f50b9df75b1e740387b9d72af99",
+    "bnb-chain/bsc": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+    "0xPolygon/bor": "ee09efd5dd9ef75917368990b272581b0e2c2665"
+  },
+  "gaps": [
+    {
+      "id": "GAP-0001",
+      "title": "Archive node mode: keep historical state for every block (--gcmode archive)",
+      "area": "storage",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:cmd/utils/flags.go",
+        "bnb-chain/bsc:cmd/utils/flags.go",
+        "0xPolygon/bor:cmd/utils/flags.go",
+        "XinFinOrg/XDPoSChain:cmd/utils/flags.go",
+        "erigontech/erigon:db/kv/prune/storage_mode.go",
+        "paradigmxyz/reth:crates/node/core/src/args/pruning.rs",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.Db/IPruningConfig.cs",
+        "besu-eth/besu:app/src/main/java/org/hyperledger/besu/cli/BesuCommand.java",
+        "status-im/nimbus-eth1:execution_chain/conf.nim"
+      ],
+      "ours": "bin/xone/src/flags.rs (--gcmode archive refused), crates/xone-node/src/config.rs (128-block state window)",
+      "priority": "P0",
+      "seen_in_count": 9,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/152",
+      "key": "archive",
+      "related": "#27, #121, #145, #149"
+    },
+    {
+      "id": "GAP-0002",
+      "title": "Polling log/block/pending filters over HTTP (eth_newFilter, eth_getFilterChanges and siblings)",
+      "area": "rpc",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:eth/filters/api.go",
+        "bnb-chain/bsc:eth/filters/api.go",
+        "0xPolygon/bor:eth/filters/api.go",
+        "XinFinOrg/XDPoSChain:eth/filters/api.go",
+        "erigontech/erigon:rpc/jsonrpc/eth_filters.go",
+        "paradigmxyz/reth:crates/rpc/rpc/src/eth/filter.rs",
+        "lambdaclass/ethrex:crates/networking/rpc/eth/filter.rs",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.JsonRpc/Modules/Eth/IEthRpcModule.cs",
+        "besu-eth/besu:ethereum/api/src/main/java/org/hyperledger/besu/ethereum/api/jsonrpc/internal/methods/EthNewFilter.java",
+        "status-im/nimbus-eth1:execution_chain/rpc/filters.nim"
+      ],
+      "ours": "none (spec/rpc/scope-adr-008.md: out; crates/xone-rpc/src/subscriptions.rs serves WebSocket only)",
+      "priority": "P1",
+      "seen_in_count": 10,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/153",
+      "key": "filters",
+      "related": "#42, #122"
+    },
+    {
+      "id": "GAP-0003",
+      "title": "Struct (opcode) logger: the default tracer of debug_trace*",
+      "area": "tracing",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:eth/tracers/logger/logger.go",
+        "bnb-chain/bsc:eth/tracers/logger/logger.go",
+        "0xPolygon/bor:eth/tracers/logger/logger.go",
+        "XinFinOrg/XDPoSChain:eth/tracers/logger/logger.go",
+        "erigontech/erigon:execution/tracing/tracers/logger/logger.go",
+        "paradigmxyz/reth:crates/rpc/rpc/src/debug.rs",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.Blockchain/Tracing/GethStyle/GethLikeTxMemoryTracer.cs",
+        "besu-eth/besu:ethereum/api/src/main/java/org/hyperledger/besu/ethereum/api/jsonrpc/internal/methods/DebugTraceTransaction.java",
+        "status-im/nimbus-eth1:execution_chain/rpc/debug.nim",
+        "lambdaclass/ethrex:crates/networking/rpc/tracing.rs"
+      ],
+      "ours": "crates/xone-rpc/src/debug.rs (no tracer -> 'tracer not supported')",
+      "priority": "P1",
+      "seen_in_count": 10,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/154",
+      "key": "structlog",
+      "related": "#42"
+    },
+    {
+      "id": "GAP-0004",
+      "title": "eth_createAccessList",
+      "area": "rpc",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:internal/ethapi/api.go",
+        "bnb-chain/bsc:internal/ethapi/api.go",
+        "0xPolygon/bor:internal/ethapi/api.go",
+        "XinFinOrg/XDPoSChain:internal/ethapi/api.go",
+        "paradigmxyz/reth:crates/rpc/rpc-eth-api/src/core.rs",
+        "erigontech/erigon:rpc/jsonrpc/eth_call.go",
+        "lambdaclass/ethrex:crates/networking/rpc/eth/account.rs",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.JsonRpc/Modules/Eth/IEthRpcModule.cs",
+        "besu-eth/besu:ethereum/api/src/main/java/org/hyperledger/besu/ethereum/api/jsonrpc/internal/methods/EthCreateAccessList.java",
+        "status-im/nimbus-eth1:execution_chain/rpc/server_api.nim"
+      ],
+      "ours": "none",
+      "priority": "P1",
+      "seen_in_count": 10,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/155",
+      "key": "accesslist",
+      "related": "#42"
+    },
+    {
+      "id": "GAP-0005",
+      "title": "Standard read-only RPC methods still missing (eth_maxPriorityFeePerGas, eth_getHeaderBy*, eth_getRawTransaction*, eth_pendingTransactions, uncle-by-index, txpool_contentFrom, rpc_modules, syncing subscription)",
+      "area": "rpc",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:internal/ethapi/api.go",
+        "XinFinOrg/XDPoSChain:internal/ethapi/api.go",
+        "paradigmxyz/reth:crates/rpc/rpc-eth-api/src/core.rs",
+        "paradigmxyz/reth:crates/rpc/rpc-api/src/txpool.rs",
+        "erigontech/erigon:rpc/jsonrpc/eth_api.go",
+        "lambdaclass/ethrex:crates/networking/rpc/eth/max_priority_fee.rs",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.JsonRpc/Modules/TxPool/ITxPoolRpcModule.cs",
+        "besu-eth/besu:ethereum/api/src/main/java/org/hyperledger/besu/ethereum/api/jsonrpc/RpcMethod.java",
+        "status-im/nimbus-eth1:execution_chain/rpc/server_api.nim",
+        "bnb-chain/bsc:internal/ethapi/api.go",
+        "0xPolygon/bor:internal/ethapi/api.go"
+      ],
+      "ours": "crates/xone-rpc/src/eth.rs, txpool.rs, subscriptions.rs (methods not registered)",
+      "priority": "P1",
+      "seen_in_count": 10,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/156",
+      "key": "stdmethods",
+      "related": "#42"
+    },
+    {
+      "id": "GAP-0006",
+      "title": "eth_getProof: account and storage Merkle proofs",
+      "area": "rpc",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:internal/ethapi/api.go",
+        "bnb-chain/bsc:internal/ethapi/api.go",
+        "0xPolygon/bor:internal/ethapi/api.go",
+        "paradigmxyz/reth:crates/rpc/rpc-eth-api/src/core.rs",
+        "erigontech/erigon:rpc/jsonrpc/eth_call.go",
+        "lambdaclass/ethrex:crates/networking/rpc/eth/account.rs",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.JsonRpc/Modules/Eth/IEthRpcModule.cs",
+        "besu-eth/besu:ethereum/api/src/main/java/org/hyperledger/besu/ethereum/api/jsonrpc/internal/methods/EthGetProof.java",
+        "status-im/nimbus-eth1:execution_chain/rpc/server_api.nim"
+      ],
+      "ours": "crates/xone-rpc/src/eth.rs (-32601), spec/rpc/scope-adr-008.md (out); proof code exists in crates/xone-snap/src/proof.rs",
+      "priority": "P1",
+      "seen_in_count": 9,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/157",
+      "key": "getproof",
+      "related": "#42, #37"
+    },
+    {
+      "id": "GAP-0007",
+      "title": "State and block overrides for eth_call and eth_estimateGas",
+      "area": "rpc",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:internal/ethapi/override/override.go",
+        "XinFinOrg/XDPoSChain:internal/ethapi/api.go",
+        "bnb-chain/bsc:internal/ethapi/api.go",
+        "0xPolygon/bor:internal/ethapi/api.go",
+        "paradigmxyz/reth:crates/rpc/rpc-eth-api/src/core.rs",
+        "erigontech/erigon:rpc/jsonrpc/eth_call.go",
+        "lambdaclass/ethrex:crates/networking/rpc/eth/transaction.rs",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.JsonRpc/Modules/Eth/IEthRpcModule.cs",
+        "besu-eth/besu:ethereum/api/src/main/java/org/hyperledger/besu/ethereum/api/jsonrpc/internal/methods/EthCall.java"
+      ],
+      "ours": "crates/xone-rpc/src/eth.rs (call/estimate read params 0 and 1 only)",
+      "priority": "P1",
+      "seen_in_count": 9,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/158",
+      "key": "overrides",
+      "related": "#42"
+    },
+    {
+      "id": "GAP-0008",
+      "title": "eth_simulateV1 and multi-call bundles (eth_callMany / eth_callBundle)",
+      "area": "rpc",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:internal/ethapi/simulate.go",
+        "XinFinOrg/XDPoSChain:internal/ethapi/api.go",
+        "bnb-chain/bsc:internal/ethapi/api.go",
+        "0xPolygon/bor:internal/ethapi/api.go",
+        "paradigmxyz/reth:crates/rpc/rpc-eth-types/src/simulate.rs",
+        "paradigmxyz/reth:crates/rpc/rpc/src/eth/bundle.rs",
+        "erigontech/erigon:rpc/jsonrpc/eth_callMany.go",
+        "lambdaclass/ethrex:crates/networking/rpc/eth/simulate.rs",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.JsonRpc/Modules/Eth/IEthRpcModule.cs",
+        "besu-eth/besu:ethereum/api/src/main/java/org/hyperledger/besu/ethereum/api/jsonrpc/internal/methods/EthSimulateV1.java"
+      ],
+      "ours": "none",
+      "priority": "P1",
+      "seen_in_count": 9,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/159",
+      "key": "simulate",
+      "related": "#42"
+    },
+    {
+      "id": "GAP-0009",
+      "title": "debug diagnostics: getBadBlocks, getRawReceipts, getRawTransaction, setHead, chaindbProperty",
+      "area": "rpc",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:eth/api_debug.go",
+        "XinFinOrg/XDPoSChain:eth/api_debug.go",
+        "bnb-chain/bsc:eth/api_debug.go",
+        "0xPolygon/bor:eth/api_debug.go",
+        "paradigmxyz/reth:crates/rpc/rpc-api/src/debug.rs",
+        "lambdaclass/ethrex:crates/networking/rpc/debug/bad_blocks.rs",
+        "lambdaclass/ethrex:crates/networking/rpc/debug/set_head.rs",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.JsonRpc/Modules/DebugModule/IDebugRpcModule.cs",
+        "besu-eth/besu:ethereum/api/src/main/java/org/hyperledger/besu/ethereum/api/jsonrpc/internal/methods/DebugGetBadBlocks.java",
+        "erigontech/erigon:rpc/jsonrpc/debug_api.go"
+      ],
+      "ours": "crates/xone-rpc/src/debug.rs (getRawHeader and getRawBlock only)",
+      "priority": "P1",
+      "seen_in_count": 9,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/160",
+      "key": "debugdiag",
+      "related": "#33, #12, #42"
+    },
+    {
+      "id": "GAP-0010",
+      "title": "debug_traceCall: trace a call on any block's state with overrides",
+      "area": "tracing",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:eth/tracers/api.go",
+        "bnb-chain/bsc:eth/tracers/api.go",
+        "0xPolygon/bor:eth/tracers/api.go",
+        "XinFinOrg/XDPoSChain:eth/tracers/api.go",
+        "erigontech/erigon:rpc/jsonrpc/tracing.go",
+        "paradigmxyz/reth:crates/rpc/rpc-api/src/debug.rs",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.JsonRpc/Modules/DebugModule/IDebugRpcModule.cs",
+        "besu-eth/besu:ethereum/api/src/main/java/org/hyperledger/besu/ethereum/api/jsonrpc/internal/methods/DebugTraceCall.java"
+      ],
+      "ours": "none (crates/xone-rpc/src/debug.rs serves traceTransaction/traceBlock only; spec/rpc/scope-adr-008.md: out)",
+      "priority": "P1",
+      "seen_in_count": 8,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/161",
+      "key": "tracecall",
+      "related": "#42"
+    },
+    {
+      "id": "GAP-0011",
+      "title": "debug state inspection: storageRangeAt, accountRange, dumpBlock, getModifiedAccountsBy*",
+      "area": "rpc",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:eth/api_debug.go",
+        "XinFinOrg/XDPoSChain:eth/api_debug.go",
+        "bnb-chain/bsc:eth/api_debug.go",
+        "0xPolygon/bor:eth/api_debug.go",
+        "paradigmxyz/reth:crates/rpc/rpc-api/src/debug.rs",
+        "erigontech/erigon:rpc/jsonrpc/debug_api.go",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.JsonRpc/Modules/DebugModule/IDebugRpcModule.cs",
+        "besu-eth/besu:ethereum/api/src/main/java/org/hyperledger/besu/ethereum/api/jsonrpc/internal/methods/DebugStorageRangeAt.java",
+        "besu-eth/besu:ethereum/api/src/main/java/org/hyperledger/besu/ethereum/api/jsonrpc/internal/methods/DebugAccountRange.java"
+      ],
+      "ours": "none",
+      "priority": "P1",
+      "seen_in_count": 8,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/162",
+      "key": "debugstate",
+      "related": "#42"
+    },
+    {
+      "id": "GAP-0012",
+      "title": "Admin and runtime operations: start/stop RPC listeners, exportChain/importChain, peerEvents, removeTrustedPeer, runtime log level",
+      "area": "rpc",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:node/api.go",
+        "ethereum/go-ethereum:eth/api_admin.go",
+        "ethereum/go-ethereum:internal/debug/api.go",
+        "XinFinOrg/XDPoSChain:eth/api_admin.go",
+        "bnb-chain/bsc:eth/api_admin.go",
+        "0xPolygon/bor:eth/api_admin.go",
+        "paradigmxyz/reth:crates/rpc/rpc/src/admin.rs",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.JsonRpc/Modules/Admin/IAdminRpcModule.cs",
+        "besu-eth/besu:ethereum/api/src/main/java/org/hyperledger/besu/ethereum/api/jsonrpc/internal/methods/AdminChangeLogLevel.java",
+        "lambdaclass/ethrex:crates/networking/rpc/rpc.rs"
+      ],
+      "ours": "crates/xone-rpc/src/admin.rs (nodeInfo, peers, addPeer, addTrustedPeer, removePeer)",
+      "priority": "P1",
+      "seen_in_count": 8,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/163",
+      "key": "adminops",
+      "related": "#42, #60"
+    },
+    {
+      "id": "GAP-0013",
+      "title": "Structured JSON log output (--log.format json)",
+      "area": "observability",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:internal/debug/flags.go",
+        "XinFinOrg/XDPoSChain:internal/debug/flags.go",
+        "bnb-chain/bsc:internal/debug/flags.go",
+        "0xPolygon/bor:internal/debug/flags.go",
+        "erigontech/erigon:node/logging/flags.go",
+        "paradigmxyz/reth:crates/node/core/src/args/log.rs",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.Runner/NLog.config",
+        "status-im/nimbus-eth1:execution_chain/conf.nim"
+      ],
+      "ours": "crates/xone-node/src/observe/logs.rs (text format only)",
+      "priority": "P1",
+      "seen_in_count": 8,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/164",
+      "key": "jsonlogs",
+      "related": "#41"
+    },
+    {
+      "id": "GAP-0014",
+      "title": "Txpool operator controls: --txpool.* limits, local accounts and a persistent local-transaction journal",
+      "area": "txpool",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:cmd/utils/flags.go",
+        "bnb-chain/bsc:cmd/utils/flags.go",
+        "0xPolygon/bor:cmd/utils/flags.go",
+        "XinFinOrg/XDPoSChain:cmd/utils/flags.go",
+        "ethereum/go-ethereum:core/txpool/locals/journal.go",
+        "bnb-chain/bsc:core/txpool/locals/journal.go",
+        "0xPolygon/bor:core/txpool/locals/journal.go",
+        "erigontech/erigon:cmd/txpool/main.go",
+        "paradigmxyz/reth:crates/node/core/src/args/txpool.rs",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.TxPool/ITxPoolConfig.cs",
+        "besu-eth/besu:app/src/main/java/org/hyperledger/besu/cli/options/TransactionPoolOptions.java"
+      ],
+      "ours": "crates/xone-builder/src/txpool/mod.rs (geth DefaultConfig fixed; 'no journal, no locals')",
+      "priority": "P1",
+      "seen_in_count": 8,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/165",
+      "key": "txpoolops",
+      "related": "#36, #63, #16"
+    },
+    {
+      "id": "GAP-0015",
+      "title": "Developer mode: single-node instant XDPoS chain (xone --dev)",
+      "area": "cli",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:cmd/utils/flags.go",
+        "XinFinOrg/XDPoSChain:cmd/utils/flags.go",
+        "bnb-chain/bsc:cmd/utils/flags.go",
+        "0xPolygon/bor:cmd/utils/flags.go",
+        "paradigmxyz/reth:crates/node/core/src/args/dev.rs",
+        "erigontech/erigon:cmd/utils/flags.go",
+        "lambdaclass/ethrex:crates/blockchain/dev/dev.rs",
+        "NethermindEth/nethermind:src/Nethermind/Chains/spaceneth.json"
+      ],
+      "ours": "ops/devnet/gen.py and sim/ (scripts; no one-flag dev chain)",
+      "priority": "P1",
+      "seen_in_count": 8,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/166",
+      "key": "devmode",
+      "related": "#25, #43"
+    },
+    {
+      "id": "GAP-0016",
+      "title": "External address detection and NAT traversal: --nat any|upnp|pmp, advertised endpoint from discovery",
+      "area": "p2p",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:p2p/nat/nat.go",
+        "XinFinOrg/XDPoSChain:p2p/nat/nat.go",
+        "bnb-chain/bsc:p2p/nat/nat.go",
+        "0xPolygon/bor:p2p/nat/nat.go",
+        "erigontech/erigon:p2p/nat/nat.go",
+        "paradigmxyz/reth:crates/net/nat/src/lib.rs",
+        "besu-eth/besu:app/src/main/java/org/hyperledger/besu/cli/options/NatOptions.java",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.Network/Config/NetworkConfig.cs"
+      ],
+      "ours": "crates/xone-node/src/services/net.rs (only extip:<IP>; otherwise the enode advertises 127.0.0.1)",
+      "priority": "P1",
+      "seen_in_count": 8,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/167",
+      "key": "nat",
+      "related": "#32"
+    },
+    {
+      "id": "GAP-0017",
+      "title": "XDC RPC extensions served by geth-XDC and XDPoSChain: eth_getRewardByHash, eth_getStakerROI*, eth_getTransactionAndReceiptProof, eth_getAccountInfo, eth_getCheckpointFromEpoch, XDPoS_getV2BlockByHash and siblings",
+      "area": "xdc-rpc",
+      "status": "issued",
+      "sources": [
+        "XinFinOrg/XDPoSChain:internal/ethapi/api.go",
+        "XinFinOrg/XDPoSChain:internal/ethapi/api.go",
+        "XinFinOrg/XDPoSChain:internal/ethapi/api.go",
+        "XinFinOrg/XDPoSChain:consensus/XDPoS/api.go",
+        "XinFinOrg/XDPoSChain:consensus/XDPoS/api.go",
+        "XDCIndia/go-ethereum@6fc8e8c2:internal/ethapi/api_xdc.go"
+      ],
+      "ours": "crates/xone-rpc/src/xdc_ext.rs, xdpos.rs (14 XDPoS methods + 7 eth XDC extensions)",
+      "priority": "P1",
+      "seen_in_count": 1,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/168",
+      "key": "xdcext",
+      "related": "#42, #30"
+    },
+    {
+      "id": "GAP-0018",
+      "title": "Additional native tracers: 4byteTracer, flatCallTracer, muxTracer, noopTracer",
+      "area": "tracing",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:eth/tracers/native/call_flat.go",
+        "bnb-chain/bsc:eth/tracers/native/call_flat.go",
+        "0xPolygon/bor:eth/tracers/native/call_flat.go",
+        "XinFinOrg/XDPoSChain:eth/tracers/native/call_flat.go",
+        "ethereum/go-ethereum:eth/tracers/native/4byte.go",
+        "ethereum/go-ethereum:eth/tracers/native/mux.go",
+        "erigontech/erigon:execution/tracing/tracers/native/call_flat.go",
+        "erigontech/erigon:execution/tracing/tracers/native/4byte.go",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.Blockchain/Tracing/GethStyle/Custom/Native/FourByte/Native4ByteTracer.cs",
+        "besu-eth/besu:ethereum/api/src/main/java/org/hyperledger/besu/ethereum/api/jsonrpc/internal/methods/DebugTraceTransaction.java"
+      ],
+      "ours": "crates/xone-rpc/src/debug.rs (callTracer and prestateTracer only)",
+      "priority": "P2",
+      "seen_in_count": 7,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/169",
+      "key": "nativetracers",
+      "related": "#42"
+    },
+    {
+      "id": "GAP-0019",
+      "title": "JavaScript tracers for debug_trace*",
+      "area": "tracing",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:eth/tracers/js/goja.go",
+        "bnb-chain/bsc:eth/tracers/js/goja.go",
+        "0xPolygon/bor:eth/tracers/js/goja.go",
+        "XinFinOrg/XDPoSChain:eth/tracers/js/goja.go",
+        "erigontech/erigon:execution/tracing/tracers/js/goja.go",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.Blockchain/Data/JSTracers/4byteTracer_legacy.js",
+        "paradigmxyz/reth:crates/rpc/rpc/src/debug.rs"
+      ],
+      "ours": "crates/xone-rpc/src/debug.rs ('tracer not found' for JS code)",
+      "priority": "P2",
+      "seen_in_count": 7,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/170",
+      "key": "jstracers",
+      "related": "#42, #15"
+    },
+    {
+      "id": "GAP-0020",
+      "title": "RPC safety flags: --rpc.gascap, --rpc.txfeecap, --rpc.evmtimeout and quota flags",
+      "area": "rpc",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:cmd/utils/flags.go",
+        "bnb-chain/bsc:cmd/utils/flags.go",
+        "0xPolygon/bor:cmd/utils/flags.go",
+        "XinFinOrg/XDPoSChain:cmd/utils/flags.go",
+        "paradigmxyz/reth:crates/node/core/src/args/rpc_server.rs",
+        "erigontech/erigon:cmd/utils/flags.go",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.JsonRpc/IJsonRpcConfig.cs"
+      ],
+      "ours": "crates/xone-rpc/src/server.rs (Limits defaults; not settable from flags or config); no tx fee cap",
+      "priority": "P2",
+      "seen_in_count": 7,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/171",
+      "key": "rpclimits",
+      "related": "#16, #39"
+    },
+    {
+      "id": "GAP-0021",
+      "title": "GraphQL endpoint (EIP-1767)",
+      "area": "rpc",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:graphql/graphql.go",
+        "bnb-chain/bsc:graphql/graphql.go",
+        "0xPolygon/bor:graphql/graphql.go",
+        "erigontech/erigon:cmd/rpcdaemon/graphql/graphql.go",
+        "besu-eth/besu:ethereum/api/src/main/java/org/hyperledger/besu/ethereum/api/graphql/GraphQLHttpService.java",
+        "status-im/nimbus-eth1:execution_chain/rpc.nim"
+      ],
+      "ours": "none (spec/rpc/scope-adr-008.md: GraphQL out)",
+      "priority": "P2",
+      "seen_in_count": 6,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/172",
+      "key": "graphql",
+      "related": "#42, #16"
+    },
+    {
+      "id": "GAP-0022",
+      "title": "eth_sendRawTransactionSync (EIP-7966): send and wait for the receipt",
+      "area": "rpc",
+      "status": "issued",
+      "sources": [
+        "paradigmxyz/reth:crates/rpc/rpc-eth-api/src/core.rs",
+        "ethereum/go-ethereum:internal/ethapi/api.go",
+        "bnb-chain/bsc:internal/ethapi/api.go",
+        "0xPolygon/bor:internal/ethapi/api.go",
+        "erigontech/erigon:rpc/jsonrpc/send_transaction.go",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.JsonRpc/Modules/Eth/IEthRpcModule.cs"
+      ],
+      "ours": "none",
+      "priority": "P2",
+      "seen_in_count": 6,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/173",
+      "key": "sendsync",
+      "related": "#42"
+    },
+    {
+      "id": "GAP-0023",
+      "title": "Profiling endpoint: --pprof is accepted but nothing listens",
+      "area": "observability",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:internal/debug/flags.go",
+        "XinFinOrg/XDPoSChain:internal/debug/flags.go",
+        "bnb-chain/bsc:internal/debug/flags.go",
+        "0xPolygon/bor:internal/debug/flags.go",
+        "erigontech/erigon:node/debug/api.go",
+        "paradigmxyz/reth:crates/node/metrics/Cargo.toml"
+      ],
+      "ours": "bin/xone/src/flags.rs and crates/xone-node/src/config.rs parse --pprof*; no listener in crates/xone-node",
+      "priority": "P2",
+      "seen_in_count": 6,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/174",
+      "key": "pprof",
+      "related": "#41, #13"
+    },
+    {
+      "id": "GAP-0024",
+      "title": "--netrestrict: restrict peers to CIDR ranges",
+      "area": "p2p",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:cmd/utils/flags.go",
+        "bnb-chain/bsc:cmd/utils/flags.go",
+        "0xPolygon/bor:cmd/utils/flags.go",
+        "XinFinOrg/XDPoSChain:cmd/utils/flags.go",
+        "erigontech/erigon:cmd/utils/flags.go",
+        "paradigmxyz/reth:crates/net/network-types/src/peers/config.rs"
+      ],
+      "ours": "none",
+      "priority": "P2",
+      "seen_in_count": 6,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/175",
+      "key": "netrestrict",
+      "related": "#32"
+    },
+    {
+      "id": "GAP-0025",
+      "title": "Database inspection and maintenance CLI: xone db stats / inspect / get / compact and offline unwind",
+      "area": "cli",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:cmd/geth/dbcmd.go",
+        "bnb-chain/bsc:cmd/geth/dbcmd.go",
+        "0xPolygon/bor:cmd/geth/dbcmd.go",
+        "XinFinOrg/XDPoSChain:cmd/XDC/dbcmd.go",
+        "paradigmxyz/reth:crates/cli/commands/src/db/mod.rs",
+        "paradigmxyz/reth:crates/cli/commands/src/stage/unwind.rs",
+        "besu-eth/besu:app/src/main/java/org/hyperledger/besu/cli/subcommands/storage/StorageSubCommand.java"
+      ],
+      "ours": "none (bin/xone/src/cmd has import, export, snapshot only)",
+      "priority": "P2",
+      "seen_in_count": 6,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/176",
+      "key": "dbcli",
+      "related": "#149, #97, #33"
+    },
+    {
+      "id": "GAP-0026",
+      "title": "History pruning: configurable retention of bodies, receipts and logs, and pruning of an existing datadir",
+      "area": "storage",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:cmd/geth/chaincmd.go",
+        "0xPolygon/bor:core/rawdb/pruner.go",
+        "paradigmxyz/reth:crates/node/core/src/args/pruning.rs",
+        "erigontech/erigon:db/kv/prune/prune.go",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.Blockchain/Receipts/IPrunedLogsRetention.cs",
+        "besu-eth/besu:app/src/main/java/org/hyperledger/besu/cli/subcommands/storage/PrunePreMergeBlockDataSubCommand.java",
+        "besu-eth/besu:ethereum/core/src/main/java/org/hyperledger/besu/ethereum/chain/ChainDataPruner.java"
+      ],
+      "ours": "--history.transactions only (bin/xone/src/flags.rs); block history kept in full",
+      "priority": "P2",
+      "seen_in_count": 6,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/177",
+      "key": "history",
+      "related": "#14, #149, #121"
+    },
+    {
+      "id": "GAP-0027",
+      "title": "Bootnode-only mode and devp2p tooling (discovery-only node, ENR/enode tools, crawler)",
+      "area": "p2p",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:cmd/devp2p/main.go",
+        "XinFinOrg/XDPoSChain:cmd/bootnode/main.go",
+        "bnb-chain/bsc:cmd/bootnode/main.go",
+        "0xPolygon/bor:cmd/bootnode/main.go",
+        "erigontech/erigon:cmd/bootnode/main.go",
+        "paradigmxyz/reth:crates/cli/commands/src/p2p/bootnode.rs"
+      ],
+      "ours": "none (ops/bootnodes lists only; crates/xone-net/src/discv4.rs has the protocol)",
+      "priority": "P2",
+      "seen_in_count": 6,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/178",
+      "key": "bootnode",
+      "related": "#32"
+    },
+    {
+      "id": "GAP-0028",
+      "title": "OpenTelemetry (OTLP) trace export",
+      "area": "observability",
+      "status": "issued",
+      "sources": [
+        "paradigmxyz/reth:crates/tracing-otlp/Cargo.toml",
+        "ethereum/go-ethereum:go.mod",
+        "bnb-chain/bsc:go.mod",
+        "0xPolygon/bor:common/tracing/context.go",
+        "besu-eth/besu:metrics/core/src/main/java/org/hyperledger/besu/metrics/opentelemetry/OpenTelemetrySystem.java"
+      ],
+      "ours": "none",
+      "priority": "P2",
+      "seen_in_count": 5,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/179",
+      "key": "otlp",
+      "related": "#41, #16"
+    },
+    {
+      "id": "GAP-0029",
+      "title": "Interactive console: xone attach over IPC/HTTP",
+      "area": "cli",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:cmd/geth/consolecmd.go",
+        "bnb-chain/bsc:cmd/geth/consolecmd.go",
+        "0xPolygon/bor:cmd/geth/consolecmd.go",
+        "XinFinOrg/XDPoSChain:cmd/XDC/consolecmd.go",
+        "lambdaclass/ethrex:tooling/repl/src/commands/admin.rs"
+      ],
+      "ours": "none",
+      "priority": "P2",
+      "seen_in_count": 5,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/180",
+      "key": "console",
+      "related": "#39"
+    },
+    {
+      "id": "GAP-0030",
+      "title": "Parity-style trace_* namespace (trace_block, trace_transaction, trace_filter, trace_replay*)",
+      "area": "tracing",
+      "status": "issued",
+      "sources": [
+        "paradigmxyz/reth:crates/rpc/rpc/src/trace.rs",
+        "erigontech/erigon:rpc/jsonrpc/trace_api.go",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.JsonRpc/Modules/Trace/ITraceRpcModule.cs",
+        "besu-eth/besu:ethereum/api/src/main/java/org/hyperledger/besu/ethereum/api/jsonrpc/internal/methods/TraceFilter.java"
+      ],
+      "ours": "none (spec/rpc/scope-adr-008.md: trace_* out)",
+      "priority": "P3",
+      "seen_in_count": 4,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/181",
+      "key": "tracens",
+      "related": "#42"
+    },
+    {
+      "id": "GAP-0031",
+      "title": "Account management CLI: xone account new / import / list / update",
+      "area": "keys",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:cmd/geth/accountcmd.go",
+        "bnb-chain/bsc:cmd/geth/accountcmd.go",
+        "0xPolygon/bor:cmd/geth/accountcmd.go",
+        "XinFinOrg/XDPoSChain:cmd/XDC/accountcmd.go"
+      ],
+      "ours": "crates/xone-signer/src/local_keystore.rs (read only); no account subcommand in bin/xone/src/cmd",
+      "priority": "P3",
+      "seen_in_count": 4,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/182",
+      "key": "accountcli",
+      "related": "#40, #61"
+    },
+    {
+      "id": "GAP-0032",
+      "title": "Otterscan ots_* namespace",
+      "area": "rpc",
+      "status": "issued",
+      "sources": [
+        "erigontech/erigon:rpc/jsonrpc/otterscan_api.go",
+        "paradigmxyz/reth:crates/rpc/rpc/src/otterscan.rs",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.JsonRpc.TraceStore/Ots/IOtsRpcModule.cs"
+      ],
+      "ours": "none",
+      "priority": "P3",
+      "seen_in_count": 3,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/183",
+      "key": "otterscan",
+      "related": "#42"
+    },
+    {
+      "id": "GAP-0033",
+      "title": "Shipped Grafana dashboard and alert rules for the Prometheus metrics",
+      "area": "observability",
+      "status": "issued",
+      "sources": [
+        "paradigmxyz/reth:etc/grafana/dashboards/overview.json",
+        "erigontech/erigon:cmd/prometheus/dashboards/dashboard.yml",
+        "lambdaclass/ethrex:metrics/provisioning/grafana/dashboards/dashboard_config_l1.yaml"
+      ],
+      "ours": "crates/xone-node/src/observe/metrics.rs (about 20 metric families); no dashboard or alert rules in the repo",
+      "priority": "P3",
+      "seen_in_count": 3,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/184",
+      "key": "grafana",
+      "related": "#41"
+    },
+    {
+      "id": "GAP-0034",
+      "title": "Snapshot import from an HTTPS URL with checksum, resume and pins",
+      "area": "storage",
+      "status": "issued",
+      "sources": [
+        "paradigmxyz/reth:crates/cli/commands/src/download/mod.rs",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.Init.Snapshot/ISnapshotConfig.cs",
+        "erigontech/erigon:cmd/downloader/main.go"
+      ],
+      "ours": "bin/xone/src/cmd/snapshot.rs (import from a local file only)",
+      "priority": "P3",
+      "seen_in_count": 3,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/185",
+      "key": "snapurl",
+      "related": "#38, #14"
+    },
+    {
+      "id": "GAP-0035",
+      "title": "Metrics push: InfluxDB and Prometheus Pushgateway export",
+      "area": "observability",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:cmd/utils/flags.go",
+        "bnb-chain/bsc:cmd/utils/flags.go",
+        "0xPolygon/bor:cmd/utils/flags.go",
+        "XinFinOrg/XDPoSChain:cmd/utils/flags.go",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.Api/Monitoring/IMetricsConfig.cs",
+        "paradigmxyz/reth:crates/node/metrics/src/server.rs",
+        "besu-eth/besu:app/src/main/java/org/hyperledger/besu/cli/options/MetricsOptions.java"
+      ],
+      "ours": "crates/xone-node/src/observe/metrics.rs (pull /metrics only)",
+      "priority": "P2",
+      "seen_in_count": 7,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/186",
+      "key": "metricspush",
+      "related": "#41"
+    },
+    {
+      "id": "GAP-0036",
+      "title": "Live chain-event hooks for in-process indexers (live tracer / execution extensions)",
+      "area": "tracing",
+      "status": "issued",
+      "sources": [
+        "ethereum/go-ethereum:cmd/utils/flags.go",
+        "bnb-chain/bsc:cmd/utils/flags.go",
+        "0xPolygon/bor:cmd/utils/flags.go",
+        "XinFinOrg/XDPoSChain:cmd/utils/flags.go",
+        "ethereum/go-ethereum:eth/tracers/live/supply.go",
+        "paradigmxyz/reth:crates/exex/exex/src/lib.rs",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.Api/Extensions/INethermindPlugin.cs",
+        "besu-eth/besu:plugin-api/src/main/java/org/hyperledger/besu/plugin/services/BesuEvents.java"
+      ],
+      "ours": "none (traces are re-executed on request only: crates/xone-rpc/src/debug.rs)",
+      "priority": "P2",
+      "seen_in_count": 7,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/187",
+      "key": "livehooks",
+      "related": "#16, #34"
+    },
+    {
+      "id": "GAP-0037",
+      "title": "JSON-RPC reference documentation: every served method with parameters, result, errors and an example",
+      "area": "docs",
+      "status": "issued",
+      "sources": [
+        "paradigmxyz/reth:docs/vocs/docs/pages/jsonrpc/debug.mdx",
+        "erigontech/erigon:docs/site/docs/fundamentals/modules/rpc-daemon.md",
+        "XinFinOrg/XDPoSChain:docs/xdc/jsonrpc.md",
+        "besu-eth/besu:docs/trace_rpc_apis.md"
+      ],
+      "ours": "spec/rpc/scope-adr-008.md, xdpos-namespace.md, xdc-eth-extensions.md (method lists and XDC specs; no per-method reference for the standard namespaces)",
+      "priority": "P3",
+      "seen_in_count": 4,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/188",
+      "key": "rpcdocs",
+      "related": "#42"
+    }
+  ],
+  "skipped": [
+    {
+      "id": "SKIP-01",
+      "title": "Engine API (engine_*) and beacon-driven fork choice",
+      "reason": "No XDC counterpart: XDPoS selects the head itself; there is no consensus-layer client. --authrpc flags exist for join.sh compatibility only.",
+      "sources": [
+        "paradigmxyz/reth:crates/rpc/rpc-api/src/engine.rs"
+      ]
+    },
+    {
+      "id": "SKIP-02",
+      "title": "discv5 discovery",
+      "reason": "No XDC counterpart: geth-XDC and XDPoSChain peers speak discv4 only (XDC ping variant); a discv5 table would find no XDC peers.",
+      "sources": [
+        "paradigmxyz/reth:crates/net/discv5/src/filter.rs"
+      ]
+    },
+    {
+      "id": "SKIP-03",
+      "title": "DNS discovery (EIP-1459 enrtree)",
+      "reason": "No XDC counterpart: XDPoSChain params carry no enrtree URL and no XDC DNS tree is published.",
+      "sources": [
+        "erigontech/erigon:p2p/dnsdisc/client.go"
+      ]
+    },
+    {
+      "id": "SKIP-04",
+      "title": "eth/68+ wire protocol with ForkID",
+      "reason": "No XDC counterpart: the XDC network runs eth/100 and eth/101 without ForkID (#32).",
+      "sources": [
+        "ethereum/go-ethereum:eth/protocols/eth"
+      ]
+    },
+    {
+      "id": "SKIP-05",
+      "title": "Era/Era1 history files (import, export, download)",
+      "reason": "No XDC counterpart: no XDC era archives exist; xOne snapshot export/import (#38) covers history transfer between xOne nodes.",
+      "sources": [
+        "ethereum/go-ethereum:internal/era/era.go",
+        "paradigmxyz/reth:crates/era/src/era1/mod.rs",
+        "NethermindEth/nethermind:src/Nethermind/Nethermind.Era1/EraImporter.cs"
+      ]
+    },
+    {
+      "id": "SKIP-06",
+      "title": "Blob pool, EIP-4844 sidecars, blob RPCs",
+      "reason": "No XDC counterpart: XDC has no blob transactions.",
+      "sources": [
+        "ethereum/go-ethereum:core/txpool/blobpool"
+      ]
+    },
+    {
+      "id": "SKIP-07",
+      "title": "MEV builder APIs, Flashbots relay, sequencer journals",
+      "reason": "No XDC counterpart; XDPoS block production has no external builder market.",
+      "sources": [
+        "0xPolygon/bor:eth/sequencer/journal.go"
+      ]
+    },
+    {
+      "id": "SKIP-08",
+      "title": "LES light server and Portal network",
+      "reason": "No XDC counterpart and no XDC light-client network; removed upstream.",
+      "sources": [
+        "status-im/nimbus-eth1:execution_chain"
+      ]
+    },
+    {
+      "id": "SKIP-09",
+      "title": "miner_* runtime start/stop and personal_*/eth_sign/eth_sendTransaction (node-held keys)",
+      "reason": "Conflicts with architecture: ADR-010 signer safety and the Gate E mint protocol make runtime producer toggles and RPC-held keys unsafe; ADR-008 lists both as out.",
+      "sources": [
+        "XinFinOrg/XDPoSChain:internal/ethapi/api.go"
+      ]
+    },
+    {
+      "id": "SKIP-10",
+      "title": "XDCx / XDCxLending namespaces",
+      "reason": "Conflicts with accepted scope ADR-009 (#23): empty-tx routing only.",
+      "sources": [
+        "XinFinOrg/XDPoSChain:XDCx"
+      ]
+    },
+    {
+      "id": "SKIP-11",
+      "title": "web3_sha3",
+      "reason": "Parity rule: the pinned geth-XDC answers -32601 (archive vector web3_sha3.jsonl); serving it would break RPC parity.",
+      "sources": [
+        "ethereum/go-ethereum:internal/ethapi/api.go"
+      ]
+    },
+    {
+      "id": "SKIP-12",
+      "title": "Standalone RPC daemon over a shared datadir (Erigon rpcdaemon)",
+      "reason": "Conflicts with architecture: one node process owns the datadir exclusively (#97, ADR-005); a second reader process is a separate design decision.",
+      "sources": [
+        "erigontech/erigon:cmd/rpcdaemon"
+      ]
+    },
+    {
+      "id": "SKIP-13",
+      "title": "Parlia / Bor-Heimdall consensus features (fast-finality votes, BLS vote keys, milestones)",
+      "reason": "Consensus-specific to BSC and Polygon; XDPoS V2 QC/TC finality already covers the role (#31, #35).",
+      "sources": [
+        "bnb-chain/bsc:cmd/geth/blsaccountcmd.go",
+        "bnb-chain/bsc:core/vote/vote_journal.go"
+      ]
+    },
+    {
+      "id": "SKIP-14",
+      "title": "Stateless/zk proving, execution witnesses, L2 rollup stacks (ethrex L2, op-reth)",
+      "reason": "No XDC counterpart in the L1 client scope.",
+      "sources": [
+        "lambdaclass/ethrex:crates/networking/rpc/debug/execution_witness.rs"
+      ]
+    },
+    {
+      "id": "SKIP-15",
+      "title": "Ethstats reporting, health endpoints, static/trusted peers, remote signer, snapshot export/import, snap/1 serving",
+      "reason": "Not a gap: present in xOneRS (crates/xone-node/src/observe/ethstats.rs, metrics.rs /livez /readyz, enode.rs, crates/xone-signer/src/remote.rs, bin/xone/src/cmd/snapshot.rs, crates/xone-snap/src/server.rs).",
+      "sources": []
+    },
+    {
+      "id": "SKIP-16",
+      "title": "Preimage export/import CLI (geth export-preimages, erigon export_preimages)",
+      "reason": "Covered: xOne moves preimages between nodes with xpre/1 and snapshot export (#38, crates/xone-snap/src/preimage.rs); no XDC operator flow needs a separate preimage file.",
+      "sources": [
+        "erigontech/erigon:cmd/utils/app/export_preimages_cmd.go"
+      ]
+    },
+    {
+      "id": "SKIP-17",
+      "title": "Offline state verification command (geth snapshot verify-state, reth db checksum)",
+      "reason": "Not split: added to the scope of the db CLI gap (GAP-0025, #176) by an issue comment, because it is the same shippable unit (rule: do not split gaps).",
+      "sources": [
+        "ethereum/go-ethereum:cmd/geth/snapshot.go",
+        "paradigmxyz/reth:crates/cli/commands/src/db/mod.rs"
+      ]
+    }
+  ]
+}
