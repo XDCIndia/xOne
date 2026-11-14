@@ -235,6 +235,10 @@ impl Rpc {
         crate::debug::register(&mut reg);
         crate::xdpos::register(&mut reg);
         crate::xdc_ext::register(&mut reg);
+        crate::policy::register_modules(
+            &mut reg,
+            &["eth", "net", "web3", "txpool", "admin", "debug", "xdpos"].map(String::from),
+        );
         let sem = |i: usize| {
             Arc::new(Semaphore::new(
                 limits.class_concurrency[i].min(Semaphore::MAX_PERMITS),

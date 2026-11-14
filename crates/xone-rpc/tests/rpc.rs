@@ -320,7 +320,7 @@ fn the_xdpos_method_set_is_exactly_the_issue_list() {
     for n in r.reg.names() {
         let ns = n.split('_').next().unwrap_or("");
         assert!(
-            ["eth", "net", "web3", "txpool", "admin", "debug", "XDPoS"].contains(&ns),
+            ["eth", "net", "web3", "txpool", "admin", "debug", "XDPoS", "rpc"].contains(&ns),
             "{n}"
         );
     }
@@ -339,7 +339,6 @@ fn out_of_scope_namespaces_are_method_not_found() {
         "les_x",
         "engine_newPayloadV1",
         "debug_traceCall",
-        "rpc_modules",
     ] {
         let e = ask(&r, req(1, m, json!([])));
         assert_eq!(e["error"]["code"], -32601, "{m}");
@@ -1337,4 +1336,60 @@ async fn a_plain_http_request_to_the_websocket_port_is_not_dispatched() {
     assert!(!out.contains("result"), "{out}");
     assert!(out.is_empty() || out.starts_with("HTTP/1.1 4"), "{out}");
     h.abort();
+}
+
+/// #156: the standard read-only methods geth-XDC serves.
+#[test]
+fn standard_read_methods_answer_like_geth() {
+    let r = rpc();
+    let call = |m: &str, p: Value| ask(&r, req(1, m, p));
+    // gas price less the head's base fee (none in the fixture)
+    assert_eq!(
+        call("eth_maxPriorityFeePerGas", json!([]))["result"],
+        "0xee6b280"
+    );
+    assert_eq!(call("eth_accounts", json!([]))["result"], json!([]));
+    let h = call("eth_getHeaderByNumber", json!(["0x5"]));
+    assert_eq!(h["result"]["number"], "0x5", "{h}");
+    assert!(h["result"].get("transactions").is_none(), "{h}");
+    let hash = h["result"]["hash"].clone();
+    assert_eq!(
+        call("eth_getHeaderByHash", json!([hash]))["result"]["number"],
+        "0x5"
+    );
+    assert_eq!(
+        call("eth_getHeaderByNumber", json!(["pending"]))["result"],
+        Value::Null
+    );
+    assert_eq!(
+        call("eth_getHeaderByNumber", json!(["0x65"]))["result"],
+        Value::Null
+    );
+    assert_eq!(
+        call("eth_getUncleByBlockNumberAndIndex", json!(["0x5", "0x0"]))["result"],
+        Value::Null
+    );
+    assert_eq!(
+        call(
+            "eth_getRawTransactionByBlockNumberAndIndex",
+            json!(["0x5", "0x0"])
+        )["result"],
+        "0x"
+    );
+    assert_eq!(
+        call(
+            "eth_getRawTransactionByHash",
+            json!([format!("{:#x}", B256::repeat_byte(7))])
+        )["result"],
+        Value::Null
+    );
+    let c = call("txpool_contentFrom", json!([format!("{ACCT:#x}")]));
+    assert_eq!(c["result"], json!({"pending": {}, "queued": {}}), "{c}");
+    let m = call("rpc_modules", json!([]));
+    assert_eq!(m["result"]["eth"], "1.0", "{m}");
+    assert_eq!(m["result"]["rpc"], "1.0", "{m}");
+    // a transport's registry advertises its own namespaces only
+    let reg = xone_rpc::policy::registry(&["eth".into(), "net".into()]).expect("registry");
+    assert!(reg.get("rpc_modules").is_some());
+    assert!(reg.get("txpool_contentFrom").is_none());
 }

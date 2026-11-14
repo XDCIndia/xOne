@@ -46,7 +46,27 @@ pub fn registry(namespaces: &[String]) -> Result<Registry, Refusal> {
             _ => return Err(Refusal::UnknownNamespace(ns.clone())),
         }
     }
+    register_modules(&mut reg, namespaces);
     Ok(reg)
+}
+
+/// geth `rpc_modules` (`rpc/server.go` `RPCService.Modules`): every namespace of this transport,
+/// and `rpc` itself, at version `1.0`.
+pub fn register_modules(reg: &mut Registry, namespaces: &[String]) {
+    let mut m = serde_json::Map::new();
+    for ns in namespaces
+        .iter()
+        .map(|n| n.to_ascii_lowercase())
+        .chain(["rpc".to_owned()])
+    {
+        if ns != "personal" {
+            m.insert(ns, serde_json::Value::String("1.0".into()));
+        }
+    }
+    let modules = serde_json::Value::Object(m);
+    reg.add("rpc_modules", crate::server::Cost::C0, move |_, _| {
+        Ok(modules.clone())
+    });
 }
 
 /// `--http.vhosts`, `--ws.origins` and `--rpc.jwtsecret`; `"*"` allows any host or origin. The
