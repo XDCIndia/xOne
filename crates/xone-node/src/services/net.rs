@@ -24,11 +24,44 @@ use xone_net::{
     rlpx::PeerId,
 };
 
+use super::peerfile::{PeerFile, SAVE_EVERY_SECS};
 use crate::{
     config::Config,
     enode::{read_peer_file, Enode},
     lifecycle::{Service, ServiceError},
 };
+
+type SharedPeerFile = Option<Arc<Mutex<PeerFile>>>;
+
+fn unix_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+}
+
+/// Records a completed outbound handshake in the peer table.
+fn remember(pf: &SharedPeerFile, id: PeerId, addr: SocketAddr) {
+    if let Some(pf) = pf {
+        let e = Enode {
+            id: alloy_primitives::hex::encode(id),
+            host: addr.ip().to_string(),
+            port: addr.port(),
+            discport: None,
+        };
+        pf.lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .record(&e, unix_now());
+    }
+}
+
+fn save(pf: &SharedPeerFile) {
+    if let Some(pf) = pf {
+        let mut g = pf.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Err(e) = g.save(unix_now()) {
+            eprintln!("net: peer table not written: {e}");
+        }
+    }
+}
 
 /// The node's p2p identity: `<datadir>/nodekey` (hex), created on first start.
 pub fn load_or_create_key(datadir: &Path) -> Result<SecretKey, String> {
@@ -63,6 +96,8 @@ pub struct NetHandle {
     pub genesis: B256,
     rt: Handle,
     tasks: Arc<Mutex<Vec<JoinHandle<()>>>>,
+    /// The persistent peer table (`peerfile.rs`); None with `--peers.nopersist`.
+    peer_file: SharedPeerFile,
 }
 
 fn peer_id(e: &Enode) -> Result<PeerId, String> {
@@ -95,16 +130,35 @@ impl NetHandle {
         if trusted {
             self.peers.add_static(id);
         }
-        let (peers, e) = (self.peers.clone(), e.clone());
+        let (peers, e, pf) = (self.peers.clone(), e.clone(), self.peer_file.clone());
         self.spawn(async move {
             loop {
                 if !peers.peer_ids().contains(&id) {
                     if let Some(addr) = resolve(&e).await {
                         // a failed dial is retried by the loop; the reason is the peer's
-                        let _ = peers.dial(addr, id).await;
+                        if peers.dial(addr, id).await.is_ok() {
+                            remember(&pf, id, addr);
+                        }
                     }
                 }
                 sleep(Duration::from_secs(5)).await;
+            }
+        });
+        Ok(())
+    }
+
+    /// Dials `e` once (a peer of the persistent table); a success refreshes its entry.
+    fn dial_once(&self, e: &Enode) -> Result<(), String> {
+        let id = peer_id(e)?;
+        let (peers, e, pf) = (self.peers.clone(), e.clone(), self.peer_file.clone());
+        self.spawn(async move {
+            if peers.peer_ids().contains(&id) {
+                return;
+            }
+            if let Some(addr) = resolve(&e).await {
+                if peers.dial(addr, id).await.is_ok() {
+                    remember(&pf, id, addr);
+                }
             }
         });
         Ok(())
@@ -169,6 +223,18 @@ impl NetService {
             None => "127.0.0.1".to_owned(),
         };
         let id = xone_net::rlpx::peer_id(&key);
+        let peer_file = (!cfg.p2p.peers_nopersist).then(|| {
+            let path = cfg
+                .p2p
+                .peers_file
+                .clone()
+                .unwrap_or_else(|| cfg.datadir.join("peers.json"));
+            let (pf, note) = PeerFile::load(&path, unix_now());
+            if let Some(n) = note {
+                eprintln!("net: {n}");
+            }
+            Arc::new(Mutex::new(pf))
+        });
         Ok(Self {
             h: NetHandle {
                 id,
@@ -184,6 +250,7 @@ impl NetService {
                 peers,
                 rt: rt.handle().clone(),
                 tasks: Arc::default(),
+                peer_file,
             },
             rt: Some(rt),
             key,
@@ -222,6 +289,7 @@ async fn discovery(
     boots: Vec<(SocketAddr, PeerId)>,
     peers: Peers,
     max: usize,
+    pf: SharedPeerFile,
 ) {
     let mut sock = sock;
     // Unix milliseconds: discv4 expirations are absolute Unix seconds (geth-XDC
@@ -272,8 +340,11 @@ async fn discovery(
                         if fresh && !connected.contains(&n.id) {
                             tried.insert(n.id, t);
                             let (p, addr) = (peers.clone(), SocketAddr::new(n.addr.ip(), n.tcp));
+                            let pf = pf.clone();
                             tokio::spawn(async move {
-                                let _ = p.dial(addr, n.id).await;
+                                if p.dial(addr, n.id).await.is_ok() {
+                                    remember(&pf, n.id, addr);
+                                }
                             });
                         }
                     }
@@ -301,13 +372,39 @@ impl Service for NetService {
         for (e, trusted) in &self.targets {
             self.h.add_peer(e, *trusted).map_err(err)?;
         }
+        // after the static and trusted peers: the most recent peers of the persistent table
+        let known: Vec<Enode> = self.h.peer_file.as_ref().map_or_else(Vec::new, |pf| {
+            pf.lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .best(self.max_peers)
+        });
+        let targeted: Vec<&str> = self.targets.iter().map(|(e, _)| e.id.as_str()).collect();
+        let known: Vec<Enode> = known
+            .into_iter()
+            .filter(|e| !targeted.contains(&e.id.as_str()))
+            .collect();
+        for e in &known {
+            self.h.dial_once(e).map_err(err)?;
+        }
+        if self.h.peer_file.is_some() {
+            let pf = self.h.peer_file.clone();
+            self.h.spawn(async move {
+                let mut t = interval(Duration::from_secs(SAVE_EVERY_SECS));
+                t.tick().await;
+                loop {
+                    t.tick().await;
+                    save(&pf);
+                }
+            });
+        }
         if let Some(addr) = self.udp {
             let sock = rt
                 .block_on(UdpSocket::bind(addr))
                 .map_err(|e| err(format!("discovery listen {addr}: {e}")))?;
             let d = Discv4::new(self.key, addr, self.listen.port());
             let mut boots = vec![];
-            for b in &self.boots {
+            // the boot nodes, and the known peers to seed the discovery table
+            for b in self.boots.iter().chain(&known) {
                 if let Some(a) = rt.block_on(resolve(b)) {
                     boots.push((
                         SocketAddr::new(a.ip(), b.discport.unwrap_or(b.port)),
@@ -321,6 +418,7 @@ impl Service for NetService {
                 boots,
                 self.h.peers.clone(),
                 self.max_peers,
+                self.h.peer_file.clone(),
             ));
         }
         Ok(())
@@ -336,6 +434,7 @@ impl Service for NetService {
         {
             t.abort();
         }
+        save(&self.h.peer_file);
         if let Some(rt) = self.rt.take() {
             let peers = self.h.peers.clone();
             // sessions get a Disconnect and are aborted after the grace time of `Peers`
@@ -344,5 +443,99 @@ impl Service for NetService {
             });
             rt.shutdown_timeout(Duration::from_secs(1));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn free_port() -> u16 {
+        std::net::TcpListener::bind("127.0.0.1:0")
+            .and_then(|l| l.local_addr())
+            .map_or(0, |a| a.port())
+    }
+
+    fn key(b: u8) -> SecretKey {
+        SecretKey::from_slice(&[b; 32])
+            .unwrap_or_else(|_| SecretKey::from_slice(&[1; 32]).unwrap_or_else(|_| unreachable!()))
+    }
+
+    struct Node {
+        svc: NetService,
+        _events: tokio::sync::mpsc::Receiver<xone_net::peers::Event>,
+    }
+
+    fn node(dir: &Path, port: u16, k: SecretKey) -> Node {
+        let mut cfg = Config {
+            datadir: dir.to_owned(),
+            ..Config::default()
+        };
+        cfg.p2p.port = port;
+        cfg.p2p.no_discover = true;
+        cfg.p2p.nat = Some("extip:127.0.0.1".into());
+        let pc = PeersConfig::new("xone/test", 551, B256::ZERO);
+        let (peers, events) = Peers::new(pc.clone(), k);
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .unwrap_or_else(|e| panic!("runtime: {e}"));
+        let mut svc = NetService::new(&cfg, rt, peers, k, &pc).unwrap_or_else(|e| panic!("{e}"));
+        svc.start().unwrap_or_else(|e| panic!("{}", e.0));
+        Node {
+            svc,
+            _events: events,
+        }
+    }
+
+    fn wait_connected(n: &Node, to: PeerId) -> bool {
+        for _ in 0..100 {
+            if n.svc.h.peers.peer_ids().contains(&to) {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        false
+    }
+
+    #[test]
+    fn a_restart_with_no_bootnodes_reconnects_from_the_peer_table() {
+        let root = std::env::temp_dir().join(format!("xone-peertable-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let (da, db) = (root.join("a"), root.join("b"));
+        let _ = std::fs::create_dir_all(&da);
+        let _ = std::fs::create_dir_all(&db);
+        let (ka, kb) = (key(0x11), key(0x22));
+        let (pa, pb) = (free_port(), free_port());
+        let b = node(&db, pb, kb);
+        let idb = xone_net::rlpx::peer_id(&kb);
+        // first start: B is a static peer of A
+        let static_nodes = da.join("static-nodes.json");
+        let _ = std::fs::write(
+            &static_nodes,
+            format!(
+                "[\"enode://{}@127.0.0.1:{pb}\"]",
+                alloy_primitives::hex::encode(idb)
+            ),
+        );
+        let mut a = node(&da, pa, ka);
+        assert!(wait_connected(&a, idb), "first connection");
+        a.svc.stop();
+        let table =
+            std::fs::read_to_string(da.join("peers.json")).unwrap_or_else(|_| String::new());
+        assert!(
+            table.contains(&alloy_primitives::hex::encode(idb)),
+            "{table}"
+        );
+
+        // second start: no static, trusted or boot peers, only the table
+        let _ = std::fs::remove_file(&static_nodes);
+        let mut a2 = node(&da, free_port(), ka);
+        assert!(wait_connected(&a2, idb), "reconnect from the peer table");
+        a2.svc.stop();
+        let mut b = b;
+        b.svc.stop();
+        let _ = std::fs::remove_dir_all(&root);
     }
 }
