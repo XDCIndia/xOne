@@ -220,6 +220,28 @@ pub struct Rpc {
     next_conn: Mutex<u64>,
 }
 
+/// geth `hasValidID`: a string, a number or null. An object or an array is not an id.
+fn valid_id(v: &Value) -> bool {
+    !matches!(v, Value::Object(_) | Value::Array(_))
+}
+
+/// The id a reply to `req` carries: `None` for a valid notification (no reply), `Null` for a
+/// request that is not an object or has an invalid id, else the request's own id.
+fn reply_id(req: &Value) -> Option<Value> {
+    let Some(obj) = req.as_object() else {
+        return Some(Value::Null);
+    };
+    match obj.get("id") {
+        None => {
+            let valid = obj.get("jsonrpc").and_then(Value::as_str) == Some("2.0")
+                && obj.get("method").and_then(Value::as_str).is_some();
+            (!valid).then_some(Value::Null)
+        }
+        Some(id) if valid_id(id) => Some(id.clone()),
+        Some(_) => Some(Value::Null),
+    }
+}
+
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
 }
@@ -297,13 +319,18 @@ impl Rpc {
 
     /// One request object to its response; `None` for a notification.
     fn one(&self, req: &Value, cancel: &AtomicBool) -> Option<Value> {
-        let id = req.get("id").cloned();
         let fail = |id: Option<Value>, e: RpcError| {
             Some(json!({"jsonrpc": "2.0", "id": id.unwrap_or(Value::Null), "error": e.to_value()}))
         };
         let Some(obj) = req.as_object() else {
             return fail(None, RpcError::invalid_request("invalid request"));
         };
+        let id = obj.get("id").cloned();
+        // geth `hasValidID` (`rpc/json.go`): an object or array id is refused before dispatch, and
+        // is not echoed back.
+        if id.as_ref().is_some_and(|v| !valid_id(v)) {
+            return fail(None, RpcError::invalid_request("invalid request id"));
+        }
         let method = obj.get("method").and_then(Value::as_str);
         if obj.get("jsonrpc").and_then(Value::as_str) != Some("2.0") || method.is_none() {
             return fail(id, RpcError::invalid_request("invalid request"));
@@ -401,6 +428,27 @@ impl Rpc {
         }
     }
 
+    /// A failure of a parsed message as a whole (quota, timeout, panic, oversized response),
+    /// answered per request: every request that expects a reply gets the error under its own id,
+    /// and a notification gets nothing. `None` when the message holds only notifications.
+    fn failed(msg: &Value, e: &RpcError) -> Option<Value> {
+        let one = |id: Value| json!({"jsonrpc": "2.0", "id": id, "error": e.to_value()});
+        match msg {
+            Value::Array(items) => {
+                let out: Vec<Value> = items.iter().filter_map(reply_id).map(one).collect();
+                (!out.is_empty()).then_some(Value::Array(out))
+            }
+            r => reply_id(r).map(one),
+        }
+    }
+
+    fn rejected_msg(&self, msg: &Value, e: RpcError, retry_after: Option<u64>) -> Reply {
+        Reply {
+            body: Self::failed(msg, &e).and_then(|v| serde_json::to_vec(&v).ok()),
+            retry_after,
+        }
+    }
+
     /// One request body through the quotas: the bucket of the connection and of the transport, the
     /// class concurrency, the class deadline and cancellation on drop. The caller holds the
     /// transport's in-flight permit.
@@ -440,7 +488,7 @@ impl Rpc {
             .take(now, units)
             .and_then(|()| lock(&self.global_bucket).take(now, units));
         if let Err(secs) = taken {
-            return self.rejected(RpcError::limit(json!(secs)), Some(secs));
+            return self.rejected_msg(&msg, RpcError::limit(json!(secs)), Some(secs));
         }
         // One permit per class in use (C0 is unbounded), taken in ascending class order so two
         // batches cannot deadlock; all or none.
@@ -454,7 +502,7 @@ impl Rpc {
         {
             match sem.clone().try_acquire_owned() {
                 Ok(p) => permits.push(p),
-                Err(_) => return self.rejected(RpcError::limit(json!(1)), Some(1)),
+                Err(_) => return self.rejected_msg(&msg, RpcError::limit(json!(1)), Some(1)),
             }
         }
         let cancel = Arc::new(AtomicBool::new(false));
@@ -463,34 +511,58 @@ impl Rpc {
         let flag = cancel.clone();
         // The permits move into the blocking worker: a deadline or a dropped request stops the
         // wait, not the thread, so the capacity is released only when the worker returns.
+        let msg = Arc::new(msg);
+        let job_msg = msg.clone();
         let job = tokio::task::spawn_blocking(move || {
-            let out = me.handle_value(&msg, &flag);
+            let out = me.handle_value(&job_msg, &flag);
             drop(permits);
             out
         });
         let out = match tokio::time::timeout(deadline, job).await {
             Ok(Ok(v)) => v,
-            Ok(Err(_)) => Some(
-                json!({"jsonrpc": "2.0", "id": null, "error": RpcError::internal("handler panicked").to_value()}),
-            ),
+            Ok(Err(_)) => Self::failed(&msg, &RpcError::internal("handler panicked")),
             Err(_) => {
                 cancel.store(true, Ordering::Relaxed);
-                Some(
-                    json!({"jsonrpc": "2.0", "id": null, "error": RpcError::server("request timed out").to_value()}),
-                )
+                Self::failed(&msg, &RpcError::server("request timed out"))
             }
         };
-        let body = out.and_then(|v| serde_json::to_vec(&v).ok()).map(|b| {
+        let body = out.and_then(|v| serde_json::to_vec(&v).ok()).and_then(|b| {
             if b.len() > self.limits.response_bytes {
-                let e = json!({"jsonrpc": "2.0", "id": null, "error": RpcError::new(-32003, "response too large").to_value()});
-                serde_json::to_vec(&e).unwrap_or_else(|_| b"null".to_vec())
+                Self::failed(&msg, &RpcError::new(-32003, "response too large"))
+                    .map(|e| serde_json::to_vec(&e).unwrap_or_else(|_| b"null".to_vec()))
             } else {
-                b
+                Some(b)
             }
         });
         Reply {
             body,
             retry_after: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod id_tests {
+    use super::*;
+
+    #[test]
+    fn whole_message_failures_keep_ids_and_skip_notifications() {
+        let e = RpcError::server("request timed out");
+        let one = Rpc::failed(&json!({"jsonrpc": "2.0", "id": "x", "method": "m"}), &e).unwrap();
+        assert_eq!(one["id"], "x");
+        assert_eq!(one["error"]["message"], "request timed out");
+        let n = Rpc::failed(&json!({"jsonrpc": "2.0", "method": "m"}), &e);
+        assert!(n.is_none());
+        let batch = json!([
+            {"jsonrpc": "2.0", "id": 1, "method": "m"},
+            {"jsonrpc": "2.0", "method": "m"},
+            {"jsonrpc": "2.0", "id": "b", "method": "m"},
+            {"jsonrpc": "2.0", "id": {"o": 1}, "method": "m"}
+        ]);
+        let out = Rpc::failed(&batch, &e).unwrap();
+        let ids: Vec<&Value> = out.as_array().unwrap().iter().map(|v| &v["id"]).collect();
+        assert_eq!(ids, [&json!(1), &json!("b"), &Value::Null]);
+        let only_notes = json!([{"jsonrpc": "2.0", "method": "m"}]);
+        assert!(Rpc::failed(&only_notes, &e).is_none());
     }
 }
