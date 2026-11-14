@@ -61,6 +61,7 @@ jobs:
       - run: command -v cargo-deny || cargo install cargo-deny --locked --version 0.20.2
       - run: command -v cargo-audit || cargo install cargo-audit --locked --version 0.23.0
       - run: cargo deny --locked check
+      - run: ci/check-deny-fixtures.sh   # ADR-002 deny list fires, issue #318
       - run: cargo audit --deny warnings
       - run: RELEASE_TREE_REQUIRE_CLEAN=1 ci/check-release-tree.sh
 

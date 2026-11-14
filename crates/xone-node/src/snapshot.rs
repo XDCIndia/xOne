@@ -222,6 +222,7 @@ pub fn import_datadir(
         &mut store,
         v.anchor.number,
         v.anchor.hash,
+        U256::ZERO,
         &v.side,
         v.install,
     )
@@ -255,6 +256,7 @@ pub fn install(
     store: &mut store::NodeStore,
     number: u64,
     hash: B256,
+    td: U256,
     side: &Side,
     install: xone_sync::store::Install,
 ) -> Result<(), InstallError> {
@@ -289,10 +291,11 @@ pub fn install(
             .map(|(n, r)| (*n, r.iter().map(|s| (s.sender, s.signed, s.ok)).collect()))
             .collect(),
         gaps: side.gaps.iter().map(|(n, c)| (*n, c.clone())).collect(),
-        // the signs of the window, which covers every consensus read of the retained range; the
-        // total difficulty below the anchor is not known
+        // the signs of the window, which covers every consensus read of the retained range
         signs_from: 0,
-        td: U256::ZERO,
+        // the total difficulty at the anchor, when the source gave it (snap: the peer's Status);
+        // 0 is unknown (a snapshot file carries none)
+        td,
     };
     ck.gaps.sort();
     save_ckpt(dir, &ck).map_err(|e| InstallError::Io(e.to_string()))?;

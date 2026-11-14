@@ -277,6 +277,8 @@ struct Follower {
     snap: mpsc::Sender<Request>,
     /// Votes, timeouts and SyncInfos for the producer's BFT machine (`--mine` only).
     bft: Option<Bft>,
+    /// Closed by the disk guard: no block is imported while it is closed (ADR-007 section 7).
+    gate: crate::diskguard::ImportGate,
 }
 
 /// Where the follower hands the BFT messages of its peers: the producer verifies them, then relays them.
@@ -335,7 +337,7 @@ impl Follower {
 
     /// Starts a poll at the best peer when nothing is in flight.
     fn kick(&mut self) {
-        if self.inflight.is_some() {
+        if self.inflight.is_some() || self.gate.stopped() {
             return;
         }
         let Some(peer) = self.best() else { return };
@@ -454,11 +456,16 @@ impl Follower {
 
     async fn import(&mut self, blocks: Vec<(Header, Body)>) -> Result<usize, String> {
         let core = self.core.clone();
+        let gate = self.gate.clone();
         let txs: usize = blocks.iter().map(|(_, b)| b.transactions.len()).sum();
         let t0 = std::time::Instant::now();
         let r = tokio::task::spawn_blocking(move || {
             let mut n = 0;
             for (h, b) in blocks {
+                // disk low: stop at the block boundary, without blaming the peer; sync resumes later
+                if gate.stopped() {
+                    return (n, None);
+                }
                 // already canonical: a `NewBlock` delivered it while this answer travelled
                 if core.hist.read().number_of(h.hash()) == Some(h.number) {
                     continue;
@@ -760,9 +767,15 @@ pub struct ChainService {
     bft: Option<Bft>,
     stop: watch::Sender<bool>,
     task: Option<JoinHandle<()>>,
+    gate: crate::diskguard::ImportGate,
 }
 
 impl ChainService {
+    pub fn with_gate(mut self, gate: crate::diskguard::ImportGate) -> Self {
+        self.gate = gate;
+        self
+    }
+
     pub fn new(
         core: Arc<Core>,
         rt: Handle,
@@ -785,6 +798,7 @@ impl ChainService {
             bft,
             stop: watch::channel(false).0,
             task: None,
+            gate: Default::default(),
         }
     }
 }
@@ -813,6 +827,7 @@ impl Service for ChainService {
             next_id: 0,
             inflight: None,
             bft: self.bft.take(),
+            gate: self.gate.clone(),
         };
         // Data requests are answered by a task of their own; the follower gets the rest.
         let server = Server {

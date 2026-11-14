@@ -21,5 +21,6 @@ pub mod transport;
 pub mod txpool;
 pub mod types;
 pub mod web3;
+pub mod xdc;
 pub mod xdc_ext;
 pub mod xdpos;

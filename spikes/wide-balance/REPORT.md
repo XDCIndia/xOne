@@ -316,8 +316,8 @@ It is not evidence about BALANCE or SELFDESTRUCT, see above.
 # vectors (writes vectors/*.json and crates/xone-primitives/tests/vectors/wide_balance.json)
 GETH_SRC=<geth-XDC checkout at oracle/PIN> spikes/wide-balance/oracle/run.sh
 cargo test -p xone-primitives
-cargo test -p wide-balance-spike                      # options A and B on revm with account-ext
-cargo test -p wide-balance-spike --no-default-features  # option B on revm without account-ext
+cargo test -p wide-balance-spike --features account-ext  # options A and B (account-ext is off by default)
+cargo test -p wide-balance-spike                         # option B only, on revm without account-ext
 cargo test --release -p wide-balance-spike --test perf -- --ignored --nocapture
 # archive evidence (read-only, 5 requests per second over ssh host xdc02)
 python3 spikes/wide-balance/tools/explore.py

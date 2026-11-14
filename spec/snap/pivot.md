@@ -46,6 +46,13 @@ same peer; every peer may be a witness for the pin.
    The pin source (the file, or the peer ids and the hash they served) is in the log line of the pivot and in
    `<datadir>/xone/snap-pivot.txt`.
 5. A V1 pivot or a V1 gap pool (the first V2 epoch) is refused (`SnapSyncError::V1`).
+6. **Total difficulty** (#119): `td(P)` is the source's Status td at its Status head `H`, less the difficulty
+   of the linked headers `P + 1 ..= H` (plus `H + 1 ..= P` when the Status is older than `P`). geth-XDC puts
+   the stored TD of its head in Status (`xdcHandshakeTD`, `eth/protocols/eth/handshake.go:87-104`), counted
+   from genesis, and a V2 block adds 1 (`engine_v2/engine.go:859-861`). The install writes `td(P)` into the
+   pivot's checkpoint and the node adds each imported block's difficulty, so its Status td equals a full
+   node's at the same head. The value is the source's claim (geth trusts a Status td the same way); a
+   missing header between `P` and `H`, or a saturated td, leaves it 0 and the node reports the window's sum.
 
 ## What is downloaded, in order
 

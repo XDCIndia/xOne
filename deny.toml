@@ -33,6 +33,19 @@ confidence-threshold = 0.9
 
 [bans]
 multiple-versions = "warn"
+# ADR-002 decision 3: the dependency deny list. Proven by ci/check-deny-fixtures.sh.
+# Only reth-ecies and reth-network-peers (git rev, unmodified) may come from reth.
+deny = [
+    { crate = "reth-eth-wire", reason = "ADR-002: eth/100 and eth/101 framing is ours (xone-net)" },
+    { crate = "reth-network", reason = "ADR-002: sessions and peer management are ours (xone-net)" },
+    { crate = "reth-trie", reason = "ADR-002: the account leaf carries the wide balance (xone-state)" },
+    { crate = "reth-provider", reason = "ADR-002: storage is xone-db" },
+    { crate = "reth-evm", reason = "ADR-002: the EVM adapter is xone-evm on revm" },
+    { crate = "reth-chainspec", reason = "ADR-002: chain rules are xone-chainspec" },
+    { crate = "evm2", reason = "ADR-002: unpublished; revm =43.0.3 is the EVM" },
+    # one revm only: two majors in the tree is a different EVM in one binary
+    { crate = "revm", deny-multiple-versions = true, reason = "ADR-002: two revm versions fail the check" },
+]
 wildcards = "deny"
 allow-wildcard-paths = true # path dependencies inside the workspace
 
@@ -40,5 +53,6 @@ allow-wildcard-paths = true # path dependencies inside the workspace
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
-# spikes/net pins reth by revision (tag v2.3.0); nothing shipped depends on it.
+# reth is taken by revision (tag v2.3.0) for reth-ecies and reth-network-peers only: crates/xone-net,
+# conformance/snap and spikes/net use it. The deny list above refuses every other reth crate.
 allow-git = ["https://github.com/paradigmxyz/reth"]

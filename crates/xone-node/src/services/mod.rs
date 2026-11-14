@@ -110,7 +110,7 @@ pub fn build(
     let producer_plan = cfg
         .mining
         .mine
-        .then(|| producer::plan(cfg, spec.chain_id))
+        .then(|| producer::plan(cfg, &spec))
         .transpose()
         .map_err(|e| e.to_string())?;
 
@@ -131,7 +131,13 @@ pub fn build(
         Err(core::CoreError::Anchored) if cfg.sync.mode == "snap" => open(true),
         r => r,
     };
-    let core = Arc::new(core.map_err(|e| e.to_string())?);
+    let mut core = core.map_err(|e| e.to_string())?;
+    // checked in the peer sessions (below), and for every block and header the chain takes
+    let required = cfg
+        .required_blocks_of_chain(cfg.network_id.unwrap_or(marker.chain_id))
+        .map_err(|e| e.to_string())?;
+    core.chain.set_required_blocks(required.clone());
+    let core = Arc::new(core);
     if core.genesis.to_string() != marker.genesis_hash {
         return Err("the genesis hash of the node differs from the chain marker".into());
     }
@@ -148,6 +154,7 @@ pub fn build(
         core.genesis,
     );
     pc.max_peers = cfg.p2p.max_peers as usize;
+    pc.required_blocks = required;
     pc.shutdown_grace = Duration::from_secs(1);
     {
         let h = core.hist.read();
@@ -161,6 +168,7 @@ pub fn build(
     let pool = Arc::new(pool::PoolShared::new(core.clone())?);
     // the producer's BFT machine reads the votes, timeouts and SyncInfos the follower receives
     let (bft_tx, bft_rx) = std::sync::mpsc::channel();
+    let gate = crate::diskguard::ImportGate::default();
     let chain_svc = chain::ChainService::new(
         core.clone(),
         rth.clone(),
@@ -168,7 +176,8 @@ pub fn build(
         pool.clone(),
         events,
         producer_plan.is_some().then_some(bft_tx),
-    );
+    )
+    .with_gate(gate.clone());
     let progress = chain_svc.progress.clone();
     let pool_svc = pool::PoolService::new(pool.clone(), rth.clone());
     let producer_svc = producer_plan
@@ -197,6 +206,13 @@ pub fn build(
         Duration::from_millis(l.service_stop_timeout_ms),
         Duration::from_millis(l.stop_timeout_ms),
     );
+    // first: the guard reads free space before the node imports anything
+    node.add(Box::new(crate::diskguard::DiskGuard::new(
+        cfg.datadir.clone(),
+        cfg.limits.clone(),
+        gate,
+        node.internal_stop(),
+    )));
     node.add(Box::new(net_svc));
     node.add(Box::new(chain_svc));
     node.add(Box::new(pool_svc));

@@ -33,3 +33,5 @@ proptest.workspace = true
 k256.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+# snapstate.rs uses the snap testkit (the same feature xone-snap enables for its own tests)
+xone-snap = { workspace = true, features = ["testkit"] }

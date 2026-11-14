@@ -16,7 +16,7 @@ The goal is PQ migration readiness under stated assumptions. It is not "quantum 
 
 | File | What it is | Issue |
 |---|---|---|
-| [`inventory.md`](inventory.md) | One row per cryptographic use and authority: 49 on-chain rows (T01-T49) and 14 planned rows (P01-P14), each with algorithm, key owner, public-key exposure, message domain, consensus-critical flag, and geth file and line at the pin | #17 |
+| [`inventory.md`](inventory.md) | One row per cryptographic use and authority: 56 on-chain rows (T01-T56) and 14 planned rows (P01-P14), each with algorithm, key owner, public-key exposure, message domain, consensus-critical flag, and geth file and line at the pin | #17 |
 | [`threat-model.md`](threat-model.md) | Harvest-now-forge-later per signature class, exposed and reused keys, legacy balances, downgrade paths, standards state with errata, and the decisions left to Track B | #17 |
 | [`../../crates/xone-primitives/src/crypto.rs`](../../crates/xone-primitives/src/crypto.rs) | `AlgorithmId`, `Domain`, `Signature`, `Signer`, `Verifier`, and `Secp256k1Verifier` wrapping the existing `ecrecover` | #17 |
 
@@ -46,7 +46,7 @@ cargo test --locked
 
 ## Open items before #17 closes
 
-- A third discovery pass over the pin (the second pass still added five rows; #17 asks for two passes with no new rows). The inventory section D lists the passes run.
+- A fourth discovery pass over the pin (pass 3 added seven rows; #17 asks for two passes with no new rows). The inventory section D lists the passes run.
 - Unknowns recorded in the inventory: T19, T20, T21, T24, T42, T44, P03, P06, P07, P10.
 - Questions Q1 to Q5 in `threat-model.md` section 9.
 - Review by the security owner (the issue's named reviewer).

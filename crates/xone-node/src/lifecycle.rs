@@ -28,6 +28,8 @@ pub enum NodeError {
     StartFailed { service: String, reason: String },
     #[error("services did not stop within their deadline: {0:?}")]
     StopTimeout(Vec<String>),
+    #[error("the datadir filesystem is out of free space (disk watermark exit line)")]
+    DiskFull,
 }
 
 impl NodeError {
@@ -35,6 +37,7 @@ impl NodeError {
         match self {
             Self::StartFailed { .. } => 1,
             Self::StopTimeout(_) => 3,
+            Self::DiskFull => 4,
         }
     }
 }
@@ -74,6 +77,8 @@ pub struct Node {
     services: Vec<Box<dyn Service>>,
     started: usize,
     stopped: bool,
+    /// Asked by a service (the disk guard), as opposed to the operator's signal.
+    internal_stop: Shutdown,
     per_service: Duration,
     total: Duration,
 }
@@ -85,9 +90,15 @@ impl Node {
             services: vec![],
             started: 0,
             stopped: false,
+            internal_stop: Shutdown::default(),
             per_service,
             total,
         }
+    }
+
+    /// A handle a service can use to stop the node: `run` then stops and returns [`NodeError::DiskFull`].
+    pub fn internal_stop(&self) -> Shutdown {
+        self.internal_stop.clone()
     }
 
     pub fn add(&mut self, s: Box<dyn Service>) {
@@ -146,10 +157,15 @@ impl Node {
     /// Start, wait for a shutdown request, stop.
     pub fn run(&mut self, shutdown: &Shutdown) -> Result<(), NodeError> {
         self.start()?;
-        while !shutdown.is_requested() {
+        while !shutdown.is_requested() && !self.internal_stop.is_requested() {
             thread::sleep(Duration::from_millis(10));
         }
-        self.stop()
+        let internal = self.internal_stop.is_requested();
+        self.stop()?;
+        if internal {
+            return Err(NodeError::DiskFull);
+        }
+        Ok(())
     }
 }
 
@@ -268,6 +284,17 @@ mod tests {
 
     fn node() -> Node {
         Node::new(Duration::from_millis(200), Duration::from_millis(500))
+    }
+
+    #[test]
+    fn an_internal_stop_ends_run_with_disk_full_after_stopping_services() {
+        let log = Arc::new(Mutex::new(vec![]));
+        let mut n = node();
+        n.add(Box::new(fake("a", &log)));
+        n.internal_stop().request();
+        assert_eq!(n.run(&Shutdown::default()), Err(NodeError::DiskFull));
+        assert_eq!(snapshot(&log), ["start a", "stop a"]);
+        assert_eq!(NodeError::DiskFull.exit_code(), 4);
     }
 
     #[test]
