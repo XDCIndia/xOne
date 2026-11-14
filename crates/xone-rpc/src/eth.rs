@@ -8,9 +8,9 @@ use crate::{
     },
     server::{Cost, Ctx, Registry},
     subscriptions::LogFilter,
-    types::{parse_address, parse_tag, BlockRef, Params, RpcError, R},
+    types::{parse_tag, BlockRef, Params, RpcError, R},
 };
-use alloy_primitives::{keccak256, Address, Bytes, B256, U256};
+use alloy_primitives::{keccak256, B256, U256};
 use serde_json::{json, Value};
 use std::sync::atomic::Ordering;
 use xone_sync::bootstrap::retention::Class;
@@ -309,49 +309,12 @@ fn storage(c: &Ctx, p: &Params) -> R {
     Ok(h256(B256::from(v)))
 }
 
-fn call_request(o: &serde_json::Map<String, Value>, cap: u64) -> Result<CallRequest, RpcError> {
-    let big = |k: &str| -> Result<Option<U256>, RpcError> {
-        match o.get(k).and_then(Value::as_str) {
-            None => Ok(None),
-            Some(s) => U256::from_str_radix(s.strip_prefix("0x").unwrap_or(s), 16)
-                .map(Some)
-                .map_err(|_| RpcError::invalid_params(format!("invalid {k}"))),
-        }
-    };
-    let ad = |k: &str| -> Result<Option<Address>, RpcError> {
-        o.get(k)
-            .and_then(Value::as_str)
-            .map(parse_address)
-            .transpose()
-    };
-    let gas = match o.get("gas").and_then(Value::as_str) {
-        Some(s) => parse_tag(s, 0)?.min(cap),
-        None => cap,
-    };
-    let data = o
-        .get("input")
-        .or_else(|| o.get("data"))
-        .and_then(Value::as_str);
-    Ok(CallRequest {
-        from: ad("from")?,
-        to: ad("to")?,
-        gas: Some(gas),
-        gas_price: big("gasPrice")?,
-        max_fee: big("maxFeePerGas")?,
-        max_priority_fee: big("maxPriorityFeePerGas")?,
-        value: big("value")?,
-        data: match data {
-            Some(s) => Bytes::from(
-                alloy_primitives::hex::decode(s)
-                    .map_err(|_| RpcError::invalid_params("invalid data"))?,
-            ),
-            None => Bytes::new(),
-        },
-    })
+fn call_request(c: &Ctx, p: &Params) -> Result<CallRequest, RpcError> {
+    crate::call_args::parse(p.obj(0)?, c.limits.call_gas_cap, c.be.chain.spec().chain_id)
 }
 
 fn call(c: &Ctx, p: &Params) -> R {
-    let req = call_request(p.obj(0)?, c.limits.call_gas_cap)?;
+    let req = call_request(c, p)?;
     let (_, h) = state_at(c, p, 1)?;
     let out = c.be.state.call(h, &req, c.cancel)?;
     match out.error {
@@ -367,7 +330,7 @@ fn call(c: &Ctx, p: &Params) -> R {
 }
 
 fn estimate(c: &Ctx, p: &Params) -> R {
-    let req = call_request(p.obj(0)?, c.limits.call_gas_cap)?;
+    let req = call_request(c, p)?;
     let (_, h) = state_at(c, p, 1)?;
     Ok(q(c.be.state.estimate_gas(h, &req, c.cancel)?))
 }

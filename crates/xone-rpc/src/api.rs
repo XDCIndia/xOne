@@ -75,6 +75,18 @@ pub struct CallRequest {
     pub max_priority_fee: Option<U256>,
     pub value: Option<U256>,
     pub data: Bytes,
+    pub nonce: Option<u64>,
+    /// `None`: not given (a legacy-style call); `Some`: the EIP-2930 list, possibly empty.
+    pub access_list: Option<Vec<AccessTuple>>,
+    /// Given by the caller and equal to the node's.
+    pub chain_id: Option<u64>,
+}
+
+/// One EIP-2930 access-list entry (geth `types.AccessTuple`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AccessTuple {
+    pub address: Address,
+    pub storage_keys: Vec<B256>,
 }
 
 #[derive(Debug, Clone)]
