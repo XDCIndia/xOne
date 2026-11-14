@@ -57,6 +57,7 @@ fn run(args: impl IntoIterator<Item = OsString>) -> ExitCode {
         Some(("import", s)) => return cmd::import(s),
         Some(("export", s)) => return cmd::export(s),
         Some(("snapshot", s)) => return cmd::snapshot(s),
+        Some(("db", s)) => return cmd::db(s),
         _ => {}
     }
     let profiles = ["xdcmainnet", "apothem", "xdcdevnet", "net2040"];

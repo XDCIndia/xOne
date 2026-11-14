@@ -671,6 +671,16 @@ pub fn command() -> Command {
         )
         .subcommand(snapshot())
         .subcommand(
+            Command::new("db")
+                .about("Inspect the datadir's database.")
+                .subcommand_required(true)
+                .subcommand(
+                    Command::new("stats")
+                        .about("Per-table entries, pages and bytes of chain.mdbx, and the sizes of the segment, journal and checkpoint directories. Read-only; works while the node runs.")
+                        .arg(Arg::new("datadir").long("datadir").value_name("dir")),
+                ),
+        )
+        .subcommand(
             Command::new("genesis-hash")
                 .about("Print the genesis block hash of a built-in network.")
                 .arg(

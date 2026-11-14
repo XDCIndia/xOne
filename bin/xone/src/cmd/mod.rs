@@ -5,6 +5,7 @@
 //! file end to end with the real executor and reports; `export` reads its range from the chain it
 //! has just imported from `--input`. They move to the datadir with the store.
 
+mod db;
 mod export;
 mod import;
 mod snapshot;
@@ -22,6 +23,7 @@ use xone_sync::{
     xdc::{genesis, XdcExecutor},
 };
 
+pub use db::db;
 pub use export::export;
 pub use import::import;
 pub use snapshot::snapshot;

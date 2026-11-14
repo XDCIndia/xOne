@@ -160,6 +160,31 @@ fn options(sync_mode: SyncMode) -> DatabaseOptions {
     }
 }
 
+/// The page counts of one table (MDBX `mdbx_dbi_stat`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TableStat {
+    pub entries: u64,
+    pub depth: u32,
+    pub branch_pages: u64,
+    pub leaf_pages: u64,
+    pub overflow_pages: u64,
+    pub page_size: u32,
+}
+
+impl TableStat {
+    /// Bytes of the table's pages.
+    pub fn bytes(&self) -> u64 {
+        self.branch_pages
+            .saturating_add(self.leaf_pages)
+            .saturating_add(self.overflow_pages)
+            .saturating_mul(u64::from(self.page_size))
+    }
+}
+
+fn wide(n: usize) -> u64 {
+    u64::try_from(n).unwrap_or(u64::MAX)
+}
+
 /// An open `chain.mdbx`.
 pub struct Env {
     db: Database<NoWriteMap>,
@@ -195,6 +220,32 @@ impl Env {
         }
         tx.commit()?;
         Ok(env)
+    }
+
+    /// Opens an existing environment read-only: no table is created, nothing is written, and a
+    /// running node may hold the same environment (MDBX readers do not block its writer).
+    pub fn open_read_only(path: &Path) -> R<Env> {
+        let db = Database::<NoWriteMap>::open_with_options(
+            path,
+            DatabaseOptions {
+                max_tables: Some(64),
+                mode: Mode::ReadOnly,
+                ..Default::default()
+            },
+        )?;
+        Ok(Env { db })
+    }
+
+    /// (map size, bytes up to the last used page) of the environment.
+    pub fn size(&self) -> R<(u64, u64)> {
+        let info = self.db.info()?;
+        let page = u64::from(self.db.stat()?.page_size());
+        Ok((
+            wide(info.map_size()),
+            wide(info.last_pgno())
+                .saturating_add(1)
+                .saturating_mul(page),
+        ))
     }
 
     /// Flushes the environment: the last commit is on the device and steady.
@@ -305,6 +356,20 @@ impl<K: TransactionKind> Tx<'_, K> {
     pub fn entries(&self, t: T) -> R<usize> {
         let tb = self.table(t.name())?;
         Ok(self.tx.table_stat(&tb)?.entries())
+    }
+
+    /// The page counts of table `name`.
+    pub fn stat_in(&self, name: &str) -> R<TableStat> {
+        let tb = self.table(name)?;
+        let s = self.tx.table_stat(&tb)?;
+        Ok(TableStat {
+            entries: wide(s.entries()),
+            depth: s.depth(),
+            branch_pages: wide(s.branch_pages()),
+            leaf_pages: wide(s.leaf_pages()),
+            overflow_pages: wide(s.overflow_pages()),
+            page_size: s.page_size(),
+        })
     }
 
     pub fn is_empty(&self, t: T) -> R<bool> {
@@ -467,6 +532,40 @@ mod tests {
         assert!(r.is_empty(T::Aux).unwrap());
         drop(r);
         drop(env);
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn read_only_stats() {
+        let d = tmp("stat");
+        let names: Vec<_> = T::ALL.iter().map(|t| t.name()).collect();
+        let env = Env::open(&d, &names).unwrap();
+        {
+            let w = env.write().unwrap();
+            for i in 0u16..300 {
+                w.put(T::Aux, &i.to_be_bytes(), &[7u8; 100]).unwrap();
+            }
+            w.commit().unwrap();
+        }
+        // MDBX opens one environment once per process; another process (a running node) may
+        // hold it while this one reads
+        drop(env);
+        let ro = Env::open_read_only(&d).unwrap();
+        let r = ro.read().unwrap();
+        let s = r.stat_in(T::Aux.name()).unwrap();
+        assert_eq!(s.entries, 300);
+        assert!(s.leaf_pages > 0 && s.depth >= 1 && s.page_size >= 4096);
+        assert_eq!(
+            s.bytes(),
+            (s.branch_pages + s.leaf_pages + s.overflow_pages) * u64::from(s.page_size)
+        );
+        assert_eq!(r.stat_in(T::SideBlocks.name()).unwrap().entries, 0);
+        let (map, used) = ro.size().unwrap();
+        assert!(used > 0 && used <= map);
+        drop(r);
+        drop(ro);
+        // a missing environment is an error, not a new one
+        assert!(Env::open_read_only(&d.join("absent")).is_err());
         let _ = fs::remove_dir_all(&d);
     }
 

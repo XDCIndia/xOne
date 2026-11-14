@@ -12,6 +12,7 @@ clap.workspace = true
 tracing.workspace = true
 xone-chainspec.workspace = true
 xone-consensus.workspace = true
+xone-db.workspace = true
 xone-node.workspace = true
 xone-primitives.workspace = true
 xone-sync.workspace = true
