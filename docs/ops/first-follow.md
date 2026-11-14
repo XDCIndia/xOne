@@ -162,7 +162,7 @@ Read from it:
   rules but no V2 chain was available to run them. The executor pays V2 checkpoint rewards (XA-05), but this
   node's context holds no gap snapshots or burn records yet, so it refuses a V2 checkpoint block.
 * `eth_call`, `eth_estimateGas`, tracing and `XDPoS_getMissedRoundsInEpochByBlockNum` answer a typed refusal;
-  no subscription publishes; CORS and virtual hosts are not enforced; the pool is not announced to peers.
+  `newPendingTransactions` does not publish (`newHeads` and `logs` do); CORS and virtual hosts are not enforced; the pool is not announced to peers.
 * TRC21 token fees: executed as geth (a transaction to a token the issuer lists takes the token-fee path); none
   is listed on this chain, so the path is empty there.
 
