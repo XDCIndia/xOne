@@ -103,6 +103,25 @@ pub fn block_of(c: &Ctx, r: BlockRef) -> Result<Option<BlockView>, RpcError> {
     Ok(c.be.chain.block(hash))
 }
 
+/// The header of `r` alone: a retained header answers even when its body is pruned or not yet
+/// downloaded (header retention is checked, not body retention).
+pub fn header_of(c: &Ctx, r: BlockRef) -> Result<Option<xone_primitives::Header>, RpcError> {
+    let hash = match r {
+        BlockRef::Hash(h) => h,
+        BlockRef::Number(n) => {
+            if n > c.be.chain.head().0 {
+                return Ok(None);
+            }
+            c.be.chain.history(Class::Header, n)?;
+            match c.be.chain.hash_by_number(n) {
+                Some(h) => h,
+                None => return Ok(None),
+            }
+        }
+    };
+    Ok(c.be.chain.header(hash))
+}
+
 /// The header a state read runs at; unknown is "header not found", below the window is the typed error.
 fn state_at(c: &Ctx, p: &Params, i: usize) -> Result<(u64, B256), RpcError> {
     let r = p.block_ref_or_latest(i)?;
