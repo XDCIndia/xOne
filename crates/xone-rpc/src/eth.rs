@@ -445,78 +445,198 @@ fn get_logs(c: &Ctx, p: &Params) -> R {
 /// `eth_feeHistory` (geth `eth/gasprice/feehistory.go`): `baseFeePerGas` has one more entry than the
 /// range, the last being the next block's base fee, which xOne does not predict: it repeats the
 /// last block's value (ponytail: exact next-block base fee when the fee rules are exposed).
+/// geth `maxHeaderHistory` and `maxBlockHistory` defaults (`eth/ethconfig/config.go`).
+const FEE_HISTORY_MAX_BLOCKS: u64 = 1024;
+/// geth `maxQueryLimit`, `eth/gasprice/feehistory.go:47`.
+const FEE_HISTORY_MAX_PERCENTILES: usize = 100;
+
+/// geth `float64(x)`.
+#[allow(clippy::as_conversions)] // geth's own float arithmetic, reproduced
+fn f64_of(x: u64) -> f64 {
+    x as f64
+}
+
+/// geth `uint64(f)` for a finite, non-negative `f` (truncation).
+#[allow(clippy::as_conversions)] // geth's own float arithmetic, reproduced
+fn u64_of(f: f64) -> u64 {
+    f as u64
+}
+
+/// geth `EffectiveGasTip` (`core/types/transaction.go:384-415`): the tip cap without a base fee;
+/// below the base fee the fee cap itself (geth leaves `dst` at the cap on `ErrGasFeeCapTooLow`);
+/// else `min(tip cap, fee cap - base fee)`.
+fn effective_tip(fee_cap: u128, tip_cap: u128, base: Option<U256>) -> U256 {
+    let (cap, tip) = (U256::from(fee_cap), U256::from(tip_cap));
+    match base {
+        None => tip,
+        Some(b) if cap < b => cap,
+        Some(b) => tip.min(cap - b),
+    }
+}
+
+/// geth `processBlock` reward row (`eth/gasprice/feehistory.go:116-150`): `(tip, gas used)` per
+/// transaction, sorted stably by tip, walked against `gasUsed * p / 100` of the block.
+fn reward_row(block_gas_used: u64, mut txs: Vec<(U256, u64)>, pct: &[f64]) -> Vec<Value> {
+    if txs.is_empty() {
+        return pct.iter().map(|_| q(0)).collect();
+    }
+    txs.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut idx = 0usize;
+    let mut sum = txs.first().map_or(0, |t| t.1);
+    pct.iter()
+        .map(|p| {
+            let threshold = u64_of(f64_of(block_gas_used) * p / 100.0);
+            while sum < threshold && idx + 1 < txs.len() {
+                idx += 1;
+                sum = sum.saturating_add(txs.get(idx).map_or(0, |t| t.1));
+            }
+            qu(txs.get(idx).map_or(U256::ZERO, |t| t.0))
+        })
+        .collect()
+}
+
+/// geth `eth_feeHistory` (`internal/ethapi/api.go:107-142`, `eth/gasprice/feehistory.go:239-361`).
 fn fee_history(c: &Ctx, p: &Params) -> R {
-    let count = parse_tag(p.str(0)?, 0).or_else(|_| {
-        p.opt(0)
-            .and_then(Value::as_u64)
-            .ok_or_else(|| RpcError::invalid_params("invalid block count"))
-    })?;
-    let head = c.be.chain.head().0;
-    let last = p.number_or_latest(1)?.min(head);
-    let count = count.clamp(1, 1024).min(last + 1);
-    let first = last + 1 - count;
-    // Integer percentiles only (ponytail: fractional ones when a client needs them).
-    let pct: Vec<u64> = match p.opt(2) {
-        Some(Value::Array(a)) => a.iter().filter_map(Value::as_u64).collect(),
-        _ => vec![],
+    // geth `math.HexOrDecimal64`: a hex or decimal string, or a JSON number
+    let bad = || RpcError::invalid_params("invalid argument 0: invalid block count");
+    let count = match p.opt(0) {
+        Some(Value::String(s)) => match s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+            Some(h) => u64::from_str_radix(h, 16).map_err(|_| bad())?,
+            None => s.parse::<u64>().map_err(|_| bad())?,
+        },
+        Some(Value::Number(n)) => n.as_u64().ok_or_else(bad)?,
+        _ => return Err(bad()),
     };
+    let pct: Vec<f64> = match p.opt(2) {
+        None | Some(Value::Null) => vec![],
+        Some(Value::Array(a)) => a
+            .iter()
+            .map(|v| {
+                v.as_f64()
+                    .ok_or_else(|| RpcError::invalid_params("invalid reward percentile"))
+            })
+            .collect::<Result<_, _>>()?,
+        Some(_) => return Err(RpcError::invalid_params("invalid reward percentiles")),
+    };
+    if count == 0 {
+        return Ok(json!({"oldestBlock": q(0), "gasUsedRatio": null}));
+    }
+    if pct.len() > FEE_HISTORY_MAX_PERCENTILES {
+        return Err(RpcError::server(format!(
+            "invalid reward percentile: over the query limit {FEE_HISTORY_MAX_PERCENTILES}"
+        )));
+    }
+    for (i, v) in pct.iter().enumerate() {
+        if !(0.0..=100.0).contains(v) {
+            return Err(RpcError::server(format!(
+                "invalid reward percentile: {v:.6}"
+            )));
+        }
+        if let Some(prev) = i.checked_sub(1).and_then(|j| pct.get(j)) {
+            if v <= prev {
+                return Err(RpcError::server(format!(
+                    "invalid reward percentile: #{}:{prev:.6} >= #{i}:{v:.6}",
+                    i - 1
+                )));
+            }
+        }
+    }
+    let head = c.be.chain.head().0;
+    let last = p.number_or_latest(1)?;
+    if last > head {
+        return Err(RpcError::server(format!(
+            "request beyond head block: requested {last}, head {head}"
+        )));
+    }
+    let count = count.min(FEE_HISTORY_MAX_BLOCKS).min(last + 1);
+    let first = last + 1 - count;
+    let spec = c.be.chain.spec();
     let (mut fees, mut ratio, mut rewards) = (vec![], vec![], vec![]);
+    let mut next_fee = q(0);
     for n in first..=last {
         let b = block_of(c, BlockRef::Number(n))?.ok_or_else(no_header)?;
-        fees.push(qu(b.header.base_fee.unwrap_or(U256::ZERO)));
+        let base = b.header.base_fee;
+        fees.push(qu(base.unwrap_or(U256::ZERO)));
+        // geth: `CalcBaseFee` of the child when London is active there; on XDC the tier of n + 1
+        next_fee = if spec.london.is_active(n + 1) {
+            q(xone_evm::basefee::xdc_base_fee_for_block(spec, n + 1))
+        } else {
+            q(0)
+        };
         ratio.push(json!(if b.header.gas_limit == 0 {
             0.0
         } else {
-            f64::from(u32::try_from(b.header.gas_used).unwrap_or(u32::MAX))
-                / f64::from(u32::try_from(b.header.gas_limit).unwrap_or(u32::MAX))
+            f64_of(b.header.gas_used) / f64_of(b.header.gas_limit)
         }));
-        if !pct.is_empty() {
-            let raw = c.be.chain.receipts(b.hash).unwrap_or_else(Vec::new);
-            let rc = decode_receipts(&raw)?;
-            let mut tips: Vec<(U256, u64)> = vec![];
-            let base = b.header.base_fee.unwrap_or(U256::ZERO);
-            for (i, t) in b.txs.iter().enumerate() {
-                let tx = xone_executor::tx::decode(t, c.be.chain.spec().chain_id)
-                    .map_err(|e| RpcError::internal(e.to_string()))?;
-                let cap = U256::from(tx.gas_price);
-                let tip = tx.priority_fee.map_or(cap.saturating_sub(base), |t| {
-                    U256::from(t).min(cap.saturating_sub(base))
-                });
-                let used = rc.get(i).map_or(0, |r| r.cumulative_gas_used)
-                    - if i == 0 {
-                        0
-                    } else {
-                        rc.get(i - 1).map_or(0, |r| r.cumulative_gas_used)
-                    };
-                tips.push((tip, used));
-            }
-            tips.sort();
-            let total: u64 = tips.iter().map(|t| t.1).sum();
-            rewards.push(Value::Array(
-                pct.iter()
-                    .map(|pc| {
-                        let thr = total.saturating_mul(*pc) / 100;
-                        let mut acc = 0u64;
-                        let mut v = U256::ZERO;
-                        for (tip, used) in &tips {
-                            v = *tip;
-                            acc += used;
-                            if acc >= thr {
-                                break;
-                            }
-                        }
-                        qu(v)
-                    })
-                    .collect(),
-            ));
+        if pct.is_empty() {
+            continue;
         }
+        let mut txs: Vec<(U256, u64)> = Vec::with_capacity(b.txs.len());
+        if !b.txs.is_empty() {
+            // the percentiles need every receipt: an unavailable one is an error, not a guess
+            c.be.chain.history(Class::Receipt, n)?;
+            let raw =
+                c.be.chain
+                    .receipts(b.hash)
+                    .ok_or_else(|| RpcError::server(format!("receipts of block {n} not found")))?;
+            let rc = decode_receipts(&raw)?;
+            if rc.len() != b.txs.len() {
+                return Err(RpcError::server(format!(
+                    "receipts of block {n} do not match its transactions"
+                )));
+            }
+            let mut prev = 0u64;
+            for (t, r) in b.txs.iter().zip(&rc) {
+                let tx = xone_executor::tx::decode(t, spec.chain_id)
+                    .map_err(|e| RpcError::internal(e.to_string()))?;
+                let tip_cap = tx.priority_fee.unwrap_or(tx.gas_price);
+                let used = r.cumulative_gas_used.saturating_sub(prev);
+                prev = r.cumulative_gas_used;
+                txs.push((effective_tip(tx.gas_price, tip_cap, base), used));
+            }
+        }
+        rewards.push(Value::Array(reward_row(b.header.gas_used, txs, &pct)));
     }
-    fees.push(fees.last().cloned().unwrap_or_else(|| q(0)));
-    // No blob transactions on XDC: the blob series are zeros, one longer for the fee (geth 1.15+).
+    fees.push(next_fee);
+    // No blob transactions on XDC (geth skips blob fees `!config.IsXDC()`): zeros, the fee
+    // series one longer.
     let zeros = vec![q(0); fees.len()];
     let mut m = json!({"oldestBlock": q(first), "baseFeePerGas": fees, "gasUsedRatio": ratio, "baseFeePerBlobGas": zeros, "blobGasUsedRatio": vec![0; ratio.len()]});
     if !pct.is_empty() {
         m["reward"] = Value::Array(rewards);
     }
     Ok(m)
+}
+
+#[cfg(test)]
+mod fee_history_tests {
+    use super::*;
+
+    #[test]
+    fn effective_tip_is_geths() {
+        let g = |x: u64| U256::from(x);
+        // no base fee: the tip cap
+        assert_eq!(effective_tip(100, 7, None), g(7));
+        // under the base fee: geth leaves the fee cap
+        assert_eq!(effective_tip(10, 7, Some(g(12))), g(10));
+        assert_eq!(effective_tip(100, 7, Some(g(12))), g(7));
+        assert_eq!(effective_tip(15, 7, Some(g(12))), g(3));
+    }
+
+    #[test]
+    fn reward_rows_use_full_gas_and_fractional_percentiles() {
+        let g = |x: u64| U256::from(x);
+        // gas values above u32: the threshold uses the whole number
+        let big = 6_000_000_000u64;
+        let txs = vec![(g(30), big), (g(10), big), (g(20), big)];
+        let row = reward_row(3 * big, txs, &[0.0, 33.3, 33.4, 66.7, 100.0]);
+        let want = [q(10), q(10), q(20), q(30), q(30)];
+        assert_eq!(row, want);
+        // an empty block: zeros
+        assert_eq!(reward_row(0, vec![], &[10.0, 90.5]), [q(0), q(0)]);
+        // geth's walk stops at the first tx whose running sum reaches the threshold
+        let row = reward_row(100, vec![(g(1), 50), (g(2), 50)], &[49.9, 50.0, 50.9, 51.0]);
+        // 50.9% of 100 truncates to 50, as geth's uint64(float64)
+        assert_eq!(row, [q(1), q(1), q(1), q(2)]);
+    }
 }
