@@ -4,7 +4,8 @@
 use crate::{
     api::{BlockView, CallRequest},
     json::{
-        addr, block_json, decode_receipts, h256, hex, log_json, q, qu, receipt_json, tx_json, Loc,
+        addr, block_json, decode_receipts, h256, hex, log_json, q, qu, receipt_json,
+        receipt_json_at, tx_json, Loc,
     },
     server::{Cost, Ctx, Registry},
     subscriptions::LogFilter,
@@ -174,8 +175,11 @@ fn block_receipts(c: &Ctx, p: &Params) -> R {
     let rc = decode_receipts(&raw)?;
     let id = c.be.chain.spec().chain_id;
     let mut out = Vec::with_capacity(b.txs.len());
+    // One pass: the first log index of each receipt is the running count of the ones before.
+    let mut first_log = 0usize;
     for (i, t) in b.txs.iter().enumerate() {
-        out.push(receipt_json(t, &rc, i, &loc(&b, i), id)?);
+        out.push(receipt_json_at(t, &rc, i, first_log, &loc(&b, i), id)?);
+        first_log += rc.get(i).map_or(0, |r| r.logs.len());
     }
     Ok(Value::Array(out))
 }
