@@ -14,6 +14,7 @@ pub mod diskguard;
 pub mod enode;
 pub mod lifecycle;
 pub mod observe;
+pub mod p2p;
 pub mod services;
 pub mod snapshot;
 

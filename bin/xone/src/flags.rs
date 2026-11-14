@@ -607,6 +607,65 @@ pub fn normalise(args: impl IntoIterator<Item = OsString>) -> (Vec<OsString>, Ve
     (out, warns)
 }
 
+/// `xone p2p` (issue #178): node keys, enode URLs and a discovery-only bootnode.
+fn p2p() -> Command {
+    let key = || {
+        Arg::new("nodekey")
+            .long("nodekey")
+            .required(true)
+            .value_name("file")
+    };
+    Command::new("p2p")
+        .about("devp2p tools: node keys, enode URLs and a discovery-only bootnode (issue #178).")
+        .subcommand_required(true)
+        .subcommand(
+            Command::new("key")
+                .about("Node key tools.")
+                .subcommand_required(true)
+                .subcommand(
+                    Command::new("generate")
+                        .about(
+                            "Write a new node key (hex, as <datadir>/nodekey); never overwrites.",
+                        )
+                        .arg(
+                            Arg::new("out")
+                                .long("out")
+                                .required(true)
+                                .value_name("file"),
+                        ),
+                )
+                .subcommand(
+                    Command::new("enode")
+                        .about("Print the enode URL of a node key.")
+                        .arg(key())
+                        .arg(
+                            Arg::new("ip")
+                                .long("ip")
+                                .value_name("ip")
+                                .default_value("127.0.0.1"),
+                        )
+                        .arg(
+                            Arg::new("port")
+                                .long("port")
+                                .value_name("port")
+                                .default_value("30303"),
+                        )
+                        .arg(Arg::new("discport").long("discport").value_name("port")),
+                ),
+        )
+        .subcommand(
+            Command::new("bootnode")
+                .about("Run discv4 only (no chain, no RLPx) until killed, like geth cmd/bootnode.")
+                .arg(key())
+                .arg(
+                    Arg::new("addr")
+                        .long("addr")
+                        .value_name("ip:port")
+                        .default_value("0.0.0.0:30301"),
+                ),
+        )
+}
+
 fn snapshot() -> Command {
     let net =
         || {
@@ -686,6 +745,7 @@ pub fn command() -> Command {
                 )),
         )
         .subcommand(snapshot())
+        .subcommand(p2p())
         .subcommand(
             Command::new("genesis-hash")
                 .about("Print the genesis block hash of a built-in network.")
