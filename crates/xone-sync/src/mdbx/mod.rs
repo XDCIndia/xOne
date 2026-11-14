@@ -293,6 +293,9 @@ fn put_preimage(tx: &Wr, pre: &[u8]) -> R<()> {
     tx.put(T::Preimages, keccak256(pre).as_slice(), pre)
 }
 
+/// Rows copied at a time by a paged scan (`xone_db::mdbx::Tx::scan_pages`).
+const SCAN_PAGE: usize = 1024;
+
 /// Writes the diff of block `n` into the state tables and its changeset (whole prior records) into
 /// the changeset tables: the same semantics as `StateDiff::apply`, over the tables.
 fn write_diff(tx: &Wr, n: u64, d: &StateDiff) -> R<()> {
@@ -304,11 +307,13 @@ fn write_diff(tx: &Wr, n: u64, d: &StateDiff) -> R<()> {
         };
         tx.put(T::AccountChangeSets, &cs_key(n, &ha), &prior)?;
         if new.is_none() {
-            for (k, v) in tx.prefix(T::HashedStorages, ha.as_slice())? {
+            // a page at a time: a removed contract may hold any number of slots; the changeset
+            // and the deletes stay in this block's one write transaction
+            tx.scan_prefix(T::HashedStorages, ha.as_slice(), SCAN_PAGE, |k, v| {
                 let hs = B256::from_slice(&k[32..]);
-                tx.put(T::StorageChangeSets, &cs_skey(n, &ha, &hs), &v)?;
-                del_slot(tx, &ha, &hs)?;
-            }
+                tx.put(T::StorageChangeSets, &cs_skey(n, &ha, &hs), v)?;
+                del_slot(tx, &ha, &hs)
+            })?;
         } else {
             put_preimage(tx, a.as_slice())?;
         }
@@ -1450,10 +1455,10 @@ impl<D: SegDir> MdbxStore<D> {
         let tx = env.write().map_err(|e| self.db_failed(&e))?;
         let r = (|| -> R<()> {
             let upto = be(floor);
-            for (k, v) in tx.range(T::CanonicalHeaders, &[], Some(&upto))? {
-                tx.del(T::HeaderNumbers, &v)?;
-                tx.del(T::CanonicalHeaders, &k)?;
-            }
+            tx.scan_pages(T::CanonicalHeaders, &[], Some(&upto), SCAN_PAGE, |k, v| {
+                tx.del(T::HeaderNumbers, v)?;
+                tx.del(T::CanonicalHeaders, k)
+            })?;
             for s in Segment::ALL {
                 tx.del_range(T::SegIdx, &seg_key(s, 0), Some(&seg_key(s, floor)))?;
             }
@@ -2219,10 +2224,10 @@ impl<D: SegDir> Store for MdbxStore<D> {
         let tx = env.write().map_err(|e| self.db_failed(&e))?;
         let r = (|| -> R<()> {
             let upto = be(h_from);
-            for (k, v) in tx.range(T::CanonicalHeaders, &[], Some(&upto))? {
-                tx.del(T::HeaderNumbers, &v)?;
-                tx.del(T::CanonicalHeaders, &k)?;
-            }
+            tx.scan_pages(T::CanonicalHeaders, &[], Some(&upto), SCAN_PAGE, |k, v| {
+                tx.del(T::HeaderNumbers, v)?;
+                tx.del(T::CanonicalHeaders, k)
+            })?;
             for s in Segment::ALL {
                 let f = if s == Segment::Headers {
                     h_from
