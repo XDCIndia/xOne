@@ -6,6 +6,7 @@ The [rebuild plan in issue #1](https://github.com/XDCIndia/xOne/issues/1) is the
 | --- | --- |
 | [Architecture review](reviews/2026-11-10-architecture-scale-pq-review.md) | Critique, primary-source project comparisons, language trade-offs, latency boundaries, PQ migration tracks, proposed gates and issue candidates. |
 | [Source register](reviews/2026-11-10-architecture-scale-pq-sources.json) | Forty primary references with access dates and implementation pinning policy. |
+| [Process](process/README.md) | PR rule (ponytail ladder), engineering-philosophy assessment and over-engineering audit. |
 | [Claude master prompt](prompts/architecture-audit-and-issue-creation.md) | Explicitly invoked audit, evidence-backed issue creation, deduplication, bounded agent work and resumable sessions. |
 
 ## How to start
