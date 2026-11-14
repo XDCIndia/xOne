@@ -15,6 +15,7 @@ use alloy_primitives::{Address, B256};
 pub use genesis::Genesis;
 pub use networks::{
     apothem, devnet, devnet551, load, load_custom, load_named, mainnet, net2040, Network,
+    FORKS_JSON,
 };
 pub use required::{
     check_required, merge_required_blocks, parse_required_blocks, RequiredBlockMismatch,

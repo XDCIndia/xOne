@@ -276,6 +276,74 @@ fn json_log_lines_parse() {
     let _ = std::fs::remove_dir_all(&d);
 }
 
+/// `xone --dev`: a chain of its own that seals alone, with no other input; refusals of the conflicting flags.
+#[test]
+fn dev_seals_blocks_alone() {
+    let d = scratch("dev");
+    let o = xone(&["--dev", "--networkid", "50"]);
+    assert_eq!(o.status.code(), Some(1));
+    assert!(
+        String::from_utf8_lossy(&o.stderr).contains("--networkid"),
+        "{o:?}"
+    );
+    let o = xone(&["--dev", "--keystore", "/k.json"]);
+    assert_eq!(o.status.code(), Some(1));
+    let mut child = Command::new(env!("CARGO_BIN_EXE_xone"))
+        .args([
+            "--dev",
+            "--dev.period",
+            "1",
+            "--datadir",
+            d.to_str().unwrap_or_default(),
+            "--port",
+            "0",
+            "--http.port",
+            "0",
+            "--authrpc.port",
+            "0",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap_or_else(|e| panic!("{e}"));
+    let err = child.stderr.take().unwrap_or_else(|| panic!("no stderr"));
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for l in BufReader::new(err).lines().map_while(Result::ok) {
+            let _ = tx.send(l);
+        }
+    });
+    let t = Instant::now();
+    let mut sealed = 0;
+    while sealed < 3 && t.elapsed() < Duration::from_secs(120) {
+        if let Ok(l) = rx.recv_timeout(Duration::from_secs(1)) {
+            sealed +=
+                usize::from(l.starts_with("producer: block ") && l.contains("sealed and sent"));
+        }
+    }
+    kill(child.id());
+    let _ = child.wait();
+    let banner = {
+        let mut s = String::new();
+        let _ = std::io::Read::read_to_string(
+            &mut child.stdout.take().unwrap_or_else(|| panic!("no stdout")),
+            &mut s,
+        );
+        s
+    };
+    assert!(sealed >= 3, "{sealed} blocks sealed in 120 s\n{banner}");
+    assert!(banner.starts_with("dev chain 1337"), "{banner}");
+    assert!(banner.contains("started chain 1337"), "{banner}");
+    // only the public genesis and fork table are written; the validator key is not
+    let files: Vec<_> = std::fs::read_dir(d.join("dev"))
+        .unwrap_or_else(|e| panic!("{e}"))
+        .flatten()
+        .map(|e| e.file_name().into_string().unwrap_or_default())
+        .collect();
+    assert_eq!(files.len(), 2, "{files:?}");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
 /// Blocks 0..=`to` of the committed Apothem vectors, as the blocks of a geth export file.
 fn vector_blocks(to: usize) -> Vec<Vec<u8>> {
     use std::io::Read;

@@ -235,6 +235,8 @@ struct Worker {
     /// The chain service's progress, and whether it proved us caught up once since the start.
     progress: Arc<Progress>,
     caught_up: bool,
+    /// `--dev` (`services::build_dev`, chain id 1337 only): mint without peers.
+    solo: bool,
     /// The block of `pending.rlp` found at the start, until `finish_pending` decides.
     pending: Option<(Header, Vec<Bytes>)>,
     /// How long the last seal took (record write, sync and signature).
@@ -820,6 +822,9 @@ impl Worker {
     /// (its caught-up proof), and no peer announced a block above our head. A block sealed without that reaches
     /// no one, or lands beside a chain the network has already extended.
     fn synced(&mut self) -> Result<(), &'static str> {
+        if self.solo {
+            return Ok(()); // `--dev`: the only validator of a chain made at start; there is no one to wait for
+        }
         if self.peers.peer_ids().is_empty() {
             return Err("not synced: no peers");
         }
@@ -1334,9 +1339,9 @@ pub struct ProducerService {
 }
 
 impl ProducerService {
-    /// Opens the key and the safety record. The key is moved into the unit and goes nowhere else.
+    /// Opens the safety record. The key is moved into the unit and goes nowhere else.
     pub fn new(
-        plan: &Plan,
+        signer: LocalSigner,
         cfg: &Config,
         core: Arc<Core>,
         pool: Arc<PoolShared>,
@@ -1344,8 +1349,6 @@ impl ProducerService {
         bft_in: Receiver<(PeerId, BftMessage)>,
         progress: Arc<Progress>,
     ) -> Result<Self, String> {
-        let signer = xone_signer::local_keystore::load(&plan.keystore, &plan.password, None)
-            .map_err(|e| format!("keystore: {e}"))?;
         let me = signer.address();
         let dir = cfg.datadir.join("xone").join("producer");
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -1357,6 +1360,8 @@ impl ProducerService {
         let unit = SafetyUnit::open_or_init(store, signer, quiet)
             .map_err(|e| format!("safety unit: {e}"))?;
         let spec = core.spec.clone();
+        // `--dev` only (`crate::dev::prepare` sets it; `services::build_dev` refuses other chains)
+        let solo = cfg.dev.enabled && spec.chain_id == crate::dev::CHAIN_ID;
         let v2 = spec.xdpos.v2.clone().ok_or("the chain has no V2 section")?;
         let bft = Bft::new(
             BftConfig {
@@ -1405,6 +1410,7 @@ impl ProducerService {
                 timeout_said: 0,
                 progress,
                 caught_up: false,
+                solo,
                 pending: None,
                 seal_ms: 0,
                 votes_in: BTreeMap::new(),
