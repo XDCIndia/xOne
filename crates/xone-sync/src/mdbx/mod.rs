@@ -2365,13 +2365,19 @@ mod schema_marker_tests {
     #[test]
     fn current_marker_opens() {
         let b = SCHEMA.to_le_bytes();
-        assert_eq!(parse_schema(Some(&b)).unwrap(), SchemaMarker::Version(SCHEMA));
+        assert_eq!(
+            parse_schema(Some(&b)).unwrap(),
+            SchemaMarker::Version(SCHEMA)
+        );
     }
 
     #[test]
     fn malformed_marker_is_not_absence() {
         for b in [&[][..], &[2][..], &[2, 0, 0, 0, 0, 0, 0, 0, 0][..]] {
-            assert!(matches!(parse_schema(Some(b)), Err(OpenError::SchemaMarker(_))));
+            assert!(matches!(
+                parse_schema(Some(b)),
+                Err(OpenError::SchemaMarker(_))
+            ));
         }
         assert!(matches!(
             parse_schema(Some(&0u64.to_le_bytes())),
