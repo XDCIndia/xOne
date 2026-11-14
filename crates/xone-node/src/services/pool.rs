@@ -166,6 +166,12 @@ impl PoolApi for PoolShared {
         (conv(p), conv(q))
     }
 
+    fn transaction(&self, hash: B256) -> Option<Bytes> {
+        let g = self.lock();
+        g.pool.get(&hash)?;
+        g.raws.get(&hash).cloned()
+    }
+
     fn add_raw(&self, raw: &[u8]) -> Result<B256, String> {
         self.add_raws(&[raw]).remove(0)
     }

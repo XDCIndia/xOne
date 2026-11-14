@@ -212,13 +212,11 @@ fn tx_by_hash(c: &Ctx, p: &Params) -> R {
         }
     }
     // Not mined: the pool (geth `GetPoolTransaction`).
-    let (pending, queued) = c.be.pool.content();
-    for raw in pending.values().chain(queued.values()).flatten() {
-        if keccak256(raw) == h {
-            return tx_json(raw, c.be.chain.spec().chain_id, None);
-        }
+    // The pool lock is released before the transaction is encoded.
+    match c.be.pool.transaction(h) {
+        Some(raw) => tx_json(&raw, c.be.chain.spec().chain_id, None),
+        None => Ok(Value::Null),
     }
-    Ok(Value::Null)
 }
 
 fn tx_receipt(c: &Ctx, p: &Params) -> R {
