@@ -6,6 +6,7 @@
 #![forbid(unsafe_code)]
 
 mod bal;
+pub mod call;
 mod overlay;
 pub mod tx;
 
