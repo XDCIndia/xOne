@@ -193,19 +193,22 @@ pub fn build(
             )
         })
         .transpose()?;
+    let l = &cfg.limits;
+    let mut node = crate::Node::new(
+        Duration::from_millis(l.service_stop_timeout_ms),
+        Duration::from_millis(l.stop_timeout_ms),
+    );
     let stats = Arc::new(stats::NodeStats {
         stamp: stamp.to_owned(),
         core: core.clone(),
         progress: progress.clone(),
         pool: pool.clone(),
         peers: nh.peers.clone(),
+        draining: node.draining(),
+        internal_stop: node.internal_stop(),
+        gate: gate.clone(),
     });
     let rpc_svc = rpc::RpcService::new(cfg, rth, core.clone(), progress, pool, nh.clone())?;
-    let l = &cfg.limits;
-    let mut node = crate::Node::new(
-        Duration::from_millis(l.service_stop_timeout_ms),
-        Duration::from_millis(l.stop_timeout_ms),
-    );
     // first: the guard reads free space before the node imports anything
     node.add(Box::new(crate::diskguard::DiskGuard::new(
         cfg.datadir.clone(),

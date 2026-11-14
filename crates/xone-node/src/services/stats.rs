@@ -20,6 +20,12 @@ pub struct NodeStats {
     pub progress: Arc<Progress>,
     pub pool: Arc<PoolShared>,
     pub peers: Peers,
+    /// [`crate::Node::draining`]: the node has begun to stop.
+    pub draining: crate::lifecycle::Shutdown,
+    /// [`crate::Node::internal_stop`]: a service (the disk guard) asked the node to stop.
+    pub internal_stop: crate::lifecycle::Shutdown,
+    /// The disk guard's import gate: closed when free space is below the stop threshold.
+    pub gate: crate::diskguard::ImportGate,
 }
 
 fn info(s: &Stored) -> BlockInfo {
@@ -99,6 +105,15 @@ impl MetricsSource for NodeStats {
             peers: self.peer_count() as u64, // ponytail: usize is u64 here
             peers_required_block_refused_total: self.peers.required_refused(),
             txpool_pending: self.pending_txs() as u64,
+            // ADR-005: a latched durability fault (a failed sync, a degraded store) or a closed
+            // import gate is never ready; it clears only through the store's recovery path.
+            degraded: matches!(
+                self.core
+                    .chain
+                    .with_store(|s| xone_sync::store::Store::durability(s)),
+                xone_db::Durability::Degraded(_)
+            ) || self.gate.stopped(),
+            shutting_down: self.draining.is_requested() || self.internal_stop.is_requested(),
             blocks_imported_total: number.saturating_sub(self.progress.start.load(Relaxed)),
             ..Snapshot::default()
         }
