@@ -586,6 +586,304 @@
       "score_breakdown": {},
       "status": "rejected",
       "reason": "Docs-only references: they host the open clients above; no closed-source XDC or Ethereum execution client leads the category, so no separate closed feature set was scored."
+    },
+    {
+      "repo": "BuildOnViction/victionchain",
+      "url": "https://github.com/BuildOnViction/victionchain",
+      "found_via": "pass 3: gh search 'xdpos'/'POSV' lineage, BuildOnViction org listing",
+      "stars": 182,
+      "last_commit": "2026-10-20",
+      "license": "LGPL-3.0",
+      "overlap_score": 83,
+      "score_breakdown": {
+        "feature_overlap_50": 42,
+        "activity_20": 20,
+        "adoption_15": 6,
+        "code_access_15": 15
+      },
+      "status": "selected",
+      "reason": "Viction (formerly TomoChain) client: Proof-of-Stake-Voting with masternodes, double validation, epoch checkpoints and randomize, the lineage XDPoS V1 was derived from. Not a fork of a selected repo; XDPoSChain descends from its code.",
+      "pass": "pass3"
+    },
+    {
+      "repo": "harmony-one/harmony",
+      "url": "https://github.com/harmony-one/harmony",
+      "found_via": "pass 3: topic pbft / proof-of-stake (topics of the selected set), web search 'BFT EVM client'",
+      "stars": 1447,
+      "last_commit": "2026-08-19",
+      "license": "LGPL-3.0",
+      "overlap_score": 73,
+      "score_breakdown": {
+        "feature_overlap_50": 26,
+        "activity_20": 20,
+        "adoption_15": 12,
+        "code_access_15": 15
+      },
+      "status": "selected",
+      "reason": "EVM chain with FBFT (round-based BFT), staking epochs, rewards and an eth-compatible RPC; Go node with its own tracer API, Rosetta and webhooks.",
+      "pass": "pass3"
+    },
+    {
+      "repo": "tempoxyz/tempo",
+      "url": "https://github.com/tempoxyz/tempo",
+      "found_via": "pass 3: web search 'reth SDK L1 BFT'; awesome-reth",
+      "stars": 1044,
+      "last_commit": "2026-11-13",
+      "license": "Apache-2.0/MIT",
+      "overlap_score": 73,
+      "score_breakdown": {
+        "feature_overlap_50": 26,
+        "activity_20": 20,
+        "adoption_15": 12,
+        "code_access_15": 15
+      },
+      "status": "selected",
+      "reason": "Rust L1 on the reth SDK with its own BFT consensus layer, validator config, localnet, follow mode and snapshot download; adds operator surface over reth (unlike reth-bsc).",
+      "pass": "pass3"
+    },
+    {
+      "repo": "kaiachain/kaia",
+      "url": "https://github.com/kaiachain/kaia",
+      "found_via": "pass 3: web search 'Istanbul BFT EVM client', successor of klaytn/klaytn",
+      "stars": 67,
+      "last_commit": "2026-11-10",
+      "license": "LGPL-3.0",
+      "overlap_score": 70,
+      "score_breakdown": {
+        "feature_overlap_50": 32,
+        "activity_20": 20,
+        "adoption_15": 3,
+        "code_access_15": 15
+      },
+      "status": "selected",
+      "reason": "Istanbul-BFT EVM chain with a validator committee, staking and rewards; adds chain-data export (Kafka, MySQL), homi network generator and live pruning over its geth base.",
+      "pass": "pass3"
+    },
+    {
+      "repo": "BuildOnViction/vic-geth",
+      "url": "https://github.com/BuildOnViction/vic-geth",
+      "found_via": "pass 3: BuildOnViction org listing",
+      "stars": 1,
+      "last_commit": "2026-11-03",
+      "license": "LGPL-3.0",
+      "overlap_score": 78,
+      "score_breakdown": {
+        "feature_overlap_50": 40,
+        "activity_20": 20,
+        "adoption_15": 3,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Score 78 but excluded by the fork rule: a rebuild of victionchain on current geth; its operator surface is geth's (selected) and its consensus is victionchain's (selected).",
+      "pass": "pass3"
+    },
+    {
+      "repo": "etclabscore/core-geth",
+      "url": "https://github.com/etclabscore/core-geth",
+      "found_via": "pass 3: snowball from geth derivatives",
+      "stars": 308,
+      "last_commit": "2026-11-08",
+      "license": "LGPL-3.0",
+      "overlap_score": 65,
+      "score_breakdown": {
+        "feature_overlap_50": 24,
+        "activity_20": 20,
+        "adoption_15": 6,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Score 65 but excluded by the fork rule: geth derivative for Ethereum Classic; extra flags are PoW, ECBP-1100 and legacy light-client items; its trace_ module is already counted from Erigon and Nethermind.",
+      "pass": "pass3"
+    },
+    {
+      "repo": "ethereum-optimism/op-geth",
+      "url": "https://github.com/ethereum-optimism/op-geth",
+      "found_via": "pass 3: snowball from geth derivatives",
+      "stars": 399,
+      "last_commit": "2026-11-11",
+      "license": "LGPL-3.0",
+      "overlap_score": 63,
+      "score_breakdown": {
+        "feature_overlap_50": 22,
+        "activity_20": 20,
+        "adoption_15": 6,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Score 63 but excluded by the fork rule: geth fork whose additions are OP Stack L2 features (SKIP-14).",
+      "pass": "pass3"
+    },
+    {
+      "repo": "celo-org/celo-blockchain",
+      "url": "https://github.com/celo-org/celo-blockchain",
+      "found_via": "pass 3: web search 'Istanbul BFT EVM client'",
+      "stars": 631,
+      "last_commit": "2026-01-15",
+      "license": "LGPL-3.0",
+      "overlap_score": 64,
+      "score_breakdown": {
+        "feature_overlap_50": 30,
+        "activity_20": 10,
+        "adoption_15": 9,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Score 64 but end of life: the repository calls itself the previous Celo client, the last commit is a CI config change, and Celo now runs op-geth as an L2 (SKIP-14).",
+      "pass": "pass3"
+    },
+    {
+      "repo": "Consensys-inc-archive/quorum",
+      "url": "https://github.com/Consensys-inc-archive/quorum",
+      "found_via": "pass 3: keyword 'node permissioning'",
+      "stars": 4762,
+      "last_commit": "2026-06-05",
+      "license": "LGPL-3.0",
+      "overlap_score": 57,
+      "score_breakdown": {
+        "feature_overlap_50": 30,
+        "activity_20": 0,
+        "adoption_15": 12,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Score 57: archived (GoQuorum end of life); its permissioning and QBFT live on in Besu (selected).",
+      "pass": "pass3"
+    },
+    {
+      "repo": "berachain/bera-reth",
+      "url": "https://github.com/berachain/bera-reth",
+      "found_via": "pass 3: awesome-reth, gh search 'reth'",
+      "stars": 37,
+      "last_commit": "2026-11-06",
+      "license": "Apache-2.0",
+      "overlap_score": 58,
+      "score_breakdown": {
+        "feature_overlap_50": 20,
+        "activity_20": 20,
+        "adoption_15": 3,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Score 58: reth SDK extension for a beacon-driven chain; adds nothing operator-facing over reth.",
+      "pass": "pass3"
+    },
+    {
+      "repo": "FISCO-BCOS/FISCO-BCOS",
+      "url": "https://github.com/FISCO-BCOS/FISCO-BCOS",
+      "found_via": "pass 3: topic pbft",
+      "stars": 2620,
+      "last_commit": "2026-11-13",
+      "license": "Apache-2.0",
+      "overlap_score": 57,
+      "score_breakdown": {
+        "feature_overlap_50": 10,
+        "activity_20": 20,
+        "adoption_15": 12,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Score 57: consortium chain with its own RPC and P2P; not an Ethereum-family client (no devp2p, no eth JSON-RPC).",
+      "pass": "pass3"
+    },
+    {
+      "repo": "shardeum/shardeum",
+      "url": "https://github.com/shardeum/shardeum",
+      "found_via": "pass 3: topic sharding",
+      "stars": 31172,
+      "last_commit": "2026-11-13",
+      "license": "MIT",
+      "overlap_score": 58,
+      "score_breakdown": {
+        "feature_overlap_50": 8,
+        "activity_20": 20,
+        "adoption_15": 15,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Score 58: sharded network whose validator is not an Ethereum-family node; eth RPC is a separate gateway.",
+      "pass": "pass3"
+    },
+    {
+      "repo": "ava-labs/coreth",
+      "url": "https://github.com/ava-labs/coreth",
+      "found_via": "pass 3: snowball from geth derivatives",
+      "stars": 204,
+      "last_commit": "2025-11-25",
+      "license": "LGPL-3.0",
+      "overlap_score": 47,
+      "score_breakdown": {
+        "feature_overlap_50": 26,
+        "activity_20": 0,
+        "adoption_15": 6,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Score 47: archived.",
+      "pass": "pass3"
+    },
+    {
+      "repo": "ava-labs/subnet-evm",
+      "url": "https://github.com/ava-labs/subnet-evm",
+      "found_via": "pass 3: snowball from geth derivatives",
+      "stars": 272,
+      "last_commit": "2025-12-15",
+      "license": "LGPL-3.0",
+      "overlap_score": 47,
+      "score_breakdown": {
+        "feature_overlap_50": 26,
+        "activity_20": 0,
+        "adoption_15": 6,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Score 47: archived.",
+      "pass": "pass3"
+    },
+    {
+      "repo": "klaytn/klaytn",
+      "url": "https://github.com/klaytn/klaytn",
+      "found_via": "pass 3: predecessor of kaiachain/kaia",
+      "stars": 366,
+      "last_commit": "2024-08-02",
+      "license": "LGPL-3.0",
+      "overlap_score": 53,
+      "score_breakdown": {
+        "feature_overlap_50": 32,
+        "activity_20": 0,
+        "adoption_15": 6,
+        "code_access_15": 15
+      },
+      "status": "rejected",
+      "reason": "Score 53: archived; superseded by kaiachain/kaia (selected).",
+      "pass": "pass3"
+    },
+    {
+      "repo": "XinFinOrg/XinFin-Node-Telemetry",
+      "url": "https://github.com/XinFinOrg/XinFin-Node-Telemetry",
+      "found_via": "pass 3: gh search 'xinfin node'",
+      "stars": 0,
+      "last_commit": "2026-10-23",
+      "license": "none",
+      "overlap_score": 28,
+      "score_breakdown": {
+        "feature_overlap_50": 5,
+        "activity_20": 20,
+        "adoption_15": 3,
+        "code_access_15": 0
+      },
+      "status": "rejected",
+      "reason": "Score 28: log shipping helper for XinFin nodes, not a client; no licence.",
+      "pass": "pass3"
     }
-  ]
+  ],
+  "pass3": {
+    "date": "2026-11-14",
+    "selected_total": 14,
+    "queries": [
+      "gh search repos: archive node evm client, execution client snapshot torrent, permissioned ethereum client, node builder rust ethereum, ethereum client low memory, static binary ethereum node, rpc recorder replay ethereum, history expiry execution client, evm tracing node, execution extensions, xdc rpc, xdpos, xinfin node, dpos evm node, bft evm execution client, ethereum execution client, puppeth, t8n, chaindatafetcher, evm localnet, required blocks",
+      "topics: execution-layer, ethereum-client, execution-client, xdc, xdc-network, xinfin, dpos, blockchain-node, ethereum-node, pbft, proof-of-stake, harmony-protocol, sharding (selected repos' own topics: blockchain, ethereum, execution-layer, ethereum-client, evm, pbft, proof-of-stake)",
+      "awesome lists: jmcph4/awesome-reth; web search: BFT EVM clients (Istanbul BFT, Kaia, core-geth)",
+      "org listings: XinFinOrg, BuildOnViction"
+    ]
+  }
 }
