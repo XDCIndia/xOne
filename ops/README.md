@@ -63,6 +63,8 @@ Code: `xone_node::observe::{ethstats, heartbeat, metrics, logs}`; pages: `spec/o
   `allow_plaintext`, which is for private devnets only.
 * `--metrics --metrics.addr A --metrics.port P` serves `/metrics`, `/livez`, `/readyz` (503 while
   syncing, with a stale head, degraded or stopping). Scrape only over localhost or a private network.
+  Grafana dashboard, alert rules and a local stack: `ops/grafana/`, `ops/prometheus/`,
+  [docs/ops/monitoring.md](../docs/ops/monitoring.md).
 * Heartbeat: `HeartbeatCfg { url, allow_plaintext, interval, authorization }`. The URL and the
   authorization value come from the env file; neither is printed.
 * Logs: `--verbosity` and per-module levels; budgets 32 KiB/s global; file sink rotates at

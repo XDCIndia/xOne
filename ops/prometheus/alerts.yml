@@ -1,0 +1,55 @@
+# Alert rules for the xOne /metrics families (crates/xone-node/src/observe/metrics.rs).
+# Every metric name here is checked against the node by crates/xone-node/tests/monitoring.rs.
+groups:
+  - name: xone
+    rules:
+      - alert: XoneHeadStale
+        expr: xone_head_block_age_seconds > 30
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }}: head block is {{ $value }} s old (XDC makes a block every 2 s)"
+      - alert: XoneLowPeers
+        expr: xone_peers < 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: only {{ $value }} peers"
+      - alert: XoneMissedEligibleTurns
+        expr: increase(xone_missed_eligible_turns_total[30m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }}: {{ $value }} eligible mining turns produced no block in 30 min"
+      - alert: XoneQueueOverflow
+        expr: increase(xone_queue_overflow_total[15m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: queue {{ $labels.queue }} overflowed {{ $value }} times in 15 min"
+      - alert: XoneRoundTimeouts
+        expr: increase(xone_timeouts_total[15m]) > 10
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: {{ $value }} round timeouts in 15 min"
+      - alert: XoneDiskAlmostFull
+        # Needs node_exporter on the same host with the datadir mount; set the mountpoint.
+        expr: >
+          xone_storage_bytes
+            / on(instance) group_left
+          node_filesystem_size_bytes{mountpoint="/var/lib/xone"} > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: datadir uses more than 85 % of the disk"
+      - alert: XoneMetricsDown
+        expr: up{job="xone"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }}: /metrics does not answer"
