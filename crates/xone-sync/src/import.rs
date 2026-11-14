@@ -36,11 +36,17 @@ pub enum FileError {
 pub fn decode_block(raw: &[u8]) -> Result<(Header, Body), FileError> {
     let mut buf = raw;
     let outer = RlpHeader::decode(&mut buf)?;
-    let mut buf = buf
-        .get(..outer.payload_length)
-        .ok_or(alloy_rlp::Error::InputTooShort)?;
+    if !outer.list {
+        return Err(alloy_rlp::Error::UnexpectedString.into());
+    }
+    if buf.len() != outer.payload_length {
+        return Err(FileError::Trailing);
+    }
     let header = Header::decode(&mut buf)?;
     let list = RlpHeader::decode(&mut buf)?;
+    if !list.list {
+        return Err(alloy_rlp::Error::UnexpectedString.into());
+    }
     let (mut txs, mut rest) = buf
         .split_at_checked(list.payload_length)
         .ok_or(alloy_rlp::Error::InputTooShort)?;
@@ -109,7 +115,16 @@ impl<R: Read + Seek> FileSource<R> {
                 let n = usize::from(p[0] - 0xf7);
                 let mut b = [0u8; 8];
                 self.r.read_exact(&mut b[8 - n..])?;
-                Ok(Some((1 + u64::from(p[0] - 0xf7), u64::from_be_bytes(b))))
+                let len = u64::from_be_bytes(b);
+                // Canonical form: no leading zero byte and a length that needs the long form.
+                if b[8 - n] == 0 || len < 56 {
+                    return Err(alloy_rlp::Error::LeadingZero.into());
+                }
+                let h = 1 + u64::from(p[0] - 0xf7);
+                at.checked_add(h)
+                    .and_then(|x| x.checked_add(len))
+                    .ok_or(FileError::TooLarge(u64::MAX))?;
+                Ok(Some((h, len)))
             }
             _ => Err(alloy_rlp::Error::UnexpectedString.into()),
         }

@@ -1,7 +1,7 @@
 //! What the chain manager needs from block execution. The real executor (XB-07/XA-05) implements
 //! [`BlockExecutor`]; [`crate::testkit::VectorExecutor`] replays recorded results.
 
-use alloy_primitives::{Bytes, B256};
+use alloy_primitives::{Bloom, Bytes, B256};
 use xone_consensus::verify::Body;
 use xone_primitives::Header;
 use xone_state::{StateDiff, StateRead};
@@ -22,6 +22,17 @@ pub struct Execution {
     /// transactions, the V1 snapshot). Persisted in the block's commit ([`crate::store::Record::aux`]);
     /// empty for an executor that keeps nothing.
     pub aux: Bytes,
+    /// The receipts root and bloom of `receipts`, when the executor derived them already: the
+    /// chain compares the header with these instead of decoding and re-rooting the receipts
+    /// (#245). `None` derives them from `receipts`.
+    pub roots: Option<ReceiptRoots>,
+}
+
+/// What [`Execution::roots`] carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReceiptRoots {
+    pub root: B256,
+    pub bloom: Bloom,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]

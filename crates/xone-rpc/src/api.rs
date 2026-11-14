@@ -165,6 +165,16 @@ pub trait PoolApi: Send + Sync {
     /// `(pending, queued)` by sender, each sorted by nonce, as consensus-encoded transactions.
     #[allow(clippy::type_complexity)]
     fn content(&self) -> (BTreeMap<Address, Vec<Bytes>>, BTreeMap<Address, Vec<Bytes>>);
+    /// One pending or queued transaction by hash, consensus-encoded (geth `GetPoolTransaction`).
+    /// Implementations answer from their hash index; the default scans [`Self::content`].
+    fn transaction(&self, hash: B256) -> Option<Bytes> {
+        let (pending, queued) = self.content();
+        pending
+            .into_values()
+            .chain(queued.into_values())
+            .flatten()
+            .find(|raw| alloy_primitives::keccak256(raw) == hash)
+    }
     /// Admits a transaction; the message of a refusal is geth's.
     fn add_raw(&self, raw: &[u8]) -> Result<B256, String>;
     /// Next nonce with the executable pool transactions applied (`eth_getTransactionCount` `pending`).

@@ -268,6 +268,7 @@ impl<F: FlatWrite> StateProvider<F> {
         for a in diff.accounts.values().flatten() {
             a.balance.check_legal()?;
         }
+        self.flat.note_preimages(diff);
         self.flat.commit_written(&diff.hashed(), &cs);
         self.advance(number, hash, diff, cs);
         Ok(())

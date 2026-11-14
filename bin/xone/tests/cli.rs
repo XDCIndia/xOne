@@ -276,6 +276,74 @@ fn json_log_lines_parse() {
     let _ = std::fs::remove_dir_all(&d);
 }
 
+/// `xone --dev`: a chain of its own that seals alone, with no other input; refusals of the conflicting flags.
+#[test]
+fn dev_seals_blocks_alone() {
+    let d = scratch("dev");
+    let o = xone(&["--dev", "--networkid", "50"]);
+    assert_eq!(o.status.code(), Some(1));
+    assert!(
+        String::from_utf8_lossy(&o.stderr).contains("--networkid"),
+        "{o:?}"
+    );
+    let o = xone(&["--dev", "--keystore", "/k.json"]);
+    assert_eq!(o.status.code(), Some(1));
+    let mut child = Command::new(env!("CARGO_BIN_EXE_xone"))
+        .args([
+            "--dev",
+            "--dev.period",
+            "1",
+            "--datadir",
+            d.to_str().unwrap_or_default(),
+            "--port",
+            "0",
+            "--http.port",
+            "0",
+            "--authrpc.port",
+            "0",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap_or_else(|e| panic!("{e}"));
+    let err = child.stderr.take().unwrap_or_else(|| panic!("no stderr"));
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for l in BufReader::new(err).lines().map_while(Result::ok) {
+            let _ = tx.send(l);
+        }
+    });
+    let t = Instant::now();
+    let mut sealed = 0;
+    while sealed < 3 && t.elapsed() < Duration::from_secs(120) {
+        if let Ok(l) = rx.recv_timeout(Duration::from_secs(1)) {
+            sealed +=
+                usize::from(l.starts_with("producer: block ") && l.contains("sealed and sent"));
+        }
+    }
+    kill(child.id());
+    let _ = child.wait();
+    let banner = {
+        let mut s = String::new();
+        let _ = std::io::Read::read_to_string(
+            &mut child.stdout.take().unwrap_or_else(|| panic!("no stdout")),
+            &mut s,
+        );
+        s
+    };
+    assert!(sealed >= 3, "{sealed} blocks sealed in 120 s\n{banner}");
+    assert!(banner.starts_with("dev chain 1337"), "{banner}");
+    assert!(banner.contains("started chain 1337"), "{banner}");
+    // only the public genesis and fork table are written; the validator key is not
+    let files: Vec<_> = std::fs::read_dir(d.join("dev"))
+        .unwrap_or_else(|e| panic!("{e}"))
+        .flatten()
+        .map(|e| e.file_name().into_string().unwrap_or_default())
+        .collect();
+    assert_eq!(files.len(), 2, "{files:?}");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
 /// Blocks 0..=`to` of the committed Apothem vectors, as the blocks of a geth export file.
 fn vector_blocks(to: usize) -> Vec<Vec<u8>> {
     use std::io::Read;
@@ -333,6 +401,79 @@ fn import_and_export_run_the_pipeline_and_write_geth_block_files() {
     assert!(String::from_utf8_lossy(&o.stderr).contains("larger than head block 200"));
     let o = xone(&["import", "/nonexistent/blocks.rlp"]);
     assert_eq!(o.status.code(), Some(1));
+}
+
+/// A free loopback port.
+fn free_port() -> u16 {
+    std::net::TcpListener::bind("127.0.0.1:0")
+        .and_then(|l| l.local_addr())
+        .map(|a| a.port())
+        .unwrap_or_else(|e| panic!("{e}"))
+}
+
+/// One HTTP/1.1 request to 127.0.0.1:`port`, retried until `want` is in the reply (60 s).
+fn http(port: u16, method: &str, path: &str, body: &str, want: &str) -> String {
+    use std::io::{Read, Write};
+    let t = Instant::now();
+    loop {
+        if let Ok(mut s) = std::net::TcpStream::connect(("127.0.0.1", port)) {
+            let req = format!(
+                "{method} {path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{body}",
+                body.len()
+            );
+            let mut r = String::new();
+            if s.write_all(req.as_bytes()).is_ok()
+                && s.read_to_string(&mut r).is_ok()
+                && r.contains(want)
+            {
+                return r;
+            }
+        }
+        assert!(t.elapsed() < Duration::from_secs(60), "{path}: no {want:?}");
+        std::thread::sleep(Duration::from_millis(200));
+    }
+}
+
+/// One identity string (#22): `--version`, `web3_clientVersion` and `xone_build_info` of a running
+/// node are the same text as the stamp that feeds the p2p name and the ethstats hello; none is `unknown`.
+#[test]
+fn identity_surfaces_equal_and_nothing_is_unknown() {
+    let stamp = out(&xone(&["--version"])).trim().to_owned();
+    assert!(!stamp.contains("unknown"), "{stamp}");
+    assert!(stamp.starts_with("xOneRS/v"), "{stamp}");
+
+    let (rpc, metrics) = (free_port(), free_port());
+    let d = scratch("identity");
+    let mut child = Command::new(env!("CARGO_BIN_EXE_xone"))
+        .args(["--datadir", d.to_str().unwrap_or_default(), "--apothem"])
+        .args([
+            "--port",
+            "0",
+            "--nodiscover",
+            "--http",
+            "--http.addr",
+            "127.0.0.1",
+        ])
+        .args(["--http.port", &rpc.to_string(), "--http.api", "web3"])
+        .args(["--metrics", "--metrics.addr", "127.0.0.1"])
+        .args(["--metrics.port", &metrics.to_string()])
+        .stdout(Stdio::null())
+        .spawn()
+        .unwrap_or_else(|e| panic!("{e}"));
+    let body = r#"{"jsonrpc":"2.0","id":1,"method":"web3_clientVersion","params":[]}"#;
+    let reply = http(rpc, "POST", "/", body, "result");
+    let scrape = http(metrics, "GET", "/metrics", "", "xone_build_info");
+    kill(child.id());
+    let _ = child.wait();
+    let _ = std::fs::remove_dir_all(&d);
+    assert!(
+        reply.contains(&format!("\"result\":\"{stamp}\"")),
+        "{stamp} vs {reply}"
+    );
+    assert!(
+        scrape.contains(&format!("xone_build_info{{version=\"{stamp}\"}} 1")),
+        "{scrape}"
+    );
 }
 
 const APOTHEM_ANCHOR: &str =
@@ -445,4 +586,37 @@ fn gzip_block_archives_import_like_plain_files_and_export_as_gzip() {
         assert_eq!(o.status.code(), Some(1), "{}", out(&o));
         assert!(!out(&o).contains("imported"), "{}", out(&o));
     }
+}
+
+/// #227: `XONE_<FLAG>` and `GETH_<FLAG>` configure the node; a flag wins over both.
+#[test]
+fn environment_variables_configure_and_flags_win() {
+    let run = |env: &[(&str, &str)], args: &[&str]| {
+        let mut c = Command::new(env!("CARGO_BIN_EXE_xone"));
+        c.args(args);
+        for (k, v) in env {
+            c.env(k, v);
+        }
+        c.output().unwrap_or_else(|e| panic!("{e}"))
+    };
+    let o = run(
+        &[("XONE_MAXPEERS", "7"), ("XONE_HTTP_API", "eth,net")],
+        &["dumpconfig"],
+    );
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    assert!(out(&o).contains("max_peers = 7"), "{}", out(&o));
+    assert!(out(&o).contains("\"eth\""), "{}", out(&o));
+    let o = run(
+        &[("XONE_MAXPEERS", "7")],
+        &["--maxpeers", "9", "dumpconfig"],
+    );
+    assert!(out(&o).contains("max_peers = 9"), "{}", out(&o));
+    // a geth env file keeps working, with a warning naming the xone variable
+    let o = run(&[("GETH_MAXPEERS", "5")], &["dumpconfig"]);
+    assert!(out(&o).contains("max_peers = 5"), "{}", out(&o));
+    assert!(String::from_utf8_lossy(&o.stderr).contains("prefer XONE_MAXPEERS"));
+    // a bad value exits 2 naming the variable
+    let o = run(&[("XONE_MAXPEERS", "many")], &["dumpconfig"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&o.stderr).contains("XONE_MAXPEERS"));
 }

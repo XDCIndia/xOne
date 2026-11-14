@@ -51,7 +51,13 @@ impl StateDiff {
     /// Writes the diff and returns its changeset. Fails, before any write, if a balance is above
     /// the legal bound (`WideBalance::check_legal`).
     pub fn apply(&self, flat: &mut impl FlatWrite) -> Result<ChangeSet, WideBalanceError> {
-        self.hashed().apply(flat)
+        let hashed = self.hashed();
+        // checked before anything is noted or written
+        for a in hashed.accounts.values().flatten() {
+            a.balance.check_legal()?;
+        }
+        flat.note_preimages(self);
+        hashed.apply(flat)
     }
 }
 

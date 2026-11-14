@@ -249,11 +249,19 @@ impl<S: StateRead, E: Env> Database for Overlay<'_, S, E> {
         if h == KECCAK_EMPTY {
             return Ok(Bytecode::default());
         }
-        let code = match self.codes.get(&h) {
-            Some(c) => c.clone(),
-            None => self.env.code(h).ok_or(OverlayError::MissingCode(h))?,
-        };
-        Ok(Bytecode::new_raw(code))
+        // code deployed by this block: not in the shared cache until the block commits
+        if let Some(c) = self.codes.get(&h) {
+            return Ok(Bytecode::new_raw(c.clone()));
+        }
+        let cache = self.env.code_cache();
+        if let Some(b) = cache.and_then(|c| c.get(&h)) {
+            return Ok(b);
+        }
+        let code = self.env.code(h).ok_or(OverlayError::MissingCode(h))?;
+        Ok(match cache {
+            Some(c) => c.analyse(h, code),
+            None => Bytecode::new_raw(code),
+        })
     }
 
     fn storage(&mut self, a: Address, k: U256) -> Result<U256, OverlayError> {

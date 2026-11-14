@@ -74,3 +74,77 @@ pub fn capacities(s: &impl StateRead, issuer: Address) -> BTreeMap<Address, U256
     }
     out
 }
+
+/// `transfer(address,uint256)`.
+const TRANSFER: [u8; 4] = [0xa9, 0x05, 0x9c, 0xbb];
+/// `transferFrom(address,address,uint256)`.
+const TRANSFER_FROM: [u8; 4] = [0x23, 0xb8, 0x72, 0xdd];
+
+/// The `holder` balance a token stores.
+pub fn token_balance(s: &impl StateRead, token: Address, holder: Address) -> U256 {
+    s.storage(token, balance_slot(holder))
+}
+
+/// geth-XDC `ValidateTRC21Tx` (`core/state/trc21_reader.go:106-133`): may `from` send this
+/// token-fee transaction? Calldata shorter than a selector: no. A zero token balance: yes (the
+/// reader's "balance = 0 and fee = 0" path). Otherwise the balance must cover `minFee` plus the
+/// value of a `transfer` (exactly 68 bytes, value at 36..68) or `transferFrom` (exactly 80 bytes,
+/// value at 68..80, as the reference packs it); any other call adds no value.
+pub fn validate_trc21_tx(s: &impl StateRead, from: Address, token: Address, data: &[u8]) -> bool {
+    if data.len() < 4 {
+        return false;
+    }
+    let balance = token_balance(s, token, from);
+    if balance.is_zero() {
+        return true;
+    }
+    let min_fee = s.storage(token, min_fee_slot());
+    let value = match (&data[..4], data.len()) {
+        (sel, 68) if sel == TRANSFER => U256::from_be_slice(&data[36..]),
+        (sel, 80) if sel == TRANSFER_FROM => U256::from_be_slice(&data[68..]),
+        _ => U256::ZERO,
+    };
+    min_fee
+        .checked_add(value)
+        .is_some_and(|need| balance >= need)
+}
+
+#[cfg(test)]
+mod pool_tests {
+    use super::*;
+    use crate::Account;
+
+    struct St(BTreeMap<(Address, B256), U256>);
+    impl StateRead for St {
+        fn account(&self, _: Address) -> Option<Account> {
+            None
+        }
+        fn storage(&self, a: Address, k: B256) -> U256 {
+            self.0.get(&(a, k)).copied().unwrap_or(U256::ZERO)
+        }
+    }
+
+    #[test]
+    fn validate_follows_the_reference_reader() {
+        let (token, from) = (Address::repeat_byte(7), Address::repeat_byte(8));
+        let transfer = |v: u64| {
+            let mut d = TRANSFER.to_vec();
+            d.extend_from_slice(&[0u8; 32]);
+            d.extend_from_slice(&U256::from(v).to_be_bytes::<32>());
+            d
+        };
+        let empty = St(BTreeMap::new());
+        assert!(!validate_trc21_tx(&empty, from, token, &[0xa9]));
+        // no token balance: accepted
+        assert!(validate_trc21_tx(&empty, from, token, &transfer(1_000)));
+        let st = St(BTreeMap::from([
+            ((token, balance_slot(from)), U256::from(100)),
+            ((token, min_fee_slot()), U256::from(10)),
+        ]));
+        assert!(validate_trc21_tx(&st, from, token, &transfer(90)));
+        assert!(!validate_trc21_tx(&st, from, token, &transfer(91)));
+        // another call: only minFee
+        assert!(validate_trc21_tx(&st, from, token, &[1, 2, 3, 4]));
+        assert_eq!(token_balance(&st, token, from), U256::from(100));
+    }
+}

@@ -144,8 +144,14 @@ pub enum BlockWriter {
 
 /// Creates the export file `path`, gzip-compressed when its name ends in `.gz` (as geth does).
 pub fn create_block_file(path: &Path) -> io::Result<BlockWriter> {
+    create_block_file_as(path, is_gz_name(path))
+}
+
+/// [`create_block_file`] with the format given: an export that is written under a temporary name
+/// and renamed (`xone export`) still wants the format of its final name.
+pub fn create_block_file_as(path: &Path, gzip: bool) -> io::Result<BlockWriter> {
     let w = BufWriter::new(File::create(path)?);
-    Ok(if is_gz_name(path) {
+    Ok(if gzip {
         BlockWriter::Gzip(GzEncoder::new(w, Compression::default()))
     } else {
         BlockWriter::Plain(w)

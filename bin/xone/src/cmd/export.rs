@@ -1,4 +1,4 @@
-use std::process::ExitCode;
+use std::{fs, path::Path, process::ExitCode};
 
 use clap::ArgMatches;
 use xone_sync::export::export as write;
@@ -22,13 +22,27 @@ pub fn export(m: &ArgMatches) -> ExitCode {
             return Err(format!("block number {last} larger than head block {head}"));
         }
         let path = m.get_one::<String>("file").map_or("", String::as_str);
+        let tmp = temp_path(path);
         // `.gz`: a gzip archive, as geth writes it
-        let mut w = xone_sync::archive::create_block_file(std::path::Path::new(path))
-            .map_err(|e| format!("{path}: {e}"))?;
-        let n = chain
-            .with_store(|s| write(s, first, last, &mut w))
-            .map_err(|e| e.to_string())?;
-        w.finish().map_err(|e| format!("{path}: {e}"))?;
+        let gz = xone_sync::archive::is_gz_name(Path::new(path));
+        let mut w = xone_sync::archive::create_block_file_as(Path::new(&tmp), gz)
+            .map_err(|e| format!("{tmp}: {e}"))?;
+        let n = match chain.with_store(|s| write(s, first, last, &mut w)) {
+            Ok(n) => n,
+            Err(e) => {
+                drop(w);
+                let _ = fs::remove_file(&tmp);
+                return Err(e.to_string());
+            }
+        };
+        if let Err(e) = w.finish() {
+            let _ = fs::remove_file(&tmp);
+            return Err(format!("{path}: {e}"));
+        }
+        fs::rename(&tmp, path).map_err(|e| {
+            let _ = fs::remove_file(&tmp);
+            format!("{path}: {e}")
+        })?;
         Ok(format!("exported {n} blocks, {first}..={last}, to {path}"))
     };
     match run() {
@@ -37,5 +51,31 @@ pub fn export(m: &ArgMatches) -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(e) => fail(e),
+    }
+}
+
+/// The sibling file the export is written to before it replaces `path`. An existing
+/// file at `path` stays unchanged until the export has been completely written and synced.
+fn temp_path(path: &str) -> String {
+    let p = Path::new(path);
+    let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("export");
+    let tmp = format!(".{name}.partial");
+    match p.parent().filter(|d| !d.as_os_str().is_empty()) {
+        Some(dir) => dir.join(tmp).to_string_lossy().into_owned(),
+        None => tmp,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn temp_path_is_a_hidden_sibling() {
+        assert_eq!(temp_path("chain.rlp"), ".chain.rlp.partial");
+        assert_eq!(
+            temp_path("/tmp/out/chain.rlp"),
+            "/tmp/out/.chain.rlp.partial"
+        );
     }
 }

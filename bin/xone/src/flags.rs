@@ -48,6 +48,7 @@ const N: Option<&str> = Some("<n>");
 const S: Option<&str> = Some("<string>");
 const P: Option<&str> = Some("<path>");
 const L: Option<&str> = Some("<a,b,..>");
+const Z: Option<&str> = Some("<size>");
 
 pub const FLAGS: &[Flag] = &[
     f(
@@ -129,6 +130,22 @@ pub const FLAGS: &[Flag] = &[
         "1024",
         "Megabytes of memory for internal caches.",
         "flags.go:556",
+    ),
+    f(
+        "db.max-size",
+        Z,
+        "1TB",
+        "2TB",
+        "Largest size the MDBX database may grow to (bytes, or KB/MB/GB/TB, powers of 1024; 16MB..8TB). Must cover an existing database; a full map stops writes with an error naming this flag.",
+        "not in geth-XDC at the pin; issue #311",
+    ),
+    f(
+        "db.growth-step",
+        Z,
+        "64MB",
+        "256MB",
+        "Bytes the MDBX database grows by when it fills (at least 1MB, at most --db.max-size).",
+        "not in geth-XDC at the pin; issue #311",
     ),
     Flag {
         aliases: &[],
@@ -523,6 +540,22 @@ pub const FLAGS: &[Flag] = &[
         "flags.go:1088",
     ),
     f(
+        "dev",
+        B,
+        "false",
+        "true",
+        "Developer chain: chain id 1337 with one validator whose key is made in memory at start and never written, sealing alone, and a funded developer account (the public test key of the test-junk mnemonic, printed at start). Implies --mine, --http and --nodiscover; the datadir is a new temp dir unless --datadir names an empty one. Refused with a network flag, --networkid, --override.genesis, --chainspec, --keystore or --password. V1 until block 2700, then V2.",
+        "flags.go:500 ; xone",
+    ),
+    f(
+        "dev.period",
+        N,
+        "2",
+        "1",
+        "Seconds between blocks of the --dev chain (1 to 60).",
+        "flags.go:504",
+    ),
+    f(
         "pprof",
         B,
         "false",
@@ -547,6 +580,46 @@ pub const FLAGS: &[Flag] = &[
         "internal/debug/flags.go:111",
     ),
     f(
+        "rpc.gascap",
+        N,
+        "50000000",
+        "0",
+        "Gas cap of eth_call and eth_estimateGas (0 = no cap). Config: [limits] rpc_gas_cap.",
+        "flags.go:711",
+    ),
+    f(
+        "rpc.txfeecap",
+        Some("<ether>"),
+        "1",
+        "0.5",
+        "Fee cap in XDC (gas price, or fee cap, times gas) of a transaction sent via eth_sendRawTransaction (0 = no cap). Config: [limits] rpc_tx_fee_cap.",
+        "flags.go:723",
+    ),
+    f(
+        "rpc.evmtimeout",
+        Some("<duration>"),
+        "5s",
+        "10s",
+        "Deadline of eth_call, such as 5s or 1m30s (0 = the RPC class deadline). Config: [limits] rpc_evm_timeout_ms.",
+        "flags.go:717",
+    ),
+    f(
+        "rpc.batch-request-limit",
+        N,
+        "100",
+        "50",
+        "Maximum requests in one batch. Config: [limits] rpc_batch_items.",
+        "flags.go:936",
+    ),
+    f(
+        "rpc.batch-response-max-size",
+        N,
+        "20971520",
+        "1048576",
+        "Maximum bytes of one response, batch or single. Config: [limits] rpc_response_bytes.",
+        "flags.go:942",
+    ),
+    f(
         "version",
         B,
         "false",
@@ -555,6 +628,58 @@ pub const FLAGS: &[Flag] = &[
         "join.sh:481 (xOneGo lesson)",
     ),
 ];
+
+/// `XONE_<NAME>`: the flag's name upper-cased, dots and dashes to `_` (geth `flags.AutoEnvVars`
+/// with the `XONE` prefix).
+pub fn env_name(name: &str) -> String {
+    env_with("XONE", name)
+}
+
+/// `GETH_<NAME>` for a flag geth-XDC has too (its source cites geth), so an existing geth env file
+/// keeps working; `None` for an xone-only flag.
+pub fn geth_env_name(x: &Flag) -> Option<String> {
+    // the source cites a geth-XDC file and line (`flags.go:829`, `cmd/geth/config.go:65`)
+    let from_geth = x.source.contains(".go:") && !x.source.starts_with("not in geth");
+    from_geth.then(|| env_with("GETH", x.name))
+}
+
+fn env_with(prefix: &str, name: &str) -> String {
+    format!(
+        "{prefix}_{}",
+        name.replace(['.', '-'], "_").to_ascii_uppercase()
+    )
+}
+
+/// Applies the environment to `cfg` for every flag not given on the command line (`on_cli`):
+/// `XONE_<NAME>` first, else `GETH_<NAME>` for a geth flag, which warns once. Precedence is
+/// command line > environment > `--config` file > default; the caller applies the command line
+/// after this. `config` and `version` are not configuration values (`XONE_CONFIG` is read by the
+/// caller).
+pub fn apply_env(
+    cfg: &mut xone_node::Config,
+    on_cli: impl Fn(&str) -> bool,
+    get: impl Fn(&str) -> Option<String>,
+) -> Result<Vec<String>, String> {
+    let mut warns = vec![];
+    for x in FLAGS
+        .iter()
+        .filter(|x| !matches!(x.name, "config" | "version") && !on_cli(x.name))
+    {
+        let xone = env_name(x.name);
+        let (var, v) = match get(&xone) {
+            Some(v) => (xone, v),
+            None => match geth_env_name(x).and_then(|g| get(&g).map(|v| (g, v))) {
+                Some((g, v)) => {
+                    warns.push(format!("using {g} for --{}; prefer {xone}", x.name));
+                    (g, v)
+                }
+                None => continue,
+            },
+        };
+        cfg.set(x.name, &v).map_err(|e| format!("{var}: {e}"))?;
+    }
+    Ok(warns)
+}
 
 fn is_known(name: &str) -> bool {
     FLAGS
@@ -712,6 +837,11 @@ pub fn render_doc() -> String {
 do not edit by hand (`UPDATE_DOCS=1 cargo test -p xone flags_doc` rewrites it).\n\n\
 Every flag takes `--name` or `-name` (geth style), `--name value` or `--name=value`. A boolean is \
 `--name` or `--name=false`. A flag always wins over the `--config` file. An unknown flag exits 2.\n\n\
+Every flag is also an environment variable: `XONE_<NAME>`, the name upper-cased with dots and \
+dashes as `_` (`--http.api` is `XONE_HTTP_API`, the config file `XONE_CONFIG`). A flag geth-XDC has \
+(its source below is a geth file) also reads `GETH_<NAME>` when `XONE_<NAME>` is unset, with a \
+warning. Precedence: command line, then environment, then the `--config` file, then the default. \
+An empty variable is unset; a bad value exits 2 naming the variable.\n\n\
 Source column: file:line in geth-XDC (`XDCIndia/go-ethereum` at `6fc8e8c2`; `flags.go` is \
 `cmd/utils/flags.go`), then the `join.sh` launch lines that pass the flag (ItWorksinMyLocal \
 `24b915e`, geth line 570, xone line 682).\n\n\

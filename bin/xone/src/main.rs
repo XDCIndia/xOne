@@ -66,14 +66,32 @@ fn run(args: impl IntoIterator<Item = OsString>) -> ExitCode {
         );
         return ExitCode::from(2);
     }
-    let mut cfg = match m.get_one::<String>("config") {
+    let env = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
+    let config_path = m
+        .get_one::<String>("config")
+        .cloned()
+        .or_else(|| env(&flags::env_name("config")));
+    let mut cfg = match config_path {
         Some(p) => match Config::from_file(p.as_ref()) {
             Ok(c) => c,
             Err(e) => return fail(e),
         },
         None => Config::default(),
     };
-    // flags win over the file
+    // the environment wins over the file (XONE_<FLAG>, or GETH_<FLAG> for a geth flag)
+    let on_cli = |n: &str| m.value_source(n) == Some(ValueSource::CommandLine);
+    match flags::apply_env(&mut cfg, on_cli, env) {
+        Ok(warns) => {
+            for w in warns {
+                eprintln!("xone: {w}");
+            }
+        }
+        Err(e) => {
+            eprintln!("xone: {e}");
+            return ExitCode::from(2);
+        }
+    }
+    // flags win over the environment and the file
     for x in flags::FLAGS
         .iter()
         .filter(|x| !matches!(x.name, "config" | "version"))
@@ -86,6 +104,11 @@ fn run(args: impl IntoIterator<Item = OsString>) -> ExitCode {
                 }
             }
         }
+    }
+    // the merged config, before anything is opened
+    if let Err(e) = cfg.validate() {
+        eprintln!("xone: {e}");
+        return ExitCode::from(2);
     }
     match m.subcommand() {
         Some(("dumpconfig", _)) => match cfg
@@ -113,18 +136,29 @@ fn run(args: impl IntoIterator<Item = OsString>) -> ExitCode {
                 Err(e) => fail(e),
             }
         }
-        _ => start(&cfg),
+        _ if cfg.dev.enabled => {
+            let given = m.value_source("datadir") == Some(ValueSource::CommandLine)
+                || cfg.datadir != Config::default().datadir;
+            match xone_node::dev::prepare(&mut cfg, given) {
+                Ok(d) => {
+                    println!("{}", d.banner);
+                    start(&cfg, Some(d))
+                }
+                Err(e) => fail(e),
+            }
+        }
+        _ => start(&cfg, None),
     }
 }
 
 /// Check the datadir marker, open the chain (a restart replays what is stored), then run net, chain,
 /// pool and rpc until SIGTERM or SIGINT.
-fn start(cfg: &Config) -> ExitCode {
+fn start(cfg: &Config, dev: Option<xone_node::dev::Started>) -> ExitCode {
     let mut logs = match logs(cfg) {
         Ok(l) => l,
         Err(e) => return fail(e),
     };
-    let code = run_node(cfg);
+    let code = run_node(cfg, dev);
     logs.stop();
     code
 }
@@ -146,7 +180,7 @@ fn note(cfg: &Config, m: &str) {
     }
 }
 
-fn run_node(cfg: &Config) -> ExitCode {
+fn run_node(cfg: &Config, dev: Option<xone_node::dev::Started>) -> ExitCode {
     let (marker, spec, genesis) = match datadir::prepare_chain(cfg) {
         Ok(m) => m,
         Err(e) => return fail(e),
@@ -163,7 +197,11 @@ fn run_node(cfg: &Config) -> ExitCode {
         }
         Err(e) => return fail(format!("snap sync: {e}")),
     }
-    let mut node = match services::build(cfg, &marker, spec, &genesis, stamp()) {
+    let built = match dev {
+        Some(d) => services::build_dev(cfg, &marker, spec, &genesis, stamp(), d.key),
+        None => services::build(cfg, &marker, spec, &genesis, stamp()),
+    };
+    let mut node = match built {
         Ok(b) => b.node,
         Err(e) => return fail(e),
     };
@@ -186,13 +224,45 @@ fn run_node(cfg: &Config) -> ExitCode {
     }
 }
 
+/// jemalloc (#249): ethrex measured the inline purge at about 12 % of block execution CPU before
+/// it moved purging to a background thread, as here.
+#[cfg(all(feature = "jemalloc", not(target_env = "msvc")))]
+#[global_allocator]
+static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+
+/// Starts jemalloc's background purge threads; `false` when the allocator refused (the node runs,
+/// with inline purging).
+#[cfg(all(feature = "jemalloc", not(target_env = "msvc")))]
+fn allocator_background() -> bool {
+    tikv_jemalloc_ctl::background_thread::write(true).is_ok()
+        && tikv_jemalloc_ctl::background_thread::read().unwrap_or(false)
+}
+
+#[cfg(not(all(feature = "jemalloc", not(target_env = "msvc"))))]
+fn allocator_background() -> bool {
+    false
+}
+
 fn main() -> ExitCode {
+    if !allocator_background() {
+        tracing::debug!("allocator: no background purge thread");
+    }
     run(std::env::args_os())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(all(feature = "jemalloc", not(target_env = "msvc")))]
+    #[test]
+    fn jemalloc_is_the_allocator_with_a_background_purge_thread() {
+        assert!(allocator_background());
+        // the epoch advances only under jemalloc
+        assert!(tikv_jemalloc_ctl::epoch::advance().is_ok());
+        let v: Vec<u8> = vec![1; 1 << 20];
+        assert_eq!(v.iter().map(|b| u64::from(*b)).sum::<u64>(), 1 << 20);
+    }
 
     #[test]
     fn stamp_shape() {
@@ -292,6 +362,58 @@ mod tests {
                 assert!(c.set(a, v).is_ok(), "{a}");
             }
         }
+    }
+
+    #[test]
+    fn every_flag_has_a_unique_env_name_and_the_cli_wins() {
+        let mut seen = std::collections::HashSet::new();
+        for f in flags::FLAGS {
+            let n = flags::env_name(f.name);
+            assert!(n.starts_with("XONE_") && !n.contains(['.', '-']), "{n}");
+            // names the launcher and the build use for themselves
+            assert!(
+                !matches!(n.as_str(), "XONE_BIN" | "XONE_BOOTNODES_DIR" | "XONE_STAMP"),
+                "{n}"
+            );
+            assert!(seen.insert(n.clone()), "{n} twice");
+        }
+        assert_eq!(flags::env_name("http.api"), "XONE_HTTP_API");
+        assert_eq!(flags::env_name("snap.gap-rpc"), "XONE_SNAP_GAP_RPC");
+        let env = |pairs: &'static [(&'static str, &'static str)]| {
+            move |k: &str| {
+                pairs
+                    .iter()
+                    .find(|(n, _)| *n == k)
+                    .map(|(_, v)| (*v).to_owned())
+            }
+        };
+        // the environment over the default, XONE_ over GETH_
+        let mut c = Config::default();
+        let w = flags::apply_env(
+            &mut c,
+            |_| false,
+            env(&[
+                ("XONE_MAXPEERS", "7"),
+                ("GETH_MAXPEERS", "9"),
+                ("GETH_HTTP_PORT", "9545"),
+            ]),
+        )
+        .map_err(|e| e.to_string());
+        assert_eq!(c.p2p.max_peers, 7);
+        assert_eq!(c.http.port, 9545);
+        assert_eq!(w.map(|w| w.len()), Ok(1));
+        // a flag on the command line is left to the command line
+        let mut c = Config::default();
+        assert!(
+            flags::apply_env(&mut c, |n| n == "maxpeers", env(&[("XONE_MAXPEERS", "7")])).is_ok()
+        );
+        assert_eq!(c.p2p.max_peers, Config::default().p2p.max_peers);
+        // an xone-only flag has no GETH_ name; a bad value names the variable
+        let mut c = Config::default();
+        assert!(flags::apply_env(&mut c, |_| false, env(&[("GETH_STATE_DISK", "true")])).is_ok());
+        assert!(!c.sync.state_disk);
+        let e = flags::apply_env(&mut c, |_| false, env(&[("XONE_MAXPEERS", "many")]));
+        assert!(e.is_err_and(|e| e.starts_with("XONE_MAXPEERS")));
     }
 
     #[test]

@@ -297,3 +297,45 @@ fn a_datadir_without_history_tables_is_refused() {
     assert!(matches!(e, CoreError::NoHistoryTables), "{e}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// History pruning takes the `TxLookup` rows of the blocks it drops and keeps those of the blocks
+/// it retains (issue #326): a transaction below the retention floor is no longer located, one at or
+/// above it still is, and a restart does not bring the removed rows back.
+#[test]
+fn pruning_history_removes_the_tx_lookup_rows_below_the_floor_and_keeps_the_rest() {
+    use alloy_primitives::keccak256;
+    use xone_sync::store::Store;
+    let dir = scratch("prune-txlookup");
+    let blocks = vectors(1200);
+    let first_tx = |r: std::ops::RangeInclusive<usize>| {
+        r.into_iter()
+            .find_map(|i| Some((i, keccak256(parts(&blocks[i]).1.transactions.first()?))))
+    };
+    let (old, mid, kept) = (
+        first_tx(1..=500).expect("a transaction below 500"),
+        first_tx(700..=799).expect("one in 700..=799"),
+        first_tx(800..=1200).expect("one at or above 800"),
+    );
+    let core = open(&dir, Network::Apothem, 0).unwrap();
+    for b in &blocks[1..=1200] {
+        let (h, body) = parts(b);
+        core.import(h, body, xone_node::services::core::now())
+            .unwrap();
+    }
+    let at = |core: &Core, h: alloy_primitives::B256| {
+        core.hist.read().src.as_ref().unwrap().tx(h).unwrap()
+    };
+    for (n, h) in [old, mid, kept] {
+        assert_eq!(
+            at(&core, h),
+            Some((n as u64, 0)),
+            "indexed before the prune"
+        );
+    }
+    core.chain.with_store_mut(|s| s.prune(800, 800)).unwrap();
+    for (n, h) in [old, mid] {
+        assert_eq!(at(&core, h), None, "block {n} is below the floor 800");
+    }
+    assert_eq!(at(&core, kept.1), Some((kept.0 as u64, 0)));
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -17,7 +17,6 @@ use std::{
     time::Duration,
 };
 
-use super::hex0x;
 use crate::lifecycle::{Service, ServiceError};
 
 #[derive(Clone, Debug, Default)]
@@ -33,7 +32,6 @@ pub struct Snapshot {
     /// The one build stamp.
     pub version: String,
     pub head_number: Option<u64>,
-    pub head_hash: [u8; 32],
     /// Unix seconds of the head block.
     pub head_timestamp: u64,
     /// Unix seconds now, from the caller's clock.
@@ -103,17 +101,6 @@ pub fn encode(s: &Snapshot) -> String {
             "gauge",
             "Number of the head block.",
             n,
-        );
-        family(
-            &mut o,
-            "xone_head_block_hash_info",
-            "gauge",
-            "Head block hash as a label; always 1.",
-        );
-        let _ = writeln!(
-            o,
-            "xone_head_block_hash_info{{hash=\"{}\"}} 1",
-            hex0x(&s.head_hash)
         );
         g(
             &mut o,
@@ -430,7 +417,6 @@ mod tests {
         Snapshot {
             version: "xone/v0.1.0-abc1234 \"x\"".into(),
             head_number: Some(100),
-            head_hash: [0xab; 32],
             head_timestamp: 1000,
             now: 1004,
             peers: 7,
@@ -452,6 +438,28 @@ mod tests {
         }
     }
 
+    /// The label sets must not grow with the chain: the head hash is read through
+    /// `eth_getBlockByNumber("latest")`, never a metric label (issue #302).
+    #[test]
+    fn label_sets_stay_bounded_across_heads() {
+        let mut series = std::collections::BTreeSet::new();
+        for n in 0..5_000u64 {
+            let mut s = snap();
+            s.head_number = Some(n);
+            s.head_timestamp = n * 2;
+            for line in encode(&s).lines().filter(|l| !l.starts_with('#')) {
+                let name = line.rsplit_once(' ').map_or(line, |(k, _)| k);
+                series.insert(name.to_owned());
+            }
+        }
+        let one = encode(&snap())
+            .lines()
+            .filter(|l| !l.starts_with('#'))
+            .count();
+        assert_eq!(series.len(), one);
+        assert!(!series.iter().any(|k| k.contains("hash")));
+    }
+
     #[test]
     fn exposition_parses_and_lists_the_named_metrics() {
         let text = encode(&snap());
@@ -459,7 +467,6 @@ mod tests {
         for want in [
             "xone_build_info",
             "xone_head_block_number",
-            "xone_head_block_hash_info",
             "xone_head_block_age_seconds",
             "xone_peers",
             "xone_peers_required_block_refused_total",

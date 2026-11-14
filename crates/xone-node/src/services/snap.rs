@@ -21,7 +21,7 @@ use xone_net::{eth::Message as Eth, peers::Peers, rlpx::PeerId, rlpx::Sub};
 use xone_snap::{
     codec::Message,
     preimage::{self, Preimages},
-    server::{empty_reply, Handled, Limits, Server, Snapshot},
+    server::{byte_codes_from, empty_reply, Handled, Limits, Server, Snapshot},
 };
 use xone_sync::store::Store;
 
@@ -114,6 +114,18 @@ impl SnapServer {
                 // an undecodable request is dropped; the peer times out
                 let msg = Message::decode(code, body).ok()?;
                 let empty = empty_reply(&msg)?;
+                // Bytecode is content-addressed: answered from the code store, no root needed.
+                if let Message::GetByteCodes(r) = &msg {
+                    let reply = {
+                        let hist = self.core.hist.read();
+                        Message::ByteCodes(byte_codes_from(r, |h| hist.codes.get(h).cloned()))
+                    };
+                    return Some(Eth::Sub {
+                        sub,
+                        code: reply.code(),
+                        body: reply.encode().into(),
+                    });
+                }
                 let root = root_of(&msg).or_else(|| self.cache.last().map(|(r, _)| *r));
                 let reply = match root {
                     Some(r) => match self.server(r).await {

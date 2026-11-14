@@ -4,6 +4,8 @@ Generated from `bin/xone/src/flags.rs` by the `flags_doc_is_current` test; do no
 
 Every flag takes `--name` or `-name` (geth style), `--name value` or `--name=value`. A boolean is `--name` or `--name=false`. A flag always wins over the `--config` file. An unknown flag exits 2.
 
+Every flag is also an environment variable: `XONE_<NAME>`, the name upper-cased with dots and dashes as `_` (`--http.api` is `XONE_HTTP_API`, the config file `XONE_CONFIG`). A flag geth-XDC has (its source below is a geth file) also reads `GETH_<NAME>` when `XONE_<NAME>` is unset, with a warning. Precedence: command line, then environment, then the `--config` file, then the default. An empty variable is unset; a bad value exits 2 naming the variable.
+
 Source column: file:line in geth-XDC (`XDCIndia/go-ethereum` at `6fc8e8c2`; `flags.go` is `cmd/utils/flags.go`), then the `join.sh` launch lines that pass the flag (ItWorksinMyLocal `24b915e`, geth line 570, xone line 682).
 
 | Flag | Aliases | Default | Meaning | Source |
@@ -18,6 +20,8 @@ Source column: file:line in geth-XDC (`XDCIndia/go-ethereum` at `6fc8e8c2`; `fla
 | `--syncfromblock <n>` |  | unset | First block to import; unset means from genesis. xone-defined. | not in geth-XDC at the pin; task list |
 | `--minimal` |  | false | Start from the anchor of an imported snapshot (`xone snapshot import`), keep only the retention window, never sync from genesis or read an archive. | not in geth-XDC at the pin; issue #38 |
 | `--cache <n>` |  | 4096 | Megabytes of memory for internal caches. | flags.go:556 |
+| `--db.max-size <size>` |  | 1TB | Largest size the MDBX database may grow to (bytes, or KB/MB/GB/TB, powers of 1024; 16MB..8TB). Must cover an existing database; a full map stops writes with an error naming this flag. | not in geth-XDC at the pin; issue #311 |
+| `--db.growth-step <size>` |  | 64MB | Bytes the MDBX database grows by when it fills (at least 1MB, at most --db.max-size). | not in geth-XDC at the pin; issue #311 |
 | `--history.transactions <n>` | `-txlookuplimit` (deprecated) | 2350000 | Recent blocks whose transactions stay indexed; 0 is the whole chain. | flags.go:379 |
 | `--port <n>` |  | 30303 | P2P listening port (TCP). | flags.go:969 ; geth,xone |
 | `--discovery.port <n>` |  | same as port | P2P discovery port (UDP). | flags.go:1026 ; xone |
@@ -66,9 +70,16 @@ Source column: file:line in geth-XDC (`XDCIndia/go-ethereum` at `6fc8e8c2`; `fla
 | `--metrics` |  | false | Enable the metrics endpoint. | flags.go:1074 |
 | `--metrics.addr <string>` |  | 127.0.0.1 | Metrics listen address. | flags.go:1083 |
 | `--metrics.port <n>` |  | 6060 | Metrics listen port. | flags.go:1088 |
+| `--dev` |  | false | Developer chain: chain id 1337 with one validator whose key is made in memory at start and never written, sealing alone, and a funded developer account (the public test key of the test-junk mnemonic, printed at start). Implies --mine, --http and --nodiscover; the datadir is a new temp dir unless --datadir names an empty one. Refused with a network flag, --networkid, --override.genesis, --chainspec, --keystore or --password. V1 until block 2700, then V2. | flags.go:500 ; xone |
+| `--dev.period <n>` |  | 2 | Seconds between blocks of the --dev chain (1 to 60). | flags.go:504 |
 | `--pprof` |  | false | Enable the profiling endpoint. | internal/debug/flags.go:106 |
 | `--pprof.addr <string>` |  | 127.0.0.1 | Profiling listen address. | internal/debug/flags.go:117 |
 | `--pprof.port <n>` |  | 6060 | Profiling listen port. | internal/debug/flags.go:111 |
+| `--rpc.gascap <n>` |  | 50000000 | Gas cap of eth_call and eth_estimateGas (0 = no cap). Config: [limits] rpc_gas_cap. | flags.go:711 |
+| `--rpc.txfeecap <ether>` |  | 1 | Fee cap in XDC (gas price, or fee cap, times gas) of a transaction sent via eth_sendRawTransaction (0 = no cap). Config: [limits] rpc_tx_fee_cap. | flags.go:723 |
+| `--rpc.evmtimeout <duration>` |  | 5s | Deadline of eth_call, such as 5s or 1m30s (0 = the RPC class deadline). Config: [limits] rpc_evm_timeout_ms. | flags.go:717 |
+| `--rpc.batch-request-limit <n>` |  | 100 | Maximum requests in one batch. Config: [limits] rpc_batch_items. | flags.go:936 |
+| `--rpc.batch-response-max-size <n>` |  | 20971520 | Maximum bytes of one response, batch or single. Config: [limits] rpc_response_bytes. | flags.go:942 |
 | `--version` | `-V` | false | Print the version stamp and exit; never opens the datadir. Short form -V. | join.sh:481 (xOneGo lesson) |
 
 Subcommands: `init <genesis.json>`, `version`, `dumpconfig`, `genesis-hash --network <name>`, `import <file>`, `export <file> [from] [to] --input <blockfile>`, `snapshot export --datadir <dir> --out <file> [--at <block>]`, `snapshot import --datadir <dir> --in <file> --pins <file>`.
