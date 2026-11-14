@@ -566,6 +566,7 @@ pub fn run(
         spec.genesis_hash,
     );
     pc.max_peers = cfg.p2p.max_peers as usize;
+    pc.restrict = cfg.netrestrict().map_err(io)?;
     pc.required_blocks = cfg
         .required_blocks_of_chain(spec.chain_id)
         .map_err(|e| io(e.to_string()))?;

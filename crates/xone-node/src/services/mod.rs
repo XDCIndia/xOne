@@ -154,6 +154,7 @@ pub fn build(
         core.genesis,
     );
     pc.max_peers = cfg.p2p.max_peers as usize;
+    pc.restrict = cfg.netrestrict()?;
     pc.required_blocks = required;
     pc.shutdown_grace = Duration::from_secs(1);
     {

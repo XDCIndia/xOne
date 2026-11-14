@@ -61,6 +61,8 @@ pub enum DiscError {
     UnknownNode,
     #[error("packet from ourselves")]
     SelfPacket,
+    #[error("sender outside --netrestrict")]
+    Restricted,
 }
 
 impl From<alloy_rlp::Error> for DiscError {
@@ -468,9 +470,21 @@ pub struct Discv4 {
     table: Table,
     pings: HashMap<PeerId, PendingPing>,
     finds: HashMap<PeerId, PendingFind>,
+    restrict: Option<crate::netrestrict::NetRestrict>,
 }
 
 impl Discv4 {
+    /// Talk only to the networks of `r` (`--netrestrict`): packets from other addresses are
+    /// dropped, neighbours in them are not pinged, and no ping is sent to them.
+    pub fn with_restrict(mut self, r: Option<crate::netrestrict::NetRestrict>) -> Self {
+        self.restrict = r;
+        self
+    }
+
+    fn allowed(&self, ip: IpAddr) -> bool {
+        crate::netrestrict::allowed(self.restrict.as_ref(), ip)
+    }
+
     /// `local` is the UDP address we advertise, `tcp_port` the RLPx port.
     pub fn new(key: SecretKey, local: SocketAddr, tcp_port: u16) -> Self {
         let id = peer_id(&key);
@@ -482,6 +496,7 @@ impl Discv4 {
             table: Table::new(&id),
             pings: HashMap::new(),
             finds: HashMap::new(),
+            restrict: None,
         }
     }
 
@@ -510,6 +525,9 @@ impl Discv4 {
         tcp: u16,
         t: &mut impl Transport,
     ) {
+        if !self.allowed(to.ip()) {
+            return;
+        }
         if self.pings.len() >= MAX_PENDING && !self.pings.contains_key(&to_id) {
             return;
         }
@@ -573,6 +591,9 @@ impl Discv4 {
         data: &[u8],
         t: &mut impl Transport,
     ) -> Result<(), DiscError> {
+        if !self.allowed(from.ip()) {
+            return Err(DiscError::Restricted);
+        }
         let (packet, id, hash) = decode(data)?;
         if id == self.id {
             return Err(DiscError::SelfPacket);
@@ -680,6 +701,7 @@ impl Discv4 {
                     // geth: UDP port above 1024, relayable address, a real key (`v4_udp.go:610-625`)
                     if n.udp <= 1024
                         || n.id == self.id
+                        || !self.allowed(ip)
                         || !relay_ok(from.ip(), ip)
                         || self.table.get(&n.id).is_some()
                     {
