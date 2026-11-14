@@ -191,6 +191,7 @@ pub fn build(
                 bft_rx,
                 progress.clone(),
             )
+            .map(|p| p.with_gate(gate.clone()))
         })
         .transpose()?;
     let stats = Arc::new(stats::NodeStats {
