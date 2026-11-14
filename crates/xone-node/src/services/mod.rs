@@ -110,7 +110,7 @@ pub fn build(
     let producer_plan = cfg
         .mining
         .mine
-        .then(|| producer::plan(cfg, spec.chain_id))
+        .then(|| producer::plan(cfg, &spec))
         .transpose()
         .map_err(|e| e.to_string())?;
 
@@ -287,6 +287,15 @@ fn identity(
 mod tests {
     use super::identity;
     use crate::observe::ethstats::hello;
+
+    /// The ethstats `node` and `client` are the build stamp, byte for byte (#22).
+    #[test]
+    fn ethstats_identity_is_the_stamp() {
+        let stamp = "xOneRS/v1-abcd1234-01012026/linux-x86_64/rustc1";
+        let i = identity(&crate::Config::default(), 51, stamp, true);
+        assert_eq!(i.node, stamp);
+        assert_eq!(i.client, stamp);
+    }
 
     /// The hello `syncMode` per node type (#123): full, snap and fast anchored, minimal.
     #[test]

@@ -176,6 +176,9 @@ pub struct Mining {
     /// Keystore file of the validator key (`--keystore`). Block production needs it and the password file.
     pub keystore: Option<PathBuf>,
     pub unlock: Vec<String>,
+    /// The signer's quiet window in seconds (`--miner.quietwindow`, ADR-010 section 8). Only a value
+    /// at or above the network's (`ChainSpec::quiet_window`) is accepted.
+    pub quiet_window: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -337,7 +340,8 @@ defaults!(Mining {
     etherbase: None,
     password_file: None,
     keystore: None,
-    unlock: vec![]
+    unlock: vec![],
+    quiet_window: None
 });
 defaults!(Logging {
     verbosity: 3,
@@ -592,6 +596,7 @@ impl Config {
             "ipcpath" => self.ipc.path = Some(v.into()),
             "mine" => self.mining.mine = flag(key, v)?,
             "miner.etherbase" => self.mining.etherbase = Some(v.to_owned()),
+            "miner.quietwindow" => self.mining.quiet_window = Some(num(key, v)?),
             "password" => self.mining.password_file = Some(v.into()),
             "keystore" => self.mining.keystore = Some(v.into()),
             "unlock" => self.mining.unlock = list(v),

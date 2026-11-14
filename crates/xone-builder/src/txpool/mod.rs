@@ -263,8 +263,43 @@ impl Head {
     }
 }
 
+/// TRC21 token-fee admission data of one head (geth-XDC `trc21Data`, `legacypool.go:611-635`): the
+/// fee capacity of every registered token and the TRC21 gas price of the pending block. Read once
+/// per head.
+#[derive(Debug, Clone, Default)]
+pub struct Trc21Fees {
+    pub caps: BTreeMap<Address, U256>,
+    /// `TRC21GasPriceForBlock(head + 1)`.
+    pub price: u128,
+    /// The head these were read at.
+    pub at: Option<u64>,
+}
+
+impl Trc21Fees {
+    /// Reads the capacities from the head state.
+    pub fn read<S: StateRead>(spec: &ChainSpec, state: &S, head: u64) -> Self {
+        use xone_state::system_contracts::trc21_issuer;
+        Self {
+            caps: trc21_issuer::capacities(state, trc21_issuer::issuer(spec.chain_id)),
+            price: xone_evm::fees::trc21_gas_price(spec, head.saturating_add(1)),
+            at: Some(head),
+        }
+    }
+
+    /// For a transaction to a registered token: its capacity and its cost at the TRC21 price
+    /// (`trc21Cost`: price * gas + value).
+    pub fn cost(&self, t: &PoolTx) -> Option<(U256, Option<U256>)> {
+        let cap = *self.caps.get(&t.tx.to?)?;
+        let cost = U256::from(self.price)
+            .checked_mul(U256::from(t.tx.gas))
+            .and_then(|c| c.checked_add(t.tx.value));
+        Some((cap, cost))
+    }
+}
+
 pub struct Pool {
     pub(crate) spec: ChainSpec,
+    pub(crate) trc21: Trc21Fees,
     pub(crate) cfg: Config,
     /// geth `gasTip`: `Init(gasTip)` and `SetGasTip`.
     pub(crate) min_tip: u128,
@@ -299,6 +334,7 @@ impl Pool {
         let head = Head::new(&spec, number, gas_limit)?;
         Ok(Self {
             min_tip: u128::from(cfg.price_limit),
+            trc21: Trc21Fees::default(),
             spec,
             cfg,
             head,
