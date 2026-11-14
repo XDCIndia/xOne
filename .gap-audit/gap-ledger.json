@@ -801,6 +801,204 @@
       "issue_url": "https://github.com/XDCIndia/xOneRS/issues/188",
       "key": "rpcdocs",
       "related": "#42"
+    },
+    {
+      "id": "GAP-0038",
+      "title": "Self-contained release binaries: static musl (or a pinned glibc floor), aarch64, size budget and a minimal image",
+      "area": "release",
+      "status": "issued",
+      "pass": "advantages",
+      "strength_of": "Zig projects (Phant, Zeam)",
+      "strength": "C-level speed in tiny, self-contained binaries built for an explicit target (x86_64 and aarch64), shipped in a scratch image",
+      "sources": [
+        "`blockblaz/zeam`: [.github/workflows/auto-release.yml](https://github.com/blockblaz/zeam/blob/HEAD/.github/workflows/auto-release.yml) (`zig build -Dtarget=x86_64-linux-gnu` and `-Dtarget=aarch64-linux-gnu`, one release per arch)",
+        "`blockblaz/zeam`: [Dockerfile.prebuilt](https://github.com/blockblaz/zeam/blob/HEAD/Dockerfile.prebuilt) (`FROM scratch` runtime with only the libraries `ldd` lists)",
+        "`stateless-consensus/phant`: [build.zig](https://github.com/stateless-consensus/phant/blob/HEAD/build.zig) (`standardTargetOptions`: any target triple, static libraries for its C dependencies)",
+        "`paradigmxyz/reth`: [Cargo.toml](https://github.com/paradigmxyz/reth/blob/36600d5ff9628465475dd4c7608e2e9f2fe24273/Cargo.toml) (release profiles; reth publishes x86_64 and aarch64 binaries)"
+      ],
+      "ours": "`ci/release.sh` builds `target/release/xone` for the host only (linux-x86_64); `Dockerfile` says \"it links glibc dynamically\" on an `ubuntu:24.04` base; `docs/ops/release.md` \"Not covered here\": aarch64. Measured on the current build: `objdump -T target/release/xone` needs `GLIBC_2.38`; `ldd` lists libc, libm, libgcc_s; size 19.4 MB, not stripped; `Cargo.toml` has no `[profile.release]`",
+      "priority": "P1",
+      "priority_reason": "P1 (impact on operators): the release binary needs GLIBC_2.38, so it does not start on Ubuntu 22.04 (glibc 2.35) or Debian 12 (2.36), which many XDC masternode hosts run. The Docker image hides this, a tarball install does not.",
+      "seen_in_count": null,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/193",
+      "key": "staticbin",
+      "related": "#46 (closed; specified x86_64 and aarch64), #62, #22"
+    },
+    {
+      "id": "GAP-0039",
+      "title": "Compressed frozen segments: zstd for closed XSEG chunks of headers, bodies and receipts (and changesets once #135 moves them)",
+      "area": "storage",
+      "status": "issued",
+      "pass": "advantages",
+      "strength_of": "Erigon (and Reth static files)",
+      "strength": "smallest archive: immutable history in compressed segment files (Erigon `.seg` with a pattern dictionary; reth NippyJar with zstd dictionaries)",
+      "sources": [
+        "`erigontech/erigon`: [db/seg/compress.go](https://github.com/erigontech/erigon/blob/bbb5524e53fb057e7d47a5066e152f1091ac4ba4/db/seg/compress.go) (segment compressor: pattern dictionary plus Huffman)",
+        "`erigontech/erigon`: [db/seg/decompress.go](https://github.com/erigontech/erigon/blob/bbb5524e53fb057e7d47a5066e152f1091ac4ba4/db/seg/decompress.go) (random access by offset into a compressed segment)",
+        "`erigontech/erigon`: [docs/site/docs/get-started/hardware-requirements.mdx](https://github.com/erigontech/erigon/blob/bbb5524e53fb057e7d47a5066e152f1091ac4ba4/docs/site/docs/get-started/hardware-requirements.mdx) (an Ethereum archive node fits on one 4 TB drive)",
+        "`paradigmxyz/reth`: [crates/storage/nippy-jar/src/compression/zstd.rs](https://github.com/paradigmxyz/reth/blob/36600d5ff9628465475dd4c7608e2e9f2fe24273/crates/storage/nippy-jar/src/compression/zstd.rs) (zstd with trained dictionaries per column)",
+        "`paradigmxyz/reth`: [crates/static-file/static-file/src/static_file_producer.rs](https://github.com/paradigmxyz/reth/blob/36600d5ff9628465475dd4c7608e2e9f2fe24273/crates/static-file/static-file/src/static_file_producer.rs)"
+      ],
+      "ours": "`docs/adr/ADR-005-storage-and-publication.md` section 6.1: a frame is `payload_len | block | payload | crc32c` with raw RLP; `BLOCKS_PER_FILE = 100_000`; `crates/xone-db/src/segments.rs` has no compression; only the snapshot export (`crates/xone-sync/src/bootstrap/format.rs`) uses gzip. #149: xone-rs Apothem datadir 72 GB against 13 GB for xOneGo",
+      "priority": "P2",
+      "priority_reason": "P2 (impact on operators): disk is the main cost of an XDC node and the xone-rs Apothem datadir is the largest of the xOne family (72 GB, #149). History grows with chain length; compression is the largest saving that does not change any format a peer or a consensus rule sees.",
+      "seen_in_count": null,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/194",
+      "key": "segzstd",
+      "related": "#149, #135, #152 (GAP-0001 archive), #177 (GAP-0026 pruning), #11"
+    },
+    {
+      "id": "GAP-0040",
+      "title": "Seeded history distribution: nodes serve their committed XSEG chunks with a hash manifest, new nodes fetch from several seeds and verify",
+      "area": "storage",
+      "status": "issued",
+      "pass": "advantages",
+      "strength_of": "Erigon",
+      "strength": "seeded distribution of immutable history: every node seeds its finished snapshot files and a new node downloads them from many peers by content hash",
+      "sources": [
+        "`erigontech/erigon`: [cmd/downloader/readme.md](https://github.com/erigontech/erigon/blob/bbb5524e53fb057e7d47a5066e152f1091ac4ba4/cmd/downloader/readme.md) (\"Service to seed/download historical data (snapshots, immutable .seg files)\"; new snapshots start seeding automatically)",
+        "`erigontech/erigon`: [db/downloader/torrent_files.go](https://github.com/erigontech/erigon/blob/bbb5524e53fb057e7d47a5066e152f1091ac4ba4/db/downloader/torrent_files.go)",
+        "`erigontech/erigon`: [db/downloader/chaintoml.go](https://github.com/erigontech/erigon/blob/bbb5524e53fb057e7d47a5066e152f1091ac4ba4/db/downloader/chaintoml.go) (published list of snapshot hashes per chain)",
+        "`paradigmxyz/reth`: [crates/cli/commands/src/download/mod.rs](https://github.com/paradigmxyz/reth/blob/36600d5ff9628465475dd4c7608e2e9f2fe24273/crates/cli/commands/src/download/mod.rs) (HTTP download of a snapshot)"
+      ],
+      "ours": "`bin/xone/src/cmd/snapshot.rs` exports and imports one archive with pins (#38, closed); GAP-0034 (#185) adds import from one HTTPS URL. Plan #1 (B3.7) and #38 say: hash-named segment files with a manifest over HTTPS; \"no torrent; add it only if public demand appears\". No node serves its chunks",
+      "priority": "P3",
+      "priority_reason": "P3 (impact on operators): a new XDC node can already snap-sync state and import a pinned snapshot (#38); this removes the single-server dependency for history and spreads the load, but no operator is blocked without it.",
+      "seen_in_count": null,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/195",
+      "key": "seeding",
+      "related": "#38, #185 (GAP-0034), #14, #1 (B3.7: no torrent), #135"
+    },
+    {
+      "id": "GAP-0041",
+      "title": "History backfill after snap sync: download headers, bodies and receipts below the pivot in the background, to a configurable barrier",
+      "area": "sync",
+      "status": "issued",
+      "pass": "advantages",
+      "strength_of": "Nethermind",
+      "strength": "fast sync: state at a pivot plus FastBlocks, which downloads headers, bodies and receipts below the pivot in parallel, back to configurable barriers",
+      "sources": [
+        "`NethermindEth/nethermind`: [src/Nethermind/Nethermind.Synchronization/FastBlocks/BodiesSyncFeed.cs](https://github.com/NethermindEth/nethermind/blob/a7dd73052e696ad934d228aad3f33e660701fdb7/src/Nethermind/Nethermind.Synchronization/FastBlocks/BodiesSyncFeed.cs)",
+        "`NethermindEth/nethermind`: [src/Nethermind/Nethermind.Synchronization/FastBlocks/FastBlocksAllocationStrategy.cs](https://github.com/NethermindEth/nethermind/blob/a7dd73052e696ad934d228aad3f33e660701fdb7/src/Nethermind/Nethermind.Synchronization/FastBlocks/FastBlocksAllocationStrategy.cs)",
+        "`NethermindEth/nethermind`: [src/Nethermind/Nethermind.Blockchain/Synchronization/ISyncConfig.cs](https://github.com/NethermindEth/nethermind/blob/a7dd73052e696ad934d228aad3f33e660701fdb7/src/Nethermind/Nethermind.Blockchain/Synchronization/ISyncConfig.cs) (`DownloadBodiesInFastSync`, `DownloadReceiptsInFastSync`, `AncientBodiesBarrier`)",
+        "Docs: https://docs.nethermind.io/fundamentals/sync"
+      ],
+      "ours": "`spec/snap/completeness.md` and `spec/retention.md`: a snap node fetches only the ranges the first block after the pivot needs (rows 3, 7, 11; \"none below the pivot\" for reorg); `crates/xone-snap/src/client.rs` `Need { kind, first, last }`; `docs/ops/net2040-sync-modes.md`: snap datadir 72 MB. No background download below the pivot",
+      "priority": "P2",
+      "priority_reason": "P2 (impact on operators): a snap-synced xone-rs node holds almost nothing below its pivot, so it cannot answer eth_getLogs, receipts or old blocks, and it serves GetBlockBodies poorly to peers (#125). An operator who wants a full-history RPC node today must full-sync from genesis.",
+      "seen_in_count": null,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/196",
+      "key": "backfill",
+      "related": "#37, #14, #125, #121, #177 (GAP-0026 retention)"
+    },
+    {
+      "id": "GAP-0042",
+      "title": "RPC traffic recorder and open-loop replay benchmark (record real requests, replay them at a set rate, report latency per method)",
+      "area": "perf",
+      "status": "issued",
+      "pass": "advantages",
+      "strength_of": "Nethermind (and ethrex)",
+      "strength": "operator tooling: an RPC request recorder in the node and Kute, a tool that replays recorded traffic and measures the node",
+      "sources": [
+        "`NethermindEth/nethermind`: [tools/Kute/README.md](https://github.com/NethermindEth/nethermind/blob/a7dd73052e696ad934d228aad3f33e660701fdb7/tools/Kute/README.md) (replays recorded JSON-RPC messages, measures the node)",
+        "`NethermindEth/nethermind`: [src/Nethermind/Nethermind.JsonRpc/IJsonRpcConfig.cs](https://github.com/NethermindEth/nethermind/blob/a7dd73052e696ad934d228aad3f33e660701fdb7/src/Nethermind/Nethermind.JsonRpc/IJsonRpcConfig.cs) (`RpcRecorderState`, `RpcRecorderBaseFilePath`)",
+        "`lambdaclass/ethrex`: [tooling/rpc_bench/run_bench.sh](https://github.com/lambdaclass/ethrex/blob/740ea493880b6c073b81537010df75e143c615c2/tooling/rpc_bench/run_bench.sh)",
+        "`lambdaclass/ethrex`: [tooling/rpc_bench/gen_workload.py](https://github.com/lambdaclass/ethrex/blob/740ea493880b6c073b81537010df75e143c615c2/tooling/rpc_bench/gen_workload.py)"
+      ],
+      "ours": "`docs/perf.md` section 4 requires open-loop load (latency from the intended send time) and `bench/workloads/*.yaml` specify workloads, but `bench/` has only `collect/env.sh` and `summarise.py`: no load generator and no recorder. `conformance/rpc-parity` checks values, not load",
+      "priority": "P3",
+      "priority_reason": "P3 (impact on operators): RPC providers and explorers need capacity numbers for xone-rs before they move traffic to it; the perf contract (#13) requires an open-loop load generator that does not exist yet.",
+      "seen_in_count": null,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/197",
+      "key": "rpcreplay",
+      "related": "#13, #16, #42"
+    },
+    {
+      "id": "GAP-0043",
+      "title": "xOneRS as a library: a documented NodeBuilder with replaceable components (RPC modules, txpool, network handlers) and runnable examples",
+      "area": "sdk",
+      "status": "issued",
+      "pass": "advantages",
+      "strength_of": "Reth",
+      "strength": "used as an SDK: crates usable as a library, a typed NodeBuilder with replaceable components, and runnable examples (custom RPC, custom components, node event hooks)",
+      "sources": [
+        "`paradigmxyz/reth`: [crates/node/builder/src/builder/mod.rs](https://github.com/paradigmxyz/reth/blob/36600d5ff9628465475dd4c7608e2e9f2fe24273/crates/node/builder/src/builder/mod.rs) (`NodeBuilder`)",
+        "`paradigmxyz/reth`: [examples/custom-node-components](https://github.com/paradigmxyz/reth/blob/36600d5ff9628465475dd4c7608e2e9f2fe24273/examples/custom-node-components)",
+        "`paradigmxyz/reth`: [examples/node-custom-rpc](https://github.com/paradigmxyz/reth/blob/36600d5ff9628465475dd4c7608e2e9f2fe24273/examples/node-custom-rpc)",
+        "`paradigmxyz/reth`: [examples/node-event-hooks](https://github.com/paradigmxyz/reth/blob/36600d5ff9628465475dd4c7608e2e9f2fe24273/examples/node-event-hooks)",
+        "Docs: https://reth.rs/sdk"
+      ],
+      "ours": "Workspace `publish = false` (Cargo.toml); `crates/xone-node/src/lib.rs` exports `Config`, `Node`, `Service` and the ADR-007 primitives but the composition of services lives in `bin/xone/src/` and `crates/xone-node/src/services/` with fixed types; no `examples/` directory; `ci/check-layering.sh` already enforces crate ranks",
+      "priority": "P3",
+      "priority_reason": "P3 (impact on operators): node operators run the binary; the builder serves integrators (explorers, bridges, indexers) who today must fork the repo to add an RPC module. It also makes in-process hooks (#187) a stable surface.",
+      "seen_in_count": null,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/198",
+      "key": "sdk",
+      "related": "#187 (GAP-0036 hooks), #8 (ADR-002 integration option), #42"
+    },
+    {
+      "id": "GAP-0044",
+      "title": "Node permissioning for private XDPoS networks: enode allowlist file, runtime perm_* RPC, refuse unlisted peers in and out",
+      "area": "p2p",
+      "status": "issued",
+      "pass": "advantages",
+      "strength_of": "Besu",
+      "strength": "enterprise and permissioned networks: node permissioning by enode allowlist (local file, runtime perm_* RPC, optional on-chain rules)",
+      "sources": [
+        "`besu-eth/besu`: [app/src/main/java/org/hyperledger/besu/cli/options/PermissionsOptions.java](https://github.com/besu-eth/besu/blob/2b839d96863d01210f45a6f62127e6229e5b0889/app/src/main/java/org/hyperledger/besu/cli/options/PermissionsOptions.java) (`--permissions-nodes-config-file-enabled`)",
+        "`besu-eth/besu`: [ethereum/permissioning/src/main/java/org/hyperledger/besu/ethereum/permissioning/NodeLocalConfigPermissioningController.java](https://github.com/besu-eth/besu/blob/2b839d96863d01210f45a6f62127e6229e5b0889/ethereum/permissioning/src/main/java/org/hyperledger/besu/ethereum/permissioning/NodeLocalConfigPermissioningController.java)",
+        "`besu-eth/besu`: [ethereum/api/src/main/java/org/hyperledger/besu/ethereum/api/jsonrpc/internal/methods/permissioning/PermAddNodesToAllowlist.java](https://github.com/besu-eth/besu/blob/2b839d96863d01210f45a6f62127e6229e5b0889/ethereum/api/src/main/java/org/hyperledger/besu/ethereum/api/jsonrpc/internal/methods/permissioning/PermAddNodesToAllowlist.java)",
+        "Docs: https://besu.hyperledger.org/private-networks/concepts/permissioning"
+      ],
+      "ours": "`crates/xone-node/src/enode.rs` reads static-nodes.json and trusted-nodes.json (they add peers; they do not exclude others); `crates/xone-net/src/peers` scores peers; GAP-0024 (#175) adds CIDR `--netrestrict`; no identity allowlist",
+      "priority": "P3",
+      "priority_reason": "P3 (impact on operators): public XDC nodes do not need it; private XDPoS networks (net2040-style devnets, enterprise chains) and validator sentry set-ups do, and today they rely on --nodiscover plus firewall rules.",
+      "seen_in_count": null,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/199",
+      "key": "nodeperm",
+      "related": "#175 (GAP-0024 netrestrict), #32, #60"
+    },
+    {
+      "id": "GAP-0045",
+      "title": "Resource budgets as measured targets: RSS, CPU and disk ceilings per node type, a low-resource profile and a CI regression soak",
+      "area": "perf",
+      "status": "issued",
+      "pass": "advantages",
+      "strength_of": "Nimbus",
+      "strength": "very low resources: a client designed and documented for small hardware (Raspberry Pi 4 class), with memory caps exposed as options",
+      "sources": [
+        "`status-im/nimbus-eth1`: [README.md](https://github.com/status-im/nimbus-eth1/blob/5e3fd7e9d19177980cc1c086c46c4e1dcf38eced/README.md) (section \"Raspberry PI\": builds and runs on a Raspberry Pi 4)",
+        "`status-im/nimbus-eth1`: [execution_chain/conf.nim](https://github.com/status-im/nimbus-eth1/blob/5e3fd7e9d19177980cc1c086c46c4e1dcf38eced/execution_chain/conf.nim) (cache size options: `debug-rocksdb-row-cache-size`, `debug-rocksdb-block-cache-size`, `debug-rdb-vtx-cache-size`)",
+        "Docs: https://nimbus.guide/pi-guide.html"
+      ],
+      "ours": "`docs/perf.md` has latency budgets (section 6) and the RSS/cgroup/page-cache rules, but no memory, CPU or disk ceiling per node type; `bin/xone/src/flags.rs` `--cache` (\"Megabytes of memory for internal caches\"); `docs/ops/net2040-follow.md`: peak RSS 7.07 GB; #145: < 6 GB target for Apothem snap only; no aarch64 build (GAP-0038)",
+      "priority": "P2",
+      "priority_reason": "P2 (impact on operators): hardware cost decides how many XDC operators run a node. The only measured numbers today are ad hoc (peak RSS 7.07 GB on net2040 full sync, 72 GB Apothem datadir), and only snap on Apothem has a target (#145, < 6 GB RSS).",
+      "seen_in_count": null,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/200",
+      "key": "budgets",
+      "related": "#13, #145, #149, #16, #193 (GAP-0038, aarch64 build)"
+    },
+    {
+      "id": "GAP-0046",
+      "title": "Code-size budget in CI: per-crate line count and dependency count on every PR, with a ceiling for the consensus crates",
+      "area": "ci",
+      "status": "issued",
+      "pass": "advantages",
+      "strength_of": "ethrex",
+      "strength": "small and readable: a lines-of-code report on every PR and a daily report, so the client stays small enough to read",
+      "sources": [
+        "`lambdaclass/ethrex`: [.github/workflows/pr_loc.yaml](https://github.com/lambdaclass/ethrex/blob/740ea493880b6c073b81537010df75e143c615c2/.github/workflows/pr_loc.yaml) (\"PR Lines of Code Analysis\": base and PR counted, diff posted)",
+        "`lambdaclass/ethrex`: [.github/workflows/daily_loc_report.yaml](https://github.com/lambdaclass/ethrex/blob/740ea493880b6c073b81537010df75e143c615c2/.github/workflows/daily_loc_report.yaml)",
+        "`lambdaclass/ethrex`: [tooling/loc/Cargo.toml](https://github.com/lambdaclass/ethrex/blob/740ea493880b6c073b81537010df75e143c615c2/tooling/loc/Cargo.toml)"
+      ],
+      "ours": "`ci/check-layering.sh` (crate ranks), `ci/unsafe-audit.sh`, `deny.toml` (cargo-deny licences and bans) exist; no line-count or dependency-count report, no ceiling",
+      "priority": "P3",
+      "priority_reason": "P3 (impact on operators): no direct operator effect; it protects auditability of the consensus and signer path, which the security reviews (#44) and the assurance gate (#15) depend on.",
+      "seen_in_count": null,
+      "issue_url": "https://github.com/XDCIndia/xOneRS/issues/201",
+      "key": "locbudget",
+      "related": "#15, #44, #22"
     }
   ],
   "skipped": [
@@ -942,5 +1140,6 @@
         "paradigmxyz/reth:crates/cli/commands/src/db/mod.rs"
       ]
     }
-  ]
+  ],
+  "priority_rule_advantages": "Second pass (strengths): priority by impact for an XDC node operator, not by competitor count. P1 = operators are blocked or forced into a workaround today; P2 = large cost or capability gain for many operators; P3 = integrators, private networks or maintainers."
 }

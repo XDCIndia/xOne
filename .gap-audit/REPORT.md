@@ -156,3 +156,45 @@ Stop condition met: pass 3 added zero competitors and zero gaps.
 - Competitor presence is verified by file path and identifier match (`verify` step of the generator); it is not a behavioural test. Cells marked *probable* in the matrix are keyword hits only.
 - OURS was checked in product code (`crates/*/src`, `bin/xone/src`); tooling under `conformance/` and the Go oracles was excluded.
 - Priorities follow the count rule with two stated exceptions (archive P0, XDC extensions P1). Several P1 RPC items reverse ADR-008 out-of-scope decisions; each issue says so, and the ADR change is part of the work.
+
+
+## Second pass: bring advantages (2026-11-14)
+
+Brief: for each strength of each execution-client family (geth, Nethermind, Besu, Erigon, Reth, ethrex, Nimbus, Zig projects), name the capability behind it with evidence, compare with xOneRS, and file one issue per strength that xOneRS lacks. Priority here is by impact for an XDC node operator, not by competitor count (rule recorded in `gap-ledger.json` as `priority_rule_advantages`): P1 = operators blocked or forced into a workaround today; P2 = large cost or capability gain for many operators; P3 = integrators, private networks or maintainers.
+
+Method: competitor shallow clones of pass 1 (same commits); Zeam and Phant through the GitHub API (licence MIT, build files and release workflow read, not built); Nimbus resource claims from its README and nimbus.guide. xOneRS evidence from main `bd1e0c3`: ADR-005, `crates/xone-db`, `crates/xone-state`, `crates/xone-sync`, `crates/xone-net`, `crates/xone-rpc`, `docs/perf.md`, `docs/ops/`, `ci/release.sh`, `Dockerfile`, and the built release binary (`objdump -T`, `ldd`). Verdict per strength: [feature-matrix.md, Strengths](feature-matrix.md#strengths-second-pass-bring-advantages).
+
+### Gaps and issues
+
+| ID | Issue | Priority | Area | Strength of | Title |
+|---|---|---|---|---|---|
+| GAP-0038 | [#193](https://github.com/XDCIndia/xOneRS/issues/193) | P1 | release | Zig projects (Phant, Zeam) | Self-contained release binaries: static musl (or a pinned glibc floor), aarch64, size budget and a minimal image |
+| GAP-0039 | [#194](https://github.com/XDCIndia/xOneRS/issues/194) | P2 | storage | Erigon (and Reth static files) | Compressed frozen segments: zstd for closed XSEG chunks of headers, bodies and receipts (and changesets once #135 moves them) |
+| GAP-0040 | [#195](https://github.com/XDCIndia/xOneRS/issues/195) | P3 | storage | Erigon | Seeded history distribution: nodes serve their committed XSEG chunks with a hash manifest, new nodes fetch from several seeds and verify |
+| GAP-0041 | [#196](https://github.com/XDCIndia/xOneRS/issues/196) | P2 | sync | Nethermind | History backfill after snap sync: download headers, bodies and receipts below the pivot in the background, to a configurable barrier |
+| GAP-0042 | [#197](https://github.com/XDCIndia/xOneRS/issues/197) | P3 | perf | Nethermind (and ethrex) | RPC traffic recorder and open-loop replay benchmark (record real requests, replay them at a set rate, report latency per method) |
+| GAP-0043 | [#198](https://github.com/XDCIndia/xOneRS/issues/198) | P3 | sdk | Reth | xOneRS as a library: a documented NodeBuilder with replaceable components (RPC modules, txpool, network handlers) and runnable examples |
+| GAP-0044 | [#199](https://github.com/XDCIndia/xOneRS/issues/199) | P3 | p2p | Besu | Node permissioning for private XDPoS networks: enode allowlist file, runtime perm_* RPC, refuse unlisted peers in and out |
+| GAP-0045 | [#200](https://github.com/XDCIndia/xOneRS/issues/200) | P2 | perf | Nimbus | Resource budgets as measured targets: RSS, CPU and disk ceilings per node type, a low-resource profile and a CI regression soak |
+| GAP-0046 | [#201](https://github.com/XDCIndia/xOneRS/issues/201) | P3 | ci | ethrex | Code-size budget in CI: per-crate line count and dependency count on every PR, with a ceiling for the consensus crates |
+
+Counts: P1 1, P2 3, P3 5; 9 issues (#193 to #201), labels `gap-audit`, `area:<name>`, `priority:<P>`; new area labels `area:release`, `area:sync`, `area:perf`, `area:sdk`, `area:ci`.
+
+Deduplication: `gh issue list --state all --search` per strength (static binary, musl, aarch64, compress, zstd, seed, torrent, backfill, fast blocks, permission, allowlist, node builder, library, sdk, lines of code, resource/memory budget, rpc replay, load test, benchmark) against all issues; overlaps found and linked instead of filed: #187 (ExEx and plugin hooks), #185 (snapshot URL import), #16 and `crates/xone-node/src/disk.rs` (low-disk stop), #145 (disk-backed state, path-keyed trie), #135 (history in segments), #46 (closed; specified aarch64 but `ci/release.sh` still builds the host target only), #1 and #38 (no BitTorrent: GAP-0040 keeps HTTPS).
+
+### Not filed
+
+| Strength | Reason |
+|---|---|
+| geth path-based state, freezer, Erigon staged sync, Reth MDBX plus static files and modular crates, Besu Bonsai, Nethermind low-disk shutdown, Zig C-level speed and LMDB-style storage | Present in xOneRS (evidence in the strengths table) |
+| Nethermind full pruning | Not applicable: path-keyed trie rows are overwritten in place and flat state keeps a 128-block window, so no dead hash-keyed nodes accumulate |
+| Besu account permissioning, on-chain permissioning, private transactions | Not applicable: would change which transactions a producer accepts or which blocks are valid, so an XDC node would diverge from geth-XDC; permissioned XDC chains belong to XDC-Subnet |
+| ethrex L2 orientation | Not applicable: SKIP-14 |
+| Nimbus SQLite storage | Not applicable: MDBX kept by the #135 decision |
+| Reth ExEx, Besu plugin API, Nethermind snapshot download | Filed in pass 1: #187, #185 |
+
+### Limits
+
+- Zeam is a consensus (lean) client and Phant a stateless research client; they are cited for build and packaging practice only, not for node features.
+- The GLIBC_2.38 floor and the 19.4 MB size were measured on the local release build of `xOne/v0.1.0` on Ubuntu 24.04; the CI release build was not run.
+- Size and memory targets in the issues are proposals until measured by the `docs/perf.md` procedure.
