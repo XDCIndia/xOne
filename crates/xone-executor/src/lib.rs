@@ -479,11 +479,11 @@ fn run_block<V: StateRead, E: Env>(
         })
         .collect();
     let (diff, codes) = db.take();
-    let tx_root = ordered_trie_root_encoded(&body.transactions);
-    let receipt_encodings: Vec<Bytes> = receipts.iter().map(|x| Bytes::from(x.encode())).collect();
-    let receipt_root = ordered_trie_root_encoded(&receipt_encodings);
-    let bloom = receipts.iter().fold(Bloom::ZERO, |b, x| b | x.bloom);
-    let state_root = StateRead::root_with(parent_view, &diff)?;
+    let (tx_root, (receipt_encodings, receipt_root, bloom), state_root) =
+        roots(&body.transactions, &receipts, || {
+            StateRead::root_with(parent_view, &diff)
+        });
+    let state_root = state_root?;
     Ok(BlockOutcome {
         hash: header.hash(),
         diff,
@@ -810,6 +810,45 @@ fn finalise_bal<S: StateRead, E: Env>(
     Ok(())
 }
 
+/// Blocks with this many transactions or more compute the tx root and the receipts root on scoped
+/// threads beside the state root; a smaller block stays on one thread (two spawns cost more than
+/// its roots).
+const PARALLEL_ROOTS: usize = 64;
+
+/// The tx root, the receipts (encodings, root and bloom) and the state root of a block: three
+/// independent pure functions, so a large block computes them at the same time (ethrex merkleizes
+/// beside execution, `crates/blockchain/blockchain.rs:1250`). `state_root` runs on this thread.
+fn roots<T>(
+    txs: &[Bytes],
+    receipts: &[Receipt],
+    state_root: impl FnOnce() -> T,
+) -> (B256, (Vec<Bytes>, B256, Bloom), T) {
+    let tx_root = || ordered_trie_root_encoded(txs);
+    let receipts_root = || {
+        let enc: Vec<Bytes> = receipts.iter().map(|x| Bytes::from(x.encode())).collect();
+        let root = ordered_trie_root_encoded(&enc);
+        (
+            enc,
+            root,
+            receipts.iter().fold(Bloom::ZERO, |b, x| b | x.bloom),
+        )
+    };
+    if txs.len() < PARALLEL_ROOTS {
+        return (tx_root(), receipts_root(), state_root());
+    }
+    std::thread::scope(|s| {
+        let t = s.spawn(tx_root);
+        let r = s.spawn(receipts_root);
+        let st = state_root();
+        (join(t), join(r), st)
+    })
+}
+
+/// A scoped thread's result; its panic goes on in the caller.
+fn join<T>(h: std::thread::ScopedJoinHandle<'_, T>) -> T {
+    h.join().unwrap_or_else(|p| std::panic::resume_unwind(p))
+}
+
 /// Decodes every transaction and recovers its sender. Recovery dominates a large block (about 0.5 ms
 /// per signature on a busy host), so a long list is split over threads; the result, and the first
 /// error by index, are those of the sequential loop.
@@ -999,6 +1038,43 @@ mod decode_tests {
 
     /// A transfer of net2040 block 918 (transaction 0, as the archive returned it).
     const TX: &str = "f865808411e1a300825208940223b5b9046a1ebb93669546bd66d6972d1544eb0180821014a096f864b08365bf86f5df595e752295dbb2b03778c0284e5dc60ec969137b29cda02f560843995541ae632a1630ad9d73436dfce0e179dc54926f849d8e265b03ca";
+
+    /// Below and above [`PARALLEL_ROOTS`]: the roots are those of the sequential code, in place.
+    #[test]
+    fn parallel_roots_are_the_sequential_ones() {
+        for n in [0, 1, PARALLEL_ROOTS - 1, PARALLEL_ROOTS, 1_000] {
+            let txs: Vec<Bytes> = (0..n)
+                .map(|i| Bytes::from(alloy_primitives::keccak256(i.to_be_bytes()).to_vec()))
+                .collect();
+            let receipts: Vec<Receipt> = (0..n)
+                .map(|i| {
+                    let log = alloy_primitives::Log::new_unchecked(
+                        Address::with_last_byte(u8::try_from(i % 251).unwrap()),
+                        vec![B256::with_last_byte(1)],
+                        Bytes::from_static(b"x"),
+                    );
+                    Receipt::new(
+                        u8::try_from(i % 3).unwrap(),
+                        i % 2 == 0,
+                        21_000 * (u64::try_from(i).unwrap() + 1),
+                        21_000,
+                        vec![log],
+                    )
+                })
+                .collect();
+            let (tx_root, (enc, receipt_root, bloom), st) = roots(&txs, &receipts, || 7u8);
+            let want: Vec<Bytes> = receipts.iter().map(|x| Bytes::from(x.encode())).collect();
+            assert_eq!(tx_root, ordered_trie_root_encoded(&txs), "{n}");
+            assert_eq!(enc, want, "{n}");
+            assert_eq!(receipt_root, ordered_trie_root_encoded(&want), "{n}");
+            assert_eq!(
+                bloom,
+                receipts.iter().fold(Bloom::ZERO, |b, x| b | x.bloom),
+                "{n}"
+            );
+            assert_eq!(st, 7);
+        }
+    }
 
     #[test]
     fn threaded_decode_is_the_sequential_one() {

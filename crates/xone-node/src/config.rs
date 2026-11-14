@@ -119,6 +119,9 @@ pub struct P2p {
     pub no_discover: bool,
     pub nat: Option<String>,
     pub bootnodes: Vec<String>,
+    /// `--eth.requiredblocks`: `<n>=<0x hash>` entries the operator adds to, or uses to replace,
+    /// the built-in ones of the network ([`Config::required_blocks`]).
+    pub required_blocks: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -173,6 +176,9 @@ pub struct Mining {
     /// Keystore file of the validator key (`--keystore`). Block production needs it and the password file.
     pub keystore: Option<PathBuf>,
     pub unlock: Vec<String>,
+    /// The signer's quiet window in seconds (`--miner.quietwindow`, ADR-010 section 8). Only a value
+    /// at or above the network's (`ChainSpec::quiet_window`) is accepted.
+    pub quiet_window: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -294,7 +300,8 @@ defaults!(P2p {
     max_peers: 50,
     no_discover: false,
     nat: None,
-    bootnodes: vec![]
+    bootnodes: vec![],
+    required_blocks: vec![]
 });
 defaults!(Http {
     enabled: false,
@@ -333,7 +340,8 @@ defaults!(Mining {
     etherbase: None,
     password_file: None,
     keystore: None,
-    unlock: vec![]
+    unlock: vec![],
+    quiet_window: None
 });
 defaults!(Logging {
     verbosity: 3,
@@ -385,6 +393,10 @@ fn flag(key: &str, v: &str) -> Result<bool, ConfigError> {
     }
 }
 
+fn canonical_required(r: &[(u64, alloy_primitives::B256)]) -> Vec<String> {
+    r.iter().map(|(n, h)| format!("{n}={h:#x}")).collect()
+}
+
 fn list(v: &str) -> Vec<String> {
     v.split(',')
         .map(str::trim)
@@ -423,6 +435,7 @@ impl Config {
         c.sync.mode = sync_mode("sync.mode", &c.sync.mode)?;
         gc_mode("sync.gcmode", &c.sync.gcmode)?;
         c.logging.levels()?;
+        c.required_blocks(None)?;
         Ok(c)
     }
 
@@ -437,6 +450,45 @@ impl Config {
             ));
         }
         Ok(())
+    }
+
+    /// The heights whose hash every peer and every chain must carry: the built-in entries of
+    /// `net` with the operator's laid over them (an operator entry replaces a built-in one at the
+    /// same height).
+    pub fn required_blocks(
+        &self,
+        net: Option<Network>,
+    ) -> Result<Vec<(u64, alloy_primitives::B256)>, ConfigError> {
+        let user = xone_chainspec::parse_required_blocks(&self.p2p.required_blocks.join(","))
+            .map_err(|_| {
+                invalid(
+                    "p2p.required_blocks",
+                    &self.p2p.required_blocks.join(","),
+                    "<number>=<0x hash>",
+                )
+            })?;
+        let builtin = net.map_or(&[][..], Network::required_blocks);
+        Ok(xone_chainspec::merge_required_blocks(builtin, &user))
+    }
+
+    /// [`Self::required_blocks`] for the built-in network of `chain_id` (none: a private chain has
+    /// no built-in entries).
+    pub fn required_blocks_of_chain(
+        &self,
+        chain_id: u64,
+    ) -> Result<Vec<(u64, alloy_primitives::B256)>, ConfigError> {
+        let net = Network::ALL
+            .into_iter()
+            .find(|n| n.try_spec().is_ok_and(|s| s.chain_id == chain_id));
+        self.required_blocks(net)
+    }
+
+    /// This config with `p2p.required_blocks` set to the effective list of its profile, as
+    /// `dumpconfig` prints it. The result loads back to the same effective list.
+    pub fn with_effective_required_blocks(mut self) -> Result<Self, ConfigError> {
+        let r = self.required_blocks(self.profile.map(Profile::network))?;
+        self.p2p.required_blocks = canonical_required(&r);
+        Ok(self)
     }
 
     pub fn from_file(path: &Path) -> Result<Self, ConfigError> {
@@ -524,6 +576,11 @@ impl Config {
             "nodiscover" => self.p2p.no_discover = flag(key, v)?,
             "nat" => self.p2p.nat = Some(v.to_owned()),
             "bootnodes" => self.p2p.bootnodes = list(v),
+            "eth.requiredblocks" => {
+                let r = xone_chainspec::parse_required_blocks(v)
+                    .map_err(|_| invalid(key, v, "<number>=<0x hash>[,<number>=<0x hash>...]"))?;
+                self.p2p.required_blocks = canonical_required(&r);
+            }
             "http" => self.http.enabled = flag(key, v)?,
             "http.addr" => self.http.addr = v.to_owned(),
             "http.port" => self.http.port = num(key, v)?,
@@ -547,6 +604,7 @@ impl Config {
             "ipcpath" => self.ipc.path = Some(v.into()),
             "mine" => self.mining.mine = flag(key, v)?,
             "miner.etherbase" => self.mining.etherbase = Some(v.to_owned()),
+            "miner.quietwindow" => self.mining.quiet_window = Some(num(key, v)?),
             "password" => self.mining.password_file = Some(v.into()),
             "keystore" => self.mining.keystore = Some(v.into()),
             "unlock" => self.mining.unlock = list(v),

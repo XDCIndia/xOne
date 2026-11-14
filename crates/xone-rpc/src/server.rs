@@ -75,6 +75,13 @@ impl Registry {
     pub fn get(&self, name: &str) -> Option<&(Cost, Handler)> {
         self.map.get(name)
     }
+    /// Removes `name` and returns its entry (the alias table of `xdc` moves handlers, never copies them).
+    pub fn take(&mut self, name: &str) -> Option<(Cost, Handler)> {
+        self.map.remove(name)
+    }
+    pub fn put(&mut self, name: &'static str, entry: (Cost, Handler)) {
+        self.map.insert(name, entry);
+    }
     /// Every registered name, sorted.
     pub fn names(&self) -> Vec<&'static str> {
         let mut v: Vec<_> = self.map.keys().copied().collect();
@@ -323,6 +330,7 @@ impl Rpc {
             &Params {
                 v,
                 head: self.be.chain.head().0,
+                finalized: self.be.chain.finalized(),
             },
         )
     }

@@ -334,3 +334,126 @@ fn import_and_export_run_the_pipeline_and_write_geth_block_files() {
     let o = xone(&["import", "/nonexistent/blocks.rlp"]);
     assert_eq!(o.status.code(), Some(1));
 }
+
+/// A free loopback port.
+fn free_port() -> u16 {
+    std::net::TcpListener::bind("127.0.0.1:0")
+        .and_then(|l| l.local_addr())
+        .map(|a| a.port())
+        .unwrap_or_else(|e| panic!("{e}"))
+}
+
+/// One HTTP/1.1 request to 127.0.0.1:`port`, retried until `want` is in the reply (60 s).
+fn http(port: u16, method: &str, path: &str, body: &str, want: &str) -> String {
+    use std::io::{Read, Write};
+    let t = Instant::now();
+    loop {
+        if let Ok(mut s) = std::net::TcpStream::connect(("127.0.0.1", port)) {
+            let req = format!(
+                "{method} {path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{body}",
+                body.len()
+            );
+            let mut r = String::new();
+            if s.write_all(req.as_bytes()).is_ok()
+                && s.read_to_string(&mut r).is_ok()
+                && r.contains(want)
+            {
+                return r;
+            }
+        }
+        assert!(t.elapsed() < Duration::from_secs(60), "{path}: no {want:?}");
+        std::thread::sleep(Duration::from_millis(200));
+    }
+}
+
+/// One identity string (#22): `--version`, `web3_clientVersion` and `xone_build_info` of a running
+/// node are the same text as the stamp that feeds the p2p name and the ethstats hello; none is `unknown`.
+#[test]
+fn identity_surfaces_equal_and_nothing_is_unknown() {
+    let stamp = out(&xone(&["--version"])).trim().to_owned();
+    assert!(!stamp.contains("unknown"), "{stamp}");
+    assert!(stamp.starts_with("xOneRS/v"), "{stamp}");
+
+    let (rpc, metrics) = (free_port(), free_port());
+    let d = scratch("identity");
+    let mut child = Command::new(env!("CARGO_BIN_EXE_xone"))
+        .args(["--datadir", d.to_str().unwrap_or_default(), "--apothem"])
+        .args([
+            "--port",
+            "0",
+            "--nodiscover",
+            "--http",
+            "--http.addr",
+            "127.0.0.1",
+        ])
+        .args(["--http.port", &rpc.to_string(), "--http.api", "web3"])
+        .args(["--metrics", "--metrics.addr", "127.0.0.1"])
+        .args(["--metrics.port", &metrics.to_string()])
+        .stdout(Stdio::null())
+        .spawn()
+        .unwrap_or_else(|e| panic!("{e}"));
+    let body = r#"{"jsonrpc":"2.0","id":1,"method":"web3_clientVersion","params":[]}"#;
+    let reply = http(rpc, "POST", "/", body, "result");
+    let scrape = http(metrics, "GET", "/metrics", "", "xone_build_info");
+    kill(child.id());
+    let _ = child.wait();
+    let _ = std::fs::remove_dir_all(&d);
+    assert!(
+        reply.contains(&format!("\"result\":\"{stamp}\"")),
+        "{stamp} vs {reply}"
+    );
+    assert!(
+        scrape.contains(&format!("xone_build_info{{version=\"{stamp}\"}} 1")),
+        "{scrape}"
+    );
+}
+
+const APOTHEM_ANCHOR: &str =
+    "83665617=0x2432ce6433608954ef6eaf2feba8f9a2fe90f5a913401eb07d5fa2f1bb499c3f";
+
+#[test]
+fn apothem_has_its_required_block_without_a_flag_and_the_operator_replaces_it() {
+    let o = out(&xone(&["--apothem", "dumpconfig"]));
+    assert!(o.contains(APOTHEM_ANCHOR), "{o}");
+    // mainnet starts empty
+    let m = out(&xone(&["dumpconfig"]));
+    assert!(m.contains("required_blocks = []"), "{m}");
+    // an operator entry at the same height replaces it; another height adds
+    let h = format!("0x{}", "11".repeat(32));
+    let o = out(&xone(&[
+        "--apothem",
+        "--eth.requiredblocks",
+        &format!("83665617={h},7={h}"),
+        "dumpconfig",
+    ]));
+    assert!(
+        o.contains(&format!("83665617={h}")) && o.contains(&format!("7={h}")),
+        "{o}"
+    );
+    assert!(!o.contains(APOTHEM_ANCHOR), "{o}");
+    // the dump loads back to the same list
+    let d = scratch("reqblk");
+    std::fs::create_dir_all(&d).unwrap_or_else(|e| panic!("{e}"));
+    let f = d.join("c.toml");
+    std::fs::write(&f, &o).unwrap_or_else(|e| panic!("{e}"));
+    let again = out(&xone(&[
+        "--config",
+        f.to_str().unwrap_or_default(),
+        "dumpconfig",
+    ]));
+    assert_eq!(o, again);
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn a_malformed_required_block_is_refused() {
+    for v in ["5", "x=0x00", "5=0x12"] {
+        assert_eq!(
+            xone(&["--eth.requiredblocks", v, "dumpconfig"])
+                .status
+                .code(),
+            Some(2),
+            "{v}"
+        );
+    }
+}

@@ -53,7 +53,7 @@ Reading it:
 
 ## What is not covered
 
-- The 72 h soak of Gate D, 4 to 14 validators, partitions: not run. One validator, so the quiet window of ADR-010 section 8 is 0 here (there is no second signer); a public network is refused.
+- The 72 h soak of Gate D, 4 to 14 validators, partitions: not run. The quiet window of ADR-010 section 8 applies here too (`ChainSpec::quiet_window`, 20 s on the devnets since #118): the first signature comes that long after the node hears gossip; mainnet is refused.
 - Producer tick budget with a cold state cache, the leader-side sibling proposal after a timeout, a validator that joins mid-V2: not tested on a devnet.
 - net2040 borrowed seat and Apothem: Gate E, owner approval needed.
 - V1 checkpoint M2 tokens for more than one masternode, and the V1 penalty list before TIPSigning: not built.

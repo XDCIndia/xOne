@@ -1008,6 +1008,69 @@ async fn websocket_refuses_methods_outside_its_list_and_a_wrong_origin() {
     h.abort();
 }
 
+#[test]
+fn xdc_namespace_aliases_eth_and_is_off_unless_listed() {
+    let a = format!("{ACCT:#x}");
+    let both = rpc_api(&["eth", "xdc"], Default::default());
+    for (x, e, params) in [
+        ("xdc_getBalance", "eth_getBalance", json!([a, "latest"])),
+        (
+            "xdc_getBlockByNumber",
+            "eth_getBlockByNumber",
+            json!(["0x5", false]),
+        ),
+        (
+            "xdc_getBlockSignersByNumber",
+            "eth_getBlockSignersByNumber",
+            json!(["0x5"]),
+        ),
+        ("xdc_chainId", "eth_chainId", json!([])),
+    ] {
+        let (rx, re) = (
+            ask(&both, req(1, x, params.clone())),
+            ask(&both, req(1, e, params)),
+        );
+        assert_eq!(rx, re, "{x}");
+        assert!(
+            rx.get("result").is_some() || rx["error"]["code"] != -32601,
+            "{x}"
+        );
+    }
+    // the transaction methods are not on the oracle BlockChainAPI
+    assert_eq!(
+        ask(&both, req(1, "xdc_getTransactionByHash", json!([])))["error"]["code"],
+        -32601
+    );
+    // off unless listed; `xdc` alone does not open `eth_`
+    let eth_only = rpc_api(&["eth"], Default::default());
+    assert_eq!(
+        ask(&eth_only, req(1, "xdc_getBalance", json!([])))["error"]["code"],
+        -32601
+    );
+    let xdc_only = rpc_api(&["xdc"], Default::default());
+    assert_eq!(
+        ask(&xdc_only, req(1, "eth_getBalance", json!([])))["error"]["code"],
+        -32601
+    );
+    assert_eq!(
+        ask(&xdc_only, req(1, "xdc_chainId", json!([])))["result"],
+        ask(&both, req(1, "eth_chainId", json!([])))["result"]
+    );
+}
+
+/// Recorded from the oracle `xdc_getStateHealStatus` on an idle node (geth-XDC 6fc8e8c2).
+#[test]
+fn state_heal_status_matches_the_oracle_idle_shape() {
+    let want: Value = serde_json::from_str(include_str!(
+        "../../../conformance/vectors/rpc/xdc_getStateHealStatus_idle.json"
+    ))
+    .unwrap();
+    let r = rpc_api(&["eth", "xdc"], Default::default());
+    for m in ["xdc_getStateHealStatus", "eth_getStateHealStatus"] {
+        assert_eq!(ask(&r, req(1, m, json!([])))["result"], want, "{m}");
+    }
+}
+
 // --- #60: authentication, WebSocket limits and forwarding headers on the real listeners ---
 
 const JWT_KEY: [u8; 32] = [0x5a; 32];

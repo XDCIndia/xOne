@@ -482,3 +482,52 @@ fn a_file_with_a_missing_block_does_not_link() {
     let e = stages::sync(&chain, &mut source(&blocks.concat()), &limits(), NOW).unwrap_err();
     assert!(matches!(e, SyncError::Link { number: 11 }), "{e}");
 }
+
+#[test]
+fn a_chain_through_the_wrong_hash_at_a_required_height_is_refused_before_it_is_stored() {
+    let (blocks, _) = raws(120);
+    let file = blocks.concat();
+    let (n, good) = (50, decode_block(&blocks[50]).unwrap().0.hash());
+    // the right hash: the whole file imports
+    let mut ok = fresh_chain();
+    ok.set_required_blocks(vec![(n, good)]);
+    stages::sync(&ok, &mut source(&file), &Limits::default(), NOW).unwrap();
+    assert_eq!(ok.head().0, 120);
+    // another hash: a typed error naming both, and nothing above genesis is stored
+    let mut bad = fresh_chain();
+    bad.set_required_blocks(vec![(n, B256::repeat_byte(7))]);
+    let e = stages::sync(&bad, &mut source(&file), &Limits::default(), NOW).unwrap_err();
+    match e {
+        SyncError::RequiredBlock(m) => {
+            assert_eq!((m.number, m.want, m.got), (50, B256::repeat_byte(7), good))
+        }
+        e => panic!("{e}"),
+    }
+    assert_eq!(bad.head().0, 0);
+}
+
+#[test]
+fn hostile_framing_is_a_typed_error_not_a_panic() {
+    let mut bad = vec![
+        vec![0xbf, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff], // string, not a list
+        vec![0xc0],                                                 // list without a header
+    ];
+    // Maximum u64 length prefix: offset and size arithmetic must not wrap.
+    let max = vec![0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
+    // Noncanonical: 5 bytes of payload in the long form, and a leading zero.
+    let long_form = vec![0xf8, 0x05, 1, 2, 3, 4, 5];
+    let zero_lead = vec![0xf9, 0x00, 0x40];
+    for f in [&max, &long_form, &zero_lead] {
+        let mut s = source(f);
+        assert!(s.headers(0, 1).is_err());
+    }
+    bad.push(max);
+    for raw in bad {
+        assert!(decode_block(&raw).is_err());
+    }
+    // A valid block with a trailing byte is refused.
+    let (mut one, _) = raws(1);
+    let mut raw = one.remove(1);
+    raw.push(0);
+    assert!(decode_block(&raw).is_err());
+}

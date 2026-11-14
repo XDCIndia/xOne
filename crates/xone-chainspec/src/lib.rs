@@ -6,6 +6,7 @@
 
 mod genesis;
 mod networks;
+mod required;
 
 use std::collections::BTreeMap;
 
@@ -14,6 +15,9 @@ use alloy_primitives::{Address, B256};
 pub use genesis::Genesis;
 pub use networks::{
     apothem, devnet, devnet551, load, load_custom, load_named, mainnet, net2040, Network,
+};
+pub use required::{
+    check_required, merge_required_blocks, parse_required_blocks, RequiredBlockMismatch,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -236,7 +240,44 @@ effective!(
 
 /// Rules that geth derives from the table but not from one row. All are pure
 /// functions of the table; see `spec/chainspec/non-parameter-switches.md`.
+/// The quiet window that mainnet and Apothem were qualified with (ADR-010 section 8: mainnet now
+/// `2 * 60 * 1.0`), and the window of a chain without a V2 section.
+pub const QUIET_WINDOW_QUALIFIED: u64 = 120;
+
 impl ChainSpec {
+    /// ADR-010 section 8: the signer's quiet window in seconds of connected time, a parameter of the
+    /// network. `W = 2 * TimeoutPeriod * Base^MaxExponent` of the newest V2 config (the one every
+    /// round from here on runs under): a live signer emits a vote or a timeout at least once per
+    /// timeout period (geth-XDC `consensus/XDPoS/engines/engine_v2/timeout.go`, G8), so a second
+    /// signer on the key is seen inside `W`. Mainnet (50) and Apothem (51) keep at least the
+    /// [`QUIET_WINDOW_QUALIFIED`] they were qualified with (Apothem's timeout period is 10 s today,
+    /// which gives 20). A chain with no V2 section takes [`QUIET_WINDOW_QUALIFIED`]. Never 0.
+    pub fn quiet_window(&self) -> u64 {
+        let adr = self
+            .xdpos
+            .v2
+            .as_ref()
+            .and_then(|v| v.configs.values().next_back())
+            .map(|c| {
+                let exp = c
+                    .exp_timeout
+                    .base
+                    .powi(i32::from(c.exp_timeout.max_exponent));
+                #[allow(
+                    clippy::as_conversions,
+                    reason = "f64 to u64 saturates; NaN is 0, refused below"
+                )]
+                let w = (2.0 * c.timeout_period as f64 * exp).ceil() as u64;
+                w
+            })
+            .filter(|w| *w > 0)
+            .unwrap_or(QUIET_WINDOW_QUALIFIED);
+        match self.chain_id {
+            50 | 51 => adr.max(QUIET_WINDOW_QUALIFIED),
+            _ => adr,
+        }
+    }
+
     /// geth `IsIstanbul`: the Istanbul row, or `TIPXDCXCancellationFee`.
     pub fn is_istanbul(&self, n: u64) -> bool {
         self.istanbul.is_active(n) || self.effective.tip_xdcx_cancellation_fee.is_active(n)
@@ -345,6 +386,17 @@ pub struct ExpTimeoutConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #118: the ADR-010 window on every built-in network, never 0; mainnet and Apothem keep 120 s.
+    #[test]
+    fn the_quiet_window_is_the_adr_010_window_of_every_network() {
+        let w = |n: Network| n.spec().quiet_window();
+        assert_eq!(w(Network::Mainnet), 120);
+        assert_eq!(w(Network::Apothem), 120);
+        assert_eq!(w(Network::Net2040), 120); // 2 * 60 s
+        assert_eq!(w(Network::Devnet), 20); // 2 * 10 s
+        assert_eq!(w(Network::Devnet551), 20);
+    }
 
     #[test]
     fn fork_block_semantics() {
