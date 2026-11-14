@@ -9,6 +9,7 @@ Source column: file:line in geth-XDC (`XDCIndia/go-ethereum` at `6fc8e8c2`; `fla
 | Flag | Aliases | Default | Meaning | Source |
 |---|---|---|---|---|
 | `--datadir <path>` |  | xone-data | Data directory for the databases and the chain marker. | flags.go:93 ; geth,xone |
+| `--datadir.ancient <path>` | `-datadir.segments` | <datadir>/xone/static | Directory of the frozen history segments (headers, bodies, receipts), e.g. on a slower disk. Recorded in the datadir; the tree must carry the datadir's identity, a wrong or missing path refuses to start (issue #225). | flags.go:109 ; geth |
 | `--networkid <n>` |  | chain id of the profile or genesis | Network id. Must equal the chain id of the genesis in use. | flags.go:141 ; geth,xone |
 | `--syncmode full|snap|fast` |  | full | Blockchain sync mode. full executes from genesis. snap, on an empty datadir, downloads the state at a pivot over snap/1 with every range proven, from any snap/1 peer (geth-XDC included; the store is keyed by hash, no preimages are needed), installs it as an anchored datadir and executes from pivot+1 (spec/snap/pivot.md); on a datadir that holds a chain it continues that chain. fast is an alias of snap, as in geth-XDC. | flags.go:299 ; geth,xone |
 | `--snap.pins <path>` |  | unset | Pins file for --syncmode snap (`<number> <0x hash>` per line): the pivot's epoch-switch header (or the pivot) must be in it. Unset: two peers must serve the same switch header. Recommended beyond test networks. | not in geth-XDC at the pin; XB-17 |

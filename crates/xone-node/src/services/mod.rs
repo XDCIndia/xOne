@@ -114,6 +114,10 @@ pub fn build(
         .transpose()
         .map_err(|e| e.to_string())?;
 
+    if let Some(tree) = &cfg.datadir_ancient {
+        xone_db::segments::set_static_root(&cfg.datadir.join("xone"), tree)
+            .map_err(|e| format!("--datadir.ancient: {e}"))?;
+    }
     let open = |minimal: bool| {
         core::Core::open_full(
             spec.clone(),
