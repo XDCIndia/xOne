@@ -38,7 +38,7 @@ use xone_sync::{
         resume::{resume, ResumeError, Resumed},
         Chain, ChainRead, HeaderCheck, InsertError,
     },
-    executor::{BlockExecutor, ExecError, Execution},
+    executor::{BlockExecutor, ExecError, Execution, ReceiptRoots},
     store::{Block, Store, StoreError, Unwound},
 };
 
@@ -211,6 +211,10 @@ impl BlockExecutor for NodeExec {
             gas_used: out.gas_used,
             access_list_hash: out.bal_hash,
             aux: Bytes::new(),
+            roots: Some(ReceiptRoots {
+                root: out.receipt_root,
+                bloom: out.bloom,
+            }),
         })
     }
 }

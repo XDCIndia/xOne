@@ -235,6 +235,7 @@ pub fn execute_block<V: StateRead, E: Env>(
         author,
         body,
         None,
+        None,
         ctx.parent,
         ctx.env,
     )?;
@@ -247,7 +248,8 @@ pub fn execute_block<V: StateRead, E: Env>(
 /// `insertChain` once per header), with the senders of `body.transactions` recovered ahead of
 /// execution (geth `SenderCacher`, `core/blockchain.go:2526`): `senders[i]` is the sender
 /// `tx::decode` recovers from transaction `i`; `None` recovers them here. Every other check of
-/// `execute_block` runs.
+/// `execute_block` runs. The body must have passed `BodyVerifier::verify_body` (as `Chain::insert`
+/// does before it executes): its transactions root is taken from the header, not derived again.
 pub fn execute_verified<V: StateRead, E: Env>(
     spec: &ChainSpec,
     parent_view: &V,
@@ -264,6 +266,13 @@ pub fn execute_verified<V: StateRead, E: Env>(
     }
     basefee::verify(spec, header.number, header.base_fee)?;
     let author = block_author(spec, header)?;
+    // `ValidateBody` already compared the header's transactions root with the body (#245): it is
+    // not derived a second time
+    debug_assert_eq!(
+        ordered_trie_root_encoded(&body.transactions),
+        header.tx_root,
+        "execute_verified on a body that was not verified"
+    );
     run_block(
         spec,
         parent_view,
@@ -271,6 +280,7 @@ pub fn execute_verified<V: StateRead, E: Env>(
         author,
         body,
         senders,
+        Some(header.tx_root),
         parent,
         env,
     )
@@ -290,7 +300,17 @@ pub fn execute_unsealed<V: StateRead, E: Env>(
     env: &E,
 ) -> Result<BlockOutcome, ExecError> {
     basefee::verify(spec, header.number, header.base_fee)?;
-    run_block(spec, parent_view, header, author, body, None, parent, env)
+    run_block(
+        spec,
+        parent_view,
+        header,
+        author,
+        body,
+        None,
+        None,
+        parent,
+        env,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -301,6 +321,7 @@ fn run_block<V: StateRead, E: Env>(
     author: Address,
     body: &Body,
     senders: Option<&[Address]>,
+    tx_root: Option<B256>,
     parent: &Header,
     env: &E,
 ) -> Result<BlockOutcome, ExecError> {
@@ -538,7 +559,7 @@ fn run_block<V: StateRead, E: Env>(
         .collect();
     let (diff, codes) = db.take();
     let (tx_root, (receipt_encodings, receipt_root, bloom), state_root) =
-        roots(&body.transactions, &receipts, || {
+        roots(&body.transactions, tx_root, &receipts, || {
             StateRead::root_with(parent_view, &diff)
         });
     let state_root = state_root?;
@@ -761,12 +782,15 @@ const PARALLEL_ROOTS: usize = 64;
 /// The tx root, the receipts (encodings, root and bloom) and the state root of a block: three
 /// independent pure functions, so a large block computes them at the same time (ethrex merkleizes
 /// beside execution, `crates/blockchain/blockchain.rs:1250`). `state_root` runs on this thread.
+/// `tx_root`: the root `BodyVerifier::verify_body` already compared with the header (#245), else
+/// derived here.
 fn roots<T>(
     txs: &[Bytes],
+    tx_root: Option<B256>,
     receipts: &[Receipt],
     state_root: impl FnOnce() -> T,
 ) -> (B256, (Vec<Bytes>, B256, Bloom), T) {
-    let tx_root = || ordered_trie_root_encoded(txs);
+    let tx_root = || tx_root.unwrap_or_else(|| ordered_trie_root_encoded(txs));
     let receipts_root = || {
         let enc: Vec<Bytes> = receipts.iter().map(|x| Bytes::from(x.encode())).collect();
         let root = ordered_trie_root_encoded(&enc);
@@ -1020,7 +1044,9 @@ mod decode_tests {
                     )
                 })
                 .collect();
-            let (tx_root, (enc, receipt_root, bloom), st) = roots(&txs, &receipts, || 7u8);
+            let (tx_root, (enc, receipt_root, bloom), st) = roots(&txs, None, &receipts, || 7u8);
+            let given = roots(&txs, Some(B256::repeat_byte(9)), &receipts, || 7u8);
+            assert_eq!(given.0, B256::repeat_byte(9), "{n}");
             let want: Vec<Bytes> = receipts.iter().map(|x| Bytes::from(x.encode())).collect();
             assert_eq!(tx_root, ordered_trie_root_encoded(&txs), "{n}");
             assert_eq!(enc, want, "{n}");

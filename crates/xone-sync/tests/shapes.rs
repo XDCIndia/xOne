@@ -225,6 +225,7 @@ fn build(sh: &Shape, v2: bool, edit: &dyn Fn(&mut Header)) -> Built {
             blk.header.block_access_list_hash
         },
         aux: Default::default(),
+        roots: None,
     };
     let mut exec = VectorExecutor::default();
     exec.record(

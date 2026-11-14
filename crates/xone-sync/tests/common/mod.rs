@@ -249,6 +249,7 @@ impl World {
                 gas_used: 0,
                 access_list_hash: None,
                 aux: Default::default(),
+                roots: None,
             },
         );
         Gen { block, flat }
