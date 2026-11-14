@@ -1338,3 +1338,103 @@ async fn a_plain_http_request_to_the_websocket_port_is_not_dispatched() {
     assert!(out.is_empty() || out.starts_with("HTTP/1.1 4"), "{out}");
     h.abort();
 }
+
+/// #291: the WebSocket bound holds for subscriptions and fragmented messages, answers with close
+/// code 1009, and a message at the bound is served.
+#[tokio::test]
+async fn websocket_message_bound_covers_subscriptions_and_fragments() {
+    use futures_util::{SinkExt, StreamExt};
+    use tokio_tungstenite::tungstenite::{
+        protocol::frame::{
+            coding::{CloseCode, Data, OpCode},
+            Frame,
+        },
+        Message,
+    };
+    const BOUND: usize = 4096;
+    let lim = Limits {
+        body_bytes: BOUND,
+        ..Limits::default()
+    };
+    let ls = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
+    let addr = ls.local_addr().expect("addr");
+    let h = tokio::spawn(xone_rpc::transport::serve_ws(rpc_with(lim, 0), ls));
+    let connect = || async {
+        tokio_tungstenite::connect_async(format!("ws://{addr}"))
+            .await
+            .expect("connect")
+            .0
+    };
+    // the server's answer to an oversized message: a close frame with 1009, never a reply
+    async fn closed_with_1009<S>(ws: &mut S)
+    where
+        S: futures_util::Stream<Item = Result<Message, tokio_tungstenite::tungstenite::Error>>
+            + Unpin,
+    {
+        let next = tokio::time::timeout(Duration::from_secs(5), ws.next())
+            .await
+            .expect("closed in time");
+        match next {
+            Some(Ok(Message::Close(Some(c)))) => assert_eq!(c.code, CloseCode::Size),
+            other => panic!("expected close 1009, got {other:?}"),
+        }
+    }
+    let pad = |n: usize| "a".repeat(n);
+
+    // an oversized eth_subscribe is refused at the WebSocket layer like any other message
+    let mut ws = connect().await;
+    let sub = format!(
+        r#"{{"jsonrpc":"2.0","id":1,"method":"eth_subscribe","params":["newHeads","{}"]}}"#,
+        pad(BOUND)
+    );
+    ws.send(Message::text(sub)).await.expect("send");
+    closed_with_1009(&mut ws).await;
+
+    // fragments each below the bound do not bypass the bound on the whole message
+    let mut ws = connect().await;
+    let body = format!(
+        r#"{{"jsonrpc":"2.0","id":1,"method":"net_version","params":["{}"]}}"#,
+        pad(BOUND * 2)
+    );
+    let bytes = body.into_bytes();
+    let chunks: Vec<&[u8]> = bytes.chunks(BOUND / 2).collect();
+    for (i, c) in chunks.iter().enumerate() {
+        let op = if i == 0 {
+            OpCode::Data(Data::Text)
+        } else {
+            OpCode::Data(Data::Continue)
+        };
+        let last = i + 1 == chunks.len();
+        if ws
+            .send(Message::Frame(Frame::message(c.to_vec(), op, last)))
+            .await
+            .is_err()
+        {
+            break;
+        }
+    }
+    closed_with_1009(&mut ws).await;
+
+    // a message of exactly the bound is served
+    let mut ws = connect().await;
+    let head = r#"{"jsonrpc":"2.0","id":7,"method":"net_version","params":[],"x":""#;
+    let tail = r#""}"#;
+    let exact = format!("{head}{}{tail}", pad(BOUND - head.len() - tail.len()));
+    assert_eq!(exact.len(), BOUND);
+    ws.send(Message::text(exact)).await.expect("send");
+    let v: Value = serde_json::from_str(
+        tokio::time::timeout(Duration::from_secs(5), ws.next())
+            .await
+            .expect("answered in time")
+            .expect("msg")
+            .expect("ok")
+            .to_text()
+            .expect("text"),
+    )
+    .expect("json");
+    assert_eq!(v["id"], 7, "{v}");
+    assert!(v.get("result").is_some(), "{v}");
+    h.abort();
+}
