@@ -1338,3 +1338,37 @@ async fn a_plain_http_request_to_the_websocket_port_is_not_dispatched() {
     assert!(out.is_empty() || out.starts_with("HTTP/1.1 4"), "{out}");
     h.abort();
 }
+
+#[test]
+fn debug_raw_receipts_and_transaction() {
+    let r = rpc();
+    // block 5 has no transactions: an empty list, as geth for a block without receipts
+    let ok = ask(&r, req(1, "debug_getRawReceipts", json!(["0x5"])));
+    assert_eq!(ok["result"], json!([]), "{ok}");
+    let by_hash = ask(
+        &r,
+        req(1, "debug_getRawReceipts", json!([header(5).hash()])),
+    );
+    assert_eq!(by_hash["result"], json!([]), "{by_hash}");
+    // an unknown block is null
+    let none = ask(&r, req(1, "debug_getRawReceipts", json!(["0x500"])));
+    assert_eq!(none["result"], Value::Null, "{none}");
+    // receipts outside the retained window are the typed error
+    let old = rpc_with(Limits::default(), 50);
+    let e = ask(&old, req(1, "debug_getRawReceipts", json!(["0x5"])));
+    assert!(
+        e["error"]["message"]
+            .as_str()
+            .unwrap_or("")
+            .starts_with("unsupported history"),
+        "{e}"
+    );
+    // a transaction neither mined nor pooled: "0x" (geth nil hexutil.Bytes)
+    let t = ask(
+        &r,
+        req(1, "debug_getRawTransaction", json!([B256::repeat_byte(9)])),
+    );
+    assert_eq!(t["result"], "0x", "{t}");
+    let bad = ask(&r, req(1, "debug_getRawTransaction", json!(["0x12"])));
+    assert_eq!(bad["error"]["code"], -32602, "{bad}");
+}

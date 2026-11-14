@@ -11,7 +11,7 @@ ADR-008 is not in `docs/adr/` yet; this page is the working scope of issue #42 w
 | `web3` | `clientVersion` (the build's one stamp function). `web3_sha3` is not served: the pinned geth-XDC answers `-32601` |
 | `txpool` | `status, content, inspect` |
 | `admin` | `nodeInfo, peers, addPeer, addTrustedPeer, removePeer` |
-| `debug` | `getRawHeader, getRawBlock, traceTransaction, traceBlockByNumber, traceBlockByHash` with `callTracer` and `prestateTracer` (config `onlyTopCall`, `withLog`, `diffMode`); output as geth (`eth/tracers/api.go:175` `txTraceResult{txHash, result}`; `tracers/native/call.go`, `prestate.go`) |
+| `debug` | `getRawHeader, getRawBlock, getRawReceipts, getRawTransaction, traceTransaction, traceBlockByNumber, traceBlockByHash` with `callTracer` and `prestateTracer` (config `onlyTopCall`, `withLog`, `diffMode`); output as geth (`eth/tracers/api.go:175` `txTraceResult{txHash, result}`; `tracers/native/call.go`, `prestate.go`) |
 | `xdc` | off unless the API list names it. The 19 methods of the oracle `BlockChainAPI` that this node serves under `eth_` (`xone-rpc/src/xdc.rs` alias table: the same handlers) and `xdc_getStateHealStatus`; `eth_getStateHealStatus` joins `eth`. The idle answer only (GAP-0058) |
 | `XDPoS` | the 14 methods of `xdpos-namespace.md` |
 

@@ -1,5 +1,5 @@
-//! `debug_*` subset (geth `eth/api_debug.go`, `eth/tracers/api.go`): `getRawHeader`, `getRawBlock`
-//! and `traceTransaction`, `traceBlockByNumber`, `traceBlockByHash` with the two native tracers
+//! `debug_*` subset (geth `eth/api_debug.go`, `internal/ethapi/api.go`, `eth/tracers/api.go`):
+//! `getRawHeader`, `getRawBlock`, `getRawReceipts`, `getRawTransaction` and `traceTransaction`, `traceBlockByNumber`, `traceBlockByHash` with the two native tracers
 //! `callTracer` and `prestateTracer` (`tracers/native/call.go`, `prestate.go`). Class C3.
 
 use crate::{
@@ -21,6 +21,8 @@ pub fn register(r: &mut Registry) {
     r.add("debug_getRawBlock", Cost::C1, |c, p| {
         Ok(block_of(c, p.block_ref(0)?)?.map_or(Value::Null, |b| hex(&b.raw)))
     });
+    r.add("debug_getRawReceipts", Cost::C1, raw_receipts);
+    r.add("debug_getRawTransaction", Cost::C1, raw_tx);
     r.add("debug_traceTransaction", Cost::C3, trace_tx);
     r.add("debug_traceBlockByNumber", Cost::C3, |c, p| {
         trace_block(c, p, BlockRef::Number(p.number_or_latest(0)?))
@@ -28,6 +30,39 @@ pub fn register(r: &mut Registry) {
     r.add("debug_traceBlockByHash", Cost::C3, |c, p| {
         trace_block(c, p, BlockRef::Hash(p.hash(0)?))
     });
+}
+
+/// geth `DebugAPI.GetRawReceipts`: `Receipt.MarshalBinary` of each receipt of the block, `null`
+/// for an unknown block, `[]` when the block has no stored receipts (geth `GetReceipts` gives nil).
+fn raw_receipts(c: &Ctx, p: &Params) -> R {
+    let Some(b) = block_of(c, p.block_ref(0)?)? else {
+        return Ok(Value::Null);
+    };
+    c.be.chain.history(Class::Receipt, b.header.number)?;
+    let raw = c.be.chain.receipts(b.hash).unwrap_or_else(Vec::new);
+    Ok(Value::Array(raw.iter().map(|r| hex(r)).collect()))
+}
+
+/// geth `DebugAPI.GetRawTransaction`: the canonical transaction, else the pooled one, as
+/// `MarshalBinary` bytes; `"0x"` when neither holds it (geth returns nil `hexutil.Bytes`).
+fn raw_tx(c: &Ctx, p: &Params) -> R {
+    let h = p.hash(0)?;
+    if let Some((bh, i)) = c.be.chain.tx_location(h) {
+        let tx =
+            c.be.chain
+                .block(bh)
+                .and_then(|b| usize::try_from(i).ok().and_then(|i| b.txs.get(i).cloned()));
+        if let Some(t) = tx {
+            return Ok(hex(&t));
+        }
+    }
+    let (pending, queued) = c.be.pool.content();
+    let pooled = pending
+        .values()
+        .chain(queued.values())
+        .flatten()
+        .find(|raw| keccak256(raw) == h);
+    Ok(hex(pooled.map_or(&[][..], |t| &t[..])))
 }
 
 fn tracer(p: &Params, i: usize) -> Result<Tracer, RpcError> {
