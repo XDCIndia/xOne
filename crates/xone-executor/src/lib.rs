@@ -6,6 +6,7 @@
 #![forbid(unsafe_code)]
 
 mod bal;
+pub mod code_cache;
 mod overlay;
 pub mod tx;
 
@@ -67,6 +68,10 @@ pub trait Env: BlockReader {
     /// `baseFee * gasUsed` of canonical block `number`, zero when its header has no base fee (the
     /// burnt amount the tiered reward records, `engine_v2_hooks.go:967-969`).
     fn burn(&self, number: u64) -> Option<U256>;
+    /// Analysed bytecode kept across blocks; `None` analyses the code at every load.
+    fn code_cache(&self) -> Option<&code_cache::CodeCache> {
+        None
+    }
 }
 
 pub struct ExecCtx<'a, E> {

@@ -36,7 +36,7 @@ use xone_consensus::{
     verify::{Body, Context, HeaderError, V1Context, V2Context},
 };
 use xone_db::{mdbx::T, segments::OsDir};
-use xone_executor::Env;
+use xone_executor::{code_cache::CodeCache, Env};
 use xone_primitives::{Header, WideBalance};
 use xone_state::{system_contracts::validator_0x88 as v88, StateRead};
 use xone_sync::mdbx::StoreReader;
@@ -126,6 +126,8 @@ pub struct HistInner {
     pub switches: Vec<Switch>,
     /// Total difficulty of the tip: the rank that peers see in our Status.
     pub td: U256,
+    /// Analysed bytecode across blocks (and `eth_call`s).
+    pub code_cache: CodeCache,
 }
 
 /// geth `XDPoS.IsEpochSwitch` (`consensus/XDPoS/xdpos_api.go:228-235`) at or below the V2 switch block, which
@@ -204,6 +206,9 @@ impl Env for HistInner {
             h.base_fee
                 .map_or(U256::ZERO, |f| f * U256::from(h.gas_used)),
         )
+    }
+    fn code_cache(&self) -> Option<&CodeCache> {
+        Some(&self.code_cache)
     }
 }
 
