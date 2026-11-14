@@ -9,6 +9,7 @@ pub mod ethstats;
 pub mod heartbeat;
 pub mod logs;
 pub mod metrics;
+pub mod slow;
 pub(crate) mod wire;
 
 /// One block as the stats board shows it.

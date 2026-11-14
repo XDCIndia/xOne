@@ -57,6 +57,8 @@ pub struct Snapshot {
     pub storage_bytes: u64,
     pub log_suppressed_lines_total: u64,
     pub log_dropped_lines_total: u64,
+    /// Blocks written by the slow-block log (`--debug.logslowblock`).
+    pub slow_blocks_total: u64,
     /// Durability or signer-fencing fault, or shutdown in progress: never ready.
     pub degraded: bool,
     pub shutting_down: bool,
@@ -251,6 +253,13 @@ pub fn encode(s: &Snapshot) -> String {
         "counter",
         "Log lines dropped by a full sink queue.",
         s.log_dropped_lines_total,
+    );
+    g(
+        &mut o,
+        "xone_slow_blocks_total",
+        "counter",
+        "Imported blocks at or above the --debug.logslowblock threshold.",
+        s.slow_blocks_total,
     );
     o
 }

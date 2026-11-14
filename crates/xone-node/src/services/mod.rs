@@ -137,6 +137,10 @@ pub fn build(
         .required_blocks_of_chain(cfg.network_id.unwrap_or(marker.chain_id))
         .map_err(|e| e.to_string())?;
     core.chain.set_required_blocks(required.clone());
+    core.slow_block = cfg
+        .logging
+        .slow_block_threshold()
+        .map_err(|e| e.to_string())?;
     let core = Arc::new(core);
     if core.genesis.to_string() != marker.genesis_hash {
         return Err("the genesis hash of the node differs from the chain marker".into());

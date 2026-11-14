@@ -18,6 +18,7 @@ Rust: `xone_node::observe::metrics` (`Snapshot`, `encode`, `MetricsServer`). The
 | `xone_timeouts_total`, `xone_missed_eligible_turns_total` | counter | the miss counter increments in `scrape_missed_turn_and_health_endpoints` |
 | `xone_storage_bytes` | gauge | datadir size |
 | `xone_log_suppressed_lines_total`, `xone_log_dropped_lines_total` | counter | from `Logs::counters` |
+| `xone_slow_blocks_total` | counter | imported blocks at or above `--debug.logslowblock` (`observe::slow`) |
 
 **Endpoints** on `--metrics.addr` and `--metrics.port` (default 127.0.0.1:6060): `/metrics`; `/livez` always 200 while the process answers (a partition never makes it fail, so it cannot cause restart loops); `/readyz` 200 only when `Snapshot::ready(max_head_age)`: a head exists, the head is not older than the limit, not syncing, not `degraded` (recovery, durability or signer-fencing fault), not shutting down; otherwise 503. A single-node devnet that cannot meet the age rule passes a larger `max_head_age_secs`; the rule is never switched off. The geth reference is `node/health.go` (XDC addition, pin `6fc8e8c2`); xOneGo `health_endpoints.go:44-111` is the lesson.
 

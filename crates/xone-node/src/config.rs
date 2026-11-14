@@ -190,6 +190,9 @@ pub struct Logging {
     pub format: String,
     /// Per-target verbosity, `xone_net=4,xone_sync::snap=5`.
     pub vmodule: String,
+    /// `--debug.logslowblock` as a Go duration: log each imported block slower than this; 0 logs
+    /// every block, a negative value is off (geth-XDC semantics and default).
+    pub slow_block: String,
 }
 
 impl Logging {
@@ -210,6 +213,17 @@ impl Logging {
             },
             format,
         ))
+    }
+
+    /// The slow-block threshold; `None` is off.
+    pub fn slow_block_threshold(&self) -> Result<Option<std::time::Duration>, ConfigError> {
+        crate::observe::slow::parse_duration(&self.slow_block).map_err(|_| {
+            invalid(
+                "debug.logslowblock",
+                &self.slow_block,
+                "a Go duration: 1s, 500ms, 0 (every block) or -1ns (off)",
+            )
+        })
     }
 }
 
@@ -346,7 +360,8 @@ defaults!(Mining {
 defaults!(Logging {
     verbosity: 3,
     format: "text".into(),
-    vmodule: String::new()
+    vmodule: String::new(),
+    slow_block: "-1ns".into()
 });
 defaults!(Limits {
     stop_timeout_ms: 5_000,
@@ -440,6 +455,7 @@ impl Config {
         c.sync.mode = sync_mode("sync.mode", &c.sync.mode)?;
         gc_mode("sync.gcmode", &c.sync.gcmode)?;
         c.logging.levels()?;
+        c.logging.slow_block_threshold()?;
         c.required_blocks(None)?;
         Ok(c)
     }
@@ -614,6 +630,10 @@ impl Config {
             "log.vmodule" | "vmodule" => {
                 self.logging.vmodule = v.to_owned();
                 self.logging.levels()?;
+            }
+            "debug.logslowblock" => {
+                self.logging.slow_block = v.to_owned();
+                self.logging.slow_block_threshold()?;
             }
             "metrics" => self.metrics.enabled = flag(key, v)?,
             "metrics.addr" => self.metrics.addr = v.to_owned(),

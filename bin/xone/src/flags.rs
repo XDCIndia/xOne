@@ -435,6 +435,14 @@ pub const FLAGS: &[Flag] = &[
         )
     },
     f(
+        "debug.logslowblock",
+        Some("<duration>"),
+        "-1ns",
+        "1s",
+        "Log one JSON line with per-phase timings (verify, senders, execution, commit, history, total) for each imported block that took at least this long; 0 logs every block, a negative value is off.",
+        "flags.go:795",
+    ),
+    f(
         "override.genesis",
         P,
         "unset",

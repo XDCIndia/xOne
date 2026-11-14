@@ -8,8 +8,11 @@
 use std::{
     collections::{BTreeMap, VecDeque},
     path::{Path, PathBuf},
-    sync::{Mutex, PoisonError, RwLock},
-    time::{SystemTime, UNIX_EPOCH},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Mutex, PoisonError, RwLock,
+    },
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use alloy_primitives::{Address, Bytes, B256, U256};
@@ -49,6 +52,7 @@ use super::{
     senders::Senders,
     store::{self, Ckpt, FileError, NodeStore},
 };
+use crate::observe::slow::{self, Phases};
 
 /// Minimal mode deletes when the floor has moved this many blocks past the first held block: a
 /// rewrite of the segment files every 256 blocks, not every block.
@@ -117,6 +121,9 @@ struct Pending {
 pub struct History {
     pub inner: RwLock<HistInner>,
     pending: Mutex<Option<Pending>>,
+    /// Phase times of the block being imported (`--debug.logslowblock`), filled by
+    /// [`NodeCheck`] and [`NodeExec`].
+    phases: Mutex<Phases>,
 }
 
 impl History {
@@ -128,6 +135,9 @@ impl History {
     }
     fn pending(&self) -> std::sync::MutexGuard<'_, Option<Pending>> {
         self.pending.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+    fn phases(&self) -> std::sync::MutexGuard<'_, Phases> {
+        self.phases.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 
@@ -149,7 +159,10 @@ impl BlockExecutor for NodeExec {
         body: &Body,
     ) -> Result<Execution, ExecError> {
         let fail = |e: String| ExecError::Failed(e);
+        let t0 = Instant::now();
         let senders = self.senders.of(&body.transactions);
+        let t1 = Instant::now();
+        self.hist.phases().senders = t1.duration_since(t0);
         let h = self.hist.read();
         let tip = h.tip();
         if header.parent_hash != tip.hash || header.number != h.tip_number() + 1 {
@@ -170,6 +183,7 @@ impl BlockExecutor for NodeExec {
             &*h,
         )
         .map_err(|e| fail(e.to_string()))?;
+        self.hist.phases().execute = t1.elapsed();
         let v1 = self
             .spec
             .xdpos
@@ -229,12 +243,16 @@ impl HeaderCheck for NodeCheck {
         parent: &Header,
         now: u64,
     ) -> Result<(), HeaderError> {
+        let t0 = Instant::now();
         let h = self.hist.read();
         if parent.hash() != h.tip().hash {
             return Err(HeaderError::UnknownAncestor(parent.number));
         }
         let ctx = h.context(header, parent, h.snaps.get(&parent.number))?;
-        HeaderVerifier::new(&self.spec).verify(header, parent, now, &ctx)
+        let r = HeaderVerifier::new(&self.spec).verify(header, parent, now, &ctx);
+        drop(h);
+        self.hist.phases().verify = t0.elapsed();
+        r
     }
 }
 
@@ -261,6 +279,10 @@ pub struct Core {
     /// The subscription hubs of the WebSocket and IPC endpoints: each canonical block and each block
     /// a reorg removes is published to them ([`Self::publish`]).
     pub hubs: Mutex<Vec<std::sync::Arc<Hub>>>,
+    /// `--debug.logslowblock`: log an imported block that took at least this long; `None` is off.
+    pub slow_block: Option<Duration>,
+    /// Blocks the slow-block log wrote (`xone_slow_blocks_total`).
+    pub slow_blocks: AtomicU64,
 }
 
 pub fn now() -> u64 {
@@ -602,6 +624,7 @@ impl Core {
         let hist = std::sync::Arc::new(History {
             inner: RwLock::new(inner),
             pending: Mutex::new(None),
+            phases: Mutex::default(),
         });
         // The blocks above the checkpoint are read before the store goes back to it, and replayed
         // below.
@@ -668,6 +691,8 @@ impl Core {
             senders,
             saving: Mutex::new(None),
             hubs: Mutex::default(),
+            slow_block: None,
+            slow_blocks: AtomicU64::new(0),
         };
         for (header, body) in replay {
             let number = header.number;
@@ -696,6 +721,8 @@ impl Core {
     /// Imports one block: header check, execution, root comparison and the store commit. `Extended`
     /// adds it to the history.
     pub fn import(&self, header: Header, body: Body, now: u64) -> Result<Outcome, CoreError> {
+        let t0 = Instant::now();
+        *self.hist.phases() = Phases::default();
         let block = Block::new(header, body);
         let (hash, number) = (block.hash(), block.number());
         let body = block.body.clone();
@@ -708,6 +735,7 @@ impl Core {
         if out != Outcome::Extended {
             return Ok(out);
         }
+        let t_insert = Instant::now();
         // The block is committed. If its history context cannot be built, rewind the chain to the
         // parent so the store head and the history tip stay the same block.
         let derived = (|| -> Result<_, CoreError> {
@@ -781,6 +809,20 @@ impl Core {
         }
         if self.minimal {
             self.prune()?;
+        }
+        let total = t0.elapsed();
+        if slow::is_slow(self.slow_block, total) {
+            let mut p = *self.hist.phases();
+            p.insert = t_insert.duration_since(t0);
+            p.history = t_insert.elapsed();
+            p.total = total;
+            let (gas, txs) = {
+                let h = self.hist.read();
+                let t = h.tip();
+                (t.header.gas_used, t.body.transactions.len())
+            };
+            self.slow_blocks.fetch_add(1, Ordering::Relaxed);
+            eprintln!("{}", slow::line(number, &hash.to_string(), gas, txs, &p));
         }
         Ok(out)
     }
