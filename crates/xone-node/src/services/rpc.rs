@@ -8,7 +8,7 @@
 
 use std::{
     net::SocketAddr,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -373,6 +373,33 @@ fn rpc_for(
     Ok(rpc)
 }
 
+/// `--rpc.jwtsecret`: the file holds 32 bytes in hex, `0x` optional (geth `node.ObtainJWTSecret`).
+/// A missing, unreadable or malformed file stops the start; nothing is generated, so a typo never
+/// leaves the endpoint open. The secret and the file content never reach an error message.
+pub fn load_jwt_secret(path: &Path) -> Result<[u8; 32], String> {
+    let meta = std::fs::metadata(path)
+        .map_err(|e| format!("--rpc.jwtsecret {}: {}", path.display(), e.kind()))?;
+    if meta.len() > 256 {
+        return Err(format!(
+            "--rpc.jwtsecret {}: not a 32-byte hex secret",
+            path.display()
+        ));
+    }
+    let text = std::fs::read_to_string(path)
+        .map_err(|e| format!("--rpc.jwtsecret {}: {}", path.display(), e.kind()))?;
+    let t = text.trim();
+    let t = t.strip_prefix("0x").unwrap_or(t);
+    alloy_primitives::hex::decode(t)
+        .ok()
+        .and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
+        .ok_or_else(|| {
+            format!(
+                "--rpc.jwtsecret {}: not a 32-byte hex secret",
+                path.display()
+            )
+        })
+}
+
 pub struct RpcService {
     rt: Handle,
     http: Option<(SocketAddr, Arc<Rpc>)>,
@@ -423,6 +450,12 @@ impl RpcService {
                         Policy {
                             vhosts: cfg.http.vhosts.clone(),
                             origins: vec![],
+                            jwt: cfg
+                                .http
+                                .jwt_secret
+                                .as_deref()
+                                .map(load_jwt_secret)
+                                .transpose()?,
                         },
                     )?,
                 ))
@@ -441,6 +474,12 @@ impl RpcService {
                         Policy {
                             vhosts: vec![],
                             origins: cfg.ws.origins.clone(),
+                            jwt: cfg
+                                .ws
+                                .jwt_secret
+                                .as_deref()
+                                .map(load_jwt_secret)
+                                .transpose()?,
                         },
                     )?,
                 ))
@@ -453,7 +492,7 @@ impl RpcService {
                         .path
                         .clone()
                         .unwrap_or_else(|| cfg.datadir.join("xone.ipc")),
-                    // the IPC endpoint is local and serves every namespace, as geth's
+                    // the IPC endpoint is local (socket mode 0600) and serves every namespace, as geth's
                     rpc_for(
                         &be,
                         &lim,
