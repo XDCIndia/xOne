@@ -106,6 +106,19 @@ pub struct CallFrame {
     pub error: Option<String>,
     pub revert_reason: Option<String>,
     pub calls: Vec<CallFrame>,
+    /// The logs this frame emitted itself, in emission order (`withLog`). A reverted frame and its
+    /// reverted descendants carry none, as in geth `callTracer.OnExit` / `clearFailedLogs`.
+    pub logs: Vec<CallLog>,
+}
+
+/// One `callTracer` log (geth `tracers/native/call.go` `callLog`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CallLog {
+    pub address: Address,
+    pub topics: Vec<B256>,
+    pub data: Bytes,
+    /// The number of child calls made by the frame before the log was emitted.
+    pub position: u64,
 }
 
 /// One account of the `prestateTracer` output (geth `tracers/native/prestate.go`).
