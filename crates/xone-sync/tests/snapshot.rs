@@ -954,7 +954,8 @@ fn pruning_deletes_only_what_the_floor_has_passed_and_the_rest_is_a_typed_error(
             class: Class::Header,
             block: k.headers_from - 1,
             floor: k.headers_from,
-            pivot: S + 4
+            // the fixture store was not installed from an anchor: its history starts at genesis
+            pivot: 0
         })
     );
     assert!(matches!(

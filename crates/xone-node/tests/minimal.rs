@@ -227,6 +227,29 @@ fn a_minimal_node_follows_two_checkpoints_and_a_reward_from_a_fake_peer_only() {
     let _ = std::fs::remove_dir_all(&min);
 }
 
+/// #121: the refusal names the block the datadir was installed at, not the head, and keeps it
+/// while the head moves and across a restart.
+#[test]
+fn the_refusal_pivot_is_the_anchor_and_does_not_move_with_the_head() {
+    let blocks = vectors(120);
+    let min = import(&blocks, "pivot");
+    let net = Network::Apothem;
+    let (spec, genesis) = (net.spec(), net.genesis().unwrap());
+    let dir = min.join("xone");
+    let core = Core::open_with(spec.clone(), &genesis, &dir, 100, true, false).unwrap();
+    assert_eq!(core.held().unwrap().pivot, AT);
+    for b in &blocks[101..=102] {
+        let (h, body) = parts(b);
+        core.import(h, body, now()).unwrap();
+    }
+    assert_eq!(core.head().0, 102);
+    assert_eq!(core.held().unwrap().pivot, AT);
+    drop(core);
+    let core = Core::open_with(spec, &genesis, &dir, 100, true, false).unwrap();
+    assert_eq!(core.held().unwrap().pivot, AT);
+    let _ = std::fs::remove_dir_all(&min);
+}
+
 #[test]
 fn a_minimal_node_prunes_to_its_floor_restarts_and_answers_for_the_rest_with_the_typed_error() {
     let blocks = vectors(1800);
@@ -253,7 +276,7 @@ fn a_minimal_node_prunes_to_its_floor_restarts_and_answers_for_the_rest_with_the
             class: Class::Header,
             block: 0,
             floor: 1,
-            pivot: 1800
+            pivot: AT
         })
     );
     assert!(matches!(
