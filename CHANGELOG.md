@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **`--state.disk`, part 2 of 3 (issue #145).** The account and storage tries are rows of a new table
+  `TrieNodes` (by position), loaded on demand and flushed in the block's transaction with a `trieroot`
+  marker; a start rebuilds them from the flat tables when the marker is not the head's root.
+
 - **`--state.disk`, part 1 of 3 (issue #145).** The head state is read from the MDBX tables behind
   bounded caches instead of a copy of every row in memory; checkpoints and the snap install write no
   state rows with the flag. Off by default. `docs/ops/disk-state.md`.

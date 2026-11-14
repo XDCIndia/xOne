@@ -18,4 +18,5 @@ pub mod trie;
 pub use account::{Account, SlimError};
 pub use changeset::{ChangeSet, HashedDiff, StateDiff};
 pub use flat::{FlatRead, FlatWrite, MemFlat};
+pub use mpt::{Flush, NodeRows, StateTrie, Trie};
 pub use provider::{CommitError, Missing, StateProvider, StateRead, StateView};

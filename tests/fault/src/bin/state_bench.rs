@@ -56,7 +56,13 @@ fn run() -> Result<(), String> {
         },
     )
     .map_err(|e| e.to_string())?;
-    let genesis = Header::default();
+    // the genesis state is empty: its root is the root of an empty trie
+    let genesis = Header {
+        state_root: alloy_primitives::b256!(
+            "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
+        ),
+        ..Header::default()
+    };
     let mut parent = genesis.hash();
     store
         .init_anchor(genesis, MemFlat::default())
@@ -107,8 +113,24 @@ fn run() -> Result<(), String> {
         };
         parent = rec.block.hash();
         store.commit_block(&rec, None).map_err(|e| e.to_string())?;
+        if n % 5 == 0 {
+            // a steady commit frees the pages of the blocks before it (the file does not grow with them)
+            store.steady().map_err(|e| e.to_string())?;
+        }
     }
     store.steady().map_err(|e| e.to_string())?;
+    if disk {
+        let (rows, _) = store.trie_rows().map_err(|e| e.to_string())?;
+        let (k, v) = rows.iter().fold((0usize, 0usize), |(k, v), (a, b)| {
+            (k + a.len(), v + b.len())
+        });
+        println!(
+            "trie rows {} (key bytes {} MB, value bytes {} MB)",
+            rows.len(),
+            k / 1_000_000,
+            v / 1_000_000
+        );
+    }
     println!(
         "mode {} blocks {n} accounts {na} slots {ns} time {} s peak RSS {} MB (now: anonymous {} MB, file pages {} MB) cache {:?}",
         if disk { "disk" } else { "memory" },

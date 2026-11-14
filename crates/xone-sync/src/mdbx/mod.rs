@@ -18,6 +18,7 @@
 
 mod codec;
 pub mod diskflat;
+pub mod trierows;
 
 use std::{
     collections::{BTreeMap, HashMap},
@@ -32,6 +33,7 @@ use codec::{
     dec_receipts, dec_record, enc_block, enc_diff, enc_link, enc_record, header_rlp, receipts_rlp,
 };
 use diskflat::{DiskFlat, Flat};
+use trierows::{rebuild, write_flush, MdbxRows, TRIEROOT_KEY};
 use xone_consensus::{v2::commit::Link, verify::Body};
 use xone_db::{
     mdbx::{Env, MdbxError, Rd, Wr, T},
@@ -45,8 +47,8 @@ use xone_db::{
 use xone_primitives::Header;
 use xone_state::{
     trie::{flat_root, root_of_sorted_rows},
-    ChangeSet, CommitError, FlatRead, FlatWrite, MemFlat, Missing, StateDiff, StateProvider,
-    StateRead,
+    ChangeSet, CommitError, FlatRead, FlatWrite, Flush, MemFlat, Missing, StateDiff, StateProvider,
+    StateRead, StateTrie,
 };
 
 use crate::store::{
@@ -313,6 +315,9 @@ fn changeset_of(rd: &Rd, k: u64) -> Result<ChangeSet, StoreError> {
     }
     Ok(cs)
 }
+
+/// The rows of `TrieNodes` and the `trieroot` marker.
+pub type TrieRows = (Vec<(Vec<u8>, Vec<u8>)>, Option<Vec<u8>>);
 
 pub struct MdbxStore<D: SegDir> {
     env: Arc<Env>,
@@ -716,6 +721,16 @@ impl<D: SegDir> MdbxStore<D> {
         }
     }
 
+    /// Every row of `TrieNodes`, and the `trieroot` marker (for tests).
+    pub fn trie_rows(&self) -> Result<TrieRows, StoreError> {
+        let db = |e: MdbxError| StoreError::Damaged(e.to_string());
+        let rd = self.rd()?;
+        Ok((
+            rd.range(T::TrieNodes, &[], None).map_err(db)?,
+            rd.get(T::Meta, TRIEROOT_KEY).map_err(db)?,
+        ))
+    }
+
     /// `--state.disk` is on.
     pub fn disk_state(&self) -> bool {
         self.cfg.disk_state
@@ -755,7 +770,7 @@ impl<D: SegDir> MdbxStore<D> {
 
     /// A read of the disk flat state failed: stop before a block is committed on a wrong answer.
     fn flat_failed(&mut self) -> Result<(), StoreError> {
-        if matches!(self.state.flat(), Flat::Disk(f) if f.failed()) {
+        if matches!(self.state.flat(), Flat::Disk(f) if f.failed()) || self.state.trie_failed() {
             // stop; the tables are not at fault, so the next start may go on (no fsync guard)
             eprintln!("xone-db: a read of the disk state failed (fail-stop)");
             self.dead = Some(Dead::Failed(Cause::Io));
@@ -903,6 +918,7 @@ impl<D: SegDir> MdbxStore<D> {
         committed: Option<&Link>,
         anchor: Option<&MemFlat>,
         new_base: u64,
+        trie: Option<&(B256, Flush)>,
     ) -> R<()> {
         let b = &rec.block;
         let n = b.number();
@@ -929,6 +945,11 @@ impl<D: SegDir> MdbxStore<D> {
             None => {
                 put_tx_lookup(tx, n, &b.body)?;
                 write_diff(tx, n, &rec.diff)?;
+                if let Some((root, rows)) = trie {
+                    // the trie rows of the block and the root they are, with the block's own rows
+                    write_flush(tx, rows)?;
+                    tx.put(T::Meta, TRIEROOT_KEY, root.as_slice())?;
+                }
                 tx.put(T::BlockDiffs, &be(n), &enc_diff(&rec.diff))?;
                 if !rec.aux.is_empty() {
                     tx.put(T::Aux, &be(n), &rec.aux)?;
@@ -1029,6 +1050,8 @@ impl<D: SegDir> MdbxStore<D> {
         } else {
             self.base.max(n.saturating_sub(self.cfg.retention))
         };
+        let trie =
+            (self.cfg.disk_state && anchor.is_none()).then(|| self.state.trie_rows(&rec.diff));
         self.flat_failed()?;
         let env = self.env.clone();
         let tx = env.write().map_err(|e| self.db_failed(&e))?;
@@ -1040,6 +1063,7 @@ impl<D: SegDir> MdbxStore<D> {
             committed.as_ref(),
             anchor.as_ref(),
             new_base,
+            trie.as_ref(),
         )
         .map_err(|e| self.db_failed(&e))?;
         self.step(K14)?;
@@ -1092,13 +1116,13 @@ impl<D: SegDir> MdbxStore<D> {
         match anchor {
             Some(f) => {
                 self.state = if self.cfg.disk_state {
-                    // the tables hold the anchor rows: the state reads them
-                    StateProvider::from_head(
-                        Flat::Disk(DiskFlat::new(self.env.clone())),
+                    // the tables hold the anchor rows: the state reads them, the trie rows are built
+                    self.disk_provider(
+                        b.header.state_root,
                         (b.number(), b.hash()),
                         Vec::new(),
                         self.cfg.retention,
-                    )
+                    )?
                 } else {
                     StateProvider::new(
                         Flat::Mem(f.clone()),
@@ -1122,6 +1146,8 @@ impl<D: SegDir> MdbxStore<D> {
                     self.fail_stop(Cause::Io);
                     return Err(e.into());
                 }
+                // the rows of the block are committed: the trie goes back to its top levels
+                self.state.trie_finish();
                 self.flat_failed()?;
             }
         }
@@ -1150,6 +1176,49 @@ impl<D: SegDir> MdbxStore<D> {
 
     // ---- start-up
 
+    /// The state over the tables for head `base`/chain, with the trie rows checked against `root` (the
+    /// head header's state root): used when the marker names `root`, else rebuilt from the flat
+    /// tables in one streamed pass and checked. Writes the marker.
+    fn disk_provider(
+        &mut self,
+        root: B256,
+        base: (u64, B256),
+        chain: Vec<(u64, B256, ChangeSet)>,
+        retention: u64,
+    ) -> Result<StateProvider<Flat>, StoreError> {
+        let bad = |what: &str| StoreError::Damaged(format!("state tables: {what}"));
+        let flat = DiskFlat::new(self.env.clone());
+        let marker = self
+            .rd()?
+            .get(T::Meta, TRIEROOT_KEY)
+            .map_err(|e| StoreError::Damaged(e.to_string()))?;
+        if marker.as_deref() != Some(root.as_slice()) {
+            let t0 = std::time::Instant::now();
+            eprintln!(
+                "state: trie rows are not those of the head: rebuilding them from the flat tables"
+            );
+            let got = rebuild(&self.env, &flat).map_err(|e| StoreError::Damaged(e.to_string()))?;
+            if flat.failed() || got != root {
+                return Err(bad("the state tables do not give the head's state root"));
+            }
+            let tx = self
+                .env
+                .write()
+                .map_err(|e| StoreError::Damaged(e.to_string()))?;
+            tx.put(T::Meta, TRIEROOT_KEY, root.as_slice())
+                .and_then(|()| tx.commit())
+                .map_err(|e| StoreError::Damaged(e.to_string()))?;
+            eprintln!(
+                "state: trie rows rebuilt in {} s, root {root}",
+                t0.elapsed().as_secs()
+            );
+        }
+        let trie = StateTrie::persisted(Arc::new(MdbxRows(self.env.clone())), root);
+        let state = StateProvider::from_head_with(Flat::Disk(flat), base, chain, retention, trie);
+        self.flat_ok(&state)?;
+        Ok(state)
+    }
+
     fn load_state(&mut self) -> Result<(), StoreError> {
         let Some(m) = self.manifest.clone() else {
             return Ok(());
@@ -1158,48 +1227,47 @@ impl<D: SegDir> MdbxStore<D> {
         let (head_n, head_h) = (m.head_number, m.head_hash);
         let bad = |what: &str| StoreError::Damaged(format!("state tables: {what}"));
         let db = |e: MdbxError| StoreError::Damaged(e.to_string());
-        let rd = self.rd()?;
-        let head_header = self.header_at(&rd, head_n)?;
-        if head_header.hash() != head_h {
-            return Err(bad("the head header is not the head of the manifest"));
-        }
-        let base = match rd.first(T::BlockDiffs).map_err(db)? {
-            Some((k, _)) => be_u64(&k).ok_or_else(|| bad("diff key"))?.saturating_sub(1),
-            None => head_n,
-        };
-        let mut hashes = BTreeMap::new();
-        for (k, v) in rd.range(T::CanonicalHeaders, &be(base), None).map_err(db)? {
-            hashes.insert(
-                be_u64(&k).ok_or_else(|| bad("index key"))?,
-                B256::from_slice(&v),
-            );
-        }
-        let base_hash = *hashes
-            .get(&base)
-            .ok_or_else(|| bad("no canonical hash at the base"))?;
-        let state = if self.cfg.disk_state {
-            // The tables hold the head; the retained changesets are rows. Nothing is loaded or
-            // replayed: the trie is built from one paged scan and its root is the check.
-            let mut chain = Vec::new();
-            for k in base + 1..=head_n {
-                let hash = *hashes
-                    .get(&k)
-                    .ok_or_else(|| bad("a hole in the canonical index"))?;
-                chain.push((k, hash, changeset_of(&rd, k)?));
+        let (head_header, base, hashes, base_hash, chain) = {
+            let rd = self.rd()?;
+            let head_header = self.header_at(&rd, head_n)?;
+            if head_header.hash() != head_h {
+                return Err(bad("the head header is not the head of the manifest"));
             }
-            let flat = DiskFlat::new(self.env.clone());
-            let state = StateProvider::from_head(
-                Flat::Disk(flat),
+            let base = match rd.first(T::BlockDiffs).map_err(db)? {
+                Some((k, _)) => be_u64(&k).ok_or_else(|| bad("diff key"))?.saturating_sub(1),
+                None => head_n,
+            };
+            let mut hashes = BTreeMap::new();
+            for (k, v) in rd.range(T::CanonicalHeaders, &be(base), None).map_err(db)? {
+                hashes.insert(
+                    be_u64(&k).ok_or_else(|| bad("index key"))?,
+                    B256::from_slice(&v),
+                );
+            }
+            let base_hash = *hashes
+                .get(&base)
+                .ok_or_else(|| bad("no canonical hash at the base"))?;
+            // the retained changesets, with the disk state (the memory state reads them below)
+            let mut chain = Vec::new();
+            if self.cfg.disk_state {
+                for k in base + 1..=head_n {
+                    let hash = *hashes
+                        .get(&k)
+                        .ok_or_else(|| bad("a hole in the canonical index"))?;
+                    chain.push((k, hash, changeset_of(&rd, k)?));
+                }
+            }
+            (head_header, base, hashes, base_hash, chain)
+        };
+        let state = if self.cfg.disk_state {
+            self.disk_provider(
+                head_header.state_root,
                 (base, base_hash),
                 chain,
                 self.cfg.retention,
-            );
-            self.flat_ok(&state)?;
-            if state.root() != head_header.state_root {
-                return Err(bad("the state tables do not give the head's state root"));
-            }
-            state
+            )?
         } else {
+            let rd = self.rd()?;
             let mut flat = MemFlat::default();
             for (k, v) in rd.range(T::HashedAccounts, &[], None).map_err(db)? {
                 flat.set_hashed_account(
@@ -1238,6 +1306,7 @@ impl<D: SegDir> MdbxStore<D> {
             }
             state
         };
+        let rd = self.rd()?;
         eprintln!(
             "state: head {head_n} loaded from the tables in {} ms ({}, {} blocks of changesets)",
             t0.elapsed().as_millis(),
@@ -1543,6 +1612,15 @@ impl<D: SegDir> MdbxStore<D> {
             (e.last_block, e.len, e.tail_digest) = (number, ends[i].0, ends[i].1);
         }
         // U3 one transaction
+        // With the disk state the trie goes back first, so that its rows are in the transaction.
+        let trie = if self.cfg.disk_state {
+            if self.state.unwind_to(number).is_err() {
+                return Err(self.fail_stop(Cause::Io));
+            }
+            Some(self.state.trie_rows_now())
+        } else {
+            None
+        };
         let env = self.env.clone();
         let tx = env.write().map_err(|e| self.db_failed(&e))?;
         let r = (|| -> R<()> {
@@ -1575,6 +1653,10 @@ impl<D: SegDir> MdbxStore<D> {
                     tx.put(T::Stages, Stage::Finish.name().as_bytes(), &be(number))?;
                 }
             }
+            if let Some((root, rows)) = &trie {
+                write_flush(&tx, rows)?;
+                tx.put(T::Meta, TRIEROOT_KEY, root.as_slice())?;
+            }
             Self::meta_rows(&tx, &manifest)
         })();
         r.map_err(|e| self.db_failed(&e))?;
@@ -1585,7 +1667,9 @@ impl<D: SegDir> MdbxStore<D> {
         self.head = (number, target);
         self.manifest = Some(manifest.clone());
         self.segs.publish(&manifest);
-        if self.state.unwind_to(number).is_err() {
+        if self.cfg.disk_state {
+            self.state.trie_finish();
+        } else if self.state.unwind_to(number).is_err() {
             return Err(self.fail_stop(Cause::Io));
         }
         if blocks == Unwound::Keep {
@@ -2003,12 +2087,9 @@ impl<D: SegDir> Store for MdbxStore<D> {
         self.head = (number, hash);
         self.base = number;
         self.state = if self.cfg.disk_state {
-            StateProvider::from_head(
-                Flat::Disk(DiskFlat::new(self.env.clone())),
-                (number, hash),
-                Vec::new(),
-                s.retention,
-            )
+            // the rows of the trie are built from the tables just committed
+            let root = s.headers.last().map_or(B256::ZERO, |h| h.state_root);
+            self.disk_provider(root, (number, hash), Vec::new(), s.retention)?
         } else {
             StateProvider::new(Flat::Mem(flat), number, hash, s.retention)
         };

@@ -13,7 +13,7 @@
 use crate::{
     changeset::{ChangeSet, StateDiff},
     flat::{FlatRead, FlatWrite},
-    mpt::{StateTrie, Undo},
+    mpt::{Flush, StateTrie, Undo},
     Account,
 };
 use alloy_primitives::{keccak256, Address, B256, U256};
@@ -171,6 +171,18 @@ impl<F: FlatWrite> StateProvider<F> {
         retention: u64,
     ) -> Self {
         let trie = StateTrie::from_flat(&flat);
+        Self::from_head_with(flat, base, chain, retention, trie)
+    }
+
+    /// [`Self::from_head`] with a trie that is already built (a persisted one: nothing is read
+    /// from the flat state).
+    pub fn from_head_with(
+        flat: F,
+        base: (u64, B256),
+        chain: Vec<(u64, B256, ChangeSet)>,
+        retention: u64,
+        trie: StateTrie,
+    ) -> Self {
         let by_hash = std::iter::once((base.1, base.0))
             .chain(chain.iter().map(|(n, h, _)| (*h, *n)))
             .collect();
@@ -186,6 +198,35 @@ impl<F: FlatWrite> StateProvider<F> {
             by_hash,
             side: HashMap::new(),
         }
+    }
+
+    /// The state root after `diff` on top of the head, and the trie rows that go with it (a
+    /// persisted trie): what the store writes in the block's transaction. Changes no row.
+    pub fn trie_rows(&mut self, diff: &StateDiff) -> (B256, Flush) {
+        let h = self.head.get_mut().unwrap_or_else(PoisonError::into_inner);
+        let root = h.root_with(diff);
+        (root, h.trie.collect())
+    }
+
+    /// The head's root and the trie rows of the trie as it is now (after an unwind).
+    pub fn trie_rows_now(&mut self) -> (B256, Flush) {
+        let h = self.head.get_mut().unwrap_or_else(PoisonError::into_inner);
+        h.settle();
+        let root = h.trie.root();
+        (root, h.trie.collect())
+    }
+
+    /// The rows of [`Self::trie_rows`] are committed: prune the trie to its top levels.
+    pub fn trie_finish(&mut self) {
+        let h = self.head.get_mut().unwrap_or_else(PoisonError::into_inner);
+        if h.pending.is_none() {
+            h.trie.finish();
+        }
+    }
+
+    /// A trie node row was missing or wrong when it was loaded.
+    pub fn trie_failed(&self) -> bool {
+        self.head_trie().trie.failed()
     }
 
     fn can_extend(&self, hash: B256, parent: B256) -> Result<u64, CommitError> {
