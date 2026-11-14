@@ -391,6 +391,26 @@ pub const FLAGS: &[Flag] = &[
         "internal/debug/flags.go:42",
     ),
     f(
+        "log.format",
+        Some("text|json"),
+        "text",
+        "json",
+        "Log line format. json writes one object per line (t, lvl, target, msg, then the fields); the byte budgets and redaction are the same as text.",
+        "internal/debug/flags.go:59",
+    ),
+    Flag {
+        aliases: &[],
+        deprecated: &["vmodule"],
+        ..f(
+            "log.vmodule",
+            S,
+            "unset",
+            "xone_net=4,xone_sync::snap=5",
+            "Per-target verbosity as target=level pairs; a target is a crate or module path (xone_net, xone_sync::snap), longest match wins. geth matches file patterns instead.",
+            "internal/debug/flags.go:47",
+        )
+    },
+    f(
         "override.genesis",
         P,
         "unset",

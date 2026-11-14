@@ -50,6 +50,8 @@ Source column: file:line in geth-XDC (`XDCIndia/go-ethereum` at `6fc8e8c2`; `fla
 | `--keystore <path>` |  | unset | Keystore file of the validator key. Block production (--mine) needs it with --password, and is refused on chain id 50 in this build. | flags.go:124 ; xone |
 | `--ethstats <string>` |  | unset | Stats server as name:secret@host:port. | flags.go:786 ; geth,xone |
 | `--verbosity <n>` |  | 3 | Log level: 0 silent, 1 error, 2 warn, 3 info, 4 debug, 5 detail. | internal/debug/flags.go:42 |
+| `--log.format text|json` |  | text | Log line format. json writes one object per line (t, lvl, target, msg, then the fields); the byte budgets and redaction are the same as text. | internal/debug/flags.go:59 |
+| `--log.vmodule <string>` | `-vmodule` (deprecated) | unset | Per-target verbosity as target=level pairs; a target is a crate or module path (xone_net, xone_sync::snap), longest match wins. geth matches file patterns instead. | internal/debug/flags.go:47 |
 | `--override.genesis <path>` |  | unset | Genesis file; the datadir is initialised from it on first start. | flags.go:294 ; xone |
 | `--chainspec <path>` |  | unset | Fork table of a private chain (one network, the format of generated/forks.json); refused for chain ids 50 and 51. | not in geth-XDC; xone-defined |
 | `--xdcmainnet` |  | false | XDC mainnet profile (chain 50). | flags.go:166 |

@@ -226,6 +226,56 @@ fn sigterm_stops_the_node_and_ten_in_a_row_are_one_stop() {
     let _ = std::fs::remove_dir_all(&d);
 }
 
+/// `--log.format json`: every stdout line of a start and a SIGTERM stop is one JSON object.
+#[test]
+fn json_log_lines_parse() {
+    let d = scratch("jsonlog");
+    let mut child = Command::new(env!("CARGO_BIN_EXE_xone"))
+        .args([
+            "--datadir",
+            d.to_str().unwrap_or_default(),
+            "--apothem",
+            "--port",
+            "0",
+            "--nodiscover",
+            "--verbosity",
+            "4",
+            "--log.format",
+            "json",
+        ])
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap_or_else(|e| panic!("{e}"));
+    let out = child.stdout.take().unwrap_or_else(|| panic!("no stdout"));
+    let reader = std::thread::spawn(move || {
+        BufReader::new(out)
+            .lines()
+            .map_while(Result::ok)
+            .collect::<Vec<_>>()
+    });
+    std::thread::sleep(Duration::from_secs(3));
+    kill(child.id());
+    assert!(child.wait().unwrap_or_else(|e| panic!("{e}")).success());
+    let seen = reader.join().unwrap_or_default();
+    assert!(
+        seen.first().is_some_and(|l| l.contains("started chain 51")),
+        "{seen:?}"
+    );
+    assert!(
+        seen.last()
+            .is_some_and(|l| l.contains("\"msg\":\"stopped\"")),
+        "{seen:?}"
+    );
+    for l in &seen {
+        let v: serde_json::Value = serde_json::from_str(l).unwrap_or_else(|e| panic!("{e}: {l}"));
+        assert!(
+            v["t"].is_u64() && v["lvl"].is_string() && v["msg"].is_string(),
+            "{l}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&d);
+}
+
 /// Blocks 0..=`to` of the committed Apothem vectors, as the blocks of a geth export file.
 fn vector_blocks(to: usize) -> Vec<Vec<u8>> {
     use std::io::Read;

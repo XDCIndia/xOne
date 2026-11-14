@@ -8,7 +8,11 @@ use std::{ffi::OsString, process::ExitCode};
 
 use clap::parser::ValueSource;
 use xone_chainspec::Network;
-use xone_node::{datadir, services, Config, Shutdown};
+use xone_node::{
+    datadir,
+    observe::logs::{Logs, SinkCfg},
+    services, Config, Service, Shutdown,
+};
 
 /// The one place the version stamp comes from.
 pub fn stamp() -> &'static str {
@@ -111,6 +115,33 @@ fn run(args: impl IntoIterator<Item = OsString>) -> ExitCode {
 /// Check the datadir marker, open the chain (a restart replays what is stored), then run net, chain,
 /// pool and rpc until SIGTERM or SIGINT.
 fn start(cfg: &Config) -> ExitCode {
+    let mut logs = match logs(cfg) {
+        Ok(l) => l,
+        Err(e) => return fail(e),
+    };
+    let code = run_node(cfg);
+    logs.stop();
+    code
+}
+
+/// The tracing subscriber: verbosity, vmodule and format from the config, to stdout (journald).
+fn logs(cfg: &Config) -> Result<Logs, String> {
+    let (levels, format) = cfg.logging.levels().map_err(|e| e.to_string())?;
+    let mut l = Logs::new(levels, format, &SinkCfg::Stdout).map_err(|e| e.to_string())?;
+    l.start().map_err(|e| e.to_string())?;
+    Ok(l)
+}
+
+/// A start or stop line on stdout: as it always was in text, a log line in json so every line parses.
+fn note(cfg: &Config, m: &str) {
+    if cfg.logging.format == "json" {
+        tracing::info!(target: "xone", "{m}");
+    } else {
+        println!("{m}");
+    }
+}
+
+fn run_node(cfg: &Config) -> ExitCode {
     let (marker, spec, genesis) = match datadir::prepare_chain(cfg) {
         Ok(m) => m,
         Err(e) => return fail(e),
@@ -122,7 +153,7 @@ fn start(cfg: &Config) -> ExitCode {
     match services::snap_sync(cfg, &spec, &genesis, stamp(), &shutdown) {
         Ok(()) => {}
         Err(services::snapsync::SnapSyncError::Stopped) => {
-            println!("stopped during snap sync; the datadir is still empty");
+            note(cfg, "stopped during snap sync; the datadir is still empty");
             return ExitCode::SUCCESS;
         }
         Err(e) => return fail(format!("snap sync: {e}")),
@@ -131,13 +162,16 @@ fn start(cfg: &Config) -> ExitCode {
         Ok(b) => b.node,
         Err(e) => return fail(e),
     };
-    println!(
-        "started chain {} genesis {}",
-        marker.chain_id, marker.genesis_hash
+    note(
+        cfg,
+        &format!(
+            "started chain {} genesis {}",
+            marker.chain_id, marker.genesis_hash
+        ),
     );
     match node.run(&shutdown) {
         Ok(()) => {
-            println!("stopped");
+            note(cfg, "stopped");
             ExitCode::SUCCESS
         }
         Err(e) => {
