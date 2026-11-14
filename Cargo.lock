@@ -4899,7 +4899,6 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
- "serde",
  "serde_json",
  "thiserror",
  "tokio",
