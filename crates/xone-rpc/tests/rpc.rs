@@ -961,6 +961,7 @@ async fn websocket_refuses_methods_outside_its_list_and_a_wrong_origin() {
         xone_rpc::policy::Policy {
             vhosts: vec![],
             origins: vec!["https://app.example".into()],
+            cors: vec![],
             jwt: None,
         },
     );
@@ -1336,5 +1337,68 @@ async fn a_plain_http_request_to_the_websocket_port_is_not_dispatched() {
     let out = raw_http(addr, &req(1, "eth_chainId", json!([])).to_string()).await;
     assert!(!out.contains("result"), "{out}");
     assert!(out.is_empty() || out.starts_with("HTTP/1.1 4"), "{out}");
+    h.abort();
+}
+
+#[tokio::test]
+async fn http_cors_preflight_and_responses_follow_corsdomain() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let r = rpc_api(
+        &["eth"],
+        xone_rpc::policy::Policy {
+            cors: vec!["https://app.example".into()],
+            ..Default::default()
+        },
+    );
+    let ls = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
+    let addr = ls.local_addr().expect("addr");
+    let h = tokio::spawn(xone_rpc::transport::serve_http(r, ls));
+    let options = |origin: &'static str, method: &'static str| async move {
+        let mut s = tokio::net::TcpStream::connect(addr).await.expect("connect");
+        let msg = format!(
+            "OPTIONS / HTTP/1.1\r\nHost: localhost\r\nOrigin: {origin}\r\nAccess-Control-Request-Method: {method}\r\nAccess-Control-Request-Headers: content-type\r\nConnection: close\r\n\r\n"
+        );
+        s.write_all(msg.as_bytes()).await.expect("write");
+        let mut out = String::new();
+        s.read_to_string(&mut out).await.expect("read");
+        out.to_lowercase()
+    };
+    let ok = options("https://app.example", "POST").await;
+    assert!(ok.starts_with("http/1.1 204"), "{ok}");
+    assert!(
+        ok.contains("access-control-allow-origin: https://app.example"),
+        "{ok}"
+    );
+    assert!(
+        ok.contains("access-control-allow-headers: content-type"),
+        "{ok}"
+    );
+    assert!(ok.contains("vary: origin"), "{ok}");
+    for (origin, method) in [
+        ("https://evil.example", "POST"),
+        ("https://app.example", "PUT"),
+    ] {
+        let no = options(origin, method).await;
+        assert!(!no.contains("access-control-allow"), "{no}");
+    }
+    let body = req(1, "eth_chainId", json!([])).to_string();
+    let post = raw_http_with(addr, "localhost", "Origin: https://app.example\r\n", &body)
+        .await
+        .to_lowercase();
+    assert!(
+        post.contains("access-control-allow-origin: https://app.example"),
+        "{post}"
+    );
+    assert!(
+        post.contains("vary: origin") && post.contains("0x33"),
+        "{post}"
+    );
+    let denied = raw_http_with(addr, "localhost", "Origin: https://evil.example\r\n", &body)
+        .await
+        .to_lowercase();
+    assert!(!denied.contains("access-control-allow-origin"), "{denied}");
+    assert!(denied.contains("vary: origin"), "{denied}");
     h.abort();
 }

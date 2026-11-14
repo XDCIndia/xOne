@@ -59,7 +59,6 @@ async fn http_handle(
     conn: Arc<Conn>,
     req: Request<hyper::body::Incoming>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
-    let limits = &st.rpc.limits;
     let host = req.headers().get("host").and_then(|h| h.to_str().ok());
     if let Err(e) = st.rpc.policy.check_host(host) {
         return Ok(http_reply(
@@ -80,6 +79,88 @@ async fn http_handle(
             None,
         ));
     }
+    // geth wraps the CORS handler inside the vhost and JWT handlers: CORS comes after both.
+    let policy = &st.rpc.policy;
+    if policy.cors.is_empty() {
+        return http_dispatch(st.clone(), conn, req).await;
+    }
+    let origin = req
+        .headers()
+        .get("origin")
+        .and_then(|h| h.to_str().ok())
+        .map(str::to_owned);
+    if req.method() == Method::OPTIONS
+        && req.headers().contains_key("access-control-request-method")
+    {
+        // A preflight never reaches dispatch, so it runs no method and shows no namespace.
+        return Ok(preflight(policy, origin.as_deref(), req.headers()));
+    }
+    let method_ok = matches!(*req.method(), Method::POST | Method::GET);
+    let mut r = http_dispatch(st.clone(), conn, req).await?;
+    let h = r.headers_mut();
+    h.append("vary", hyper::header::HeaderValue::from_static("Origin"));
+    if method_ok {
+        if let Some(v) = policy
+            .cors_allow(origin.as_deref())
+            .and_then(|o| hyper::header::HeaderValue::from_str(&o).ok())
+        {
+            h.insert("access-control-allow-origin", v);
+        }
+    }
+    Ok(r)
+}
+
+/// `rs/cors` preflight with geth's options (methods POST and GET, any header, max age 600): 204,
+/// `Vary` on the three request headers, and permission headers only for an allowed origin and
+/// method. A denied preflight gets no permission header.
+fn preflight(
+    policy: &crate::policy::Policy,
+    origin: Option<&str>,
+    req: &hyper::HeaderMap,
+) -> Response<Full<Bytes>> {
+    use hyper::header::HeaderValue;
+    let mut r = Response::new(Full::new(Bytes::new()));
+    *r.status_mut() = StatusCode::NO_CONTENT;
+    let h = r.headers_mut();
+    for v in [
+        "Origin",
+        "Access-Control-Request-Method",
+        "Access-Control-Request-Headers",
+    ] {
+        h.append("vary", HeaderValue::from_static(v));
+    }
+    let method = req
+        .get("access-control-request-method")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_ascii_uppercase);
+    let (Some(allow), Some(method)) = (policy.cors_allow(origin), method) else {
+        return r;
+    };
+    if method != "POST" && method != "GET" {
+        return r;
+    }
+    let (Ok(allow), Ok(method)) = (
+        HeaderValue::from_str(&allow),
+        HeaderValue::from_str(&method),
+    ) else {
+        return r;
+    };
+    h.insert("access-control-allow-origin", allow);
+    h.insert("access-control-allow-methods", method);
+    if let Some(v) = req.get("access-control-request-headers") {
+        h.insert("access-control-allow-headers", v.clone());
+    }
+    h.insert("access-control-max-age", HeaderValue::from_static("600"));
+    r
+}
+
+/// The request after the Host and JWT checks (and CORS, when it is on).
+async fn http_dispatch(
+    st: Arc<HttpState>,
+    conn: Arc<Conn>,
+    req: Request<hyper::body::Incoming>,
+) -> Result<Response<Full<Bytes>>, Infallible> {
+    let limits = &st.rpc.limits;
     if req.method() != Method::POST {
         return Ok(http_reply(StatusCode::METHOD_NOT_ALLOWED, vec![], None));
     }

@@ -450,6 +450,7 @@ impl RpcService {
                         Policy {
                             vhosts: cfg.http.vhosts.clone(),
                             origins: vec![],
+                            cors: cfg.http.cors.clone(),
                             jwt: cfg
                                 .http
                                 .jwt_secret
@@ -474,6 +475,7 @@ impl RpcService {
                         Policy {
                             vhosts: vec![],
                             origins: cfg.ws.origins.clone(),
+                            cors: vec![],
                             jwt: cfg
                                 .ws
                                 .jwt_secret
