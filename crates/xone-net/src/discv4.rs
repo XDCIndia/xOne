@@ -37,6 +37,16 @@ const BUCKETS: usize = 17;
 const MIN_DISTANCE: usize = 239;
 /// Pings and findnodes in flight; more are dropped, not queued.
 pub const MAX_PENDING: usize = 256;
+/// How long a pong keeps proving an endpoint (geth `v4_udp.go` `bondExpiration`). An older bond
+/// no longer authorizes a FindNode reply, and a ping from that node is answered with a new ping.
+pub const BOND_EXPIRATION_MS: u64 = 24 * 60 * 60 * 1000;
+/// A table entry not proven for this long is due for revalidation (one probe per call of
+/// [`Discv4::revalidate`]).
+pub const REVALIDATE_MS: u64 = 30_000;
+/// Unanswered revalidation pings after which an entry is dropped for a replacement.
+pub const MAX_FAILS: u8 = 3;
+/// Verified nodes kept per bucket for when a member dies (geth `table.go` `maxReplacements`).
+pub const MAX_REPLACEMENTS: usize = 10;
 const HEAD: usize = 32 + 65;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -344,14 +354,25 @@ fn log_dist(a: &B256, b: &B256) -> usize {
     256 - lz
 }
 
+#[derive(Debug, Clone)]
+struct Entry {
+    node: Node,
+    /// When a pong last proved `node.addr` (Unix ms).
+    bond_ms: u64,
+    /// Revalidation pings unanswered since that pong.
+    fails: u8,
+}
+
 /// Nodes by log distance from us: 17 buckets of at most 16, so at most 272 nodes. A node is in
-/// the table only after a pong proved its endpoint. A full bucket keeps its old nodes and
-/// refuses the new one. ponytail: no revalidation or eviction of dead entries; add it with the
-/// periodic refresh when the discovery loop is wired.
+/// the table only after a pong proved its endpoint. A full bucket keeps its members and puts the
+/// new node in that bucket's replacement list (at most [`MAX_REPLACEMENTS`], newest kept). A
+/// member whose endpoint fails [`MAX_FAILS`] revalidation pings in a row is dropped and the
+/// newest replacement takes its place (geth `table.go` `addReplacement`, `table_reval.go`).
 #[derive(Debug)]
 pub struct Table {
     local: B256,
-    buckets: [Vec<Node>; BUCKETS],
+    buckets: [Vec<Entry>; BUCKETS],
+    repl: [Vec<Entry>; BUCKETS],
 }
 
 impl Table {
@@ -359,6 +380,7 @@ impl Table {
         Self {
             local: keccak256(local),
             buckets: Default::default(),
+            repl: Default::default(),
         }
     }
 
@@ -369,25 +391,85 @@ impl Table {
         }
     }
 
-    /// Adds or refreshes. `false`: the node is us or its bucket is full.
-    pub fn insert(&mut self, node: Node) -> bool {
+    /// Adds or refreshes a node whose endpoint a pong proved at `now_ms`. `false`: the node is us
+    /// or its bucket is full (it is then kept as a replacement).
+    pub fn insert(&mut self, node: Node, now_ms: u64) -> bool {
         let Some(b) = self.bucket(&keccak256(node.id)) else {
             return false;
         };
+        let entry = Entry {
+            node,
+            bond_ms: now_ms,
+            fails: 0,
+        };
         let bucket = &mut self.buckets[b];
-        if let Some(e) = bucket.iter_mut().find(|e| e.id == node.id) {
-            *e = node;
+        if let Some(e) = bucket.iter_mut().find(|e| e.node.id == entry.node.id) {
+            *e = entry;
             return true;
         }
         if bucket.len() >= BUCKET_SIZE {
+            let r = &mut self.repl[b];
+            r.retain(|e| e.node.id != entry.node.id);
+            if r.len() >= MAX_REPLACEMENTS {
+                r.remove(0);
+            }
+            r.push(entry);
             return false;
         }
-        bucket.push(node);
+        bucket.push(entry);
         true
+    }
+
+    /// A member's endpoint did not answer a ping. After [`MAX_FAILS`] in a row it is removed and
+    /// the newest replacement of its bucket, if any, takes the place. `true`: it was removed.
+    pub fn fail(&mut self, id: &PeerId) -> bool {
+        let Some(b) = self.bucket(&keccak256(id)) else {
+            return false;
+        };
+        let bucket = &mut self.buckets[b];
+        let Some(i) = bucket.iter().position(|e| e.node.id == *id) else {
+            return false;
+        };
+        let e = &mut bucket[i];
+        e.fails = e.fails.saturating_add(1);
+        if e.fails < MAX_FAILS {
+            return false;
+        }
+        bucket.remove(i);
+        if let Some(r) = self.repl[b].pop() {
+            bucket.push(r);
+        }
+        true
+    }
+
+    /// The member proven longest ago, if that was [`REVALIDATE_MS`] or more before `now_ms`.
+    pub fn stalest(&self, now_ms: u64) -> Option<Node> {
+        self.buckets
+            .iter()
+            .flatten()
+            .filter(|e| now_ms.saturating_sub(e.bond_ms) >= REVALIDATE_MS)
+            .min_by_key(|e| e.bond_ms)
+            .map(|e| e.node.clone())
+    }
+
+    /// The member, if a pong proved its endpoint within [`BOND_EXPIRATION_MS`] of `now_ms`.
+    pub fn bonded(&self, id: &PeerId, now_ms: u64) -> Option<&Node> {
+        self.entry(id)
+            .filter(|e| now_ms.saturating_sub(e.bond_ms) < BOND_EXPIRATION_MS)
+            .map(|e| &e.node)
+    }
+
+    fn entry(&self, id: &PeerId) -> Option<&Entry> {
+        self.buckets.iter().flatten().find(|e| e.node.id == *id)
     }
 
     pub fn len(&self) -> usize {
         self.buckets.iter().map(Vec::len).sum()
+    }
+
+    /// Replacement candidates held, at most `17 * MAX_REPLACEMENTS`.
+    pub fn replacements(&self) -> usize {
+        self.repl.iter().map(Vec::len).sum()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -395,7 +477,7 @@ impl Table {
     }
 
     pub fn get(&self, id: &PeerId) -> Option<&Node> {
-        self.buckets.iter().flatten().find(|n| n.id == *id)
+        self.entry(id).map(|e| &e.node)
     }
 
     /// The `n` nodes closest to `target` (a keccak of a node id), nearest first.
@@ -404,6 +486,7 @@ impl Table {
             .buckets
             .iter()
             .flatten()
+            .map(|e| &e.node)
             .map(|e| {
                 let mut x = keccak256(e.id);
                 for (a, b) in x.0.iter_mut().zip(target.iter()) {
@@ -557,12 +640,30 @@ impl Discv4 {
         t.send(to.addr, data);
     }
 
-    /// Forget requests older than [`RESP_TIMEOUT_MS`].
+    /// Forget requests older than [`RESP_TIMEOUT_MS`]. An unanswered ping to a table member's
+    /// recorded endpoint counts as a failure of that member ([`Table::fail`]).
     pub fn expire(&mut self, now_ms: u64) {
-        self.pings
-            .retain(|_, p| now_ms.saturating_sub(p.sent_ms) < RESP_TIMEOUT_MS);
+        let table = &mut self.table;
+        self.pings.retain(|id, p| {
+            let live = now_ms.saturating_sub(p.sent_ms) < RESP_TIMEOUT_MS;
+            if !live && table.get(id).is_some_and(|n| n.addr == p.addr) {
+                table.fail(id);
+            }
+            live
+        });
         self.finds
             .retain(|_, f| now_ms.saturating_sub(f.sent_ms) < RESP_TIMEOUT_MS);
+    }
+
+    /// Probe the member proven longest ago, when it is due ([`REVALIDATE_MS`]). Call it on a
+    /// timer after [`Self::expire`]: one ping per call bounds the refresh traffic, and a member
+    /// that stays silent is replaced after [`MAX_FAILS`] calls.
+    pub fn revalidate(&mut self, now_ms: u64, t: &mut impl Transport) {
+        if let Some(n) = self.table.stalest(now_ms) {
+            if !self.pings.contains_key(&n.id) {
+                self.ping_with_tcp(now_ms, n.addr, n.id, n.tcp, t);
+            }
+        }
     }
 
     /// Process one datagram. An `Err` is a dropped packet; nothing is sent for it.
@@ -595,8 +696,12 @@ impl Discv4 {
                     },
                 );
                 t.send(from, pong);
-                // Bond back unless we already know this endpoint (`v4_udp.go:704-711`).
-                if self.table.get(&id).is_none_or(|n| n.addr != from) {
+                // Bond back unless a current bond proves this endpoint (`v4_udp.go:704-711`).
+                if self
+                    .table
+                    .bonded(&id, now_ms)
+                    .is_none_or(|n| n.addr != from)
+                {
                     self.ping_with_tcp(now_ms, from, id, ep.tcp, t);
                 }
                 Ok(())
@@ -619,7 +724,7 @@ impl Discv4 {
                     tcp: p.tcp,
                 };
                 self.pings.remove(&id);
-                self.table.insert(node);
+                self.table.insert(node, now_ms);
                 Ok(())
             }
             Packet::FindNode { target, expiration } => {
@@ -627,8 +732,13 @@ impl Discv4 {
                     return Err(DiscError::Expired);
                 }
                 // No endpoint proof, no answer: a findnode from a spoofed address must not make
-                // us send a larger packet to the victim (`v4_udp.go:735-752`).
-                if self.table.get(&id).is_none_or(|n| n.addr.ip() != from.ip()) {
+                // us send a larger packet to the victim (`v4_udp.go:735-752`). An expired bond
+                // must be renewed by a ping/pong first.
+                if self
+                    .table
+                    .bonded(&id, now_ms)
+                    .is_none_or(|n| n.addr.ip() != from.ip())
+                {
                     return Err(DiscError::UnknownNode);
                 }
                 let nodes: Vec<WireNode> = self
@@ -966,16 +1076,20 @@ mod tests {
                 addr: addr(9),
                 tcp: 1,
             };
-            accepted += usize::from(t.insert(n));
+            accepted += usize::from(t.insert(n, NOW));
         }
         assert!(t.len() <= BUCKETS * BUCKET_SIZE, "{}", t.len());
         assert_eq!(t.len(), accepted);
         assert_eq!(t.closest(&B256::ZERO, 5).len(), 5);
-        assert!(!t.insert(Node {
-            id: me,
-            addr: addr(1),
-            tcp: 1
-        }));
+        assert!(!t.insert(
+            Node {
+                id: me,
+                addr: addr(1),
+                tcp: 1
+            },
+            NOW
+        ));
+        assert!(t.replacements() <= BUCKETS * MAX_REPLACEMENTS);
         // more pings than MAX_PENDING are not sent
         let mut d = Discv4::new(key(1), addr(1), 1);
         let mut out = Vec::new();
@@ -1004,5 +1118,120 @@ mod tests {
         assert!(!relay_ok(wan, lo) && !relay_ok(wan, lan));
         assert!(!relay_ok(wan, IpAddr::V4(Ipv4Addr::UNSPECIFIED)));
         assert!(!relay_ok(wan, IpAddr::V4(Ipv4Addr::new(224, 0, 0, 1))));
+    }
+
+    fn far(i: u32) -> Node {
+        let mut id = [0u8; 64];
+        id[..4].copy_from_slice(&i.to_be_bytes());
+        id[63] = 1;
+        Node {
+            id: B512::from(id),
+            addr: addr(9),
+            tcp: 1,
+        }
+    }
+
+    /// Fills one bucket and returns (members, others in the same bucket).
+    fn full_bucket(t: &mut Table) -> (Vec<Node>, Vec<Node>) {
+        let b0 = t.bucket(&keccak256(far(0).id));
+        let same: Vec<Node> = (0..5000u32)
+            .map(far)
+            .filter(|n| t.bucket(&keccak256(n.id)) == b0)
+            .collect();
+        let (m, o) = same.split_at(BUCKET_SIZE);
+        for n in m {
+            assert!(t.insert(n.clone(), NOW));
+        }
+        (m.to_vec(), o.to_vec())
+    }
+
+    #[test]
+    fn full_bucket_with_a_dead_member_admits_a_verified_replacement() {
+        let mut t = Table::new(&peer_id(&key(1)));
+        let (members, others) = full_bucket(&mut t);
+        // a full bucket refuses, but keeps a bounded list of replacements
+        for n in others.iter().take(MAX_REPLACEMENTS + 5) {
+            assert!(!t.insert(n.clone(), NOW));
+        }
+        assert_eq!(t.replacements(), MAX_REPLACEMENTS);
+        let newest = &others[MAX_REPLACEMENTS + 4];
+        // the dead member survives MAX_FAILS - 1 failures, then the newest replacement steps in
+        for _ in 1..MAX_FAILS {
+            assert!(!t.fail(&members[0].id));
+        }
+        assert!(t.get(&members[0].id).is_some());
+        assert!(t.fail(&members[0].id));
+        assert!(t.get(&members[0].id).is_none());
+        assert!(t.get(&newest.id).is_some());
+        assert_eq!(t.len(), BUCKET_SIZE);
+        assert_eq!(t.replacements(), MAX_REPLACEMENTS - 1);
+        // a pong resets the failure count
+        t.fail(&members[1].id);
+        t.insert(members[1].clone(), NOW + 1);
+        for _ in 1..MAX_FAILS {
+            assert!(!t.fail(&members[1].id));
+        }
+    }
+
+    #[test]
+    fn revalidation_is_one_probe_per_tick_and_drops_silent_nodes() {
+        let mut d = Discv4::new(key(1), addr(1), 1);
+        let (members, _) = full_bucket(&mut d.table);
+        let mut out = Vec::new();
+        // nothing is due before REVALIDATE_MS
+        d.revalidate(NOW + REVALIDATE_MS - 1, &mut out);
+        assert!(out.is_empty());
+        // each tick: the earlier probe times out, one new probe is sent
+        let mut t = NOW + REVALIDATE_MS;
+        let ticks = usize::from(MAX_FAILS) * members.len();
+        for _ in 0..ticks {
+            d.expire(t);
+            d.revalidate(t, &mut out);
+            t += 5_000;
+        }
+        d.expire(t);
+        assert_eq!(out.len(), ticks, "one ping per tick");
+        assert!(d.pings.len() <= 1);
+        // nobody answered: the bucket emptied after MAX_FAILS probes each
+        assert!(d.table.is_empty(), "{}", d.table.len());
+    }
+
+    #[test]
+    fn stale_bond_does_not_authorize_findnode() {
+        let mut net = Net::new(2);
+        net.ping(1, 2);
+        net.run();
+        let id2 = net.id(2);
+        let later = NOW + BOND_EXPIRATION_MS;
+        let a = &net.nodes[&addr(1)];
+        assert!(a.table().bonded(&id2, NOW).is_some());
+        assert!(a.table().bonded(&id2, later).is_none());
+        // node 2 asks node 1 after the bond expired: no neighbors are sent
+        let (req, _) = encode(
+            &key(2),
+            &Packet::FindNode {
+                target: id2,
+                expiration: later / 1000 + EXPIRATION_S,
+            },
+        );
+        let mut out = Vec::new();
+        let d = net.nodes.get_mut(&addr(1)).unwrap();
+        assert!(matches!(
+            d.handle(later, addr(2), &req, &mut out),
+            Err(DiscError::UnknownNode)
+        ));
+        assert!(out.is_empty());
+        // a ping from it is answered with a pong and a new bonding ping
+        let (ping, _) = encode(
+            &key(2),
+            &Packet::Ping {
+                version: 4,
+                from: Endpoint::new(addr(2), 30_002),
+                to: Endpoint::new(addr(1), 0),
+                expiration: later / 1000 + EXPIRATION_S,
+            },
+        );
+        d.handle(later, addr(2), &ping, &mut out).unwrap();
+        assert_eq!(out.len(), 2);
     }
 }
